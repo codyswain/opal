@@ -4,7 +4,7 @@ import {
   DirectoryStructures,
   Embedding,
   SimilarNote,
-} from "@/shared/types";
+} from "@/renderer/shared/types";
 import { ipcMain } from "electron";
 import OpenAI from "openai";
 import fs from "fs/promises";

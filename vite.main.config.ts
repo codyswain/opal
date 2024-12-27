@@ -11,7 +11,7 @@ export default defineConfig((env) => {
     build: {
       outDir: '.vite/build',
       lib: {
-        entry: forgeConfigSelf.entry!,
+        entry: forgeConfigSelf.entry || '',
         fileName: () => '[name].js',
         formats: ['cjs'],
       },

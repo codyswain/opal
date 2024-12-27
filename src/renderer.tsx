@@ -1,7 +1,7 @@
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "@/App";
-import "@/index.css";
+import App from "@/renderer/App";
+import "@/renderer/index.css";
 import {
   Note,
   FileNode,
@@ -9,7 +9,7 @@ import {
   SimilarNote,
   Embedding,
   DirectoryStructures,
-} from "@/shared/types";
+} from "@/renderer/shared/types";
 
 declare global {
   interface Window {

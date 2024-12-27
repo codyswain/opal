@@ -1,9 +1,9 @@
 import { ipcMain, app } from "electron";
 import fs from "fs/promises";
 import path from "path";
-import { Config, DirectoryEntry, Note, NoteMetadata } from "@/shared/types";
+import { Config, DirectoryEntry, Note, NoteMetadata } from "@/renderer/shared/types";
 import { v4 as uuidv4 } from "uuid";
-
+import logger from "./logger";
 const NOTES_DIR = path.join(app.getPath("userData"), "notes");
 
 // Special delimiter used for parsing notes from non-notes
@@ -152,11 +152,11 @@ const loadDirectoryStructure = async (dirPath: string): Promise<DirectoryEntry> 
 
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    console.log(`Found ${entries.length} entries in ${dirPath}`);
+    logger.debug(`Found ${entries.length} entries in ${dirPath}`);
 
     for (const entry of entries) {
       const childPath = path.join(dirPath, entry.name);
-      console.log(`Processing entry: ${entry.name} in ${dirPath}`);
+      logger.debug(`Processing entry: ${entry.name} in ${dirPath}`);
 
       if (entry.isDirectory()) {
         const childStructure = await loadDirectoryStructure(childPath);

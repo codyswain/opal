@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { Note, FileNode, DirectoryStructures, Embedding, SimilarNote } from "./shared/types";
+import { Note, FileNode, DirectoryStructures, Embedding, SimilarNote } from "./renderer/shared/types";
 
 contextBridge.exposeInMainWorld("electron", {
   saveNote: (note: Note, dirPath: string) =>
