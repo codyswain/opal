@@ -84,7 +84,7 @@ class Logger {
     log.info(message);
   }
 
-  public error(message: string) {
+  public error(...message: string[]) {
     log.error(message);
   }
 

@@ -1,14 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
-import { setupFileSystem } from "./main/fileSystem";
-import {
-  addTopLevelFolder,
-  getTopLevelFolders,
-  removeTopLevelFolder,
-} from "./main/configManager";
-import { setupEmbeddingService } from "./main/embeddings";
-import log from "./main/logger";
 import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
+import { closeDatabase, initializeDatabase } from "./main/database";
+import { registerConfigIPCHandlers, registerEmbeddingIPCHandlers, registerFileSystemIPCHandlers, log } from "./main/index";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -16,63 +10,59 @@ if (require("electron-squirrel-startup")) {
   app.quit();
 }
 
-let mainWindow: BrowserWindow | null = null;
 const isDevelopment = process.env.NODE_ENV === "development";
+let mainWindow: BrowserWindow | null = null;
 
-// More lenient CSP
+// CSP Configuration
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",
-  // This is used for Ollama 
-  "connect-src 'self' https: ws: http://localhost:11434",
+  "connect-src 'self' https: ws: http://localhost:11434", // Ollama
   "media-src 'self' https:",
-];
+].join("; "); // Join CSP directives
+
 
 const createWindow = () => {
   log.info(`Creating main window; windowWidth: ${DEFAULT_WINDOW_WIDTH}, windowHeight: ${DEFAULT_WINDOW_HEIGHT}`);
+
   mainWindow = new BrowserWindow({
     width: DEFAULT_WINDOW_WIDTH,
     height: DEFAULT_WINDOW_HEIGHT,
     frame: false,
     webPreferences: {
-      // Preload script for the main process to access the renderer process
       preload: path.join(__dirname, "preload.js"),
-      // Block the render process from having direct NodeJS access
       nodeIntegration: false,
-      // Separate JS context for render process from the main process
       contextIsolation: true,
-      // Restricts what the render process can do at a system level
       sandbox: true,
     },
   });
 
-  // Set Content Security Policy
-  mainWindow.webContents.session.webRequest.onHeadersReceived(
-    (details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          "Content-Security-Policy": [CSP.join("; ")],
-        },
-      });
-    }
-  );
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+      ...details.responseHeaders,
+        "Content-Security-Policy": [CSP],
+      },
+    });
+  });
 
-  // Load the main page (which will contain the navigation)
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    log.info(`Loading URL: ${MAIN_WINDOW_VITE_DEV_SERVER_URL}`);
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    const filePath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
-    log.info(`Loading file: ${filePath}`);
-    mainWindow.loadFile(filePath);
+  const loadPage = () => {  // Helper function for loading page
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      log.info(`Loading URL: ${MAIN_WINDOW_VITE_DEV_SERVER_URL}`);
+      mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    } else {
+      const filePath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+      log.info(`Loading file: ${filePath}`);
+      mainWindow.loadFile(filePath);
+    }
   }
 
-  // Open the DevTools in development
-  if (isDevelopment){
+  loadPage();
+
+  if (isDevelopment) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -85,98 +75,50 @@ const createWindow = () => {
   });
 };
 
-// Set up IPC listeners for window controls
-ipcMain.on("minimize-window", () => {
-  log.info('Minimizing window');
-  mainWindow?.minimize();
-});
-
+// --- Window Control IPC Handlers
+ipcMain.on("minimize-window", () => { mainWindow?.minimize(); });
 ipcMain.on("maximize-window", () => {
-  if (mainWindow?.isMaximized()) {
-    log.info('Unmaximizing window');
-    mainWindow.unmaximize();
-  } else {
-    log.info('Maximizing window');
-    mainWindow?.maximize();
-  }
+  mainWindow?.isMaximized()? mainWindow.unmaximize(): mainWindow?.maximize();
+});
+ipcMain.on("close-window", () => { mainWindow?.close(); });
+
+
+// --- App Lifecycle Events 
+app.on("window-all-closed", () => {
+  if (process.platform!== "darwin") app.quit();
 });
 
-ipcMain.on("close-window", () => {
-  log.info('Closing window');
-  mainWindow?.close();
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// This method will be called when Electron has finished initialization
+// --- Error Handling ---
+process.on("uncaughtException", (error) => {
+  log.error(`Uncaught exception: ${error}`);
+  dialog.showErrorBox('An error occurred', error.message);
+});
+
+// --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
-
-  // Log permission errors
-  process.on('uncaughtException', (error) => {
-    console.log('error-1', error)
+  process.on('uncaughtException', (error) => { // Keep this for early errors
+    console.log('error-1', error);
   });
 
   try {
-    await setupFileSystem();
-    log.info('File system setup complete');
-    await setupEmbeddingService();
-    log.info('Embedding service setup complete');
+    await registerFileSystemIPCHandlers();
+    await registerConfigIPCHandlers();
+    await registerEmbeddingIPCHandlers();
+    await initializeDatabase();
     createWindow();
   } catch (error) {
     log.error(`Error during app setup: ${error}`);
   }
 });
 
-// Quit when all windows are closed, except on macOS
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    log.info('All windows closed, quitting app');
-    app.quit();
+app.on('before-quit', async () => {
+  try {
+    await closeDatabase();
+  } catch (error) {
+    log.error("Error during app shutdown:", error);
   }
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    log.info('Activating app, creating new window');
-    createWindow();
-  }
-});
-
-// Add error handling
-process.on("uncaughtException", (error) => {
-  log.error(`Uncaught exception: ${error}`);
-  dialog.showErrorBox('An error occurred', error.message);
-});
-
-// IPC handlers for top-level folder management
-ipcMain.handle("get-top-level-folders", async () => {
-  log.info('Getting top-level folders');
-  return getTopLevelFolders();
-});
-
-ipcMain.handle("add-top-level-folder", async (_, folderPath) => {
-  log.info(`Adding top-level folder: ${folderPath}`);
-  await addTopLevelFolder(folderPath);
-  return getTopLevelFolders();
-});
-
-ipcMain.handle("remove-top-level-folder", async (_, folderPath) => {
-  log.info(`Removing top-level folder: ${folderPath}`);
-  await removeTopLevelFolder(folderPath);
-  return getTopLevelFolders();
-});
-
-// Folder selection dialog handler
-ipcMain.handle("open-folder-dialog", async () => {
-  log.info('Opening folder dialog');
-  const result = await dialog.showOpenDialog({
-    properties: ["openDirectory", "createDirectory"],
-    buttonLabel: "Select Folder",
-    title: "Select a folder to add as a top-level folder",
-  });
-
-  if (!result.canceled && result.filePaths.length > 0) {
-    log.info(`Folder selected: ${result.filePaths[0]}`);
-    return result.filePaths[0];
-  }
-  log.info('Folder selection cancelled');
-  return null;
 });

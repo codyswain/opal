@@ -14,6 +14,7 @@ async function readConfig(): Promise<Config> {
   try {
     const data = await fs.readFile(CONFIG_FILE, 'utf-8');
     const config = JSON.parse(data);
+
     // Ensure topLevelFolders is always an array
     if (!Array.isArray(config.topLevelFolders)) {
       config.topLevelFolders = [];
