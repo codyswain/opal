@@ -1,5 +1,23 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { Note, FileNode, DirectoryStructures, Embedding, SimilarNote } from "./shared/types";
+import { Note, FileNode, DirectoryStructures, Embedding, SimilarNote } from "./renderer/shared/types";
+
+/* 
+  The preload script runs in an isolated context. (since contextIsolation is 
+  enabled in main.ts.)
+
+  It calls contextBridge which provides a secure way to bridge across isolated
+  contexts. exposeInMainWorld, exposes these methods in the main world. 
+  Confusingly, the main world is the JS context that your renderer (e.g., React)
+  runs in. 
+
+  So the preload script runs in an isolated context, but it exposes IPC methods,
+  and these IPC methods provide a bridge between the main electron process, and
+  the renderer process. 
+
+  |--Main Process--|--Preload Script--|--Renderer Process--|
+  After preload script runs:
+  |--Main Process--|   <--IPC-->   |--Renderer Process--|
+*/
 
 contextBridge.exposeInMainWorld("electron", {
   saveNote: (note: Note, dirPath: string) =>

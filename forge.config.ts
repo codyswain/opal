@@ -11,7 +11,9 @@ import path from 'path';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    extraResource: [],
+    extraResource: [
+      path.join(__dirname, 'src', 'main', 'database', 'schema.sql')
+    ],
     icon: path.resolve(__dirname, 'assets', 'AppIcon.icns')
   },
   rebuildConfig: {},
