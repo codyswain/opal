@@ -1,6 +1,7 @@
-import React from 'react';
-import { Button } from '@/renderer/shared/components/Button';
-import { LucideIcon } from 'lucide-react';
+import React from "react";
+import { Button } from "@/renderer/shared/components/Button";
+import { LucideIcon } from "lucide-react";
+import { cn } from "../../utils";
 
 interface ContextMenuItemProps {
   icon?: LucideIcon;
@@ -9,15 +10,25 @@ interface ContextMenuItemProps {
   className?: string;
 }
 
-const ContextMenuItem: React.FC<ContextMenuItemProps> = ({ icon: Icon, label, onClick, className }) => {
+const ContextMenuItem: React.FC<ContextMenuItemProps> = ({
+  icon: Icon,
+  label,
+  onClick,
+  className,
+}) => {
   return (
     <Button
       variant="ghost"
-      className={`w-full justify-start px-2 py-1.5 text-sm ${className}`}
+      className={cn(
+        "w-full px-2 py-1.5 text-sm",
+        className
+      )}
       onClick={onClick}
     >
-      {Icon && <Icon className="mr-2 h-4 w-4" />}
-      {label}
+      <div className="w-full flex flex-row items-center justify-start">
+        {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" />}
+        <span className="truncate">{label}</span>
+      </div>
     </Button>
   );
 };

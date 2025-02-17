@@ -1,6 +1,5 @@
 // src/features/notes/hooks/useNotes.ts
 
-import log from "electron-log";
 import { v4 as uuidv4 } from "uuid";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
@@ -44,7 +43,7 @@ export const useNotes = () => {
       if (fileNode) {
         setActiveFileNode(fileNode);
       } else {
-        log.error("Could not find file node for id", activeFileNodeId);
+        console.error("Could not find file node for id", activeFileNodeId);
       }
     }
   }, [activeFileNodeId, directoryStructures]);
@@ -75,7 +74,7 @@ export const useNotes = () => {
             setActiveNote(loadedNote);
           }
         } catch (err) {
-          log.error("Failed to load note:", err);
+          console.error("Failed to load note:", err);
           if (isCurrent) {
             setActiveNote(null);
           }
@@ -97,25 +96,25 @@ export const useNotes = () => {
     setIsLoading(true);
     setError(null);
     try {
-      log.info("Starting to load notes...");
+      console.info("Starting to load notes...");
       const topLevelDirPaths = await window.electron.getTopLevelFolders();
-      log.info("Top level folders:", topLevelDirPaths);
+      console.info("Top level folders:", topLevelDirPaths);
       
       const dirStructuresPromises = topLevelDirPaths.map(async (dirPath) => {
         try {
-          log.info(`Loading directory structure for: ${dirPath}`);
+          console.info(`Loading directory structure for: ${dirPath}`);
           const dirStructure = await window.electron.getDirectoryStructure(dirPath);
-          log.info(`Successfully loaded structure for ${dirPath}:`, dirStructure);
+          console.info(`Successfully loaded structure for ${dirPath}:`, dirStructure);
           return dirStructure;
         } catch (err) {
-          log.error(`Failed to load directory structure for ${dirPath}:`, err);
+          console.error(`Failed to load directory structure for ${dirPath}:`, err);
           setError(err);
           return null;
         }
       });
 
       const dirStructures = await Promise.all(dirStructuresPromises);
-      log.info('All directory structures:', dirStructures);
+      console.info('All directory structures:', dirStructures);
 
       const newDirectoryStructures: DirectoryStructures = {
         rootIds: [],
@@ -124,15 +123,15 @@ export const useNotes = () => {
 
       dirStructures.forEach((dirStructure, index) => {
         if (dirStructure) {
-          log.info(`Building structure for directory ${index}`);
+          console.info(`Building structure for directory ${index}`);
           buildDirectoryStructures(dirStructure, null, newDirectoryStructures);
         }
       });
 
-      log.info('Final directory structures:', newDirectoryStructures);
+      console.info('Final directory structures:', newDirectoryStructures);
       setDirectoryStructures(newDirectoryStructures);
     } catch (err) {
-      log.error("Failed to load notes:", err);
+      console.error("Failed to load notes:", err);
       setError(err);
     } finally {
       setIsLoading(false);
@@ -190,8 +189,8 @@ export const useNotes = () => {
       try {
         const savedNotePath = await window.electron.saveNote(newNote, dirPath);
 
-        log.info("saved new note path", savedNotePath);
-        log.info("full path passed in =", dirPath);
+        console.info("saved new note path", savedNotePath);
+        console.info("full path passed in =", dirPath);
 
         // Create a new FileNode for the note
         const newFileNodeId = uuidv4();
@@ -218,10 +217,10 @@ export const useNotes = () => {
               node.fullPath === savedNotePath.split("/").slice(0, -1).join("/")
           );
 
-          log.info('parent node fullepath=', parentNode.fullPath)
+          console.info('parent node fullepath=', parentNode.fullPath)
 
           if (parentNode) {
-            log.info('newFileNode.parentId', newFileNode.parentId)
+            console.info('newFileNode.parentId', newFileNode.parentId)
             newFileNode.parentId = parentNode.id;
             updatedNodes[parentNode.id] = {
               ...parentNode,
@@ -242,7 +241,7 @@ export const useNotes = () => {
 
         setActiveFileNodeId(newFileNodeId);
       } catch (error) {
-        log.error("Error creating note:", error);
+        console.error("Error creating note:", error);
       }
     },
     [setDirectoryStructures, setActiveFileNodeId]
@@ -251,7 +250,7 @@ export const useNotes = () => {
   const saveNote = useCallback(
     async (updatedNote: Note) => {
       if (!activeFileNode || activeFileNode.type !== "note") {
-        log.error("No active note file node");
+        console.error("No active note file node");
         return;
       }
       try {
@@ -281,7 +280,7 @@ export const useNotes = () => {
 
         // No need to update activeFileNode explicitly; it will update via useMemo
       } catch (error) {
-        log.error("Error saving note:", error);
+        console.error("Error saving note:", error);
         toast.error("Failed to save note. Please try again.");
       }
     },
@@ -335,9 +334,9 @@ export const useNotes = () => {
 
         // If it was a top-level folder, remove it from mountedDirPaths
         const topLevelFolderPaths = await window.electron.getTopLevelFolders();
-        log.info("Top level folder paths:", topLevelFolderPaths);
+        console.info("Top level folder paths:", topLevelFolderPaths);
         if (topLevelFolderPaths.includes(fileNode.fullPath)) {
-          log.info(`Removing top-level folder: ${fileNode.fullPath}`);
+          console.info(`Removing top-level folder: ${fileNode.fullPath}`);
           await window.electron.removeTopLevelFolder(fileNode.fullPath);
           setMountedDirPaths((prev) =>
             prev.filter((path) => path !== fileNode.fullPath)
@@ -350,7 +349,7 @@ export const useNotes = () => {
           setActiveNote(null);
         }
       } catch (error) {
-        log.error("Error deleting file node:", error);
+        console.error("Error deleting file node:", error);
         toast.error("Failed to delete file. Please try again.");
       }
     },
@@ -407,7 +406,7 @@ export const useNotes = () => {
           err instanceof Error ? err.message : String(err)
         }`
       );
-      log.error("Failed to create folder:", err);
+      console.error("Failed to create folder:", err);
     }
   }, [activeFileNode, newFolderName, loadNotes]);
 
@@ -426,10 +425,10 @@ export const useNotes = () => {
       setMountedDirPaths(mountedDirPaths);
 
       if (mountedDirPaths.length === 0) {
-        log.info('No mounted directory paths found');
+        console.info('No mounted directory paths found');
       }
     } catch (error) {
-      log.error('Error loading mounted directory paths:', error);
+      console.error('Error loading mounted directory paths:', error);
       setMountedDirPathsLoadError('Failed to load mounted directory paths');
     } finally {
       setIsLoadingMountedDirPaths(false);
@@ -443,7 +442,7 @@ export const useNotes = () => {
   const openDialogToMountDirpath = useCallback(async () => {
     const result = await window.electron.openFolderDialog();
     if (result) {
-      log.info(`Adding top-level folder: ${result}`);
+      console.info(`Adding top-level folder: ${result}`);
       await window.electron.addTopLevelFolder(result);
       await loadMountedDirPaths();
       await loadNotes();
@@ -459,11 +458,11 @@ export const useNotes = () => {
         );
         return true;
       } catch (error) {
-        log.error(`Failed generating note embedding:`, error);
+        console.error(`Failed generating note embedding:`, error);
         return false;
       }
     } else {
-      log.error(`Embedding creation triggered for invalid file node type`);
+      console.error(`Embedding creation triggered for invalid file node type`);
       return false;
     }
   }, [activeFileNode, activeNote]);
@@ -504,7 +503,7 @@ export const useNotes = () => {
       if (fileNode) {
         setActiveFileNodeId(fileNode.id);
       } else {
-        log.error("Could not find file node for note", note);
+        console.error("Could not find file node for note", note);
       }
     },
     [getFileNodeFromNote]
@@ -518,7 +517,7 @@ export const useNotes = () => {
       if (fileNode) {
         setActiveFileNodeId(fileNode.id);
       } else {
-        log.error("Could not find file node for note ID", noteId);
+        console.error("Could not find file node for note ID", noteId);
       }
     },
     [directoryStructures, setActiveFileNodeId]
@@ -533,7 +532,7 @@ export const useNotes = () => {
         );
         return assistantMessage;
       } catch (error) {
-        log.error("Error performing RAG Chat:", error);
+        console.error("Error performing RAG Chat:", error);
         throw error;
       }
     },

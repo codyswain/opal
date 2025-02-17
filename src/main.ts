@@ -38,6 +38,7 @@ const createWindow = () => {
     height: DEFAULT_WINDOW_HEIGHT,
     frame: false,
     webPreferences: {
+      // Preload script for the main process to access the renderer process
       preload: path.join(__dirname, "preload.js"),
       // Block the render process from having direct NodeJS access
       nodeIntegration: false,
