@@ -78,3 +78,48 @@ contextBridge.exposeInMainWorld("electron", {
   addRootFolder: (folderPath: string) =>
     ipcRenderer.invoke("add-root-folder", folderPath),
 });
+
+// Expose the database API to the renderer process
+contextBridge.exposeInMainWorld('databaseAPI', {
+  // Folder operations
+  createFolder: (parentPath: string, folderName: string) => 
+    ipcRenderer.invoke('create-folder', parentPath, folderName),
+  
+  // Note operations
+  createNote: (parentPath: string, noteName: string, initialContent: string) => 
+    ipcRenderer.invoke('create-note', parentPath, noteName, initialContent),
+  getNoteContent: (notePath: string) => 
+    ipcRenderer.invoke('get-note-content', notePath),
+  updateNoteContent: (notePath: string, newContent: string) => 
+    ipcRenderer.invoke('update-note-content', notePath, newContent),
+  
+  // Item operations
+  listItems: (directoryPath: string) => 
+    ipcRenderer.invoke('list-items', directoryPath),
+  getItemByPath: (itemPath: string) => 
+    ipcRenderer.invoke('get-item-by-path', itemPath),
+  deleteItem: (itemPath: string) => 
+    ipcRenderer.invoke('delete-item', itemPath),
+  renameItem: (itemPath: string, newName: string) => 
+    ipcRenderer.invoke('rename-item', itemPath, newName),
+  moveItem: (oldPath: string, newParentPath: string) => 
+    ipcRenderer.invoke('move-item', oldPath, newParentPath),
+  
+  // Root folder operations
+  addRootFolder: (folderPath: string) => 
+    ipcRenderer.invoke('add-root-folder', folderPath),
+  
+  // File operations
+  importFile: (sourceFilePath: string, destinationPath: string) => 
+    ipcRenderer.invoke('import-file', sourceFilePath, destinationPath),
+
+  // Migration utilities
+  triggerMigration: () => 
+    ipcRenderer.invoke('trigger-migration'),
+  cleanupOldNotes: () => 
+    ipcRenderer.invoke('cleanup-old-notes'),
+
+  // Add this to your existing databaseAPI
+  resetDatabase: () => 
+    ipcRenderer.invoke('reset-database'),
+});

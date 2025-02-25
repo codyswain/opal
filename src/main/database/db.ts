@@ -40,9 +40,20 @@ class DatabaseManager {
       log.info(`Loading schema from: ${schemaPath}`);
       const schemaSQL = await fs.promises.readFile(schemaPath, 'utf-8');
       
+      // Execute the schema in a transaction for better reliability
+      this.db.exec('BEGIN TRANSACTION;');
       this.db.exec(schemaSQL);
+      this.db.exec('COMMIT;');
+      
       log.info('Database schema initialized successfully');
     } catch (error) {
+      // If there was an error, try to rollback the transaction
+      try {
+        this.db.exec('ROLLBACK;');
+      } catch (rollbackError) {
+        log.error('Error during rollback:', rollbackError);
+      }
+      
       log.error('Error initializing database schema:', error);
       throw error;
     }

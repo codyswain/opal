@@ -7,6 +7,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Item, Note } from './types';
 import db from './db';
+import { migrateNotesToDatabase } from './migration';
+import { cleanupOldNotes } from './cleanup';
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
@@ -410,4 +412,85 @@ export async function registerDatabaseIPCHandlers() {
             return { success: false, error: String(error) };
         }
     });
+
+  ipcMain.handle('trigger-migration', async () => {
+    try {
+      log.info('Manual migration triggered');
+      await migrateNotesToDatabase();
+      return { success: true, message: 'Migration completed successfully' };
+    } catch (error) {
+      log.error('Error during manual migration:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('cleanup-old-notes', async () => {
+    try {
+      log.info('Manual cleanup triggered');
+      await cleanupOldNotes();
+      return { success: true, message: 'Old notes cleaned up successfully' };
+    } catch (error) {
+      log.error('Error during cleanup:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('reset-database', async () => {
+    try {
+      log.info('Database reset triggered');
+      
+      const dbManager = DatabaseManager.getInstance();
+      const db = dbManager.getDatabase();
+      
+      // Temporarily disable foreign key constraints
+      db.exec('PRAGMA foreign_keys = OFF;');
+      
+      let transactionStarted = false;
+      
+      try {
+        // Start transaction
+        db.exec('BEGIN TRANSACTION;');
+        transactionStarted = true;
+        
+        // Drop tables in reverse order of dependencies
+        db.exec('DROP TABLE IF EXISTS items_fts;');
+        db.exec('DROP TABLE IF EXISTS ai_metadata;');
+        db.exec('DROP TABLE IF EXISTS notes;');
+        db.exec('DROP TABLE IF EXISTS items;');
+        
+        // Commit the transaction before reinitializing
+        db.exec('COMMIT;');
+        transactionStarted = false;
+        
+        // Re-enable foreign key constraints
+        db.exec('PRAGMA foreign_keys = ON;');
+        
+        // Reinitialize the database schema
+        await dbManager.initialize();
+        
+        return { success: true, message: 'Database reset successfully' };
+      } catch (error) {
+        // If there was an error and a transaction is active, roll it back
+        if (transactionStarted) {
+          try {
+            db.exec('ROLLBACK;');
+          } catch (rollbackError) {
+            log.error('Error during rollback:', rollbackError);
+          }
+        }
+        
+        // Re-enable foreign key constraints
+        try {
+          db.exec('PRAGMA foreign_keys = ON;');
+        } catch (pragmaError) {
+          log.error('Error re-enabling foreign keys:', pragmaError);
+        }
+        
+        throw error;
+      }
+    } catch (error) {
+      log.error('Error during database reset:', error);
+      return { success: false, error: String(error) };
+    }
+  });
 }
