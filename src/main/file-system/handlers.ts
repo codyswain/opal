@@ -19,6 +19,11 @@ export async function registerFileSystemIPCHandlers(){
   }
 
   ipcMain.handle("get-directory-structure", async (_, dirPath: string) => {
+    if (!dirPath || typeof dirPath !== 'string') {
+      console.error('dirPath is not a string or is undefined');
+      throw new Error('dirPath is not a string or is undefined');
+    }
+
     try {
       const dirStructure = await loadDirectoryStructure(dirPath);
       return dirStructure;

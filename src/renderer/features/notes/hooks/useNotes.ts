@@ -441,9 +441,9 @@ export const useNotes = () => {
 
   const openDialogToMountDirpath = useCallback(async () => {
     const result = await window.electron.openFolderDialog();
-    if (result) {
+    if (result && result.length > 0) {
       console.info(`Adding top-level folder: ${result}`);
-      await window.electron.addTopLevelFolder(result);
+      await window.electron.addTopLevelFolder(result[0]);
       await loadMountedDirPaths();
       await loadNotes();
     }

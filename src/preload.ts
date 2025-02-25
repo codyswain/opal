@@ -53,4 +53,28 @@ contextBridge.exposeInMainWorld("electron", {
     conversation: { role: string; content: string }[],
     directoryStructures: DirectoryStructures
   ) => ipcRenderer.invoke("perform-rag-chat", conversation, directoryStructures),
+
+  // Database File Operations
+  createFolder: (parentPath: string, folderName: string) =>
+    ipcRenderer.invoke("create-folder", parentPath, folderName),
+  createNote: (parentPath: string, noteName: string, initialContent: string) =>
+    ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
+  listItems: (directoryPath: string) =>
+    ipcRenderer.invoke("list-items", directoryPath),
+  getItemByPath: (itemPath: string) =>
+    ipcRenderer.invoke("get-item-by-path", itemPath),
+  deleteItem: (itemPath: string) =>
+    ipcRenderer.invoke("delete-item", itemPath),
+  renameItem: (itemPath: string, newName: string) =>
+    ipcRenderer.invoke("rename-item", itemPath, newName),
+  moveItem: (oldPath: string, newParentPath: string) =>
+    ipcRenderer.invoke("move-item", oldPath, newParentPath),
+  getNoteContent: (notePath: string) =>
+    ipcRenderer.invoke("get-note-content", notePath),
+  updateNoteContent: (notePath: string, newContent: string) =>
+    ipcRenderer.invoke("update-note-content", notePath, newContent),
+  importFile: (sourceFilePath: string, newPath: string) =>
+    ipcRenderer.invoke("import-file", sourceFilePath, newPath),
+  addRootFolder: (folderPath: string) =>
+    ipcRenderer.invoke("add-root-folder", folderPath),
 });

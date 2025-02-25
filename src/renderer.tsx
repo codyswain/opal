@@ -10,6 +10,7 @@ import {
   Embedding,
   DirectoryStructures,
 } from "@/renderer/shared/types";
+import { Item } from "./main/database/types";
 
 declare global {
   interface Window {
@@ -27,7 +28,7 @@ declare global {
       getTopLevelFolders: () => Promise<string[]>;
       addTopLevelFolder: (folderPath: string) => Promise<string[]>;
       removeTopLevelFolder: (folderPath: string) => Promise<string[]>;
-      openFolderDialog: () => Promise<string | null>;
+      openFolderDialog: () => Promise<string[] | null>;
       getDirectoryStructure: (dirPath: string) => Promise<DirectoryEntry>;
       loadNote: (notePath: string) => Promise<Note>;
       deleteFileNode: (
@@ -46,6 +47,19 @@ declare global {
         conversation: { role: string; content: string }[],
         directoryStructures: DirectoryStructures
       ) => Promise<{ role: string; content: string }>;
+
+      // Database File Operations
+      createFolder: (parentPath: string, folderName: string) => Promise<void>;
+      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<void>;
+      listItems: (directoryPath: string) => Promise<Item[]>;
+      getItemByPath: (itemPath: string) => Promise<Item>;
+      deleteItem: (itemPath: string) => Promise<void>;
+      renameItem: (itemPath: string, newName: string) => Promise<void>;
+      moveItem: (oldPath: string, newParentPath: string) => Promise<void>;
+      getNoteContent: (notePath: string) => Promise<string>;
+      updateNoteContent: (notePath: string, newContent: string) => Promise<void>;
+      importFile: (sourceFilePath: string, newPath: string) => Promise<void>;
+      addRootFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

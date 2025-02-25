@@ -3,6 +3,7 @@ import path from "path";
 import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
 import { closeDatabase, initializeDatabase } from "./main/database";
 import { registerConfigIPCHandlers, registerEmbeddingIPCHandlers, registerFileSystemIPCHandlers, log } from "./main/index";
+import { registerDatabaseIPCHandlers } from "./main/database/handlers";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -106,6 +107,7 @@ app.whenReady().then(async () => {
 
   try {
     await registerFileSystemIPCHandlers();
+    await registerDatabaseIPCHandlers();
     await registerConfigIPCHandlers();
     await registerEmbeddingIPCHandlers();
     await initializeDatabase();

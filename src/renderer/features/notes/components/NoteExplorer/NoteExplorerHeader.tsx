@@ -17,6 +17,20 @@ export const NoteExplorerHeader: React.FC<NoteExplorerHeaderProps> = ({
     openDialogToMountDirpath
   } = useNotesContext();
 
+
+
+  async function handleFolderCreation() {
+    const result = await window.electron.openFolderDialog();
+    if (result && result.length > 0) {
+      try {
+        const response = await window.electron.addRootFolder(result[0]);
+        console.log('response: ', response);
+      } catch (error) {
+        console.error('Error adding folder:', error);
+      }
+    }
+  }
+
   return (
     <div className="flex justify-between items-center p-2 h-10 border-b border-border">
       <span className="font-semibold text-sm">Files</span>
@@ -40,7 +54,18 @@ export const NoteExplorerHeader: React.FC<NoteExplorerHeaderProps> = ({
         >
           <FolderPlus className="h-4 w-4" />
         </Button> */}
+  
         <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={handleFolderCreation}
+          title="New Top Level Button to Load with SQLite"
+        >
+          <FolderPlus className="h-4 w-4" />
+        </Button>
+
+        {/* <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
@@ -48,7 +73,7 @@ export const NoteExplorerHeader: React.FC<NoteExplorerHeaderProps> = ({
           title="Add Top-Level Folder"
         >
           <FolderPlus className="h-4 w-4" />
-        </Button>
+        </Button> */}
       </div>
     </div>
   );
