@@ -18,6 +18,7 @@ import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
 import { commandRegistry, useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
+import { Explorer } from "./features/explorer-tab";
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
@@ -122,6 +123,17 @@ const App: React.FC = () => {
                               setIsLeftSidebarOpen={setIsLeftSidebarOpen}
                               setIsRightSidebarOpen={setIsRightSidebarOpen}
                             />
+                          }
+                        />
+                        <Route
+                          path="/explorer"
+                          element={
+                            <Explorer
+                            isLeftSidebarOpen={isLeftSidebarOpen}
+                            isRightSidebarOpen={isRightSidebarOpen}
+                            setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+                            setIsRightSidebarOpen={setIsRightSidebarOpen}
+                          />
                           }
                         />
                       </Routes>
