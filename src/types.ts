@@ -41,6 +41,7 @@ export interface FSExplorerState {
   };
   loadFileSystem: () => Promise<boolean>;
   getNote: (id: string) => Promise<boolean>;
+  updateNoteContent: (id: string, content: string) => Promise<boolean>;
   
   toggleFolder: (folderId: string) => void;
   setSearchQuery: (query: string) => void;

@@ -6,7 +6,7 @@ import FolderView from "./FolderView";
 import NoteView from "./NoteView";
 
 function ExploreCenterPanel() {
-  const { entities, ui, selectEntry, getNote } = useFileExplorerStore();
+  const { entities, ui, selectEntry, updateNoteContent } = useFileExplorerStore();
   const [isSaving, setIsSaving] = useState(false);
   const [indicatorStatus, setIndicatorStatus] = useState<"green" | "yellow">("green");
 
@@ -17,11 +17,25 @@ function ExploreCenterPanel() {
   // Debounce save to prevent too many saves
   const debouncedSaveContent = useDebouncedCallback(
     async (noteId: string, content: string) => {
+      if (!selectedNode || selectedNode.type !== 'note') {
+        console.error('Cannot save content for non-note item:', noteId);
+        toast("Error saving note", {
+          description: "This item is not a note and cannot be edited.",
+        });
+        return;
+      }
+
       setIsSaving(true);
       try {
-        // await saveNote(noteId, content);
-        setIndicatorStatus("green");
+        const success = await updateNoteContent(noteId, content);
+        if (success) {
+          setIndicatorStatus("green");
+        } else {
+          throw new Error("Failed to save note");
+        }
       } catch (err) {
+        console.error('Error saving note:', err);
+        setIndicatorStatus("green"); // Reset indicator to avoid showing perpetual "saving" state
         toast("Error saving note", {
           description: "An error occurred while saving the note. Please try again.",
         });

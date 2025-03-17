@@ -66,6 +66,7 @@ declare global {
     fileExplorer: {
       getEntries: () => Promise<{ success: boolean; items: Record<string, FSEntry> }>;
       getNote: (id: string) => Promise<{ success: boolean; note: NoteV2 }>;
+      updateNoteContent: (id: string, content: string) => Promise<{ success: boolean; error?: string }>;
     }
   }
 }

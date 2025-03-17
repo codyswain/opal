@@ -42,26 +42,30 @@ DROP TRIGGER IF EXISTS ai_metadata_au;
 DROP TRIGGER IF EXISTS ai_metadata_ad;
 
 -- Create triggers
-CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
-    INSERT INTO items_fts(rowid, content, summary)
-    SELECT new.item_id, new.content, ai_metadata.summary
-    FROM ai_metadata
-    WHERE ai_metadata.item_id = new.item_id;
-END;
+-- CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
+--     INSERT INTO items_fts(rowid, content, summary)
+--     SELECT new.item_id, new.content, ai_metadata.summary
+--     FROM ai_metadata
+--     WHERE ai_metadata.item_id = new.item_id;
+-- END;
 
 -- After delete from notes
-CREATE TRIGGER notes_ad AFTER DELETE ON notes BEGIN
-  INSERT INTO items_fts(items_fts, rowid, content, summary) VALUES('delete', old.item_id, old.content, NULL);
-END;
+-- CREATE TRIGGER notes_ad AFTER DELETE ON notes BEGIN
+--   INSERT INTO items_fts(items_fts, rowid, content, summary) VALUES('delete', old.item_id, old.content, NULL);
+-- END;
 
 -- After update of notes content
-CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
-  INSERT INTO items_fts(items_fts, rowid, content, summary) VALUES('delete', old.item_id, old.content, NULL);
-  INSERT INTO items_fts(rowid, content, summary)
-    SELECT new.item_id, new.content, ai_metadata.summary
-    FROM ai_metadata
-    WHERE ai_metadata.item_id = new.item_id;
-END;
+-- CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
+  -- First delete the old entry
+--   INSERT INTO items_fts(items_fts, rowid, content, summary) VALUES('delete', old.item_id, old.content, NULL);
+  
+  -- Insert new entry with LEFT JOIN to handle missing ai_metadata
+--   INSERT INTO items_fts(rowid, content, summary)
+--   SELECT n.item_id, n.content, COALESCE(am.summary, '')
+--   FROM notes n
+--   LEFT JOIN ai_metadata am ON am.item_id = n.item_id
+--   WHERE n.item_id = new.item_id;
+-- END;
 
 -- After insert into ai_metadata
 CREATE TRIGGER ai_metadata_ai AFTER INSERT ON ai_metadata BEGIN

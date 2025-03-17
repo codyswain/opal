@@ -64,6 +64,49 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     }
   },
 
+  updateNoteContent: async (id: string, content: string) => {
+    try {
+      const node = get().entities.nodes[id];
+      if (!node) {
+        console.error('Note node not found:', id);
+        return false;
+      }
+
+      // Check if the node is a note before updating
+      if (node.type !== 'note') {
+        console.error('Cannot update content for non-note item:', id, node.type);
+        return false;
+      }
+
+      // Call the IPC method to update the note content in the database
+      const result = await window.fileExplorer.updateNoteContent(id, content);
+      
+      if (!result.success) {
+        console.error('Failed to update note content:', result.error);
+        return false;
+      }
+      
+      // Update the local state
+      set(state => ({
+        entities: {
+          ...state.entities,
+          notes: {
+            ...state.entities.notes,
+            [id]: {
+              ...state.entities.notes[id],
+              content
+            }
+          }
+        }
+      }));
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to update note content:', error);
+      return false;
+    }
+  },
+
   selectEntry: async (id: string) => {
     set(state => ({
       ui: {

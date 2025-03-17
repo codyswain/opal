@@ -40,12 +40,39 @@ export async function registerDatabaseIPCHandlers() {
     if (!db) throw new Error('Database not initialized');
 
     try {
-      const note = await db.prepare(`
+      log.info(`Getting note content for ID: ${id}`);
+      
+      // First verify the item exists and is a note
+      const stmt = db.prepare(`
+        SELECT type
+        FROM items
+        WHERE id = ?
+        LIMIT 1
+      `);
+      const item = stmt.get(id) as { type: string } | undefined;
+
+      if (!item) {
+        log.error(`Item not found for ID: ${id}`);
+        return { success: false, error: 'Item not found' };
+      }
+
+      if (item.type !== 'note') {
+        log.error(`Item is not a note: ${id}`);
+        return { success: false, error: 'Item is not a note' };
+      }
+      
+      const noteStmt = db.prepare(`
         SELECT content
         FROM notes
-        WHERE item_id = '${id}'
+        WHERE item_id = ?
         LIMIT 1
-      `).get() as Note; 
+      `);
+      const note = noteStmt.get(id) as Note;
+
+      if (!note) {
+        log.error(`Note content not found for ID: ${id}`);
+        return { success: false, error: 'Note content not found' };
+      }
 
       return { success: true, note: {id, content: note.content} };
     } catch (error) {
@@ -54,7 +81,61 @@ export async function registerDatabaseIPCHandlers() {
     }
   })
 
+  ipcMain.handle('file-explorer:update-note-content', async (event, id: string, content: string) => {
+    const db = dbManager.getDatabase();
+    if (!db) throw new Error('Database not initialized');
 
+    try {
+      log.info(`Updating note content for ID: ${id}`);
+      log.info(`Content to update: ${content}`);
+      
+      // Get the node to check if it's a note and get its path
+      const stmt = db.prepare(`
+        SELECT type
+        FROM items
+        WHERE id = ?
+        LIMIT 1
+      `);
+      const node = stmt.get(id) as { type: string } | undefined;
+
+      if (!node) {
+        log.error('Node not found for ID:', id);
+        return { success: false, error: 'Node not found' };
+      }
+
+      if (node.type !== 'note') {
+        log.error('Cannot update content for non-note item:', id, node.type);
+        return { success: false, error: 'Item is not a note' };
+      }
+
+      // Use a transaction to ensure both updates succeed or fail together
+      const transaction = db.transaction(() => {
+        // Update the note content
+        const updateStmt = db.prepare(`
+          UPDATE notes
+          SET content = ?
+          WHERE item_id = ?
+        `);
+        updateStmt.run(content, id);
+        
+        // Update the updated_at timestamp for the item
+        const updateTimestampStmt = db.prepare(`
+          UPDATE items
+          SET updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `);
+        updateTimestampStmt.run(id);
+      });
+
+      log.info(`Running update transaction for note ID: ${id}`);
+      transaction();
+
+      return { success: true };
+    } catch (error) {
+      log.error('Error updating note content:', error);
+      return { success: false, error: String(error) };
+    }
+  })
 
   // First order of business
   // When a user selects a top level folder, we need to recursively load all of the items
@@ -167,6 +248,7 @@ export async function registerDatabaseIPCHandlers() {
       }
 
       const id = uuidv4();
+      log.info(`Generated UUID for new note: ${id}`);
       const newPath = path.join(parentPath, noteName);
 
       const transaction = db.transaction(() => {
@@ -408,12 +490,38 @@ export async function registerDatabaseIPCHandlers() {
         return { success: false, error: 'Database not initialized' };
       }
 
-      const stmt = db.prepare(`
+      // First check if the item exists and is a note
+      const checkItemStmt = db.prepare(`
+        SELECT id, type FROM items WHERE path = ?
+      `);
+      const item = checkItemStmt.get(notePath) as { id: string; type: string } | undefined;
+      
+      if (!item) {
+        log.error(`Item not found for path: ${notePath}`);
+        return { success: false, error: 'Item not found' };
+      }
+      
+      if (item.type !== 'note') {
+        log.error(`Cannot update content for non-note item: ${notePath}, type: ${item.type}`);
+        return { success: false, error: 'Item is not a note' };
+      }
+
+      // Now update the note content
+      const updateStmt = db.prepare(`
         UPDATE notes
         SET content = ?
-        WHERE item_id = (SELECT id FROM items WHERE path = ?)
+        WHERE item_id = ?
       `);
-      stmt.run(newContent, notePath);
+      updateStmt.run(newContent, item.id);
+      
+      // Update the updated_at timestamp for the item
+      const updateTimestampStmt = db.prepare(`
+        UPDATE items
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      updateTimestampStmt.run(item.id);
+      
       return { success: true };
     } catch (error) {
       log.error('Error updating note content:', error);
