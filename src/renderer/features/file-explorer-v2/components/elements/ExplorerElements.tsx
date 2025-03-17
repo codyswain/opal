@@ -40,8 +40,6 @@ export const VerticalGuideLine: React.FC<VerticalGuideLineProps> = ({
       left: `${index * explorerStyles.indentationWidth + explorerStyles.indentationOffset}px`, 
       top: 0, 
       height: '100%',
-      // Hide the line for the current level if this is the last child
-      display: index === level - 1 && isLastChild ? 'none' : 'block'
     }}
   />
 );

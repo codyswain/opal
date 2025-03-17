@@ -6,14 +6,14 @@ const explorerStyles = {
   // Spacing and sizing
   indentationWidth: 10,
   indentationOffset: 8,
-  itemHeight: 6,        // Tailwind height units (h-6)
+  itemHeight: 6.5,        // Tailwind height units (h-6)
   itemPaddingY: 1,      // Tailwind py-1
   itemPaddingX: 1.5,    // Tailwind px-1.5
   iconSize: 4.5,        // w-4.5 h-4.5
   iconMargin: 1.5,      // mr-1.5
   
   // Text sizes
-  itemTextSize: 'xs',   // text-xs
+  itemTextSize: 'sm',   // text-xs
   headerTextSize: 'sm', // text-sm
   
   // Colors
