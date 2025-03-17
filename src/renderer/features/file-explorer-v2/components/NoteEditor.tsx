@@ -125,7 +125,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
   }, [content, editor]);
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden p-4">
+    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
       <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/90 border-b border-border/40 px-2 py-0.5 mb-1">
         <Toolbar editor={editor} />
       </div>
@@ -137,7 +137,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
           }
         }}
       >
-        <div className="min-h-full max-w-4xl mx-auto px-6 py-2 bg-card text-card-foreground rounded-lg shadow-lg">
+        <div className="min-h-full px-6 py-2 bg-card text-card-foreground rounded-lg shadow-lg">
           <EditorContent 
             className="prose-modern" 
             editor={editor} 

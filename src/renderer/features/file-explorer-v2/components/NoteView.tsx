@@ -30,10 +30,10 @@ const NoteView: React.FC<NoteViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden p-4">
-      <div className="flex w-full justify-center items-center">
-        <div className="flex items-center justify-between mb-4 w-full max-w-4xl">
-          <div className="flex items-center flex-grow mr-2">
+    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
+      <div className="flex flex-col h-full max-w-4xl mx-auto w-full">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center flex-grow">
             <Input
               type="text"
               value={selectedNode.name}
@@ -43,7 +43,7 @@ const NoteView: React.FC<NoteViewProps> = ({
             />
             {isSaving && <Loader2 className="h-4 w-4 animate-spin ml-2 text-muted-foreground" />}
           </div>
-          <div className="flex items-center space-x-2 mr-4">
+          <div className="flex items-center space-x-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
@@ -65,12 +65,14 @@ const NoteView: React.FC<NoteViewProps> = ({
             </Tooltip>
           </div>
         </div>
-      </div>
 
-      <NoteEditor 
-        content={selectedNote.content || ""} 
-        onUpdate={handleContentChange} 
-      />
+        <div className="flex-grow">
+          <NoteEditor 
+            content={selectedNote.content || ""} 
+            onUpdate={handleContentChange} 
+          />
+        </div>
+      </div>
     </div>
   );
 };

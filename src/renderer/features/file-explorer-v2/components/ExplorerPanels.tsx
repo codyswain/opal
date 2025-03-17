@@ -5,16 +5,13 @@ import {
   PanelResizeHandle,
   ImperativePanelHandle,
 } from "react-resizable-panels";
-import NoteEditor from "@/renderer/features/notes/components/NoteEditor/NoteEditor"
+
 import RightSidebar from "@/renderer/features/notes/components/RightSidebar/RightSidebar";
-import { useNotesContext } from "@/renderer/features/notes/context/notesContext";
-import { Button } from "@/renderer/shared/components/Button";
-import { FileExplorerProvider, useFileExplorerContext } from "../context/FileExplorerContext";
 import ExplorerLeftPanel from "./ExplorerLeftPanel";
 import ExploreCenterPanel from "./ExploreCenterPanel";
 
 const ResizeHandle: React.FC<{ className?: string }> = ({ className }) => (
-  <PanelResizeHandle 
+  <PanelResizeHandle
     className={`group relative w-1.5 transition-colors duration-200 flex items-center justify-center ${className}`}
   >
     <div className="absolute inset-y-0 left-1/2 w-[1px] bg-slate-200 dark:bg-slate-700/50" />
@@ -36,7 +33,6 @@ const Explorer: React.FC<{
 }) => {
   const [leftSidebarSize, setLeftSidebarSize] = useState(18);
   const [rightSidebarSize, setRightSidebarSize] = useState(25);
-  const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
 
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
@@ -82,8 +78,6 @@ const Explorer: React.FC<{
         break;
     }
   };
-
-  const { items, setItems } = useFileExplorerContext();
 
   return (
     <PanelGroup direction="horizontal" className="h-screen w-screen">
