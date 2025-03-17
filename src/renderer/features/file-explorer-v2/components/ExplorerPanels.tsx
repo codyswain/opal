@@ -6,9 +6,22 @@ import {
   ImperativePanelHandle,
 } from "react-resizable-panels";
 import NoteEditor from "@/renderer/features/notes/components/NoteEditor/NoteEditor"
-import NoteExplorer from "@/renderer/features/notes/components/NoteExplorer/NoteExplorer";
 import RightSidebar from "@/renderer/features/notes/components/RightSidebar/RightSidebar";
 import { useNotesContext } from "@/renderer/features/notes/context/notesContext";
+import { Button } from "@/renderer/shared/components/Button";
+import { FileExplorerProvider, useFileExplorerContext } from "../context";
+import ExplorerLeftPanel from "./ExplorerLeftPanel";
+import ExploreCenterPanel from "./ExploreCenterPanel";
+
+const ResizeHandle: React.FC<{ className?: string }> = ({ className }) => (
+  <PanelResizeHandle 
+    className={`group relative w-1.5 transition-colors duration-200 flex items-center justify-center ${className}`}
+  >
+    <div className="absolute inset-y-0 left-1/2 w-[1px] bg-slate-200 dark:bg-slate-700/50" />
+    <div className="absolute h-16 w-0.5 bg-transparent group-hover:bg-accent/70 rounded-full transition-all duration-300" />
+    <div className="absolute inset-0 hover:bg-accent/10 transition-colors duration-200" />
+  </PanelResizeHandle>
+);
 
 const Explorer: React.FC<{
   isLeftSidebarOpen: boolean;
@@ -21,9 +34,9 @@ const Explorer: React.FC<{
   setIsLeftSidebarOpen,
   setIsRightSidebarOpen,
 }) => {
-  const { activeNote } = useNotesContext();
   const [leftSidebarSize, setLeftSidebarSize] = useState(18);
-  const [rightSidebarSize, setRightSidebarSize] = useState(25); // Increased default size for better readability
+  const [rightSidebarSize, setRightSidebarSize] = useState(25);
+  const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
 
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
@@ -70,6 +83,8 @@ const Explorer: React.FC<{
     }
   };
 
+  const { items, setItems } = useFileExplorerContext();
+
   return (
     <PanelGroup direction="horizontal" className="h-screen w-screen">
       <Panel
@@ -81,22 +96,13 @@ const Explorer: React.FC<{
         collapsible={true}
         onCollapse={() => handlePanelCollapse("leftSidebar")}
       >
-        <NoteExplorer
-          isOpen={isLeftSidebarOpen}
-          onClose={() => setIsLeftSidebarOpen(false)}
-        />
+        <ExplorerLeftPanel />
       </Panel>
-      <PanelResizeHandle className="w-1 bg-border hover:bg-accent/50 cursor-ew-resize" />
+      <ResizeHandle />
       <Panel>
-        {activeNote ? (
-          <NoteEditor note={activeNote} />
-        ) : (
-          <div className="flex w-full h-full justify-center items-center">
-            Please select a note
-          </div>
-        )}
+        <ExploreCenterPanel />
       </Panel>
-      <PanelResizeHandle className="w-1 bg-border hover:bg-accent/50 cursor-ew-resize" />
+      <ResizeHandle />
       <Panel
         ref={rightPanelRef}
         defaultSize={rightSidebarSize}

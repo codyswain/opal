@@ -11,7 +11,7 @@ interface RightSidebarProps {
 
 const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
   return (
-    <div className="h-full flex flex-col bg-background border-l border-border">
+    <div className="h-full flex flex-col bg-background">
       <Tabs defaultValue="related" className="flex flex-col h-full">
         <div className="flex justify-between items-center p-2 h-10 border-b border-border">
           <TabsList className="flex gap-4 bg-transparent">

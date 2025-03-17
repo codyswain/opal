@@ -20,3 +20,9 @@ export interface AIMetadata {
   tags: string | null; // Consider string[] if you split tags
   embedding: Buffer | null; // If you store embeddings
 } 
+
+export interface ItemWithAIMetadata extends Item {
+  summary: string | null;
+  tags: string | null;
+  embedding: Buffer | null;
+}

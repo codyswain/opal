@@ -5,14 +5,55 @@ import log from 'electron-log';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Item, Note } from './types';
-import db from './db';
+import { Item, ItemWithAIMetadata, Note } from './types';
 import { migrateNotesToDatabase } from './migration';
 import { cleanupOldNotes } from './cleanup';
+import { transformFileSystemData } from './transforms';
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
   const dbManager = DatabaseManager.getInstance();
+
+  // Eventually move the logic into its own service
+  ipcMain.handle('file-explorer:get-entries', async () => {
+    const db = dbManager.getDatabase();
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      const items = await db.prepare(`
+        SELECT  i.id, i.type, i.path, i.parent_path, i.name, i.created_at, i.updated_at, i.size, a.summary, a.tags
+        FROM items i
+        LEFT JOIN ai_metadata a ON i.id = a.item_id
+      `).all() as ItemWithAIMetadata[];
+
+      const entries = transformFileSystemData(items);
+
+      return { success: true, items: entries };
+    } catch (error){
+      log.error('Error fetching file explorer entries:', error);
+      return { success: false, error: String(error) };
+    }
+  })
+
+  ipcMain.handle('file-explorer:get-note', async (event, id: string) => {
+    const db = dbManager.getDatabase();
+    if (!db) throw new Error('Database not initialized');
+
+    try {
+      const note = await db.prepare(`
+        SELECT content
+        FROM notes
+        WHERE item_id = '${id}'
+        LIMIT 1
+      `).get() as Note; 
+
+      return { success: true, note: {id, content: note.content} };
+    } catch (error) {
+      log.error('Error fetching note:', error);
+      return { success: false, error: String(error) };
+    }
+  })
+
 
 
   // First order of business

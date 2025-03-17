@@ -11,6 +11,7 @@ import {
   DirectoryStructures,
 } from "@/renderer/shared/types";
 import { Item } from "./main/database/types";
+import { FSEntry, Note as NoteV2 } from "@/types";
 
 declare global {
   interface Window {
@@ -61,6 +62,11 @@ declare global {
       importFile: (sourceFilePath: string, newPath: string) => Promise<void>;
       addRootFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
     };
+
+    fileExplorer: {
+      getEntries: () => Promise<{ success: boolean; items: Record<string, FSEntry> }>;
+      getNote: (id: string) => Promise<{ success: boolean; note: NoteV2 }>;
+    }
   }
 }
 

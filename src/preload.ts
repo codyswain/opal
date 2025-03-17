@@ -123,3 +123,9 @@ contextBridge.exposeInMainWorld('databaseAPI', {
   resetDatabase: () => 
     ipcRenderer.invoke('reset-database'),
 });
+
+
+contextBridge.exposeInMainWorld("fileExplorer", {
+  getEntries: () => ipcRenderer.invoke('file-explorer:get-entries'),
+  getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
+})
