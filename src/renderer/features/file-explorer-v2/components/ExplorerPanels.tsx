@@ -9,7 +9,7 @@ import NoteEditor from "@/renderer/features/notes/components/NoteEditor/NoteEdit
 import RightSidebar from "@/renderer/features/notes/components/RightSidebar/RightSidebar";
 import { useNotesContext } from "@/renderer/features/notes/context/notesContext";
 import { Button } from "@/renderer/shared/components/Button";
-import { FileExplorerProvider, useFileExplorerContext } from "../context";
+import { FileExplorerProvider, useFileExplorerContext } from "../context/FileExplorerContext";
 import ExplorerLeftPanel from "./ExplorerLeftPanel";
 import ExploreCenterPanel from "./ExploreCenterPanel";
 

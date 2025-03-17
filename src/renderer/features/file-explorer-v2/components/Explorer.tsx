@@ -1,7 +1,10 @@
 import React from "react";
-import { FileExplorerProvider } from "../context";
+import { FileExplorerProvider } from "../context/FileExplorerContext";
 import ExplorerPanels from "./ExplorerPanels";
 
+/**
+ * Main Explorer component that provides the file explorer functionality
+ */
 const Explorer: React.FC<{
   isLeftSidebarOpen: boolean;
   isRightSidebarOpen: boolean;

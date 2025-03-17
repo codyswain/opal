@@ -1,7 +1,9 @@
-import {create} from 'zustand';
-import {FSExplorerState, FSEntry, Note, AIMetadata } from '@/types';
+import { create } from 'zustand';
+import { FSExplorerState, FSEntry, Note, AIMetadata } from '@/types';
 
-
+/**
+ * Zustand store for file explorer state management
+ */
 export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   entities: {
     nodes: {},
@@ -125,5 +127,4 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
       }
     }));
   }
-}))
-
+})) 

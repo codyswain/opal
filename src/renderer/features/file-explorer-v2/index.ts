@@ -1,5 +1,4 @@
-import Explorer from '@/renderer/features/file-explorer-v2/components/Explorer'
-
-export {
-  Explorer
-}
+// Export the Explorer component
+import Explorer from './components/Explorer';
+export default Explorer;
+export { Explorer }; 

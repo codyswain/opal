@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { useDebouncedCallback } from "use-debounce";
-import { useFileExplorerStore } from "../store";
+import { useFileExplorerStore } from "../store/fileExplorerStore";
 import { toast } from "@/renderer/shared/components/Toast";
 import FolderView from "./FolderView";
 import NoteView from "./NoteView";
