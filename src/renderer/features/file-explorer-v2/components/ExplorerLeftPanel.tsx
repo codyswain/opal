@@ -3,6 +3,8 @@ import { useFileExplorerStore } from '../store/fileExplorerStore';
 import explorerStyles from './styles/explorerStyles';
 import { LoadingState } from './elements/ExplorerElements';
 import FolderContents from './FolderContents';
+import { useFileExplorerContextMenu } from '../hooks/useFileExplorerContextMenu';
+import FileExplorerContextMenu from './FileExplorerContextMenu';
 
 /**
  * ExplorerLeftPanel - Main component for the file explorer panel
@@ -12,9 +14,11 @@ import FolderContents from './FolderContents';
  * 2. Displaying the header
  * 3. Showing loading/error states
  * 4. Rendering the folder contents
+ * 5. Handling context menu interactions
  */
 export default function ExplorerLeftPanel() {
   const { loading, loadFileSystem } = useFileExplorerStore();
+  const { contextMenu, handleContextMenu, closeContextMenu } = useFileExplorerContextMenu();
 
   // Load file system data on component mount
   useEffect(() => {
@@ -33,8 +37,17 @@ export default function ExplorerLeftPanel() {
         <LoadingState isLoading={loading.isLoading} error={loading.error} />
         
         {!loading.isLoading && !loading.error && (
-          <FolderContents parentId={null} />
+          <FolderContents 
+            parentId={null} 
+            onContextMenu={handleContextMenu}
+          />
         )}
+        
+        {/* Context Menu */}
+        <FileExplorerContextMenu 
+          contextMenu={contextMenu} 
+          onClose={closeContextMenu} 
+        />
       </div>
     </div>
   );

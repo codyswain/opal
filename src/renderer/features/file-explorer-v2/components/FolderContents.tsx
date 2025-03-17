@@ -10,12 +10,13 @@ import { FSEntry } from '@/types';
 export interface FolderContentsProps {
   parentId: string | null;
   level?: number;
+  onContextMenu: (e: React.MouseEvent, entry: FSEntry) => void;
 }
 
 /**
  * FolderContents - Recursively renders the contents of a folder
  */
-const FolderContents: React.FC<FolderContentsProps> = ({ parentId, level = 0 }) => {
+const FolderContents: React.FC<FolderContentsProps> = ({ parentId, level = 0, onContextMenu }) => {
   const { entities, ui } = useFileExplorerStore();
   
   // Get child entries for this parent
@@ -35,12 +36,17 @@ const FolderContents: React.FC<FolderContentsProps> = ({ parentId, level = 0 }) 
             entry={entry} 
             level={level} 
             isLastChild={index === childEntries.length - 1} 
+            onContextMenu={onContextMenu}
           />
           
           {/* Render children if this is an expanded folder */}
           {entry.type === 'folder' && 
            ui.expandedFolders.has(entry.id) && 
-           <FolderContents parentId={entry.id} level={level + 1} />}
+           <FolderContents 
+             parentId={entry.id} 
+             level={level + 1} 
+             onContextMenu={onContextMenu}
+           />}
         </div>
       ))}
     </>

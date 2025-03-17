@@ -169,5 +169,20 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         searchQuery: query
       }
     }));
-  }
+  },
+
+  createNote: async (parentPath: string, noteName: string) => {
+    try {
+      const initialContent = '# New Note\n\nStart writing here...';
+      // Make sure we're using the create-note IPC method
+      await window.electron.createNote(parentPath, noteName, initialContent);
+      
+      // Reload the file system to reflect the changes
+      return get().loadFileSystem();
+    } catch (error) {
+      console.error('Failed to create note:', error);
+      set({ loading: { isLoading: false, error: String(error) } });
+      return false;
+    }
+  },
 })) 

@@ -3,6 +3,7 @@ import { FSEntry } from '@/types';
 import { useFileExplorerStore } from '../store/fileExplorerStore';
 import explorerStyles from './styles/explorerStyles';
 import { VerticalGuideLine, FileIcon } from './elements/ExplorerElements';
+import { useFileExplorerContextMenu } from '../hooks/useFileExplorerContextMenu';
 
 // ======================================================
 // Type Definitions
@@ -12,12 +13,13 @@ export interface FileItemProps {
   entry: FSEntry;
   level: number;
   isLastChild: boolean;
+  onContextMenu: (e: React.MouseEvent, entry: FSEntry) => void;
 }
 
 /**
  * FileItem - Displays a single file, folder, or note in the explorer
  */
-const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild }) => {
+const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContextMenu }) => {
   const { ui, selectEntry, toggleFolder } = useFileExplorerStore();
   const isSelected = ui.selectedId === entry.id;
   const isExpanded = ui.expandedFolders.has(entry.id);
@@ -29,6 +31,10 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild }) => {
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     toggleFolder(entry.id);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    onContextMenu(e, entry);
   };
   
   return (
@@ -48,6 +54,7 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild }) => {
         className={`flex items-center py-${explorerStyles.itemPaddingY} px-${explorerStyles.itemPaddingX} rounded cursor-pointer relative h-${explorerStyles.itemHeight} text-${explorerStyles.itemTextSize}`}
         style={{ paddingLeft: `${level * explorerStyles.indentationWidth + 4}px` }}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
       >
         {/* Background div that doesn't cover the vertical lines */}
         <div 
