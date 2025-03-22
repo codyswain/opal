@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/renderer/shared/components/Input";
-import { Loader2, Check, ArrowLeft, ArrowRight, Edit3 } from "lucide-react";
+import { Loader2, Check, Edit3 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -30,7 +30,7 @@ const NoteView: React.FC<NoteViewProps> = ({
   const [newTitle, setNewTitle] = useState(selectedNode?.name || "");
   const [isRenamingSaving, setIsRenamingSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { renameItem, goBack, goForward, canGoBack, canGoForward } = useFileExplorerStore();
+  const { renameItem } = useFileExplorerStore();
 
   // Update title when selected node changes
   useEffect(() => {
@@ -88,54 +88,36 @@ const NoteView: React.FC<NoteViewProps> = ({
       {/* Header with note name and controls - made consistent with FolderView */}
       <div className="p-4 border-b flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={goBack}
-              disabled={!canGoBack()}
-              className={`p-1.5 rounded-md ${canGoBack() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
-              title="Go back"
+          {isEditing ? (
+            <div className="flex items-center">
+              <Input
+                ref={inputRef}
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onBlur={handleRename}
+                onKeyDown={handleKeyDown}
+                className="text-xl font-semibold bg-transparent h-8 px-2"
+                aria-label="Edit note title"
+              />
+              {isRenamingSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <button onClick={handleRename} className="ml-1 p-1 hover:bg-muted rounded">
+                  <Check className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div 
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1 cursor-pointer group"
             >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={goForward}
-              disabled={!canGoForward()}
-              className={`p-1.5 rounded-md ${canGoForward() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
-              title="Go forward"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            
-            {isEditing ? (
-              <div className="flex items-center">
-                <Input
-                  ref={inputRef}
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  onBlur={handleRename}
-                  onKeyDown={handleKeyDown}
-                  className="text-xl font-semibold bg-transparent h-8 px-2"
-                  aria-label="Edit note title"
-                />
-                {isRenamingSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                ) : (
-                  <button onClick={handleRename} className="ml-1 p-1 hover:bg-muted rounded">
-                    <Check className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div 
-                onClick={() => setIsEditing(true)}
-                className="flex items-center gap-1 cursor-pointer group"
-              >
-                <h2 className="text-xl font-semibold">{selectedNode.name}</h2>
-                <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-50" />
-              </div>
-            )}
-          </div>
+              <Edit3 className="w-4 h-4 text-green-500" />
+              <h2 className="text-lg font-semibold">{selectedNode.name}</h2>
+              <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-50" />
+            </div>
+          )}
           
           <Tooltip>
             <TooltipTrigger asChild>

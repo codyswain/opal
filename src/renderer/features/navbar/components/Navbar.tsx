@@ -3,18 +3,18 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/renderer/shared/components/Button";
 import { NavbarItem, NavbarItemProps } from "./NavbarItem";
 import {
-  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Settings,
-  Square,
-  X,
   ChevronsUp,
   ChevronsDown,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { ThemeToggle } from "@/renderer/features/theme";
+import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
 interface NavbarProps {
   toggleLeftSidebar: () => void;
@@ -36,36 +36,57 @@ const Navbar: React.FC<NavbarProps> = ({
   items,
 }) => {
   const location = useLocation();
+  const { canGoBack, canGoForward, goBack, goForward } = useFileExplorerStore();
 
   const handleWindowAction = (action: "minimize" | "maximize" | "close") => {
     window.electron[action]();
   };
 
   const renderWindowControls = () => (
-    <div className="flex items-center space-x-2 no-drag">
-      {[
-        { action: "close", icon: X },
-        { action: "minimize", icon: Minus },
-        { action: "maximize", icon: Square },
-      ].map(({ action, icon: Icon }) => (
-        <Button
-          key={action}
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() =>
-            handleWindowAction(action as "minimize" | "maximize" | "close")
-          }
-        >
-          <span className="sr-only">{action}</span>
-          <Icon className="h-4 w-4 mr-2" />
-        </Button>
-      ))}
+    <div className="flex items-center space-x-1.5 no-drag ml-2">
+      {/* Apple-style buttons */}
+      <button
+        className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
+        onClick={() => handleWindowAction("close")}
+        title="Close"
+      />
+      <button
+        className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-600 transition-colors"
+        onClick={() => handleWindowAction("minimize")}
+        title="Minimize"
+      />
+      <button
+        className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-600 transition-colors"
+        onClick={() => handleWindowAction("maximize")}
+        title="Maximize"
+      />
     </div>
   );
 
   const renderNavItems = () => (
-    <ul className="flex items-center space-x-2 no-drag mx-auto">
+    <ul className="flex items-center space-x-2 no-drag">
+      <li className="flex items-center mr-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={goBack}
+          title="Go back"
+          disabled={!canGoBack()}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={goForward}
+          title="Go forward"
+          disabled={!canGoForward()}
+        >
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </li>
       {items.map((item) => (
         <NavbarItem
           key={item.to}

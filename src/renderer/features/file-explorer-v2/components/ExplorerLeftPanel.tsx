@@ -28,9 +28,9 @@ export default function ExplorerLeftPanel() {
   return (
     <div className="flex flex-col h-full w-full overflow-auto">
       {/* Header */}
-      <div className={`p-1.5 font-semibold border-b text-${explorerStyles.headerTextSize}`}>
+      {/* <div className={`p-1.5 font-semibold border-b text-${explorerStyles.headerTextSize}`}>
         Files
-      </div>
+      </div> */}
       
       {/* Content area */}
       <div className="flex-1 overflow-auto p-1.5">

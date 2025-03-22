@@ -11,9 +11,7 @@ import {
   List, 
   Grid, 
   FileIcon,
-  Edit3,
-  ArrowLeft,
-  ArrowRight
+  Edit3
 } from "lucide-react";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 
@@ -27,19 +25,16 @@ interface FolderViewProps {
 
 type SortField = 'name' | 'updatedAt' | 'createdAt' | 'type';
 type SortDirection = 'asc' | 'desc';
-type ViewMode = 'compact' | 'normal';
+type ViewMode = 'list' | 'grid';
 
 const FolderView: React.FC<FolderViewProps> = ({ 
   selectedNode, 
   entities, 
   selectEntry 
 }) => {
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [viewMode, setViewMode] = useState<ViewMode>('normal');
-  
-  // Get navigation functions from store
-  const { goBack, goForward, canGoBack, canGoForward } = useFileExplorerStore();
 
   // Toggle sort direction or change sort field
   const handleSort = (field: SortField) => {
@@ -58,11 +53,11 @@ const FolderView: React.FC<FolderViewProps> = ({
   const getIcon = (type: string) => {
     switch (type) {
       case 'folder':
-        return <Folder className="w-5 h-5 text-blue-500" />;
+        return <Folder className="w-4 h-4 text-blue-500" />;
       case 'note':
-        return <Edit3 className="w-5 h-5 text-green-500" />;
+        return <Edit3 className="w-4 h-4 text-green-500" />;
       default:
-        return <FileIcon className="w-5 h-5 text-gray-500" />;
+        return <FileIcon className="w-4 h-4 text-gray-500" />;
     }
   };
 
@@ -115,42 +110,24 @@ const FolderView: React.FC<FolderViewProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Header with folder name and controls */}
-      <div className="p-4 border-b flex flex-col gap-2">
+      <div className="p-3 border-b flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={goBack}
-              disabled={!canGoBack()}
-              className={`p-1.5 rounded-md ${canGoBack() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
-              title="Go back"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={goForward}
-              disabled={!canGoForward()}
-              className={`p-1.5 rounded-md ${canGoForward() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
-              title="Go forward"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-1">
-              <Folder className="w-4 h-4 text-blue-500" />
-              <h2 className="text-xl font-semibold">{selectedNode?.name}</h2>
-            </div>
+          <div className="flex items-center gap-1">
+            <Folder className="w-4 h-4 text-blue-500" />
+            <h2 className="text-lg font-semibold">{selectedNode?.name}</h2>
           </div>
           <div className="flex items-center gap-1">
             <button 
-              onClick={() => setViewMode('compact')}
-              className={`p-1.5 rounded-md ${viewMode === 'compact' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
-              title="Compact view"
+              onClick={() => setViewMode('list')}
+              className={`p-1 rounded-md ${viewMode === 'list' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+              title="List view"
             >
               <List className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => setViewMode('normal')}
-              className={`p-1.5 rounded-md ${viewMode === 'normal' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
-              title="Normal view"
+              onClick={() => setViewMode('grid')}
+              className={`p-1 rounded-md ${viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+              title="Grid view"
             >
               <Grid className="w-4 h-4" />
             </button>
@@ -200,8 +177,8 @@ const FolderView: React.FC<FolderViewProps> = ({
       
       {/* Content area */}
       <div className="flex-1 overflow-auto p-2">
-        {viewMode === 'compact' ? (
-          // Compact view - table layout
+        {viewMode === 'list' ? (
+          // List view - table layout
           <div className="w-full">
             <table className="w-full border-collapse">
               <thead>
@@ -222,16 +199,16 @@ const FolderView: React.FC<FolderViewProps> = ({
                     <td className="p-2">
                       <div className="flex items-center gap-2">
                         {getIcon(child.type)}
-                        <span>{child.name}</span>
+                        <span className="truncate">{child.name}</span>
                       </div>
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground">
+                    <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
                       {formatDate(child.metadata.updatedAt)}
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground hidden md:table-cell">
+                    <td className="p-2 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
                       {formatDate(child.metadata.createdAt)}
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground hidden md:table-cell">
+                    <td className="p-2 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
                       {child.type !== 'folder' ? getFileSize(child.metadata.size) : '-'}
                     </td>
                   </tr>
@@ -240,37 +217,25 @@ const FolderView: React.FC<FolderViewProps> = ({
             </table>
           </div>
         ) : (
-          // Normal view - grid with previews
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          // Grid view - more compact with smaller previews
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             {sortedChildren.map((child) => (
               <div 
                 key={child.id}
                 onClick={() => selectEntry(child.id)}
-                className="flex flex-col bg-card hover:bg-card/80 rounded-lg cursor-pointer border border-muted overflow-hidden transition-all hover:shadow-sm"
+                className="flex flex-col bg-card hover:bg-card/80 rounded-md cursor-pointer border border-muted overflow-hidden transition-all hover:shadow-sm"
               >
-                {/* Preview area */}
-                <div className="h-28 bg-muted/20 flex items-center justify-center p-4">
+                {/* Smaller preview area */}
+                <div className="h-16 bg-muted/20 flex items-center justify-center">
                   {getIcon(child.type)}
                 </div>
                 
-                {/* Info area */}
-                <div className="p-2.5">
-                  <div className="font-medium truncate text-sm">{child.name}</div>
-                  <div className="flex flex-col mt-1 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>Modified {formatDate(child.metadata.updatedAt)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>Created {formatDate(child.metadata.createdAt)}</span>
-                    </div>
-                    {child.type !== 'folder' && child.type !== 'note' && (
-                      <div className="flex items-center gap-1">
-                        <FileText className="w-3 h-3" />
-                        <span>{getFileSize(child.metadata.size)}</span>
-                      </div>
-                    )}
+                {/* More compact info area */}
+                <div className="p-2 text-xs">
+                  <div className="font-medium truncate">{child.name}</div>
+                  <div className="flex items-center gap-1 mt-1 text-muted-foreground text-[10px]">
+                    <Clock className="w-3 h-3" />
+                    <span className="truncate">{formatDate(child.metadata.updatedAt)}</span>
                   </div>
                 </div>
               </div>
