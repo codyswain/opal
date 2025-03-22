@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
@@ -17,9 +17,46 @@ import { Link } from '@tiptap/extension-link';
 import { Image } from '@tiptap/extension-image';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { EditorView } from "@tiptap/pm/view";
-import Toolbar from "@/renderer/features/notes/components/NoteEditor/Toolbar";
+import { cn } from '@/renderer/shared/utils/cn';
 import '@/renderer/styles/NoteEditor.css';
 import { configureLowlight } from "./editorConfig";
+import Toolbar from "@/renderer/features/notes/components/NoteEditor/Toolbar";
+
+// Create a simple extension for keyboard shortcuts
+const KeyboardShortcuts = {
+  name: 'keyboardShortcuts',
+  addKeyboardShortcuts() {
+    return {
+      'Mod-b': () => this.editor.commands.toggleBold(),
+      'Mod-i': () => this.editor.commands.toggleItalic(),
+      'Mod-u': () => this.editor.commands.toggleUnderline(),
+      'Mod-k': () => this.editor.commands.toggleLink(),
+    };
+  },
+};
+
+// Simple FileHandler component
+const FileHandler = ({ children, onFileDrop }: { children: React.ReactNode, onFileDrop: (files: File[]) => void }) => {
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      onFileDrop(files);
+    }
+  };
+  
+  return (
+    <div 
+      className="w-full h-full"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+    >
+      {children}
+    </div>
+  );
+};
 
 const lowlight = configureLowlight();
 
@@ -29,9 +66,18 @@ const SPACES_PER_TAB = 4;
 interface NoteEditorProps {
   content: string;
   onUpdate: ({ editor }: { editor: any }) => void;
+  readOnly?: boolean;
+  filePath?: string;
 }
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
+const NoteEditor: React.FC<NoteEditorProps> = ({ 
+  content, 
+  onUpdate,
+  readOnly = false,
+  filePath
+}) => {
+  const [wordCount, setWordCount] = useState({ words: 0, characters: 0 });
+  
   // Initialize TipTap editor
   const editor = useEditor({
     extensions: [
@@ -40,18 +86,31 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
         bulletList: false,
         orderedList: false,
         listItem: false,
+        history: {
+          depth: 100,
+          newGroupDelay: 500,
+        },
       }),
       CodeBlockLowlight.configure({
         lowlight,
         defaultLanguage: 'plaintext',
+        HTMLAttributes: {
+          class: 'code-block',
+        },
       }),
-      Markdown,
+      Markdown.configure({
+        transformPastedText: true,
+      }),
       Placeholder.configure({
         placeholder: "Type '/' for commands...",
+        emptyEditorClass: 'is-editor-empty',
       }),
       BulletList.configure({
         keepMarks: true,
         keepAttributes: false,
+        HTMLAttributes: {
+          class: 'bullet-list',
+        },
       }),
       OrderedList.configure({
         keepMarks: true,
@@ -61,33 +120,78 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
           class: 'ordered-list',
         },
       }),
-      ListItem,
-      TaskList,
+      ListItem.configure({
+        HTMLAttributes: {
+          class: 'list-item',
+        },
+      }),
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'task-list',
+        },
+      }),
       TaskItem.configure({
         nested: true,
+        HTMLAttributes: {
+          class: 'task-item',
+        },
       }),
       Table.configure({
         resizable: true,
+        HTMLAttributes: {
+          class: 'editor-table',
+        },
       }),
       TableRow,
       TableHeader,
       TableCell,
       Link.configure({
         openOnClick: false,
+        HTMLAttributes: {
+          class: 'editor-link',
+          rel: 'noopener noreferrer',
+          target: '_blank',
+        },
+        validate: url => /^https?:\/\//.test(url) || url.startsWith('#'),
       }),
-      Image,
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'editor-image',
+        },
+      }),
       TextAlign.configure({
         types: ['heading', 'paragraph'],
+        alignments: ['left', 'center', 'right', 'justify'],
+        defaultAlignment: 'left',
       }),
     ],
     content: content || "",
-    onUpdate: onUpdate,
-    autofocus: true,
+    onUpdate: ({ editor }) => {
+      onUpdate({ editor });
+      
+      // Update word count
+      const text = editor.getText();
+      const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+      const characterCount = text.length;
+      
+      setWordCount({
+        words: wordCount,
+        characters: characterCount,
+      });
+    },
+    autofocus: !readOnly,
+    editable: !readOnly,
     editorProps: {
       attributes: {
-        class: "prose prose-md dark:prose-invert focus:outline-none max-w-none h-full w-full overflow-auto leading-normal cursor-text",
+        class: cn(
+          "prose prose-md dark:prose-invert focus:outline-none max-w-none h-full w-full overflow-auto leading-normal cursor-text",
+          readOnly && "editor-readonly"
+        ),
       },
       handleKeyDown: (view: EditorView, event: KeyboardEvent): boolean => {
+        if (readOnly) return false;
+        
         if (event.key === 'Tab') {
           event.preventDefault();
           if (event.shiftKey) {
@@ -112,6 +216,32 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
             return true;
           }
         }
+        
+        // Handle keyboard shortcuts
+        if (event.key === 'b' && (event.ctrlKey || event.metaKey)) {
+          editor.chain().focus().toggleBold().run();
+          return true;
+        }
+        
+        if (event.key === 'i' && (event.ctrlKey || event.metaKey)) {
+          editor.chain().focus().toggleItalic().run();
+          return true;
+        }
+        
+        return false;
+      },
+      handleDrop: (view, event, slice, moved) => {
+        // Handle dropped content and files
+        if (!moved && event.dataTransfer?.files.length) {
+          const files = Array.from(event.dataTransfer.files);
+          const imageFiles = files.filter(file => file.type.startsWith('image/'));
+          
+          if (imageFiles.length > 0) {
+            // Show image upload modal or handle image insert directly
+            event.preventDefault();
+            return true;
+          }
+        }
         return false;
       },
     },
@@ -123,26 +253,50 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ content, onUpdate }) => {
       editor.commands.setContent(content || "");
     }
   }, [content, editor]);
+  
+  // Handle file drop for image upload
+  const handleFileDrop = useCallback((files: File[]) => {
+    if (!editor) return;
+    
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result === 'string') {
+          editor.chain().focus().setImage({ src: result }).run();
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [editor]);
 
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30 px-1 py-0.5">
-        <Toolbar editor={editor} />
+        {!readOnly && (
+          <div className="flex justify-between items-center">
+            <div className="text-xs text-muted-foreground ml-auto">
+              {wordCount.words} words · {wordCount.characters} characters
+            </div>
+          </div>
+        )}
+        
+        {!readOnly && (
+          <Toolbar editor={editor} />
+        )}
       </div>
-      <div
-        className="flex-grow overflow-auto"
-        onClick={() => {
-          if (editor) {
-            editor.chain().focus().run();
-          }
-        }}
-      >
-        <div className="min-h-full px-4 py-2">
-          <EditorContent 
-            className="prose-modern" 
-            editor={editor} 
-          />
-        </div>
+      
+      <div className="flex-grow overflow-auto relative">
+        <FileHandler onFileDrop={handleFileDrop}>
+          <div className="overflow-auto min-h-full px-4 py-2">
+            <EditorContent 
+              className="prose-modern" 
+              editor={editor} 
+            />
+          </div>
+        </FileHandler>
       </div>
     </div>
   );

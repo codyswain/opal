@@ -98,7 +98,7 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
       
       {/* Item content with background that doesn't cover the lines */}
       <div 
-        className={`flex items-center py-${explorerStyles.itemPaddingY} hover:bg-gray-800/30 rounded-none cursor-pointer relative h-${explorerStyles.itemHeight} text-${explorerStyles.itemTextSize} ${isSelected ? 'text-white' : 'text-gray-300'}`}
+        className={`flex items-center py-${explorerStyles.itemPaddingY} px-${explorerStyles.itemPaddingX} hover:bg-gray-800/30 rounded cursor-pointer relative h-${explorerStyles.itemHeight} text-${explorerStyles.itemTextSize} ${isSelected ? 'text-white' : 'text-gray-300'}`}
         style={{ paddingLeft: `${level * explorerStyles.indentationWidth}px` }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
@@ -126,7 +126,7 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
         {/* Entry name with timestamp tooltip */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ${entry.type === 'folder' ? 'text-yellow-500 dark:text-yellow-500 font-medium' : ''}`}>
+            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ml-${explorerStyles.iconMargin} ${entry.type === 'folder' ? 'text-yellow-500 dark:text-yellow-500 font-medium' : ''}`}>
               {entry.name}
             </span>
           </TooltipTrigger>

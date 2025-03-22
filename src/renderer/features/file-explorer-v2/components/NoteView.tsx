@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/renderer/shared/components/Input";
-import { Loader2, Check, Edit3 } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -10,6 +10,7 @@ import { cn } from '@/renderer/shared/utils/cn';
 import NoteEditor from "./NoteEditor";
 import { FSEntry, Note } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
+import { Button } from "@/renderer/shared/components/Button";
 
 interface NoteViewProps {
   selectedNode: FSEntry;
@@ -84,73 +85,55 @@ const NoteView: React.FC<NoteViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header with note name and controls - made consistent with FolderView */}
-      <div className="p-4 border-b flex flex-col gap-2">
-        <div className="flex items-center justify-between">
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="flex justify-between items-center p-3 py-2 border-b border-border">
+        <div className="flex-1 flex items-center space-x-2">
           {isEditing ? (
-            <div className="flex items-center">
+            <div className="flex-1 flex items-center">
               <Input
                 ref={inputRef}
-                type="text"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                onBlur={handleRename}
                 onKeyDown={handleKeyDown}
-                className="text-xl font-semibold bg-transparent h-8 px-2"
-                aria-label="Edit note title"
+                onBlur={handleRename}
+                className="h-7"
               />
-              {isRenamingSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin ml-2" />
-              ) : (
-                <button onClick={handleRename} className="ml-1 p-1 hover:bg-muted rounded">
-                  <Check className="h-4 w-4" />
-                </button>
-              )}
+              {isRenamingSaving && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             </div>
           ) : (
-            <div 
+            <div
+              className="text-lg font-medium leading-tight truncate cursor-pointer"
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-1 cursor-pointer group"
+              title={selectedNode.name}
             >
-              <Edit3 className="w-4 h-4 text-green-500" />
-              <h2 className="text-lg font-semibold">{selectedNode.name}</h2>
-              <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-50" />
+              {selectedNode.name}
             </div>
           )}
-          
+        </div>
+        
+        <div className="flex items-center gap-2">
           <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center">
-                {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                <div
-                  className={cn(
-                    "w-2 h-2 rounded-full",
-                    indicatorStatus === "green"
-                      ? "bg-primary"
-                      : "bg-secondary animate-pulse"
-                  )}
-                />
-              </div>
+            <TooltipTrigger>
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full transition-colors",
+                  indicatorStatus === "green" ? "bg-green-500" : "bg-yellow-500"
+                )}
+              />
             </TooltipTrigger>
             <TooltipContent>
-              <p>
-                {indicatorStatus === "green"
-                  ? "Note saved"
-                  : "Saving note..."}
-              </p>
+              <p>{indicatorStatus === "green" ? "Saved" : "Saving..."}</p>
             </TooltipContent>
           </Tooltip>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        <div className="max-w-4xl mx-auto w-full">
-          <NoteEditor 
-            content={selectedNote.content || ""} 
-            onUpdate={handleContentChange} 
-          />
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <NoteEditor
+          content={selectedNote.content}
+          onUpdate={handleContentChange}
+          filePath={selectedNode.path}
+        />
       </div>
     </div>
   );

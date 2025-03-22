@@ -46,6 +46,7 @@ export interface FSExplorerState {
   getNote: (id: string) => Promise<boolean>;
   updateNoteContent: (id: string, content: string) => Promise<boolean>;
   createNote: (parentPath: string, noteName: string) => Promise<boolean>;
+  createFolder: (parentPath: string, folderName: string) => Promise<boolean>;
   renameItem: (id: string, newName: string) => Promise<boolean>;
   
   toggleFolder: (folderId: string) => void;

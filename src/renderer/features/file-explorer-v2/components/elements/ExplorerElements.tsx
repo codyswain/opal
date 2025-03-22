@@ -52,13 +52,14 @@ export const VerticalGuideLine: React.FC<VerticalGuideLineProps> = ({
   isLastChild 
 }) => (
   <div 
-    className="absolute border-l opacity-30"
+    className="absolute border-l"
     style={{ 
-      left: `${index * explorerStyles.indentationWidth + 8}px`, 
+      left: `${index * explorerStyles.indentationWidth + 10}px`, 
       top: 0, 
       bottom: isLastChild ? '50%' : 0,
       height: isLastChild ? 'auto' : '100%',
-      borderColor: 'rgb(83, 83, 83)'
+      borderColor: 'rgb(83, 83, 83)',
+      opacity: 0.4
     }}
   />
 );
@@ -80,15 +81,15 @@ export const FileIcon: React.FC<FileIconProps> = ({
       case 'tsx':
       case 'js':
       case 'jsx':
-        return <FileCode size={12} className="text-blue-400" />;
+        return <FileCode size={14} className="text-blue-400" />;
       case 'json':
-        return <FileJson size={12} className="text-yellow-400" />;
+        return <FileJson size={14} className="text-yellow-400" />;
       case 'sql':
-        return <Database size={12} className="text-yellow-500" />;
+        return <Database size={14} className="text-yellow-500" />;
       case 'md':
-        return <FileText size={12} className="text-gray-300" />;
+        return <FileText size={14} className="text-gray-300" />;
       default:
-        return <File size={12} className="text-gray-400" />;
+        return <File size={14} className="text-gray-400" />;
     }
   };
 
@@ -97,15 +98,15 @@ export const FileIcon: React.FC<FileIconProps> = ({
       {type === 'folder' ? (
         <button 
           onClick={onToggle}
-          className="flex items-center justify-center w-4 text-gray-500 hover:text-gray-400"
+          className="flex items-center justify-center w-5 h-5 text-gray-500 hover:text-gray-400"
         >
           {isExpanded ? 
-            <ChevronDown size={14} className="stroke-[1.5]" /> : 
-            <ChevronRight size={14} className="stroke-[1.5]" />
+            <ChevronDown size={16} className="stroke-[1.5]" /> : 
+            <ChevronRight size={16} className="stroke-[1.5]" />
           }
         </button>
       ) : (
-        <span className="flex w-4 justify-center">
+        <span className="flex w-5 h-5 justify-center items-center">
           {getFileIcon()}
         </span>
       )}

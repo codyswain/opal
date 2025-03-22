@@ -293,6 +293,20 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     }
   },
 
+  createFolder: async (parentPath: string, folderName: string) => {
+    try {
+      // Use the createFolder IPC method
+      await window.electron.createFolder(parentPath, folderName);
+      
+      // Reload the file system to reflect the changes
+      return get().loadFileSystem();
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      set({ loading: { isLoading: false, error: String(error) } });
+      return false;
+    }
+  },
+
   renameItem: async (id: string, newName: string) => {
     try {
       const node = get().entities.nodes[id];
