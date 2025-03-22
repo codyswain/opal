@@ -29,9 +29,9 @@ const FolderContents: React.FC<FolderContentsProps> = ({ parentId, level = 0, on
   }
   
   return (
-    <>
+    <div className="flex flex-col">
       {childEntries.map((entry: FSEntry, index) => (
-        <div key={entry.id}>
+        <div key={entry.id} className="w-full">
           <FileItem 
             entry={entry} 
             level={level} 
@@ -49,7 +49,7 @@ const FolderContents: React.FC<FolderContentsProps> = ({ parentId, level = 0, on
            />}
         </div>
       ))}
-    </>
+    </div>
   );
 };
 
