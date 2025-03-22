@@ -134,9 +134,12 @@ const FolderView: React.FC<FolderViewProps> = ({
             >
               <ArrowRight className="w-4 h-4" />
             </button>
-            <h2 className="text-xl font-semibold">{selectedNode?.name}</h2>
+            <div className="flex items-center gap-1">
+              <Folder className="w-4 h-4 text-blue-500" />
+              <h2 className="text-xl font-semibold">{selectedNode?.name}</h2>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button 
               onClick={() => setViewMode('compact')}
               className={`p-1.5 rounded-md ${viewMode === 'compact' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
@@ -155,10 +158,10 @@ const FolderView: React.FC<FolderViewProps> = ({
         </div>
         
         {/* Sort controls */}
-        <div className="flex flex-wrap gap-2 text-sm">
+        <div className="flex flex-wrap gap-1 text-xs">
           <button 
             onClick={() => handleSort('name')}
-            className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortField === 'name' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${sortField === 'name' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
           >
             Name
             {sortField === 'name' && (
@@ -167,7 +170,7 @@ const FolderView: React.FC<FolderViewProps> = ({
           </button>
           <button 
             onClick={() => handleSort('type')}
-            className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortField === 'type' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${sortField === 'type' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
           >
             Type
             {sortField === 'type' && (
@@ -176,7 +179,7 @@ const FolderView: React.FC<FolderViewProps> = ({
           </button>
           <button 
             onClick={() => handleSort('updatedAt')}
-            className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortField === 'updatedAt' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${sortField === 'updatedAt' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
           >
             Modified
             {sortField === 'updatedAt' && (
@@ -185,7 +188,7 @@ const FolderView: React.FC<FolderViewProps> = ({
           </button>
           <button 
             onClick={() => handleSort('createdAt')}
-            className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortField === 'createdAt' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md ${sortField === 'createdAt' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
           >
             Created
             {sortField === 'createdAt' && (
@@ -238,21 +241,21 @@ const FolderView: React.FC<FolderViewProps> = ({
           </div>
         ) : (
           // Normal view - grid with previews
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {sortedChildren.map((child) => (
               <div 
                 key={child.id}
                 onClick={() => selectEntry(child.id)}
-                className="flex flex-col bg-card hover:bg-card/80 rounded-lg cursor-pointer border border-muted overflow-hidden transition-all hover:shadow-md"
+                className="flex flex-col bg-card hover:bg-card/80 rounded-lg cursor-pointer border border-muted overflow-hidden transition-all hover:shadow-sm"
               >
                 {/* Preview area */}
-                <div className="h-32 bg-muted/30 flex items-center justify-center p-4">
+                <div className="h-28 bg-muted/20 flex items-center justify-center p-4">
                   {getIcon(child.type)}
                 </div>
                 
                 {/* Info area */}
-                <div className="p-3">
-                  <div className="font-medium truncate">{child.name}</div>
+                <div className="p-2.5">
+                  <div className="font-medium truncate text-sm">{child.name}</div>
                   <div className="flex flex-col mt-1 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -278,8 +281,8 @@ const FolderView: React.FC<FolderViewProps> = ({
         {/* Empty state */}
         {(!selectedNode?.children || selectedNode.children.length === 0) && (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
-            <Folder className="w-12 h-12 mb-2 opacity-30" />
-            <p>This folder is empty</p>
+            <Folder className="w-10 h-10 mb-2 opacity-20" />
+            <p className="text-sm">This folder is empty</p>
           </div>
         )}
       </div>

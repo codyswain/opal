@@ -34,10 +34,10 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
 
   const buttonClass = (isActive: boolean) =>
     cn(
-      'p-2 rounded-md',
+      'p-1 rounded-md',
       isActive
-        ? 'bg-primary text-primary-foreground'
-        : 'hover:bg-accent hover:text-accent-foreground'
+        ? 'bg-primary/10 text-primary'
+        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
     );
 
   const setLanguage = (language: string) => {
@@ -58,14 +58,14 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
   ];
 
   return (
-    <div className="flex items-center space-x-1 mb-4 bg-muted/50 p-2 rounded-md max-w-4xl w-full">
+    <div className="flex items-center flex-wrap gap-0.5 py-1 px-1">
       <Button
         onClick={() => editor.chain().focus().toggleBold().run()}
         className={buttonClass(editor.isActive('bold'))}
         variant="ghost"
         size="icon"
       >
-        <Bold className="h-4 w-4" />
+        <Bold className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleItalic().run()}
@@ -73,7 +73,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <Italic className="h-4 w-4" />
+        <Italic className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleStrike().run()}
@@ -81,7 +81,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <Strikethrough className="h-4 w-4" />
+        <Strikethrough className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleCode().run()}
@@ -89,16 +89,16 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <Code className="h-4 w-4" />
+        <Code className="h-3.5 w-3.5" />
       </Button>
-      <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2" />
+      <div className="border-l border-muted h-4 mx-1" />
       <Button
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={buttonClass(editor.isActive('bulletList'))}
         variant="ghost"
         size="icon"
       >
-        <List className="h-4 w-4" />
+        <List className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
@@ -106,16 +106,16 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <ListOrdered className="h-4 w-4" />
+        <ListOrdered className="h-3.5 w-3.5" />
       </Button>
-      <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2" />
+      <div className="border-l border-muted h-4 mx-1" />
       <Button
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         className={buttonClass(editor.isActive('blockquote'))}
         variant="ghost"
         size="icon"
       >
-        <Quote className="h-4 w-4" />
+        <Quote className="h-3.5 w-3.5" />
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -124,8 +124,8 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
             variant="ghost"
             size="icon"
           >
-            <Code2 className="h-4 w-4" />
-            <ChevronDown className="h-3 w-3 ml-1" />
+            <Code2 className="h-3.5 w-3.5" />
+            <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
@@ -133,21 +133,21 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
             <DropdownMenuItem
               key={value}
               onClick={() => editor.chain().focus().toggleCodeBlock({ language: value }).run()}
-              className={editor.isActive('codeBlock', { language: value }) ? 'bg-accent' : ''}
+              className={editor.isActive('codeBlock', { language: value }) ? 'bg-primary/10 text-primary' : ''}
             >
               {label}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2" />
+      <div className="border-l border-muted h-4 mx-1" />
       <Button
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         className={buttonClass(editor.isActive('heading', { level: 1 }))}
         variant="ghost"
         size="icon"
       >
-        <Heading1 className="h-4 w-4" />
+        <Heading1 className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
@@ -155,7 +155,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <Heading2 className="h-4 w-4" />
+        <Heading2 className="h-3.5 w-3.5" />
       </Button>
       <Button
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
@@ -163,7 +163,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         variant="ghost"
         size="icon"
       >
-        <Heading3 className="h-4 w-4" />
+        <Heading3 className="h-3.5 w-3.5" />
       </Button>
     </div>
   );
