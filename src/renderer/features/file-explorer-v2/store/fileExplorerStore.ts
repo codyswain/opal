@@ -14,6 +14,9 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     selectedId: null,
     expandedFolders: new Set(),
     searchQuery: '',
+    history: [],
+    historyIndex: -1,
+    isNavigatingHistory: false,
   },
   loading: {
     isLoading: false,
@@ -32,6 +35,23 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
           },
           loading: { isLoading: false, error: null }
         }));
+        
+        // Find the root folder to select initially
+        const rootNodes = Object.values(items).filter(node => node.parentId === null);
+        if (rootNodes.length > 0) {
+          const rootId = rootNodes[0].id;
+          
+          // Initialize history with root node and select it
+          set(state => ({
+            ui: {
+              ...state.ui,
+              selectedId: rootId,
+              history: [rootId],
+              historyIndex: 0
+            }
+          }));
+        }
+        
         return true;
       }
       return false;
@@ -108,12 +128,49 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   },
 
   selectEntry: async (id: string) => {
+    const { ui } = get();
+    const isNavigatingHistory = ui.isNavigatingHistory;
+    
+    // Update selected ID
     set(state => ({
       ui: {
         ...state.ui,
         selectedId: id
       }
     }));
+    
+    // Update navigation history if not using back/forward navigation
+    if (!isNavigatingHistory) {
+      set(state => {
+        const currentIndex = state.ui.historyIndex;
+        const history = [...state.ui.history];
+        
+        // If the same item is selected, don't update history
+        if (history[currentIndex] === id) {
+          return state;
+        }
+        
+        // Add new entry to history, removing any forward history
+        const newHistory = [...history.slice(0, currentIndex + 1), id];
+        const newIndex = currentIndex + 1;
+        
+        return {
+          ui: {
+            ...state.ui,
+            history: newHistory,
+            historyIndex: newIndex
+          }
+        };
+      });
+    } else {
+      // Reset navigating flag after navigation completes
+      set(state => ({
+        ui: {
+          ...state.ui,
+          isNavigatingHistory: false
+        }
+      }));
+    }
     
     // Get the entry type
     const entry = get().entities.nodes[id];
@@ -142,6 +199,56 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         }
       }));
     }
+  },
+
+  // Add navigation functions
+  goBack: () => {
+    const { ui } = get();
+    
+    if (ui.historyIndex > 0) {
+      // Set navigating flag
+      set(state => ({
+        ui: {
+          ...state.ui,
+          isNavigatingHistory: true,
+          historyIndex: state.ui.historyIndex - 1
+        }
+      }));
+      
+      // Navigate to the previous entry
+      const newIndex = get().ui.historyIndex;
+      const prevId = get().ui.history[newIndex];
+      get().selectEntry(prevId);
+    }
+  },
+  
+  goForward: () => {
+    const { ui } = get();
+    
+    if (ui.historyIndex < ui.history.length - 1) {
+      // Set navigating flag
+      set(state => ({
+        ui: {
+          ...state.ui,
+          isNavigatingHistory: true,
+          historyIndex: state.ui.historyIndex + 1
+        }
+      }));
+      
+      // Navigate to the next entry
+      const newIndex = get().ui.historyIndex;
+      const nextId = get().ui.history[newIndex];
+      get().selectEntry(nextId);
+    }
+  },
+  
+  canGoBack: () => {
+    return get().ui.historyIndex > 0;
+  },
+  
+  canGoForward: () => {
+    const { ui } = get();
+    return ui.historyIndex < ui.history.length - 1;
   },
   
   toggleFolder: (folderId: string) => {
@@ -182,6 +289,48 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     } catch (error) {
       console.error('Failed to create note:', error);
       set({ loading: { isLoading: false, error: String(error) } });
+      return false;
+    }
+  },
+
+  renameItem: async (id: string, newName: string) => {
+    try {
+      const node = get().entities.nodes[id];
+      if (!node) {
+        console.error('Node not found for ID:', id);
+        return false;
+      }
+
+      // Call the IPC method to rename the item in the database
+      const result = await window.fileExplorer.renameItem(node.path, newName);
+      
+      if (!result.success) {
+        console.error('Failed to rename item:', result.error);
+        return false;
+      }
+      
+      // Update the local state with the new name and path
+      set(state => {
+        const updatedNodes = { ...state.entities.nodes };
+        
+        // Update the renamed node
+        updatedNodes[id] = {
+          ...updatedNodes[id],
+          name: newName,
+          path: result.newPath
+        };
+        
+        return {
+          entities: {
+            ...state.entities,
+            nodes: updatedNodes
+          }
+        };
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to rename item:', error);
       return false;
     }
   },

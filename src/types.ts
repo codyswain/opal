@@ -34,6 +34,9 @@ export interface FSExplorerState {
     selectedId: string | null;
     expandedFolders: Set<string>;
     searchQuery: string;
+    history: string[];
+    historyIndex: number;
+    isNavigatingHistory: boolean;
   };
   loading: {
     isLoading: boolean;
@@ -43,8 +46,15 @@ export interface FSExplorerState {
   getNote: (id: string) => Promise<boolean>;
   updateNoteContent: (id: string, content: string) => Promise<boolean>;
   createNote: (parentPath: string, noteName: string) => Promise<boolean>;
+  renameItem: (id: string, newName: string) => Promise<boolean>;
   
   toggleFolder: (folderId: string) => void;
   setSearchQuery: (query: string) => void;
   selectEntry: (id: string) => void;
+  
+  // Navigation methods
+  goBack: () => void;
+  goForward: () => void;
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
 }

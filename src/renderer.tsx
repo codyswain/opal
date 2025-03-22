@@ -67,6 +67,8 @@ declare global {
       getEntries: () => Promise<{ success: boolean; items: Record<string, FSEntry> }>;
       getNote: (id: string) => Promise<{ success: boolean; note: NoteV2 }>;
       updateNoteContent: (id: string, content: string) => Promise<{ success: boolean; error?: string }>;
+      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<{ success: boolean; error?: string }>;
+      renameItem: (itemPath: string, newName: string) => Promise<{ success: boolean; newPath: string; error?: string }>;
     }
   }
 }

@@ -1,6 +1,6 @@
 import { FSEntry } from "@/types";
 import React, { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { formatLocalDate, getLocalDate } from "@/renderer/shared/utils";
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -11,8 +11,11 @@ import {
   List, 
   Grid, 
   FileIcon,
-  Edit3
+  Edit3,
+  ArrowLeft,
+  ArrowRight
 } from "lucide-react";
+import { useFileExplorerStore } from "../store/fileExplorerStore";
 
 interface FolderViewProps {
   selectedNode: FSEntry;
@@ -34,6 +37,9 @@ const FolderView: React.FC<FolderViewProps> = ({
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('normal');
+  
+  // Get navigation functions from store
+  const { goBack, goForward, canGoBack, canGoForward } = useFileExplorerStore();
 
   // Toggle sort direction or change sort field
   const handleSort = (field: SortField) => {
@@ -45,14 +51,8 @@ const FolderView: React.FC<FolderViewProps> = ({
     }
   };
 
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    try {
-      return format(new Date(dateString), 'MMM d, yyyy h:mm a');
-    } catch (e) {
-      return 'Unknown date';
-    }
-  };
+  // Format date for display in user's local timezone
+  const formatDate = formatLocalDate;
 
   // Get file/folder icon based on type
   const getIcon = (type: string) => {
@@ -86,13 +86,19 @@ const FolderView: React.FC<FolderViewProps> = ({
             ? a.name.localeCompare(b.name)
             : b.name.localeCompare(a.name);
         } else if (sortField === 'updatedAt') {
+          // Use our utility function to get dates in local timezone
+          const dateA = getLocalDate(a.metadata.updatedAt);
+          const dateB = getLocalDate(b.metadata.updatedAt);
           return sortDirection === 'asc'
-            ? new Date(a.metadata.updatedAt).getTime() - new Date(b.metadata.updatedAt).getTime()
-            : new Date(b.metadata.updatedAt).getTime() - new Date(a.metadata.updatedAt).getTime();
+            ? dateA.getTime() - dateB.getTime()
+            : dateB.getTime() - dateA.getTime();
         } else if (sortField === 'createdAt') {
+          // Use our utility function to get dates in local timezone
+          const dateA = getLocalDate(a.metadata.createdAt);
+          const dateB = getLocalDate(b.metadata.createdAt);
           return sortDirection === 'asc'
-            ? new Date(a.metadata.createdAt).getTime() - new Date(b.metadata.createdAt).getTime()
-            : new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime();
+            ? dateA.getTime() - dateB.getTime()
+            : dateB.getTime() - dateA.getTime();
         }
         
         return 0;
@@ -111,7 +117,25 @@ const FolderView: React.FC<FolderViewProps> = ({
       {/* Header with folder name and controls */}
       <div className="p-4 border-b flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">{selectedNode?.name}</h2>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={goBack}
+              disabled={!canGoBack()}
+              className={`p-1.5 rounded-md ${canGoBack() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
+              title="Go back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={goForward}
+              disabled={!canGoForward()}
+              className={`p-1.5 rounded-md ${canGoForward() ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'}`}
+              title="Go forward"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <h2 className="text-xl font-semibold">{selectedNode?.name}</h2>
+          </div>
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setViewMode('compact')}

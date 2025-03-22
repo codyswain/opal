@@ -6,6 +6,7 @@ declare global {
       getEntries: () => Promise<{ success: boolean; items: Record<string, FSEntry>; error?: string }>;
       getNote: (id: string) => Promise<{ success: boolean; note: Note; error?: string }>;
       updateNoteContent: (id: string, content: string) => Promise<{ success: boolean; error?: string }>;
+      renameItem: (itemPath: string, newName: string) => Promise<{ success: boolean; newPath: string; error?: string }>;
     };
     electron: {
       saveNote: (note: Note, dirPath: string) => Promise<any>;

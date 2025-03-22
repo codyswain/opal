@@ -129,4 +129,5 @@ contextBridge.exposeInMainWorld("fileExplorer", {
   getEntries: () => ipcRenderer.invoke('file-explorer:get-entries'),
   getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
+  renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
 })

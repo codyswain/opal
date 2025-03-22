@@ -4,6 +4,12 @@ import { useFileExplorerStore } from '../store/fileExplorerStore';
 import explorerStyles from './styles/explorerStyles';
 import { VerticalGuideLine, FileIcon } from './elements/ExplorerElements';
 import { useFileExplorerContextMenu } from '../hooks/useFileExplorerContextMenu';
+import { formatLocalDate, getLocalDate } from '@/renderer/shared/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/renderer/shared/components/Tooltip";
 
 // ======================================================
 // Type Definitions
@@ -23,6 +29,9 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
   const { ui, selectEntry, toggleFolder } = useFileExplorerStore();
   const isSelected = ui.selectedId === entry.id;
   const isExpanded = ui.expandedFolders.has(entry.id);
+  
+  // Format date for display in user's local timezone
+  const formatDate = formatLocalDate;
   
   const handleClick = () => {
     selectEntry(entry.id);
@@ -69,10 +78,18 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
           onToggle={handleToggle} 
         />
         
-        {/* Entry name */}
-        <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize}`}>
-          {entry.name}
-        </span>
+        {/* Entry name with timestamp tooltip */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize}`}>
+              {entry.name}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Last updated: {formatDate(entry.metadata.updatedAt)}</p>
+            <p>Created: {formatDate(entry.metadata.createdAt)}</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );
