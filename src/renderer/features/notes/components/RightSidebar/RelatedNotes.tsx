@@ -62,7 +62,7 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea className="flex-grow px-4">
+      <ScrollArea className="flex-grow w-full px-4">
         <div className="py-4">
           {similarNotesIsLoading ? (
             <div className="flex items-center justify-center h-20">

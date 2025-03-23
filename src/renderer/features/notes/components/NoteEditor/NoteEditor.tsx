@@ -258,7 +258,11 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note }) => {
         <Toolbar editor={editor} />
       </div>
       <div
-        className="flex-grow overflow-auto"
+        className="flex-grow overflow-auto w-full"
+        style={{ 
+          position: 'relative',
+          overflowX: 'hidden'
+        }}
         onClick={() => {
           if (editor) {
             editor.chain().focus().run();

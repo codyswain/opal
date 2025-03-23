@@ -141,7 +141,7 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
   };
 
   return (
-    <ScrollArea className="h-[calc(100%-2.5rem)]">
+    <ScrollArea className="h-[calc(100%-2.5rem)] w-full">
       {newFolderState.error && (
         <div className="text-red-500 text-sm p-2">{newFolderState.error}</div>
       )}

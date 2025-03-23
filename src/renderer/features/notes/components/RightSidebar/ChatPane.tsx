@@ -3,12 +3,12 @@ import { cn } from "@/renderer/shared/utils";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Button } from "@/renderer/shared/components/Button";
 import { Input } from "@/renderer/shared/components/Input";
-import { Settings, Send } from "lucide-react";
+import { Send, RefreshCw, Info, Bot } from "lucide-react";
 import { toast } from "@/renderer/shared/components/Toast";
-import { useNotesContext } from "../../context/notesContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { v4 as uuidv4 } from "uuid";
+import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
 interface BottomPaneProps {
   onClose: () => void;
@@ -31,7 +31,11 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     return localStorage.getItem("currentChatConversationId") || uuidv4();
   });
 
-  const { openNoteById } = useNotesContext();
+  // Get the selected note info from fileExplorerStore
+  const { ui, entities } = useFileExplorerStore();
+  const selectedId = ui.selectedId;
+  const selectedNode = selectedId ? entities.nodes[selectedId] : null;
+  const selectedNote = selectedId && selectedNode?.type === 'note' ? entities.notes[selectedId] : null;
 
   // Load conversation history when component mounts
   useEffect(() => {
@@ -53,10 +57,58 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
   }, [conversationId]);
 
   useEffect(() => {
+    // Scroll to bottom whenever messages change
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+      const scrollElement = scrollAreaRef.current;
+      setTimeout(() => {
+        scrollElement.scrollTop = scrollElement.scrollHeight;
+      }, 100);
     }
   }, [messages]);
+
+  // If the chat history is empty, show a welcome message
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([
+        {
+          role: "assistant",
+          content: "Hello! What would you like to know about your notes?"
+        }
+      ]);
+    }
+  }, [messages]);
+
+  // Make sure to load the note content if it's not already loaded
+  useEffect(() => {
+    if (selectedId && selectedNode?.type === 'note' && !entities.notes[selectedId]) {
+      // Load the note content
+      const loadNote = async () => {
+        await useFileExplorerStore.getState().getNote(selectedId);
+      };
+      loadNote();
+    }
+  }, [selectedId, selectedNode, entities.notes]);
+
+  // Improved function to open notes by ID that correctly handles the note:// links generated in handlers.ts
+  const openNoteById = async (noteId: string) => {
+    // The noteId in this case is directly the database item ID from handlers.ts
+    // No need to search by metadata - it's the primary key of the item
+    if (entities.nodes[noteId]) {
+      // The note exists in our store, select it
+      await useFileExplorerStore.getState().selectEntry(noteId);
+    } else {
+      // If not in our store yet, we need to load it first
+      try {
+        // Attempt to get the note content which should load it into the store
+        await useFileExplorerStore.getState().getNote(noteId);
+        // Then select it
+        await useFileExplorerStore.getState().selectEntry(noteId);
+      } catch (error) {
+        console.error("Failed to open note:", error);
+        toast.error("Note not found or could not be loaded");
+      }
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -70,8 +122,61 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
       // Add the user message to the database
       await window.chatAPI.addMessage(conversationId, userMessage.role, userMessage.content);
       
-      // Perform RAG query
-      const result = await window.chatAPI.performRAG(conversationId, userMessage.content);
+      // Prepare the RAG query with comprehensive context about the current note
+      let currentNoteContext = "";
+      let systemContext = "You are an AI assistant specialized in helping with notes and knowledge management. ";
+      let modifiedQuery = userMessage.content;
+      
+      // If active note exists, include its complete details
+      if (selectedNote && selectedNode) {
+        // Prepare note metadata string
+        const metadata = selectedNode.metadata || {};
+        const createdDate = metadata && 'createdAt' in metadata && metadata.createdAt 
+          ? new Date(metadata.createdAt as string).toLocaleDateString() 
+          : 'unknown date';
+        const updatedDate = metadata && 'updatedAt' in metadata && metadata.updatedAt 
+          ? new Date(metadata.updatedAt as string).toLocaleDateString() 
+          : 'unknown date';
+        const metadataStr = `created on ${createdDate}, last updated on ${updatedDate}`;
+        
+        // Add detailed information about current note to system context
+        systemContext += `The user is currently viewing a note titled "${selectedNode.name}" (ID: ${selectedId})`;
+        if (selectedNode.path) {
+          systemContext += ` located at path: ${selectedNode.path}`;
+        }
+        systemContext += `. This note was ${metadataStr}. `;
+        
+        // Create the current note context section that will be clearly highlighted
+        currentNoteContext = `
+CURRENT NOTE:
+============
+Title: ${selectedNode.name}
+ID: ${selectedId}
+Path: ${selectedNode.path || 'N/A'}
+Metadata: ${metadataStr}
+Content:
+${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ? '...' : ''}
+============
+
+`;
+
+        // Modify the query to include current note context and user query
+        modifiedQuery = `${currentNoteContext}USER QUERY: ${userMessage.content}`;
+      } else {
+        systemContext += "The user currently doesn't have any specific note open. ";
+      }
+      
+      // Add specific instructions for the AI
+      systemContext += "When answering, the CURRENT NOTE section contains the full content of the note the user is currently viewing. " +
+                      "You should directly reference this content when answering questions about the current note. " +
+                      "Be specific and point to relevant sections. If appropriate, suggest ways to organize or improve their notes. " +
+                      "When referencing other notes, use note:// links followed by the exact note ID.";
+      
+      // Add system context to the final query
+      const finalQuery = `SYSTEM CONTEXT: ${systemContext}\n\n${modifiedQuery}`;
+      
+      // Perform the RAG query with the enhanced context
+      const result = await window.chatAPI.performRAG(conversationId, finalQuery);
       
       if (result.success) {
         // Add the assistant's response to the UI
@@ -95,58 +200,107 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     <div
       key={message.id || index}
       className={cn(
-        "mb-4",
-        message.role === "user" ? "text-right" : "text-left"
+        "mb-3 group",
+        message.role === "user" ? "ml-8" : "mr-8"
       )}
     >
-      <div
-        className={cn(
-          "inline-block px-4 py-2 rounded-md",
-          message.role === "user"
-            ? "bg-primary text-primary-foreground"
-            : "bg-secondary text-secondary-foreground"
+      <div className="flex items-start gap-3">
+        {message.role === "assistant" && (
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Bot className="w-4 h-4 text-primary" />
+          </div>
         )}
-      >
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ href, children, ...props }) => {
-              if (href?.startsWith("note://")) {
-                const noteId = href.replace("note://", "");
+        <div className={cn(
+          "flex-1 px-4 py-2.5 rounded-lg",
+          message.role === "user"
+            ? "bg-primary/10 text-primary-foreground ml-auto"
+            : "bg-muted/30 text-foreground"
+        )}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ href, children, ...props }) => {
+                if (href?.startsWith("note://")) {
+                  const noteId = href.replace("note://", "");
+                  return (
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openNoteById(noteId);
+                      }}
+                      className="text-primary hover:underline"
+                      {...props}
+                    >
+                      {children}
+                    </a>
+                  );
+                }
                 return (
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openNoteById(noteId);
-                    }}
+                  <a 
+                    href={href} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-primary hover:underline"
                     {...props}
                   >
                     {children}
                   </a>
                 );
-              }
-              return (
-                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+              },
+              p: ({ children }) => <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>,
+              ul: ({ children }) => <ul className="list-disc ml-4 mb-2 text-sm">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 text-sm">{children}</ol>,
+              code: ({ children }) => (
+                <code className="bg-muted/50 px-1.5 py-0.5 rounded text-xs font-mono">
                   {children}
-                </a>
-              );
-            },
-          }}
-        >
-          {message.content}
-        </ReactMarkdown>
+                </code>
+              ),
+              pre: ({ children }) => (
+                <pre className="bg-muted/50 p-3 rounded-md my-2 overflow-x-auto text-xs font-mono">
+                  {children}
+                </pre>
+              ),
+            }}
+          >
+            {message.content}
+          </ReactMarkdown>
+        </div>
+        {message.role === "user" && (
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <div className="w-4 h-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
+              U
+            </div>
+          </div>
+        )}
       </div>
+      {message.created_at && (
+        <div className={cn(
+          "text-[10px] text-muted-foreground mt-1",
+          message.role === "user" ? "text-right" : "text-left ml-11"
+        )}>
+          {new Date(message.created_at).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          })}
+        </div>
+      )}
     </div>
   );
 
   const renderLoader = () => (
-    <div className="mb-4 text-left">
-      <div className="inline-block px-4 py-2 rounded-md bg-secondary text-secondary-foreground">
-        <div className="flex space-x-2">
-          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+    <div className="mb-3 mr-8">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Bot className="w-4 h-4 text-primary animate-pulse" />
+        </div>
+        <div className="flex-1 px-4 py-2.5 rounded-lg bg-muted/30">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0s' }} />
+            <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0.2s' }} />
+            <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0.4s' }} />
+          </div>
         </div>
       </div>
     </div>
@@ -160,20 +314,38 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-between items-center p-2 border-b border-border">
-        <h3 className="text-sm font-medium">Chat</h3>
-        <Button variant="ghost" size="sm" onClick={startNewConversation}>
-          New Chat
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex justify-between items-center h-8 px-3 border-b border-border bg-background/95">
+        <div className="flex items-center gap-2">
+          <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+          <h3 className="text-xs font-medium text-muted-foreground">Note Assistant</h3>
+          {selectedNote && selectedNode && (
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/30 text-[10px]">
+              <Info className="w-3 h-3 text-muted-foreground" />
+              <span className="text-muted-foreground truncate max-w-[150px]">
+                {selectedNode.name}
+              </span>
+            </div>
+          )}
+        </div>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={startNewConversation} 
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
         </Button>
       </div>
-      <ScrollArea className="flex-grow px-4" ref={scrollAreaRef}>
-        <div className="py-4 space-y-4">
+      
+      <ScrollArea className="flex-grow w-full" ref={scrollAreaRef}>
+        <div className="px-3 py-2 space-y-3">
           {messages.map(renderMessage)}
           {isLoading && renderLoader()}
         </div>
       </ScrollArea>
-      <div className="border-t border-border p-4">
+
+      <div className="px-3 py-2 border-t border-border bg-background/95">
         <div className="flex items-center gap-2">
           <Input
             value={input}
@@ -184,15 +356,16 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
                 handleSend();
               }
             }}
-            placeholder="Type your message..."
-            className="flex-grow"
+            placeholder="Ask about your notes..."
+            className="flex-grow h-7 text-xs bg-muted/30 border-muted-foreground/20"
           />
           <Button
             onClick={handleSend}
             disabled={isLoading || !input.trim()}
             size="icon"
+            className="h-7 w-7"
           >
-            <Send className="h-4 w-4" />
+            <Send className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
