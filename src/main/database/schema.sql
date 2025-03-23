@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS ai_metadata (
     item_id TEXT PRIMARY KEY,
     summary TEXT,
     tags TEXT,  -- Consider a separate tags table later if needed
-    embedding BLOB,
+    embedding TEXT,
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 

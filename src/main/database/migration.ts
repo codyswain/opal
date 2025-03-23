@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import log from 'electron-log';
 import DatabaseManager from './db';
 import { DirectoryEntry, Note } from '@/renderer/shared/types';
+import BetterSqlite3 from 'better-sqlite3';
 
 // Path to the old notes directory
 const NOTES_DIR = path.join(app.getPath('userData'), 'notes');
@@ -336,5 +337,159 @@ async function processNoteEntry(
   } catch (error) {
     log.error(`Error processing note entry ${entry.fullPath}:`, error);
     throw error;
+  }
+}
+
+// Add this function to migrate embeddings
+export async function migrateEmbeddingsToDatabase(workspacePath: string): Promise<void> {
+  const dbManager = DatabaseManager.getInstance();
+  const db = dbManager.getDatabase();
+  
+  if (!db) {
+    log.error('Database not initialized, cannot migrate embeddings');
+    return;
+  }
+  
+  log.info('Starting embedding migration to database...');
+  
+  try {
+    // Find all notes in the database
+    const notesStmt = db.prepare(`
+      SELECT i.id, i.path, i.name
+      FROM items i
+      WHERE i.type = 'note'
+    `);
+    
+    const notes = notesStmt.all() as { id: string, path: string, name: string }[];
+    log.info(`Found ${notes.length} notes to check for embeddings`);
+    
+    let migratedCount = 0;
+    
+    for (const note of notes) {
+      // Check if there's an embedding file in the filesystem
+      const dirPath = path.dirname(note.path);
+      const embeddingPath = path.join(dirPath, `${note.id}.embedding.json`);
+      
+      try {
+        // Check if the embedding file exists
+        await fs.access(embeddingPath);
+        
+        // Read the embedding file
+        const embeddingContent = await fs.readFile(embeddingPath, 'utf-8');
+        const embedding = JSON.parse(embeddingContent);
+        
+        // Store in database
+        const embeddingBuffer = Buffer.from(embeddingContent);
+        
+        // Check if an entry already exists
+        const existingStmt = db.prepare(`
+          SELECT item_id FROM ai_metadata WHERE item_id = ?
+        `);
+        
+        const existing = existingStmt.get(note.id);
+        
+        if (existing) {
+          // Update existing record
+          const updateStmt = db.prepare(`
+            UPDATE ai_metadata
+            SET embedding = ?
+            WHERE item_id = ?
+          `);
+          updateStmt.run(embeddingBuffer, note.id);
+        } else {
+          // Insert new record
+          const insertStmt = db.prepare(`
+            INSERT INTO ai_metadata (item_id, embedding)
+            VALUES (?, ?)
+          `);
+          insertStmt.run(note.id, embeddingBuffer);
+        }
+        
+        migratedCount++;
+        
+        // Optionally delete the embedding file after migration
+        // await fs.unlink(embeddingPath);
+        
+      } catch (error) {
+        // Embedding file might not exist, that's OK
+        if (error.code !== 'ENOENT') {
+          log.warn(`Error migrating embedding for note ${note.id}:`, error);
+        }
+      }
+    }
+    
+    log.info(`Successfully migrated ${migratedCount} embeddings to database`);
+  } catch (error) {
+    log.error('Error migrating embeddings to database:', error);
+  }
+}
+
+// Add this function to migrate the ai_metadata table
+export async function migrateAIMetadataSchema(): Promise<void> {
+  const dbManager = DatabaseManager.getInstance();
+  const db = dbManager.getDatabase();
+  
+  if (!db) {
+    log.error('Database not initialized, cannot migrate AI metadata schema');
+    return;
+  }
+  
+  log.info('Starting AI metadata schema migration...');
+  
+  try {
+    // Check if we have any ai_metadata records
+    const checkStmt = db.prepare('SELECT COUNT(*) as count FROM ai_metadata');
+    const { count } = checkStmt.get() as { count: number };
+    
+    if (count > 0) {
+      log.info(`Found ${count} AI metadata records that might need migration`);
+    }
+    
+    // Begin transaction
+    db.exec('BEGIN TRANSACTION');
+    
+    // Create a new table with the correct schema
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_metadata_new (
+        item_id TEXT PRIMARY KEY,
+        summary TEXT,
+        tags TEXT,
+        embedding TEXT,
+        FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+      )
+    `);
+    
+    // Copy data from the old table to the new one
+    // For embedding column, convert from BLOB to TEXT if needed
+    db.exec(`
+      INSERT INTO ai_metadata_new (item_id, summary, tags, embedding)
+      SELECT item_id, summary, tags,
+             CASE 
+               WHEN typeof(embedding) = 'blob' THEN json(embedding) 
+               ELSE embedding 
+             END as embedding
+      FROM ai_metadata
+    `);
+    
+    // Drop the old table
+    db.exec('DROP TABLE IF EXISTS ai_metadata');
+    
+    // Rename the new table to the original name
+    db.exec('ALTER TABLE ai_metadata_new RENAME TO ai_metadata');
+    
+    // Commit changes
+    db.exec('COMMIT');
+    
+    log.info('AI metadata schema migration completed successfully');
+    
+  } catch (error) {
+    // Rollback on error
+    try {
+      db.exec('ROLLBACK');
+    } catch (rollbackError) {
+      log.error('Error during rollback:', rollbackError);
+    }
+    
+    log.error('Error migrating AI metadata schema:', error);
   }
 } 

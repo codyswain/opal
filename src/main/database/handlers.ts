@@ -11,6 +11,7 @@ import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
+import { generateEmbeddingsForNote } from '../embeddings/handlers';
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
@@ -93,12 +94,12 @@ export async function registerDatabaseIPCHandlers() {
       
       // Get the node to check if it's a note and get its path
       const stmt = db.prepare(`
-        SELECT type
+        SELECT type, name
         FROM items
         WHERE id = ?
         LIMIT 1
       `);
-      const node = stmt.get(id) as { type: string } | undefined;
+      const node = stmt.get(id) as { type: string, name: string } | undefined;
 
       if (!node) {
         log.error('Node not found for ID:', id);
@@ -132,12 +133,25 @@ export async function registerDatabaseIPCHandlers() {
       log.info(`Running update transaction for note ID: ${id}`);
       transaction();
 
+      // Generate embeddings asynchronously after saving the note
+      // This is non-blocking, so it won't affect the note saving process
+      log.info(`Starting asynchronous embedding generation for note ${id}`);
+      
+      generateEmbeddingsForNote(id, content, node.name)
+        .then(() => {
+          log.info(`Asynchronous embedding generation completed for note ${id}`);
+        })
+        .catch(error => {
+          log.error(`Non-blocking embedding generation failed for note ${id}:`, error);
+          // We catch errors here so they don't affect the main promise chain
+        });
+
       return { success: true };
     } catch (error) {
       log.error('Error updating note content:', error);
       return { success: false, error: String(error) };
     }
-  })
+  });
 
   // Add the rename item handler for file-explorer namespace
   ipcMain.handle('file-explorer:rename-item', async (event, itemPath: string, newName: string) => {

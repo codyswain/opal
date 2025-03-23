@@ -6,11 +6,10 @@ import {
   SimilarNote,
 } from "@/renderer/shared/types";
 import OpenAI from "openai";
-import fs from "fs/promises";
-import path from "path";
 import { parse } from "node-html-parser";
-import { getOpenAIKey } from "../file-system/loader";
 import { ChatCompletionMessageParam } from "openai/resources/chat";
+import DatabaseManager from "../database/db";
+import { AIMetadata, Item } from "../database/types";
 
 const TEXT_EMBEDDING_MODEL = "text-embedding-ada-002";
 
@@ -29,77 +28,127 @@ export class EmbeddingCreator {
   }
 
   async parseNoteForEmbedding(note: Note): Promise<string> {
-    const root = parse(note.content);
+    // Handle case where content might be undefined
+    const content = note.content || '';
+    const root = parse(content);
     const textContent = root.textContent.trim();
     return `${note.title}\n\n${textContent}`;
   }
 
-  async saveEmbedding(embedding: Embedding, filePath: string): Promise<void> {
-    const embeddingDirPath = path.dirname(filePath);
-    await fs.mkdir(embeddingDirPath, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(embedding));
+  async saveEmbeddingToDatabase(noteId: string, embedding: Embedding): Promise<void> {
+    const dbManager = DatabaseManager.getInstance();
+    const db = dbManager.getDatabase();
+    
+    if (!db) throw new Error("Database not initialized");
+    
+    try {
+      // Check if embedding already exists for this note
+      const existingStmt = db.prepare(`
+        SELECT * FROM ai_metadata WHERE item_id = ?
+      `);
+      
+      const existingMetadata = existingStmt.get(noteId) as AIMetadata | undefined;
+      
+      // Convert embedding to proper format for storage
+      // SQLite expects binary data for BLOB columns
+      const embeddingJson = JSON.stringify(embedding);
+      
+      if (existingMetadata) {
+        // Update existing record
+        const updateStmt = db.prepare(`
+          UPDATE ai_metadata
+          SET embedding = ?
+          WHERE item_id = ?
+        `);
+        updateStmt.run(embeddingJson, noteId);
+      } else {
+        // Insert new record
+        const insertStmt = db.prepare(`
+          INSERT INTO ai_metadata (item_id, embedding)
+          VALUES (?, ?)
+        `);
+        insertStmt.run(noteId, embeddingJson);
+      }
+    } catch (error) {
+      console.error(`Error saving embedding to database for note ${noteId}:`, error);
+      throw new Error(`Failed to save embedding: ${error.message}`);
+    }
   }
 }
 
 export class SimilaritySearcher {
-  async findEmbeddingPaths(
-    directoryStructures: DirectoryStructures
-  ): Promise<string[]> {
-    const embeddingPaths: string[] = [];
-
-    const traverseStructure = async (fileNode: FileNode) => {
-      if (fileNode.type === "note" && fileNode.noteMetadata) {
-        const embeddingPath = `${path.dirname(fileNode.fullPath)}/${
-          fileNode.noteMetadata.id
-        }.embedding.json`;
-        try {
-          await fs.access(embeddingPath);
-          embeddingPaths.push(embeddingPath);
-        } catch (error) {
-          // Embedding file doesn't exist, skip
-        }
-      }
-      if (fileNode.childIds) {
-        for (const childId of fileNode.childIds) {
-          const childNode = directoryStructures.nodes[childId];
-          if (childNode) {
-            await traverseStructure(childNode);
-          }
-        }
-      }
-    };
-
-    for (const rootId of directoryStructures.rootIds) {
-      const rootNode = directoryStructures.nodes[rootId];
-      if (rootNode) {
-        await traverseStructure(rootNode);
-      }
-    }
-
-    return embeddingPaths;
+  async findNotesWithEmbeddings(): Promise<{ id: string, embedding: Embedding }[]> {
+    const dbManager = DatabaseManager.getInstance();
+    const db = dbManager.getDatabase();
+    
+    if (!db) throw new Error("Database not initialized");
+    
+    // Query all notes that have embeddings
+    const stmt = db.prepare(`
+      SELECT i.id, a.embedding 
+      FROM items i
+      JOIN ai_metadata a ON i.id = a.item_id
+      WHERE i.type = 'note' AND a.embedding IS NOT NULL
+    `);
+    
+    const rows = stmt.all() as { id: string, embedding: string }[];
+    
+    // Parse the embedding JSON from string
+    return rows.map(row => ({
+      id: row.id,
+      embedding: JSON.parse(row.embedding) as Embedding
+    }));
   }
 
   async performSimilaritySearch(
     queryEmbedding: OpenAI.Embeddings.CreateEmbeddingResponse,
-    embeddingPaths: string[]
+    limit = 10
   ): Promise<SimilarNote[]> {
-    const results: SimilarNote[] = [];
-
-    for (const embeddingPath of embeddingPaths) {
-      const embeddingContent = await fs.readFile(embeddingPath, "utf-8");
-      const embedding = JSON.parse(embeddingContent) as Embedding;
+    const dbManager = DatabaseManager.getInstance();
+    const db = dbManager.getDatabase();
+    
+    if (!db) throw new Error("Database not initialized");
+    
+    // Get all notes with embeddings
+    const notesWithEmbeddings = await this.findNotesWithEmbeddings();
+    
+    // Calculate similarity scores
+    const notesWithScores = notesWithEmbeddings.map(note => {
       const score = this.cosineSimilarity(
         queryEmbedding.data[0].embedding,
-        embedding.data[0].embedding
+        note.embedding.data[0].embedding
       );
-      const notePath = embeddingPath.replace(".embedding.json", ".json");
-      const noteContent = await fs.readFile(notePath, "utf-8");
-      const note = JSON.parse(noteContent) as SimilarNote;
-
-      results.push({ ...note, score });
+      return { id: note.id, score };
+    });
+    
+    // Sort by score and get top results
+    const topResults = notesWithScores
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+    
+    // Fetch complete note details for the top results
+    const results: SimilarNote[] = [];
+    
+    for (const result of topResults) {
+      // Get note details
+      const noteStmt = db.prepare(`
+        SELECT i.id, i.name as title, n.content
+        FROM items i
+        JOIN notes n ON i.id = n.item_id
+        WHERE i.id = ?
+      `);
+      
+      const note = noteStmt.get(result.id) as SimilarNote;
+      
+      if (note) {
+        results.push({
+          ...note,
+          score: result.score
+        });
+      }
     }
-
-    return results.sort((a, b) => b.score - a.score).slice(0, 10); // Return top 5 results
+    
+    return results;
   }
 
   cosineSimilarity(a: number[], b: number[]): number {
@@ -126,8 +175,7 @@ export class RAGChat {
   }
 
   async performRAGChat(
-    conversation: { role: string; content: string }[],
-    directoryStructures: DirectoryStructures
+    conversation: { role: string; content: string }[]
   ): Promise<{ role: string; content: string }> {
     try {
       // Get the last user message
@@ -140,12 +188,8 @@ export class RAGChat {
       );
 
       // Find relevant notes
-      const embeddingPaths = await this.similaritySearcher.findEmbeddingPaths(
-        directoryStructures
-      );
       const similarNotes = await this.similaritySearcher.performSimilaritySearch(
-        queryEmbedding,
-        embeddingPaths
+        queryEmbedding
       );
 
       // Prepare the context for the assistant

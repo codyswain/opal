@@ -12,7 +12,6 @@ import { NotesProvider } from "@/renderer/features/notes/context/notesContext";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Navbar, navbarItems } from "@/renderer/features/navbar";
-import { Notes } from "@/renderer/features/notes";
 import { Settings, SettingsProvider } from "@/renderer/features/settings";
 import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
 import { commandRegistry, useCommands } from "@/renderer/features/commands";
@@ -94,53 +93,40 @@ const App: React.FC = () => {
         <ThemeProvider>
           <SettingsProvider>
             <TooltipProvider>
-              <NotesProvider>
-                <div className="flex flex-col h-screen w-screen overflow-hidden">
-                  <Toaster />
-                  <div className="flex flex-col flex-grow overflow-hidden">
-                    <Navbar
-                      toggleLeftSidebar={toggleLeftSidebar}
-                      toggleRightSidebar={toggleRightSidebar}
-                      toggleBottomPane={toggleBottomPane}
-                      isLeftSidebarOpen={isLeftSidebarOpen}
-                      isRightSidebarOpen={isRightSidebarOpen}
-                      isBottomPaneOpen={isBottomPaneOpen}
-                      items={navbarItems}
-                    />
-                    <main className="flex-grow overflow-hidden mt-10">
-                      <Routes>
-                        <Route
-                          path="/"
-                          element={<Navigate to="/explorer" replace />}
-                        />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route
-                          path="/notes"
-                          element={
-                            <Notes
-                              isLeftSidebarOpen={isLeftSidebarOpen}
-                              isRightSidebarOpen={isRightSidebarOpen}
-                              setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                              setIsRightSidebarOpen={setIsRightSidebarOpen}
-                            />
-                          }
-                        />
-                        <Route
-                          path="/explorer"
-                          element={
-                            <Explorer
+              <div className="flex flex-col h-screen w-screen overflow-hidden">
+                <Toaster />
+                <div className="flex flex-col flex-grow overflow-hidden">
+                  <Navbar
+                    toggleLeftSidebar={toggleLeftSidebar}
+                    toggleRightSidebar={toggleRightSidebar}
+                    toggleBottomPane={toggleBottomPane}
+                    isLeftSidebarOpen={isLeftSidebarOpen}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    isBottomPaneOpen={isBottomPaneOpen}
+                    items={navbarItems}
+                  />
+                  <main className="flex-grow overflow-hidden mt-10">
+                    <Routes>
+                      <Route
+                        path="/"
+                        element={<Navigate to="/explorer" replace />}
+                      />
+
+                      <Route
+                        path="/explorer"
+                        element={
+                          <Explorer
                             isLeftSidebarOpen={isLeftSidebarOpen}
                             isRightSidebarOpen={isRightSidebarOpen}
                             setIsLeftSidebarOpen={setIsLeftSidebarOpen}
                             setIsRightSidebarOpen={setIsRightSidebarOpen}
                           />
-                          }
-                        />
-                      </Routes>
-                    </main>
-                  </div>
+                        }
+                      />
+                    </Routes>
+                  </main>
                 </div>
-              </NotesProvider>
+              </div>
             </TooltipProvider>
           </SettingsProvider>
         </ThemeProvider>

@@ -10,8 +10,8 @@ import {
   TooltipTrigger,
 } from "@/renderer/shared/components/Tooltip";
 import { SimilarNote } from "@/renderer/shared/types";
-import { useNotesContext } from "../../context/notesContext";
 import { NoteItem } from "./RelatedNoteListItem";
+import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
 interface RelatedNotesProps {
   isOpen: boolean;
@@ -23,10 +23,12 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
   const [similarNotesIsLoading, setSimilarNotesIsLoading] =
     useState<boolean>(false);
 
-  const { activeNote, openNote, directoryStructures } = useNotesContext();
+  const { entities, ui, selectEntry } = useFileExplorerStore();
+  const selectedId = ui.selectedId;
+  const selectedNote = selectedId && entities.notes[selectedId];
 
   const findSimilarNotes = useCallback(async () => {
-    if (!activeNote) {
+    if (!selectedNote || !selectedId) {
       console.error("No active note");
       setSimilarNotes([]);
       setSimilarNotesIsLoading(false);
@@ -34,13 +36,15 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
     }
     setSimilarNotesIsLoading(true);
     try {
+      // Using findSimilarNotes from the window.electron API
       const similarNotes = await window.electron.findSimilarNotes(
-        activeNote.content,
-        directoryStructures
+        selectedNote.content,
+        {} // Empty directory structures since we're using SQLite embeddings now
       );
+      
       setSimilarNotes(
         similarNotes.filter(
-          (note: SimilarNote) => note.id !== activeNote.id && note.score >= 0.5
+          (note: SimilarNote) => note.id !== selectedId && note.score >= 0.5
         )
       );
     } catch (error) {
@@ -52,13 +56,18 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
     } finally {
       setSimilarNotesIsLoading(false);
     }
-  }, [activeNote?.id]);
+  }, [selectedNote, selectedId]);
+
+  // Function to open a note using fileExplorerStore
+  const openNote = useCallback((note: SimilarNote) => {
+    selectEntry(note.id);
+  }, [selectEntry]);
 
   useEffect(() => {
-    if (isOpen && activeNote) {
+    if (isOpen && selectedNote && selectedId) {
       findSimilarNotes();
     }
-  }, [isOpen, activeNote?.id, findSimilarNotes]);
+  }, [isOpen, selectedId, selectedNote, findSimilarNotes]);
 
   return (
     <div className="h-full flex flex-col">
