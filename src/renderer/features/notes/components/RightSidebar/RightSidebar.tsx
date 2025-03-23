@@ -2,7 +2,6 @@ import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/renderer/shared/components/Tabs";
 import RelatedNotes from "./RelatedNotes";
 import ChatPane from "./ChatPane";
-import ChatLocalPane from "./ChatLocalPane";
 
 interface RightSidebarProps {
   isOpen: boolean;
@@ -27,12 +26,6 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
             >
               Chat
             </TabsTrigger>
-            <TabsTrigger 
-              value="chat-local" 
-              className="font-semibold text-sm px-0 data-[state=active]:bg-transparent data-[state=active]:text-foreground"
-            >
-              Chat Local
-            </TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="related" className="flex-grow overflow-hidden p-0">
@@ -40,9 +33,6 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
         </TabsContent>
         <TabsContent value="chat" className="flex-grow overflow-hidden p-0">
           <ChatPane onClose={onClose} />
-        </TabsContent>
-        <TabsContent value="chat-local" className="flex-grow overflow-hidden p-0">
-          <ChatLocalPane />
         </TabsContent>
       </Tabs>
     </div>

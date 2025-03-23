@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { cn } from "@/renderer/shared/utils";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Button } from "@/renderer/shared/components/Button";
@@ -8,6 +8,7 @@ import { toast } from "@/renderer/shared/components/Toast";
 import { useNotesContext } from "../../context/notesContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { v4 as uuidv4 } from "uuid";
 
 interface BottomPaneProps {
   onClose: () => void;
@@ -16,15 +17,40 @@ interface BottomPaneProps {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  id?: string;
+  created_at?: string;
 }
 
 const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
-  const [messages, setMessages] = React.useState<Message[]>([]);
-  const [input, setInput] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [conversationId, setConversationId] = useState<string>(() => {
+    // Use an existing conversation ID from localStorage or create a new one
+    return localStorage.getItem("currentChatConversationId") || uuidv4();
+  });
 
-  const { performRAGChat, openNoteById } = useNotesContext();
+  const { openNoteById } = useNotesContext();
+
+  // Load conversation history when component mounts
+  useEffect(() => {
+    const loadConversation = async () => {
+      try {
+        const result = await window.chatAPI.getConversation(conversationId);
+        if (result.success) {
+          setMessages(result.messages);
+        }
+      } catch (error) {
+        console.error("Error loading conversation:", error);
+      }
+    };
+
+    // Save conversation ID to localStorage
+    localStorage.setItem("currentChatConversationId", conversationId);
+    
+    loadConversation();
+  }, [conversationId]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -34,13 +60,29 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
 
   const handleSend = async () => {
     if (!input.trim()) return;
+    
     const userMessage: Message = { role: "user", content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    
     try {
-      const assistantMessage = await performRAGChat([...messages, userMessage]);
-      setMessages((prev) => [...prev, assistantMessage as Message]);
+      // Add the user message to the database
+      await window.chatAPI.addMessage(conversationId, userMessage.role, userMessage.content);
+      
+      // Perform RAG query
+      const result = await window.chatAPI.performRAG(conversationId, userMessage.content);
+      
+      if (result.success) {
+        // Add the assistant's response to the UI
+        const assistantMessage: Message = { 
+          role: "assistant", 
+          content: result.message.content 
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } else {
+        toast.error("Failed to get response" + (result.error ? `: ${result.error}` : ""));
+      }
     } catch (error) {
       console.error("Error in RAG Chat:", error);
       toast.error("Failed to get response. Please try again.");
@@ -51,7 +93,7 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
 
   const renderMessage = (message: Message, index: number) => (
     <div
-      key={index}
+      key={message.id || index}
       className={cn(
         "mb-4",
         message.role === "user" ? "text-right" : "text-left"
@@ -110,8 +152,21 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     </div>
   );
 
+  const startNewConversation = () => {
+    const newConversationId = uuidv4();
+    setConversationId(newConversationId);
+    setMessages([]);
+    toast.success("Started a new conversation");
+  };
+
   return (
     <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center p-2 border-b border-border">
+        <h3 className="text-sm font-medium">Chat</h3>
+        <Button variant="ghost" size="sm" onClick={startNewConversation}>
+          New Chat
+        </Button>
+      </div>
       <ScrollArea className="flex-grow px-4" ref={scrollAreaRef}>
         <div className="py-4 space-y-4">
           {messages.map(renderMessage)}

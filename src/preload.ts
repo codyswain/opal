@@ -131,3 +131,13 @@ contextBridge.exposeInMainWorld("fileExplorer", {
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
   renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
 })
+
+// Expose chat API to the renderer process
+contextBridge.exposeInMainWorld("chatAPI", {
+  getConversation: (conversationId: string) => 
+    ipcRenderer.invoke('chat:get-conversation', conversationId),
+  addMessage: (conversationId: string, role: string, content: string) => 
+    ipcRenderer.invoke('chat:add-message', conversationId, role, content),
+  performRAG: (conversationId: string, query: string) => 
+    ipcRenderer.invoke('chat:perform-rag', conversationId, query),
+});

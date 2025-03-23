@@ -26,9 +26,19 @@ CREATE TABLE IF NOT EXISTS ai_metadata (
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,  -- UUID
+    role TEXT NOT NULL CHECK( role IN ('user', 'assistant') ),
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    conversation_id TEXT NOT NULL,  -- Group messages by conversation
+    sequence INTEGER NOT NULL  -- Order within conversation
+);
+
 CREATE INDEX IF NOT EXISTS idx_items_path ON items (path);
 CREATE INDEX IF NOT EXISTS idx_items_parent_path ON items (parent_path);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items (type);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, sequence);
 
 -- FTS5 setup (for full-text search)
 CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(content, summary, content=notes, content_rowid=item_id);

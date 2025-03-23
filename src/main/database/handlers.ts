@@ -9,6 +9,8 @@ import { Item, ItemWithAIMetadata, Note } from './types';
 import { migrateNotesToDatabase } from './migration';
 import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
+import { OpenAI } from 'openai';
+import { getOpenAIKey } from '../file-system/loader';
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
@@ -719,6 +721,164 @@ export async function registerDatabaseIPCHandlers() {
       }
     } catch (error) {
       log.error('Error during database reset:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // --- Chat Functionality ---
+  ipcMain.handle('chat:get-conversation', async (event, conversationId: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when chat:get-conversation was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      const stmt = db.prepare(`
+        SELECT id, role, content, created_at
+        FROM chat_messages
+        WHERE conversation_id = ?
+        ORDER BY sequence ASC
+      `);
+      const messages = stmt.all(conversationId);
+
+      return { success: true, messages };
+    } catch (error) {
+      log.error('Error getting chat conversation:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('chat:add-message', async (event, conversationId: string, role: string, content: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when chat:add-message was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get the next sequence number for this conversation
+      const seqStmt = db.prepare(`
+        SELECT COALESCE(MAX(sequence), -1) + 1 as next_seq
+        FROM chat_messages
+        WHERE conversation_id = ?
+      `);
+      const { next_seq } = seqStmt.get(conversationId) as { next_seq: number };
+
+      // Insert the new message
+      const insertStmt = db.prepare(`
+        INSERT INTO chat_messages (id, conversation_id, role, content, sequence)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const messageId = uuidv4();
+      insertStmt.run(messageId, conversationId, role, content, next_seq);
+
+      return { success: true, messageId };
+    } catch (error) {
+      log.error('Error adding chat message:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('chat:perform-rag', async (event, conversationId: string, query: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when chat:perform-rag was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get conversation history - but limit it to last 10 messages to save tokens
+      const historyStmt = db.prepare(`
+        SELECT role, content
+        FROM chat_messages
+        WHERE conversation_id = ?
+        ORDER BY sequence DESC
+        LIMIT 10
+      `);
+      const recentHistory = historyStmt.all(conversationId) as { role: string; content: string }[];
+      // Reverse to get chronological order
+      const history = recentHistory.reverse();
+
+      // Use FTS to find most relevant notes based on the query
+      const notesStmt = db.prepare(`
+        SELECT n.content, i.name, i.id, i.path
+        FROM notes n
+        JOIN items i ON n.item_id = i.id
+        WHERE i.type = 'note'
+        ORDER BY (
+          CASE WHEN n.content LIKE ? THEN 3
+          WHEN i.name LIKE ? THEN 2
+          ELSE 1 END
+        ) DESC
+        LIMIT 5
+      `);
+      
+      const searchTerm = `%${query}%`;
+      const notes = notesStmt.all(searchTerm, searchTerm) as { content: string; name: string; id: string; path: string }[];
+
+      // Prepare context from relevant notes but limit each note content
+      let contextText = '';
+      for (const note of notes) {
+        // Extract just the first 300 chars of content for context to save tokens
+        const truncatedContent = note.content.slice(0, 300) + (note.content.length > 300 ? '...' : '');
+        contextText += `Note ID: ${note.id}\nTitle: ${note.name}\nPath: ${note.path}\nSnippet:\n${truncatedContent}\n\n`;
+      }
+      
+      // Limit overall context length
+      if (contextText.length > 2000) {
+        contextText = contextText.slice(0, 2000) + '...';
+      }
+
+      // Build messages for OpenAI API with token-saving strategy
+      const messages = [
+        { 
+          role: 'system', 
+          content: 'You are a helpful assistant. Use only the provided note snippets to answer questions. When you refer to a note, include a clickable link in the format [Note Title](note://noteId). Keep responses concise.' 
+        },
+        { 
+          role: 'user', 
+          content: `Here are some relevant note snippets that might help answer my question:\n\n${contextText}\n\nMy question is: ${query}` 
+        }
+      ];
+      
+      // Only include most recent conversation history if we have room
+      if (history.length > 0) {
+        // Add just the last few messages from history to save tokens
+        messages.push(...history.slice(-4));
+      }
+
+      // Get OpenAI API key
+      const openaiApiKey = await getOpenAIKey();
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+
+      // Get response from OpenAI with explicit token limit
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: messages as any,
+        max_tokens: 1000, // Limit response length
+      });
+
+      const assistantMessage = completion.choices[0].message;
+
+      // Save the assistant's response
+      const seqStmt = db.prepare(`
+        SELECT COALESCE(MAX(sequence), -1) + 1 as next_seq
+        FROM chat_messages
+        WHERE conversation_id = ?
+      `);
+      const { next_seq } = seqStmt.get(conversationId) as { next_seq: number };
+
+      const insertStmt = db.prepare(`
+        INSERT INTO chat_messages (id, conversation_id, role, content, sequence)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const messageId = uuidv4();
+      insertStmt.run(messageId, conversationId, 'assistant', assistantMessage.content, next_seq);
+
+      return { success: true, message: assistantMessage };
+    } catch (error) {
+      log.error('Error performing RAG chat:', error);
       return { success: false, error: String(error) };
     }
   });
