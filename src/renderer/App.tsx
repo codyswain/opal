@@ -107,11 +107,11 @@ const App: React.FC = () => {
                       isBottomPaneOpen={isBottomPaneOpen}
                       items={navbarItems}
                     />
-                    <main className="flex-grow overflow-hidden mt-12">
+                    <main className="flex-grow overflow-hidden mt-10">
                       <Routes>
                         <Route
                           path="/"
-                          element={<Navigate to="/notes" replace />}
+                          element={<Navigate to="/explorer" replace />}
                         />
                         <Route path="/settings" element={<Settings />} />
                         <Route
