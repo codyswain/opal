@@ -112,6 +112,8 @@ const App: React.FC = () => {
                         element={<Navigate to="/explorer" replace />}
                       />
 
+                      <Route path="/settings" element={<Settings />} />
+
                       <Route
                         path="/explorer"
                         element={
