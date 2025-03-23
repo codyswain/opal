@@ -8,8 +8,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Settings,
-  ChevronsUp,
-  ChevronsDown,
   ArrowLeft,
   ArrowRight,
 } from "lucide-react";
@@ -43,50 +41,51 @@ const Navbar: React.FC<NavbarProps> = ({
   };
 
   const renderWindowControls = () => (
-    <div className="flex items-center space-x-1.5 no-drag ml-2">
+    <div className="flex items-center space-x-2 no-drag ml-2">
       {/* Apple-style buttons */}
       <button
-        className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
+        className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
         onClick={() => handleWindowAction("close")}
         title="Close"
       />
       <button
-        className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-600 transition-colors"
+        className="w-2.5 h-2.5 rounded-full bg-yellow-500 hover:bg-yellow-600 transition-colors"
         onClick={() => handleWindowAction("minimize")}
         title="Minimize"
       />
       <button
-        className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-600 transition-colors"
+        className="w-2.5 h-2.5 rounded-full bg-green-500 hover:bg-green-600 transition-colors"
         onClick={() => handleWindowAction("maximize")}
         title="Maximize"
       />
+      <div className="w-4"></div>
+      <div className="space-x-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={goBack}
+          title="Go back"
+          disabled={!canGoBack()}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={goForward}
+          title="Go forward"
+          disabled={!canGoForward()}
+        >
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 
   const renderNavItems = () => (
     <ul className="flex items-center space-x-2 no-drag">
-      <li className="flex items-center mr-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={goBack}
-          title="Go back"
-          disabled={!canGoBack()}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={goForward}
-          title="Go forward"
-          disabled={!canGoForward()}
-        >
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </li>
       {items.map((item) => (
         <NavbarItem
           key={item.to}
@@ -98,54 +97,42 @@ const Navbar: React.FC<NavbarProps> = ({
   );
 
   const renderSidebarControls = () => (
-    <div className="flex items-center space-x-2 no-drag">
+    <div className="flex items-center space-x-1.5 no-drag">
       <ThemeToggle />
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-7 w-7"
         onClick={toggleLeftSidebar}
       >
         {isLeftSidebarOpen ? (
-          <PanelLeftClose className="h-4 w-4" />
+          <PanelLeftClose className="h-3.5 w-3.5" />
         ) : (
-          <PanelLeftOpen className="h-4 w-4" />
+          <PanelLeftOpen className="h-3.5 w-3.5" />
         )}
       </Button>
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-7 w-7"
         onClick={toggleRightSidebar}
       >
         {isRightSidebarOpen ? (
-          <PanelRightClose className="h-4 w-4" />
+          <PanelRightClose className="h-3.5 w-3.5" />
         ) : (
-          <PanelRightOpen className="h-4 w-4" />
-        )}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={toggleBottomPane}
-      >
-        {isBottomPaneOpen ? (
-          <ChevronsDown className="h-4 w-4" />
-        ) : (
-          <ChevronsUp className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
         )}
       </Button>
       <Link to="/settings">
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Settings className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Settings className="h-3.5 w-3.5" />
         </Button>
       </Link>
     </div>
   );
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-12 bg-background border-b border-border flex items-center justify-between px-4 z-20 drag-handle">
+    <nav className="fixed top-0 left-0 right-0 h-9 bg-background border-b border-border flex items-center justify-between px-3 z-20 drag-handle">
       {renderWindowControls()}
       {renderNavItems()}
       {renderSidebarControls()}
