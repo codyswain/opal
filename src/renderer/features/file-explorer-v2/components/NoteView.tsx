@@ -113,8 +113,8 @@ const NoteView: React.FC<NoteViewProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
-      <div className="flex justify-between items-center p-3 py-2 border-b border-border">
-        <div className="flex-1 flex items-center space-x-2">
+      <div className="flex justify-between items-center border-b border-border bg-background/95 sticky top-0 z-10">
+        <div className="flex-1 flex items-center max-w-[900px] w-full mx-auto px-6 py-3 sm:px-4 xs:px-3">
           {isEditing ? (
             <div className="flex-1 flex items-center">
               <Input
@@ -123,13 +123,13 @@ const NoteView: React.FC<NoteViewProps> = ({
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={handleRename}
-                className="h-7"
+                className="h-9 text-lg font-medium"
               />
               {isRenamingSaving && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             </div>
           ) : (
             <div
-              className="text-lg font-medium leading-tight truncate cursor-pointer"
+              className="text-xl font-medium leading-tight truncate cursor-pointer hover:text-primary transition-colors"
               onClick={() => setIsEditing(true)}
               title={selectedNode.name}
             >
@@ -147,24 +147,26 @@ const NoteView: React.FC<NoteViewProps> = ({
         />
       </div>
       
-      <div className="flex justify-between items-center px-3 py-1.5 border-t border-border text-xs text-muted-foreground">
-        <div>
-          {wordCount.words} words · {wordCount.characters} characters
-        </div>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger>
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full transition-colors",
-                  indicatorStatus === "green" ? "bg-green-500" : "bg-yellow-500"
-                )}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{indicatorStatus === "green" ? "Saved" : "Saving..."}</p>
-            </TooltipContent>
-          </Tooltip>
+      <div className="border-t border-border sticky bottom-0 bg-background/90 backdrop-blur-sm">
+        <div className="flex justify-between items-center max-w-[900px] w-full mx-auto px-6 py-1.5 text-xs text-muted-foreground sm:px-4 xs:px-3">
+          <div>
+            {wordCount.words} words · {wordCount.characters} characters
+          </div>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger>
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-colors",
+                    indicatorStatus === "green" ? "bg-green-500" : "bg-yellow-500"
+                  )}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{indicatorStatus === "green" ? "Saved" : "Saving..."}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
     </div>

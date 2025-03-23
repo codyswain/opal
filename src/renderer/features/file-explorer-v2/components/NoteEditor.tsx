@@ -294,11 +294,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   }, [editor]);
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30 px-1.5 py-1">
-        {!readOnly && (
-          <Toolbar editor={editor} />
-        )}
+    <div className="flex flex-col h-full w-full relative">
+      <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30">
+        <div className="max-w-[900px] mx-auto w-full px-6 py-1 sm:px-4 xs:px-3">
+          {!readOnly && (
+            <Toolbar editor={editor} />
+          )}
+        </div>
       </div>
       
       <div className="flex-grow overflow-auto relative w-full">
