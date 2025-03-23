@@ -1,83 +1,177 @@
 .ProseMirror {
   /* Base editor spacing */
-  font-size: 16px;
+  font-size: 14px;
   margin: 0;
-  line-height: 1.5;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  line-height: 1.5; /* Adjusted for consistent spacing */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, 'Helvetica Neue', sans-serif;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
   color: var(--foreground);
-  padding: 0 1rem;
+  padding: 0.75rem 1.25rem;
   min-height: 100%;
+  width: 100%; /* Use full width instead of max-width */
 
   /* Focus state */
   &:focus {
     outline: none;
   }
 
-  /* Regular paragraphs */
-  p {
-    margin: 0 0 0.75em 0;
-    line-height: 1.5;
+  /* Set white-space to pre-wrap to preserve new lines but wrap text */
+  white-space: pre-wrap;
+
+  /* Regular paragraphs - zero spacing */
+  p, .paragraph {
+    margin: 0;
+    padding: 0;
+    line-height: 1.5; /* Match the container's line height */
   }
 
-  /* Headings */
+  /* All elements should have the same line-height for consistency */
+  * {
+    line-height: 1.5;
+  }
+  
+  /* Remove all spacing between paragraphs to match line height exactly */
+  p + p {
+    margin-top: 0; /* No extra space between paragraphs */
+  }
+
+  /* Remove spacing from all block elements */
+  & > * + * {
+    margin-top: 0; /* No spacing between blocks */
+  }
+
+  /* This maintains consistent line spacing across the editor */
+  & > :not(p) + p,
+  & > p + :not(p) {
+    margin-top: 0; /* No extra spacing */
+  }
+  
+  /* Headings with consistent line height */
   h1, h2, h3, h4, h5, h6 {
-    margin-top: 1em;
-    margin-bottom: 0.5em;
+    margin: 0;
+    padding: 0;
     font-weight: 600;
-    line-height: 1.3;
+    line-height: 1.5;
+    color: var(--foreground);
   }
 
   h1 {
     font-size: 1.8em;
-    color: hsl(var(--primary));
     border-bottom: 1px solid hsla(var(--muted) / 0.2);
-    padding-bottom: 0.3em;
+    padding-bottom: 0.2em;
   }
 
   h2 {
     font-size: 1.4em;
-    color: hsl(var(--primary) / 0.9);
   }
 
   h3 {
     font-size: 1.2em;
-    color: hsl(var(--primary) / 0.85);
   }
 
   h4 {
     font-size: 1.1em;
-    color: hsl(var(--primary) / 0.8);
   }
 
-  /* Lists */
+  /* Lists - improved spacing to match paragraph line height */
   ul, ol {
-    margin: 0 0 0.75em 0;
-    padding-left: 1.5em;
+    margin: 0;
+    padding-left: 1.6em;
   }
 
+  /* Lists with consistent line height */
   li {
-    margin-bottom: 0.25em;
+    margin: 0;
+    line-height: 1.5;
+    position: relative;
   }
 
-  /* Nested lists should have less margin */
+  /* No extra spacing between list items */
+  li + li {
+    margin-top: 0;
+  }
+  
+  /* No extra spacing for nested lists */
   li > ul, li > ol {
-    margin: 0.25em 0;
+    margin: 0;
+  }
+
+  /* Better bullet styling with consistent spacing */
+  ul.bullet-list {
+    list-style-type: none; /* Remove default bullets */
+  }
+
+  ul.bullet-list li {
+    position: relative;
+    padding-left: 0.4em;
+  }
+
+  /* Bullet points with consistent line height */
+  ul.bullet-list li::before {
+    content: "•";
+    position: absolute;
+    left: -1.1em;
+    top: 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 1em;
+    line-height: 1.5;
+  }
+
+  ul.bullet-list ul li::before {
+    content: "◦";
+    font-size: 0.95em;
+    left: -1.2em;
+  }
+
+  ul.bullet-list ul ul li::before {
+    content: "▪";
+    font-size: 0.8em;
+    left: -1.3em;
+  }
+
+  /* Zero-margin paragraphs inside list items */
+  ul.bullet-list li > p,
+  ol.ordered-list li > p {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Zero-margin between paragraphs inside list items */
+  ul.bullet-list li > p + p,
+  ol.ordered-list li > p + p {
+    margin-top: 0;
+  }
+
+  /* Ordered lists - improved styling */
+  ol.ordered-list {
+    list-style-type: decimal;
+  }
+
+  ol.ordered-list ol {
+    list-style-type: lower-alpha;
+  }
+
+  ol.ordered-list ol ol {
+    list-style-type: lower-roman;
   }
   
   /* Task lists */
   ul[data-type="taskList"] {
     list-style: none;
     padding: 0;
+    margin-left: 0.3em;  /* Small indent for task lists */
   }
   
   ul[data-type="taskList"] li {
     display: flex;
     align-items: flex-start;
-    margin-bottom: 0.25em;
+    margin-bottom: 0.4em;
+    padding-left: 1.2em;
   }
   
   ul[data-type="taskList"] li > label {
-    margin-right: 0.5em;
+    margin-right: 0.6em;
     user-select: none;
   }
   
@@ -87,8 +181,8 @@
 
   /* Code blocks */
   pre {
-    margin: 1em 0;
-    padding: 0.8em;
+    margin: 1.2em 0;
+    padding: 1em;
     border-radius: 6px;
     background-color: hsl(var(--card));
     border: 1px solid hsl(var(--border));
@@ -111,13 +205,27 @@
     border-radius: 0;
   }
 
-  /* Blockquotes */
+  /* Blockquotes with consistent spacing */
   blockquote {
-    margin: 0.75em 0;
-    padding-left: 1em;
-    border-left: 3px solid hsl(var(--primary) / 0.5);
+    margin: 0;
+    padding: 0 0 0 0.8em;
+    border-left: 3px solid hsl(var(--muted) / 0.8);
     color: hsl(var(--muted-foreground));
     font-style: italic;
+    background-color: hsla(var(--muted) / 0.05);
+    border-radius: 0 3px 3px 0;
+  }
+  
+  /* Blockquotes with consistent line height */
+  blockquote p {
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+  }
+  
+  /* Zero-margin between paragraphs in blockquotes */
+  blockquote p + p {
+    margin-top: 0;
   }
 
   /* Tables */

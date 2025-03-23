@@ -86,6 +86,11 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         bulletList: false,
         orderedList: false,
         listItem: false,
+        paragraph: {
+          HTMLAttributes: {
+            class: 'paragraph',
+          },
+        },
         history: {
           depth: 100,
           newGroupDelay: 500,
@@ -188,12 +193,25 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     editorProps: {
       attributes: {
         class: cn(
-          "prose prose-md dark:prose-invert focus:outline-none max-w-none h-full w-full overflow-auto leading-normal cursor-text",
+          "prose prose-md dark:prose-invert focus:outline-none max-w-none h-full w-full overflow-auto cursor-text",
           readOnly && "editor-readonly"
         ),
+        spellcheck: "false",
+      },
+      handleDOMEvents: {
+        scroll: (view, event) => {
+          const element = event.target as HTMLElement;
+          element.style.scrollBehavior = 'smooth';
+          return false;
+        },
       },
       handleKeyDown: (view: EditorView, event: KeyboardEvent): boolean => {
         if (readOnly) return false;
+        
+        // Handle paragraph spacing for consistency
+        if (event.key === 'Enter' && !event.shiftKey) {
+          // Default paragraph behavior is fine - CSS handles spacing now
+        }
         
         if (event.key === 'Tab') {
           event.preventDefault();
@@ -276,18 +294,18 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   }, [editor]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30 px-1 py-0.5">
+    <div className="flex flex-col h-full w-full">
+      <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30 px-1.5 py-1">
         {!readOnly && (
           <Toolbar editor={editor} />
         )}
       </div>
       
-      <div className="flex-grow overflow-auto relative">
+      <div className="flex-grow overflow-auto relative w-full">
         <FileHandler onFileDrop={handleFileDrop}>
-          <div className="overflow-auto min-h-full px-4 py-2">
+          <div className="h-full w-full">
             <EditorContent 
-              className="prose-modern" 
+              className="h-full w-full" 
               editor={editor} 
             />
           </div>

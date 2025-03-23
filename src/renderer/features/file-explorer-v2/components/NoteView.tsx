@@ -139,7 +139,7 @@ const NoteView: React.FC<NoteViewProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden bg-background">
         <NoteEditor
           content={selectedNote.content}
           onUpdate={handleEditorUpdate}
@@ -147,7 +147,7 @@ const NoteView: React.FC<NoteViewProps> = ({
         />
       </div>
       
-      <div className="flex justify-between items-center p-2 border-t border-border text-xs text-muted-foreground">
+      <div className="flex justify-between items-center px-3 py-1.5 border-t border-border text-xs text-muted-foreground">
         <div>
           {wordCount.words} words · {wordCount.characters} characters
         </div>
