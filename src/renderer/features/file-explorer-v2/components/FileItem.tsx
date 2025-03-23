@@ -126,7 +126,7 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
         {/* Entry name with timestamp tooltip */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ml-${explorerStyles.iconMargin} ${entry.type === 'folder' ? 'text-yellow-500 dark:text-yellow-500 font-medium' : ''}`}>
+            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ml-${explorerStyles.iconMargin}`}>
               {entry.name}
             </span>
           </TooltipTrigger>

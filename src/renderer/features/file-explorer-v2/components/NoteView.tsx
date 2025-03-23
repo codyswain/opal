@@ -30,6 +30,7 @@ const NoteView: React.FC<NoteViewProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [newTitle, setNewTitle] = useState(selectedNode?.name || "");
   const [isRenamingSaving, setIsRenamingSaving] = useState(false);
+  const [wordCount, setWordCount] = useState({ words: 0, characters: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const { renameItem } = useFileExplorerStore();
 
@@ -39,6 +40,22 @@ const NoteView: React.FC<NoteViewProps> = ({
       setNewTitle(selectedNode.name);
     }
   }, [selectedNode]);
+
+  // Initialize word count when note changes
+  useEffect(() => {
+    if (selectedNote && selectedNote.content) {
+      // Extract text from the HTML content
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = selectedNote.content;
+      const text = tempDiv.textContent || '';
+      
+      const words = text.split(/\s+/).filter((word: string) => word.length > 0).length;
+      const characters = text.length;
+      setWordCount({ words, characters });
+    } else {
+      setWordCount({ words: 0, characters: 0 });
+    }
+  }, [selectedNote]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -80,6 +97,16 @@ const NoteView: React.FC<NoteViewProps> = ({
     }
   };
 
+  const handleEditorUpdate = ({ editor, wordCount }: { editor: any, wordCount?: { words: number, characters: number } }) => {
+    // Update word count if provided by the editor
+    if (wordCount) {
+      setWordCount(wordCount);
+    }
+    
+    // Call the original content change handler with just the editor
+    handleContentChange({ editor });
+  };
+
   if (!selectedNode || !selectedNote) {
     return <div className="flex justify-center items-center h-full">Loading note...</div>;
   }
@@ -110,7 +137,20 @@ const NoteView: React.FC<NoteViewProps> = ({
             </div>
           )}
         </div>
-        
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <NoteEditor
+          content={selectedNote.content}
+          onUpdate={handleEditorUpdate}
+          filePath={selectedNode.path}
+        />
+      </div>
+      
+      <div className="flex justify-between items-center p-2 border-t border-border text-xs text-muted-foreground">
+        <div>
+          {wordCount.words} words · {wordCount.characters} characters
+        </div>
         <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger>
@@ -126,14 +166,6 @@ const NoteView: React.FC<NoteViewProps> = ({
             </TooltipContent>
           </Tooltip>
         </div>
-      </div>
-
-      <div className="flex-1 overflow-hidden">
-        <NoteEditor
-          content={selectedNote.content}
-          onUpdate={handleContentChange}
-          filePath={selectedNode.path}
-        />
       </div>
     </div>
   );
