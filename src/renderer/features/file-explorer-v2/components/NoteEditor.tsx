@@ -65,7 +65,7 @@ const SPACES_PER_TAB = 4;
 
 interface NoteEditorProps {
   content: string;
-  onUpdate: ({ editor }: { editor: any }) => void;
+  onUpdate: ({ editor, wordCount }: { editor: any, wordCount?: { words: number, characters: number } }) => void;
   readOnly?: boolean;
   filePath?: string;
 }
@@ -168,17 +168,20 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     ],
     content: content || "",
     onUpdate: ({ editor }) => {
-      onUpdate({ editor });
-      
       // Update word count
       const text = editor.getText();
       const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
       const characterCount = text.length;
       
-      setWordCount({
+      const newWordCount = {
         words: wordCount,
         characters: characterCount,
-      });
+      };
+      
+      setWordCount(newWordCount);
+      
+      // Pass the word count to the parent component
+      onUpdate({ editor, wordCount: newWordCount });
     },
     autofocus: !readOnly,
     editable: !readOnly,
@@ -275,14 +278,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/30 px-1 py-0.5">
-        {!readOnly && (
-          <div className="flex justify-between items-center">
-            <div className="text-xs text-muted-foreground ml-auto">
-              {wordCount.words} words · {wordCount.characters} characters
-            </div>
-          </div>
-        )}
-        
         {!readOnly && (
           <Toolbar editor={editor} />
         )}
