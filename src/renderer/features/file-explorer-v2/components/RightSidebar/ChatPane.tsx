@@ -39,6 +39,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
   const [_, setForceUpdate] = useState(0);
   const forceUpdate = () => setForceUpdate(prev => prev + 1);
   const messageRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [conversationId, setConversationId] = useState<string>(() => {
     // Generate a new ID and ensure it's stored immediately
     const storedId = localStorage.getItem("currentChatConversationId");
@@ -57,6 +59,80 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
   const selectedNode = selectedId ? entities.nodes[selectedId] : null;
   const selectedNote = selectedId && selectedNode?.type === 'note' ? entities.notes[selectedId] : null;
 
+  // Enhanced scrollToBottom that tries multiple approaches
+  const scrollToBottom = () => {
+    console.log("Attempting to scroll to bottom");
+    
+    // Try scrolling the messagesContainer directly
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+      console.log("Scrolled messagesContainer:", container.scrollTop, container.scrollHeight);
+    }
+    
+    // Also try scrolling via the Viewport element by ID
+    try {
+      const viewport = document.getElementById('chat-messages-viewport');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+        console.log("Scrolled viewport by ID");
+      }
+    } catch (e) {
+      console.error("Error scrolling viewport:", e);
+    }
+    
+    // And try scrolling the ScrollArea if we have a ref to it
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+      console.log("Scrolled scrollArea");
+    }
+    
+    // As a last resort, try to find the last message and scroll it into view
+    const messages = document.getElementById('chat-messages-container');
+    if (messages && messages.lastElementChild) {
+      messages.lastElementChild.scrollIntoView({ behavior: 'auto', block: 'end' });
+      console.log("Scrolled last message into view");
+    }
+  };
+
+  // Use a MutationObserver to detect when new content is added
+  useEffect(() => {
+    // Create a MutationObserver to watch for changes in the messages container
+    const messagesContainer = document.getElementById('chat-messages-container');
+    if (!messagesContainer) return;
+    
+    const observer = new MutationObserver((mutations) => {
+      // If content changes, scroll to bottom
+      scrollToBottom();
+    });
+    
+    // Start observing the container for DOM changes
+    observer.observe(messagesContainer, { 
+      childList: true,     // Watch for changes to the direct children
+      subtree: true,       // Watch for changes in all descendants
+      characterData: true  // Watch for changes to text content
+    });
+    
+    // Clean up the observer when component unmounts
+    return () => observer.disconnect();
+  }, []);
+
+  // Add useEffect to scroll when messages change or streaming occurs
+  useEffect(() => {
+    console.log("Messages or streaming changed, scrolling...");
+    // Use multiple timeouts to ensure scrolling happens after DOM updates
+    setTimeout(scrollToBottom, 0);
+    setTimeout(scrollToBottom, 100);
+    setTimeout(scrollToBottom, 300);
+  }, [messages, isStreaming]);
+  
+  // After streaming is complete, make a final scroll
+  useEffect(() => {
+    if (!isStreaming && messages.length > 0) {
+      console.log("Streaming ended, final scroll");
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [isStreaming, messages.length]);
 
   const loadConversation = async (id: string) => {
     try {
@@ -68,6 +144,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
       const result = await window.chatAPI.getConversation(id);
       if (result.success) {
         setMessages(result.messages);
+        // Scroll to bottom after loading messages
+        setTimeout(scrollToBottom, 0);
       } else {
         // If no messages found, set empty message array with welcome message
         setMessages([
@@ -76,6 +154,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
             content: "Hello! What would you like to know about your notes?"
           }
         ]);
+        // Scroll to bottom after setting welcome message
+        setTimeout(scrollToBottom, 0);
       }
     } catch (error) {
       console.error("Error loading conversation:", error);
@@ -211,6 +291,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     setIsLoading(true);
     setIsStreaming(true);
     
+    // Force scroll after adding user message
+    setTimeout(scrollToBottom, 0);
+    setTimeout(scrollToBottom, 100);
+    
     try {
       // Ensure we have a valid conversation ID
       const chatId = conversationId || uuidv4();
@@ -303,6 +387,10 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           setIsLoading(false);
           setIsStreaming(false);
           
+          // Force final scroll to make sure everything is visible
+          setTimeout(scrollToBottom, 0);
+          setTimeout(scrollToBottom, 100);
+          
           // No need to update messages since this is just a control signal
           return;
         }
@@ -343,6 +431,11 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           // Force a separate UI update via the counter
           setTimeout(() => {
             forceUpdate(); // Force complete component re-render
+            
+            // Make sure to scroll to the bottom with each chunk received
+            scrollToBottom();
+            // Add another delayed scroll to ensure it happens after render
+            setTimeout(scrollToBottom, 50);
           }, 0);
           
           // Return the updated messages array
@@ -639,7 +732,16 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
   // Force scroll to the bottom when the component mounts
   useEffect(() => {
     // Initial scroll to bottom when component mounts
+    setTimeout(scrollToBottom, 0);
   }, []);
+
+  // Also modify the useEffect for streaming to actively scroll with each update
+  useEffect(() => {
+    if (isStreaming && !showConversations) {
+      // Ensure we're scrolled to the bottom during streaming
+      scrollToBottom();
+    }
+  }, [isStreaming, showConversations]);
 
   return (
     <div className="flex flex-col h-full">
@@ -754,10 +856,12 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
             <ScrollArea 
               className="flex-grow p-2" 
               scrollHideDelay={0}
+              ref={scrollAreaRef}
             >
               <ScrollAreaPrimitive.Viewport 
                 className="h-full w-full rounded-[inherit]"
                 id="chat-messages-viewport"
+                ref={messagesContainerRef}
               >
                 <div 
                   className="space-y-4 flex flex-col" 
