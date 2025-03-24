@@ -1,11 +1,12 @@
 import { app } from 'electron';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import log from 'electron-log';
+import BetterSqlite3 from 'better-sqlite3';
+import { v4 as uuidv4 } from 'uuid';
 import DatabaseManager from './db';
 import { DirectoryEntry, Note } from '@/renderer/shared/types';
-import BetterSqlite3 from 'better-sqlite3';
 
 // Path to the old notes directory
 const NOTES_DIR = path.join(app.getPath('userData'), 'notes');
@@ -20,7 +21,14 @@ export async function migrateNotesToDatabase(): Promise<void> {
   const dbManager = DatabaseManager.getInstance();
   const db = dbManager.getDatabase();
   
-  log.info('Starting migration of notes from file system to SQLite database');
+  if (!db) {
+    log.error('Database not initialized, cannot migrate notes');
+    return;
+  }
+  
+  const userDataPath = app.getPath('userData');
+  const workspacePath = path.join(userDataPath, 'workspace');
+  log.info(`Starting note migration to database from ${workspacePath}...`);
   
   try {
     // Load top-level folders from config
@@ -136,7 +144,7 @@ async function checkIfMigrationNeeded(topLevelFolders: string[]): Promise<boolea
     for (const notePath of noteFiles) {
       try {
         const noteContent = await fs.readFile(notePath, 'utf-8');
-        const note = JSON.parse(noteContent) as Note;
+        const note: Note = JSON.parse(noteContent);
         
         if (!note.id) {
           return true; // Note without ID needs migration
@@ -340,8 +348,8 @@ async function processNoteEntry(
   }
 }
 
-// Add this function to migrate embeddings
-export async function migrateEmbeddingsToDatabase(workspacePath: string): Promise<void> {
+// Update the migrateEmbeddingsToDatabase function signature
+export async function migrateEmbeddingsToDatabase(): Promise<void> {
   const dbManager = DatabaseManager.getInstance();
   const db = dbManager.getDatabase();
   
@@ -350,7 +358,9 @@ export async function migrateEmbeddingsToDatabase(workspacePath: string): Promis
     return;
   }
   
-  log.info('Starting embedding migration to database...');
+  const userDataPath = app.getPath('userData');
+  const workspacePath = path.join(userDataPath, 'workspace');
+  log.info(`Starting embedding migration to database from ${workspacePath}...`);
   
   try {
     // Find all notes in the database

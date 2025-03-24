@@ -6,22 +6,10 @@ import log from 'electron-log';
 
 class DatabaseManager {
   private static instance: DatabaseManager;
-  private db: BetterSqlite3.Database;
+  private db: BetterSqlite3.Database | null = null;
 
   private constructor() {
-    const dbPath = path.join(app.getPath('userData'), 'tread.db');
-
-    log.info(`Database path: ${dbPath}`);
-    log.info(`Database exists before connection: ${fs.existsSync(dbPath)}`);
-    
-    this.db = new BetterSqlite3(dbPath, {
-      verbose: (message) => log.debug(`[SQLite] ${message}`)
-    });
-    
-    log.info(`Database exists after connection: ${fs.existsSync(dbPath)}`);
-    
-    // Enable foreign keys
-    this.db.pragma('foreign_keys = ON');
+    // Database will be initialized explicitly via initialize() method
   }
 
   public static getInstance(): DatabaseManager {
@@ -31,41 +19,41 @@ class DatabaseManager {
     return DatabaseManager.instance;
   }
 
-  public async initialize(): Promise<void> {
+  public async initialize(dbPath?: string): Promise<BetterSqlite3.Database> {
     try {
-      const schemaPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'schema.sql')
-        : path.join(process.cwd(), 'src', 'main', 'database', 'schema.sql');
+      // If dbPath is not provided, use the default location
+      const finalDbPath = dbPath || path.join(app.getPath('userData'), 'tread.db');
+
+      log.info(`Initializing database at: ${finalDbPath}`);
+      log.info(`Database exists before connection: ${fs.existsSync(finalDbPath)}`);
       
-      log.info(`Loading schema from: ${schemaPath}`);
-      const schemaSQL = await fs.promises.readFile(schemaPath, 'utf-8');
+      // Create the database connection
+      this.db = new BetterSqlite3(finalDbPath, {
+        verbose: (message) => log.debug(`[SQLite] ${message}`)
+      });
       
-      // Execute the schema in a transaction for better reliability
-      this.db.exec('BEGIN TRANSACTION;');
-      this.db.exec(schemaSQL);
-      this.db.exec('COMMIT;');
+      log.info(`Database exists after connection: ${fs.existsSync(finalDbPath)}`);
       
-      log.info('Database schema initialized successfully');
+      // Enable foreign keys
+      this.db.pragma('foreign_keys = ON');
+      
+      log.info('Database connection established successfully');
+      
+      return this.db;
     } catch (error) {
-      // If there was an error, try to rollback the transaction
-      try {
-        this.db.exec('ROLLBACK;');
-      } catch (rollbackError) {
-        log.error('Error during rollback:', rollbackError);
-      }
-      
-      log.error('Error initializing database schema:', error);
+      log.error('Error creating database connection:', error);
       throw error;
     }
   }
 
-  public getDatabase(): BetterSqlite3.Database {
+  public getDatabase(): BetterSqlite3.Database | null {
     return this.db;
   }
 
   public close(): void {
     if (this.db) {
       this.db.close();
+      this.db = null;
     }
   }
 }

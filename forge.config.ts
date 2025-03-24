@@ -12,7 +12,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     extraResource: [
-      path.join(__dirname, 'src', 'main', 'database', 'schema.sql')
+      path.resolve(__dirname, 'src', 'main', 'database', 'schema.sql')
     ],
     icon: path.resolve(__dirname, 'assets', 'AppIcon.icns')
   },

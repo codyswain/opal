@@ -111,6 +111,7 @@
     "remark-math": "^6.0.0",
     "rxjs": "^7.8.1",
     "sonner": "^1.5.0",
+    "sqlite-vss": "^0.1.2",
     "styled-components": "^6.1.12",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",

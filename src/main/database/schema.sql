@@ -65,16 +65,12 @@ DROP TRIGGER IF EXISTS ai_metadata_ad;
 -- END;
 
 -- After update of notes content
--- CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
-  -- First delete the old entry
+-- CREATE TRIGGER notes_au AFTER UPDATE OF content ON notes BEGIN
 --   INSERT INTO items_fts(items_fts, rowid, content, summary) VALUES('delete', old.item_id, old.content, NULL);
-  
-  -- Insert new entry with LEFT JOIN to handle missing ai_metadata
 --   INSERT INTO items_fts(rowid, content, summary)
---   SELECT n.item_id, n.content, COALESCE(am.summary, '')
---   FROM notes n
---   LEFT JOIN ai_metadata am ON am.item_id = n.item_id
---   WHERE n.item_id = new.item_id;
+--   SELECT new.item_id, new.content, ai_metadata.summary
+--   FROM ai_metadata
+--   WHERE ai_metadata.item_id = new.item_id;
 -- END;
 
 -- After insert into ai_metadata
@@ -99,4 +95,11 @@ END;
 CREATE TRIGGER ai_metadata_ad AFTER DELETE ON ai_metadata BEGIN
     INSERT INTO items_fts(items_fts, rowid, content, summary)
         VALUES('delete', old.item_id, NULL, old.summary);
-END; 
+END;
+
+-- Vector search setup (using sqlite-vss)
+-- This will be enabled dynamically in the code by loading the extension
+-- CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
+--     embedding(384), -- Specify your embedding dimension
+--     item_id TEXT
+-- ); 
