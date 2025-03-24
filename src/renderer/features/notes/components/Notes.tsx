@@ -7,7 +7,7 @@ import {
 } from "react-resizable-panels";
 import NoteEditor from "./NoteEditor/NoteEditor";
 import NoteExplorer from "./NoteExplorer/NoteExplorer";
-import RightSidebar from "./RightSidebar/RightSidebar";
+import RightSidebar from "./right-sidebar/RightSidebar";
 import { useNotesContext } from "../context/notesContext";
 
 const Notes: React.FC<{

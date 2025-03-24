@@ -6,7 +6,7 @@ import {
   ImperativePanelHandle,
 } from "react-resizable-panels";
 
-import RightSidebar from "@/renderer/features/file-explorer-v2/components/RightSidebar/RightSidebar";
+import RightSidebar from "@/renderer/features/file-explorer-v2/components/right-sidebar/RightSidebar";
 import ExplorerLeftPanel from "./ExplorerLeftPanel";
 import ExploreCenterPanel from "./ExploreCenterPanel";
 

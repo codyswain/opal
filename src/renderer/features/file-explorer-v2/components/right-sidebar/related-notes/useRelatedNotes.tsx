@@ -1,18 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Button } from "@/renderer/shared/components/Button";
-import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import { Loader2, RefreshCw } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "@/renderer/shared/components/Toast";
 import { SimilarNote } from "@/renderer/shared/types";
-import { NoteItem } from "./RelatedNoteListItem";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
-interface RelatedNotesProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
+export const useRelatedNotes = (isOpen: boolean) => {
   const [similarNotes, setSimilarNotes] = useState<SimilarNote[]>([]);
   const [similarNotesIsLoading, setSimilarNotesIsLoading] = useState<boolean>(false);
 
@@ -27,7 +18,9 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
       setSimilarNotesIsLoading(false);
       return;
     }
+    
     setSimilarNotesIsLoading(true);
+    
     try {
       // Using findSimilarNotes from the window.electron API
       const similarNotes = await window.electron.findSimilarNotes(
@@ -62,29 +55,10 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, selectedId, selectedNote, findSimilarNotes]);
 
-  return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-grow w-full px-1">
-        <div className="py-2">
-          {similarNotesIsLoading ? (
-            <div className="flex items-center justify-center h-16">
-              <Loader2 className="h-5 w-5 animate-spin" />
-            </div>
-          ) : similarNotes.length > 0 ? (
-            <div className="space-y-2">
-              {similarNotes.map((note) => (
-                <NoteItem key={note.id} note={note} openNote={openNote} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-4 text-xs">
-              No similar notes found
-            </p>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-};
-
-export default RelatedNotes; 
+  return {
+    similarNotes,
+    similarNotesIsLoading,
+    findSimilarNotes,
+    openNote
+  };
+}; 
