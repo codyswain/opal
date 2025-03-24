@@ -13,6 +13,8 @@ import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store
 
 interface ChatPaneProps {
   onClose: () => void;
+  isNoteSelected?: boolean;
+  selectedNodeId?: string | null;
 }
 
 interface Message {
@@ -31,7 +33,7 @@ interface Conversation {
   message_count: number;
 }
 
-const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
+const ChatPane: React.FC<ChatPaneProps> = ({ onClose, isNoteSelected = false, selectedNodeId = null }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -51,13 +53,28 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     return newId;
   });
   const [previousConversations, setPreviousConversations] = useState<Conversation[]>([]);
-  const [showConversations, setShowConversations] = useState(false);
-
+  const [showConversations, setShowConversations] = useState(true);
+  const [activeChatView, setActiveChatView] = useState<'conversations' | 'chat'>('conversations');
+  
   // Get the selected note info from fileExplorerStore
   const { ui, entities } = useFileExplorerStore();
   const selectedId = ui.selectedId;
   const selectedNode = selectedId ? entities.nodes[selectedId] : null;
   const selectedNote = selectedId && selectedNode?.type === 'note' ? entities.notes[selectedId] : null;
+
+  // Add useEffect to handle note selection
+  useEffect(() => {
+    if (isNoteSelected && selectedNodeId) {
+      // If a note is selected, start a new chat
+      startNewConversation();
+      setActiveChatView('chat');
+      setShowConversations(false);
+    } else {
+      // If a folder is selected, show conversations
+      setActiveChatView('conversations');
+      setShowConversations(true);
+    }
+  }, [isNoteSelected, selectedNodeId]);
 
   // Enhanced scrollToBottom that tries multiple approaches
   const scrollToBottom = () => {
@@ -729,10 +746,10 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
 
   return (
     <div className="flex flex-col h-full">
-      {showConversations ? (
+      {activeChatView === 'conversations' ? (
         <div className="flex flex-col h-full">
           <div className="flex justify-between items-center p-2 border-b border-border">
-            <h3 className="text-sm font-medium">Previous Conversations</h3>
+            <h3 className="text-sm font-medium">Conversations</h3>
             <div className="flex items-center gap-2">
               <Button 
                 variant="ghost" 
@@ -746,28 +763,16 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={() => setShowConversations(false)}
+                onClick={startNewConversation}
                 className="h-7 w-7"
-                title="Return to chat"
+                title="New chat"
               >
-                <MessageSquare className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </div>
           <ScrollArea className="flex-grow">
             <div className="p-2 space-y-2">
-              <div className="mb-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full text-xs h-7"
-                  onClick={startNewConversation}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  New Conversation
-                </Button>
-              </div>
-
               {getSortedConversations().length === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-xs text-muted-foreground mb-2">No conversations found</p>
@@ -793,7 +798,11 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
                         "p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors text-xs",
                         conversation.id === conversationId ? "bg-muted border border-border" : ""
                       )}
-                      onClick={() => switchToConversation(conversation.id)}
+                      onClick={() => {
+                        switchToConversation(conversation.id);
+                        setActiveChatView('chat');
+                        setShowConversations(false);
+                      }}
                     >
                       <div className="flex items-start space-x-2">
                         <MessageSquare className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
@@ -817,24 +826,29 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           <div className="flex justify-between items-center p-2 border-b border-border">
             <div className="flex space-x-2">
               <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-2"
-                onClick={startNewConversation}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                New Chat
-              </Button>
-              <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs px-2"
-                onClick={() => setShowConversations(true)}
+                onClick={() => {
+                  setActiveChatView('conversations');
+                  setShowConversations(true);
+                }}
               >
-                <History className="h-3 w-3 mr-1" />
-                History
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                  <path d="m15 18-6-6 6-6"/>
+                </svg>
+                Back
               </Button>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={startNewConversation}
+              title="New chat"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
           <div className="flex-grow overflow-hidden flex flex-col">
             <ScrollArea 

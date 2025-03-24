@@ -37,6 +37,7 @@ export interface FSExplorerState {
     history: string[];
     historyIndex: number;
     isNavigatingHistory: boolean;
+    rightSidebarTab: string;
   };
   loading: {
     isLoading: boolean;

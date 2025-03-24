@@ -17,6 +17,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     history: [],
     historyIndex: -1,
     isNavigatingHistory: false,
+    rightSidebarTab: 'related',
   },
   loading: {
     isLoading: false,
