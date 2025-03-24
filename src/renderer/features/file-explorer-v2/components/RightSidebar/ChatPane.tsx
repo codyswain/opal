@@ -61,13 +61,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
 
   // Enhanced scrollToBottom that tries multiple approaches
   const scrollToBottom = () => {
-    console.log("Attempting to scroll to bottom");
-    
     // Try scrolling the messagesContainer directly
     if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
       container.scrollTop = container.scrollHeight;
-      console.log("Scrolled messagesContainer:", container.scrollTop, container.scrollHeight);
     }
     
     // Also try scrolling via the Viewport element by ID
@@ -75,7 +72,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
       const viewport = document.getElementById('chat-messages-viewport');
       if (viewport) {
         viewport.scrollTop = viewport.scrollHeight;
-        console.log("Scrolled viewport by ID");
       }
     } catch (e) {
       console.error("Error scrolling viewport:", e);
@@ -84,14 +80,12 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     // And try scrolling the ScrollArea if we have a ref to it
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-      console.log("Scrolled scrollArea");
     }
     
     // As a last resort, try to find the last message and scroll it into view
     const messages = document.getElementById('chat-messages-container');
     if (messages && messages.lastElementChild) {
       messages.lastElementChild.scrollIntoView({ behavior: 'auto', block: 'end' });
-      console.log("Scrolled last message into view");
     }
   };
 
@@ -101,7 +95,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     const messagesContainer = document.getElementById('chat-messages-container');
     if (!messagesContainer) return;
     
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
       // If content changes, scroll to bottom
       scrollToBottom();
     });
@@ -119,7 +113,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
 
   // Add useEffect to scroll when messages change or streaming occurs
   useEffect(() => {
-    console.log("Messages or streaming changed, scrolling...");
     // Use multiple timeouts to ensure scrolling happens after DOM updates
     setTimeout(scrollToBottom, 0);
     setTimeout(scrollToBottom, 100);
@@ -129,7 +122,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
   // After streaming is complete, make a final scroll
   useEffect(() => {
     if (!isStreaming && messages.length > 0) {
-      console.log("Streaming ended, final scroll");
       setTimeout(scrollToBottom, 100);
     }
   }, [isStreaming, messages.length]);
@@ -373,7 +365,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
       
       
       // Use streaming API to get real-time updates
-      console.log("Starting RAG streaming request...");
       
       // Flag to track if we've received any chunks
       let hasReceivedChunks = false;
@@ -381,8 +372,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
       const cleanupFn = window.chatAPI.performRAGStreaming(chatId, finalQuery, (chunk: string) => {
         // Check for the special completion signal
         if (chunk === "__DONE__") {
-          console.log("Received streaming completion signal");
-          
           // Immediately end loading and streaming states
           setIsLoading(false);
           setIsStreaming(false);
@@ -399,7 +388,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
         hasReceivedChunks = true;
         
         // Debug log to see if chunks are being received
-        console.log("Received chunk:", chunk);
         
         // Use a callback to get the latest messages state
         setMessages(prevMessages => {
@@ -426,8 +414,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           const newMessages = [...prevMessages];
           newMessages[lastIndex] = updatedMessage;
           
-          console.log("Updated message content:", updatedMessage.content);
-          
           // Force a separate UI update via the counter
           setTimeout(() => {
             forceUpdate(); // Force complete component re-render
@@ -443,14 +429,12 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
         });
       });
       
-      console.log("Started streaming request");
-      
       // When streaming is finished, the cleanup function will be called automatically
       // Now this just serves as a safety timeout in case the streaming never completes
       setTimeout(() => {
         // Only cleanup if we're still in loading/streaming state
         if (isLoading || isStreaming) {
-          console.log("Safety timeout fired - cleaning up unfinished streaming");
+          console.error("Safety timeout fired - cleaning up unfinished streaming");
           
           // Check if we received any chunks
           if (!hasReceivedChunks) {

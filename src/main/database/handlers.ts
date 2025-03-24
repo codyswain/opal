@@ -1004,7 +1004,6 @@ export async function registerDatabaseIPCHandlers() {
         const openai = new OpenAI({ apiKey: openaiApiKey });
         
         // Test that the API key is valid by making a small request
-        log.info('Testing OpenAI API key validity...');
         try {
           // Create a quick test to validate the API key
           await openai.chat.completions.create({
@@ -1012,7 +1011,6 @@ export async function registerDatabaseIPCHandlers() {
             messages: [{ role: 'user', content: 'test' }],
             max_tokens: 5
           });
-          log.info('OpenAI API key is valid');
         } catch (apiKeyError) {
           log.error('Invalid OpenAI API key:', apiKeyError);
           event.sender.send(responseChannel, "Error: Invalid OpenAI API key. Please check your API key in settings.");
@@ -1084,7 +1082,6 @@ export async function registerDatabaseIPCHandlers() {
         let fullResponse = '';
         
         // Create a streaming completion
-        log.info('Creating streaming completion with OpenAI...');
         const stream = await openai.chat.completions.create({
           model: 'gpt-4',
           messages: messages as any,
@@ -1093,15 +1090,10 @@ export async function registerDatabaseIPCHandlers() {
         });
 
         // Process each chunk as it arrives
-        log.info('Starting to process stream chunks');
         for await (const chunk of stream) {
           try {
-            // Log chunk info
-            log.debug(`Received chunk from OpenAI: ${JSON.stringify(chunk)}`);
-            
             // Check if this is a completion signal (empty delta with finish_reason: "stop")
             if (chunk.choices?.[0]?.finish_reason === "stop") {
-              log.info('Received completion signal from OpenAI with finish_reason: stop');
               break; // Exit the loop as we're done receiving content
             }
             
@@ -1110,7 +1102,6 @@ export async function registerDatabaseIPCHandlers() {
             
             if (content) {
               // Send the chunk to the renderer process
-              log.info(`Sending chunk to renderer (${content.length} chars): "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
               event.sender.send(responseChannel, content);
               // Append to full response
               fullResponse += content;
@@ -1139,7 +1130,6 @@ export async function registerDatabaseIPCHandlers() {
         insertStmt.run(messageId, conversationId, 'assistant', fullResponse, next_seq);
 
         // Signal completion
-        log.info('Sending completion signal');
         event.sender.send(responseChannel, null);
         
         return { success: true };
