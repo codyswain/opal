@@ -140,6 +140,8 @@ contextBridge.exposeInMainWorld("fileExplorer", {
 contextBridge.exposeInMainWorld("chatAPI", {
   getConversation: (conversationId: string) => 
     ipcRenderer.invoke('chat:get-conversation', conversationId),
+  getAllConversations: () =>
+    ipcRenderer.invoke('chat:get-all-conversations'),
   addMessage: (conversationId: string, role: string, content: string) => 
     ipcRenderer.invoke('chat:add-message', conversationId, role, content),
   performRAG: (conversationId: string, query: string) => 

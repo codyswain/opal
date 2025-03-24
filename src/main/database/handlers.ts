@@ -786,6 +786,64 @@ export async function registerDatabaseIPCHandlers() {
     }
   });
 
+  ipcMain.handle('chat:get-all-conversations', async (event) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when chat:get-all-conversations was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get all unique conversation IDs with their latest message and timestamp
+      const stmt = db.prepare(`
+        SELECT 
+          c1.conversation_id as id,
+          MIN(c1.created_at) as created_at,
+          MAX(c1.created_at) as last_message_at,
+          (
+            SELECT content FROM chat_messages c2 
+            WHERE c2.conversation_id = c1.conversation_id 
+            AND c2.role = 'user'
+            ORDER BY c2.sequence ASC 
+            LIMIT 1
+          ) as title,
+          (
+            SELECT COUNT(*) FROM chat_messages c3
+            WHERE c3.conversation_id = c1.conversation_id
+          ) as message_count
+        FROM chat_messages c1
+        GROUP BY c1.conversation_id
+        ORDER BY MAX(c1.created_at) DESC
+      `);
+      
+      // Type the database result
+      interface RawConversation {
+        id: string;
+        created_at: string;
+        last_message_at: string;
+        title: string | null;
+        message_count: number;
+      }
+      
+      const rawConversations = stmt.all() as RawConversation[];
+      
+      const conversations = rawConversations.map(conv => {
+        return {
+          id: conv.id,
+          created_at: new Date(conv.created_at).toISOString(),
+          last_message_at: new Date(conv.last_message_at).toISOString(),
+          title: conv.title ? (conv.title.length > 30 ? conv.title.substring(0, 30) + '...' : conv.title) : null,
+          message_count: conv.message_count
+        };
+      });
+      
+      return { success: true, conversations };
+    } catch (error) {
+      log.error('Error getting all chat conversations:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
   ipcMain.handle('chat:add-message', async (event, conversationId: string, role: string, content: string) => {
     try {
       const db = dbManager.getDatabase();

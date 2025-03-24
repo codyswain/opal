@@ -3,7 +3,7 @@ import { cn } from "@/renderer/shared/utils";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Button } from "@/renderer/shared/components/Button";
 import { Input } from "@/renderer/shared/components/Input";
-import { Send, RefreshCw, Info, Bot } from "lucide-react";
+import { Send, RefreshCw, Info, Bot, Plus, MessageSquare, Clock } from "lucide-react";
 import { toast } from "@/renderer/shared/components/Toast";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,6 +21,13 @@ interface Message {
   created_at?: string;
 }
 
+interface Conversation {
+  conversation_id: string;
+  last_updated: string;
+  latest_user_message: string;
+  message_count: number;
+}
+
 const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -30,12 +37,27 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     // Use an existing conversation ID from localStorage or create a new one
     return localStorage.getItem("currentChatConversationId") || uuidv4();
   });
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [showConversationHistory, setShowConversationHistory] = useState(true);
+  const isInitialMount = useRef(true);
 
   // Get the selected note info from fileExplorerStore
   const { ui, entities } = useFileExplorerStore();
   const selectedId = ui.selectedId;
   const selectedNode = selectedId ? entities.nodes[selectedId] : null;
   const selectedNote = selectedId && selectedNode?.type === 'note' ? entities.notes[selectedId] : null;
+
+  // Load all conversations for the history view
+  const loadAllConversations = async () => {
+    try {
+      const result = await window.chatAPI.getAllConversations();
+      if (result.success) {
+        setConversations(result.conversations);
+      }
+    } catch (error) {
+      console.error("Error loading conversation history:", error);
+    }
+  };
 
   // Load conversation history when component mounts
   useEffect(() => {
@@ -44,6 +66,10 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
         const result = await window.chatAPI.getConversation(conversationId);
         if (result.success) {
           setMessages(result.messages);
+          // If we have messages, exit the conversation history view
+          if (result.messages.length > 0) {
+            setShowConversationHistory(false);
+          }
         }
       } catch (error) {
         console.error("Error loading conversation:", error);
@@ -54,21 +80,27 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     localStorage.setItem("currentChatConversationId", conversationId);
     
     loadConversation();
+    loadAllConversations();
   }, [conversationId]);
 
   useEffect(() => {
+    // Show conversation history when no messages in current chat
+    setShowConversationHistory(messages.length === 0);
+  }, [messages]);
+
+  useEffect(() => {
     // Scroll to bottom whenever messages change
-    if (scrollAreaRef.current) {
+    if (scrollAreaRef.current && !showConversationHistory) {
       const scrollElement = scrollAreaRef.current;
       setTimeout(() => {
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }, 100);
     }
-  }, [messages]);
+  }, [messages, showConversationHistory]);
 
   // If the chat history is empty, show a welcome message
   useEffect(() => {
-    if (messages.length === 0) {
+    if (messages.length === 0 && !showConversationHistory) {
       setMessages([
         {
           role: "assistant",
@@ -76,7 +108,7 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
         }
       ]);
     }
-  }, [messages]);
+  }, [messages, showConversationHistory]);
 
   // Make sure to load the note content if it's not already loaded
   useEffect(() => {
@@ -193,6 +225,8 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
       toast.error("Failed to get response. Please try again.");
     } finally {
       setIsLoading(false);
+      // Refresh conversation history for next time
+      loadAllConversations();
     }
   };
 
@@ -311,7 +345,85 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
     setConversationId(newConversationId);
     setMessages([]);
     toast.success("Started a new conversation");
+    setShowConversationHistory(false);
   };
+
+  const switchToConversation = (id: string) => {
+    setConversationId(id);
+    setShowConversationHistory(false);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const renderConversationHistory = () => (
+    <div className="flex flex-col space-y-1 px-3 py-2">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-medium text-foreground">Recent Conversations</h3>
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={startNewConversation} 
+          className="h-6 flex items-center gap-1 text-xs"
+        >
+          <Plus className="w-3 h-3" />
+          New Chat
+        </Button>
+      </div>
+
+      {conversations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center text-muted-foreground text-xs py-4">
+          <MessageSquare className="w-8 h-8 mb-2 opacity-50" />
+          <p>No conversations yet</p>
+          <p className="mt-1">Start a new chat to ask about your notes</p>
+        </div>
+      ) : (
+        conversations.map((convo) => (
+          <button
+            key={convo.conversation_id}
+            onClick={() => switchToConversation(convo.conversation_id)}
+            className={cn(
+              "flex flex-col text-left p-2 rounded-md hover:bg-muted/50 transition-colors",
+              convo.conversation_id === conversationId ? "bg-muted/30" : ""
+            )}
+          >
+            <div className="flex justify-between items-center">
+              <div className="font-medium text-xs truncate max-w-[200px]">
+                {convo.latest_user_message || "New conversation"}
+              </div>
+              <div className="text-[10px] text-muted-foreground flex items-center">
+                <Clock className="w-3 h-3 mr-1" />
+                {formatDate(convo.last_updated)}
+              </div>
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              {convo.message_count} message{convo.message_count !== 1 ? 's' : ''}
+            </div>
+          </button>
+        ))
+      )}
+    </div>
+  );
+
+  // Start a new conversation when component mounts with a new key
+  useEffect(() => {
+    // Skip on initial mount to prevent overriding the conversation loaded from localStorage
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    startNewConversation();
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -319,7 +431,7 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
         <div className="flex items-center gap-2">
           <Bot className="w-3.5 h-3.5 text-muted-foreground" />
           <h3 className="text-xs font-medium text-muted-foreground">Note Assistant</h3>
-          {selectedNote && selectedNode && (
+          {selectedNote && selectedNode && !showConversationHistory && (
             <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/30 text-[10px]">
               <Info className="w-3 h-3 text-muted-foreground" />
               <span className="text-muted-foreground truncate max-w-[150px]">
@@ -328,21 +440,37 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
             </div>
           )}
         </div>
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={startNewConversation} 
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </Button>
+        <div className="flex items-center">
+          {!showConversationHistory && (
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setShowConversationHistory(true)} 
+              className="h-6 w-6 text-muted-foreground hover:text-foreground mr-1"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={startNewConversation} 
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
       </div>
       
       <ScrollArea className="flex-grow w-full" ref={scrollAreaRef}>
-        <div className="px-3 py-2 space-y-3">
-          {messages.map(renderMessage)}
-          {isLoading && renderLoader()}
-        </div>
+        {showConversationHistory ? (
+          renderConversationHistory()
+        ) : (
+          <div className="px-3 py-2 space-y-3">
+            {messages.map(renderMessage)}
+            {isLoading && renderLoader()}
+          </div>
+        )}
       </ScrollArea>
 
       <div className="px-3 py-2 border-t border-border bg-background/95">
@@ -356,7 +484,7 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
                 handleSend();
               }
             }}
-            placeholder="Ask about your notes..."
+            placeholder={showConversationHistory ? "Type to start a new conversation..." : "Ask about your notes..."}
             className="flex-grow h-7 text-xs bg-muted/30 border-muted-foreground/20"
           />
           <Button

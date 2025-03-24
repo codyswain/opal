@@ -147,6 +147,7 @@ declare global {
     
     chatAPI: {
       getConversation: (conversationId: string) => Promise<{success: boolean, messages: any[], error?: string}>;
+      getAllConversations: () => Promise<{success: boolean, conversations: any[], error?: string}>;
       addMessage: (conversationId: string, role: string, content: string) => Promise<{success: boolean, messageId: string, error?: string}>;
       performRAG: (conversationId: string, query: string) => Promise<{success: boolean, message: any, error?: string}>;
     };
