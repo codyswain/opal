@@ -10,6 +10,7 @@ export const Settings: React.FC = () => {
   const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
   const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
   const [resetStatus, setResetStatus] = useState<string | null>(null);
+  const [embeddingsStatus, setEmbeddingsStatus] = useState<string | null>(null);
 
   const handleSave = () => {
     updateSettings({ openAIKey: settings.openAIKey });
@@ -56,10 +57,48 @@ export const Settings: React.FC = () => {
         if (result.success) {
           setResetStatus('Database reset successfully! You can now migrate your notes again.');
         } else {
-          setResetStatus(`Database reset failed: ${result.error}`);
+          setResetStatus(`Database reset failed: ${result.message || result.error}`);
         }
       } catch (error) {
         setResetStatus(`Database reset error: ${error}`);
+      }
+    }
+  };
+  
+  const handleRebuildEmbeddings = async () => {
+    // Show confirmation dialog
+    if (window.confirm('Are you sure you want to rebuild all note embeddings? This may take a while but can fix issues with related notes.')) {
+      setEmbeddingsStatus('Rebuilding embeddings in progress...');
+      
+      try {
+        // Check if the clearVectorIndex function exists
+        if (!window.electron.clearVectorIndex) {
+          setEmbeddingsStatus('This version of the application does not support the rebuild embeddings feature yet. Please restart the application first.');
+          return;
+        }
+        
+        // First, clear the vector index
+        const clearResult = await window.electron.clearVectorIndex();
+        if (!clearResult.success) {
+          setEmbeddingsStatus(`Failed to clear vector index: ${clearResult.message}`);
+          return;
+        }
+        
+        // Check if the regenerateAllEmbeddings function exists
+        if (!window.electron.regenerateAllEmbeddings) {
+          setEmbeddingsStatus('This version of the application does not support the regenerate embeddings feature yet. Please restart the application first.');
+          return;
+        }
+        
+        // Then regenerate all embeddings
+        const result = await window.electron.regenerateAllEmbeddings();
+        if (result.success) {
+          setEmbeddingsStatus(`Successfully rebuilt embeddings for ${result.count} notes. Related notes should now work properly.`);
+        } else {
+          setEmbeddingsStatus(`Failed to rebuild embeddings: ${result.message}`);
+        }
+      } catch (error) {
+        setEmbeddingsStatus(`Error rebuilding embeddings: ${error}`);
       }
     }
   };
@@ -123,6 +162,18 @@ export const Settings: React.FC = () => {
           {cleanupStatus && (
             <div className={`p-2 rounded ${cleanupStatus.includes('failed') || cleanupStatus.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
               {cleanupStatus}
+            </div>
+          )}
+          
+          <button
+            onClick={handleRebuildEmbeddings}
+            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          >
+            Fix Related Notes (Rebuild Embeddings)
+          </button>
+          {embeddingsStatus && (
+            <div className={`p-2 rounded ${embeddingsStatus.includes('Failed') || embeddingsStatus.includes('Error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+              {embeddingsStatus}
             </div>
           )}
           

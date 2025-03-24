@@ -44,38 +44,52 @@ export class EmbeddingCreator {
     if (!db) throw new Error("Database not initialized");
     
     try {
-      // Check if embedding already exists for this note
-      const existingStmt = db.prepare(`
-        SELECT * FROM ai_metadata WHERE item_id = ?
+      // Try a different approach completely - use a backup table
+      log.info(`Attempting to save embedding for note ${noteId} with alternative method`);
+      
+      // First make sure our backup table exists
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS embeddings_backup (
+          item_id TEXT PRIMARY KEY,
+          embedding_data TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
       `);
       
-      const existingMetadata = existingStmt.get(noteId) as AIMetadata | undefined;
-      
-      // Convert embedding to proper format for storage
+      // Convert embedding to proper format for storage - base64 encode to avoid any data type issues
       const embeddingJson = JSON.stringify(embedding);
+      const embeddingBase64 = Buffer.from(embeddingJson).toString('base64');
+      log.info(`Embedding encoded to base64, length: ${embeddingBase64.length}`);
       
-      if (existingMetadata) {
-        // Update existing record
-        const updateStmt = db.prepare(`
-          UPDATE ai_metadata
-          SET embedding = ?
-          WHERE item_id = ?
-        `);
-        updateStmt.run(embeddingJson, noteId);
-      } else {
-        // Insert new record
-        const insertStmt = db.prepare(`
+      // First store in our backup table
+      db.prepare(`
+        INSERT OR REPLACE INTO embeddings_backup (item_id, embedding_data)
+        VALUES (?, ?)
+      `).run(noteId, embeddingBase64);
+      
+      log.info(`Successfully saved embedding to backup table for note ${noteId}`);
+      
+      try {
+        // Try saving to the main table too
+        db.prepare(`
+          DELETE FROM ai_metadata WHERE item_id = ?
+        `).run(noteId);
+        
+        db.prepare(`
           INSERT INTO ai_metadata (item_id, embedding)
           VALUES (?, ?)
-        `);
-        insertStmt.run(noteId, embeddingJson);
+        `).run(noteId, embeddingBase64);
+        
+        log.info(`Successfully saved embedding to main table for note ${noteId}`);
+      } catch (mainTableError) {
+        log.warn(`Could not save to main table, will use backup: ${mainTableError.message}`);
       }
       
       // Update vector index if VSS is available
-      this.updateVectorIndex(noteId, embedding);
+      await this.updateVectorIndex(noteId, embedding);
       
     } catch (error) {
-      console.error(`Error saving embedding to database for note ${noteId}:`, error);
+      log.error(`Error saving embedding to database for note ${noteId}:`, error);
       throw new Error(`Failed to save embedding: ${error.message}`);
     }
   }
@@ -95,6 +109,7 @@ export class EmbeddingCreator {
       
       if (!tableExists) {
         // VSS extension probably not loaded, silently return
+        log.warn("Vector index table doesn't exist, can't update vector");
         return;
       }
       
@@ -111,17 +126,22 @@ export class EmbeddingCreator {
         db.prepare(`
           DELETE FROM vector_index WHERE item_id = ?
         `).run(noteId);
+        log.info(`Deleted existing vector index entry for note ${noteId}`);
       }
       
-      // Insert into vector index
-      // Convert the embedding array to a buffer using Float32Array
-      const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
-      
-      db.prepare(`
-        INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
-      `).run(vectorBuffer, noteId);
-      
-      log.info(`Updated vector index for note ${noteId}`);
+      try {
+        // Insert into vector index
+        // Convert the embedding array to a buffer using Float32Array
+        const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
+        
+        db.prepare(`
+          INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
+        `).run(vectorBuffer, noteId);
+        
+        log.info(`Updated vector index for note ${noteId}`);
+      } catch (vssError) {
+        log.warn(`Could not insert into VSS index: ${vssError.message}`);
+      }
       
     } catch (error) {
       // Don't throw the error - if VSS isn't available, this is expected to fail
@@ -137,21 +157,83 @@ export class SimilaritySearcher {
     
     if (!db) throw new Error("Database not initialized");
     
-    // Query all notes that have embeddings
-    const stmt = db.prepare(`
+    // Try to get embeddings from the main table first
+    const mainTableStmt = db.prepare(`
       SELECT i.id, a.embedding 
       FROM items i
       JOIN ai_metadata a ON i.id = a.item_id
       WHERE i.type = 'note' AND a.embedding IS NOT NULL
     `);
     
-    const rows = stmt.all() as { id: string, embedding: string }[];
+    const mainRows = mainTableStmt.all() as { id: string, embedding: string }[];
+    log.info(`Found ${mainRows.length} notes with embeddings in main table.`);
     
-    // Parse the embedding JSON from string
-    return rows.map(row => ({
-      id: row.id,
-      embedding: JSON.parse(row.embedding) as Embedding
-    }));
+    // If we found embeddings in the main table, use those
+    if (mainRows.length > 0) {
+      // Parse the embedding JSON from string
+      return mainRows.map(row => {
+        try {
+          // Check if the embedding is base64 encoded
+          if (row.embedding.startsWith('eyJvYmplY3QiOiJs')) {
+            // This looks like base64, try to decode it
+            const jsonStr = Buffer.from(row.embedding, 'base64').toString();
+            return {
+              id: row.id,
+              embedding: JSON.parse(jsonStr) as Embedding
+            };
+          } else {
+            // Regular JSON string
+            return {
+              id: row.id,
+              embedding: JSON.parse(row.embedding) as Embedding
+            };
+          }
+        } catch (error) {
+          log.error(`Error parsing embedding for note ${row.id}:`, error);
+          throw error;
+        }
+      });
+    }
+    
+    // If we didn't find any in the main table, check our backup table
+    log.info(`No embeddings found in main table, checking backup table`);
+    
+    // Check if backup table exists
+    const backupTableExists = db.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name='embeddings_backup'
+    `).get();
+    
+    if (!backupTableExists) {
+      log.warn("No backup table found either, no embeddings available");
+      return [];
+    }
+    
+    // Query the backup table
+    const backupStmt = db.prepare(`
+      SELECT e.item_id as id, e.embedding_data as embedding 
+      FROM embeddings_backup e
+      JOIN items i ON e.item_id = i.id
+      WHERE i.type = 'note'
+    `);
+    
+    const backupRows = backupStmt.all() as { id: string, embedding: string }[];
+    log.info(`Found ${backupRows.length} notes with embeddings in backup table.`);
+    
+    // Parse the embedding JSON from the backup table
+    return backupRows.map(row => {
+      try {
+        // The data in backup is always base64 encoded
+        const jsonStr = Buffer.from(row.embedding, 'base64').toString();
+        return {
+          id: row.id,
+          embedding: JSON.parse(jsonStr) as Embedding
+        };
+      } catch (error) {
+        log.error(`Error parsing embedding from backup for note ${row.id}:`, error);
+        throw error;
+      }
+    });
   }
 
   async performSimilaritySearch(
@@ -165,20 +247,23 @@ export class SimilaritySearcher {
     
     try {
       // Check if vector_index exists (which means VSS is loaded)
+      log.info("Checking if vector_index table exists...");
       const vssEnabled = db.prepare(`
         SELECT name FROM sqlite_master 
         WHERE type='table' AND name='vector_index'
       `).get();
       
       if (vssEnabled) {
+        log.info("Vector search table found, using VSS for similarity search");
         // Use VSS for similarity search
         return await this.performVSSSimilaritySearch(queryEmbedding, limit);
       } else {
+        log.info("Vector search table not found, falling back to manual cosine similarity");
         // Fall back to manual cosine similarity calculation
         return await this.performManualSimilaritySearch(queryEmbedding, limit);
       }
     } catch (error) {
-      log.warn("Error checking for VSS availability:", error);
+      log.error("Error checking for VSS availability:", error);
       // Fall back to manual cosine similarity
       return await this.performManualSimilaritySearch(queryEmbedding, limit);
     }
@@ -199,7 +284,119 @@ export class SimilaritySearcher {
     const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
     
     try {
+      // First, make sure we have embeddings in the vector_index table
+      const countVectors = db.prepare(`
+        SELECT COUNT(*) as count FROM vector_index
+      `).get() as { count: number };
+      
+      log.info(`Vector index contains ${countVectors.count} embeddings`);
+      
+      if (countVectors.count === 0) {
+        log.warn("Vector index is empty, migrating embeddings");
+        
+        // First check if we have a backup table
+        const backupTableExists = db.prepare(`
+          SELECT name FROM sqlite_master 
+          WHERE type='table' AND name='embeddings_backup'
+        `).get();
+        
+        // If we have a backup table, restore embeddings from there first
+        if (backupTableExists) {
+          log.info("Found backup table, trying to restore embeddings from there");
+          
+          // Get all embeddings from the backup table
+          const backupRows = db.prepare(`
+            SELECT item_id, embedding_data 
+            FROM embeddings_backup
+          `).all() as { item_id: string, embedding_data: string }[];
+          
+          log.info(`Found ${backupRows.length} embeddings in backup table`);
+          
+          if (backupRows.length > 0) {
+            let successCount = 0;
+            
+            // Process each embedding
+            for (const row of backupRows) {
+              try {
+                // Decode the base64 embedding
+                const jsonStr = Buffer.from(row.embedding_data, 'base64').toString();
+                const embedding = JSON.parse(jsonStr) as Embedding;
+                
+                // Get the embedding vector
+                const vector = embedding.data[0].embedding;
+                
+                // Convert the vector to a buffer and insert into the VSS index
+                const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
+                
+                db.prepare(`
+                  INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
+                `).run(vectorBuffer, row.item_id);
+                
+                // Also restore to the main table if missing
+                const existsInMain = db.prepare(`
+                  SELECT item_id FROM ai_metadata WHERE item_id = ?
+                `).get(row.item_id);
+                
+                if (!existsInMain) {
+                  db.prepare(`
+                    INSERT INTO ai_metadata (item_id, embedding) VALUES (?, ?)
+                  `).run(row.item_id, row.embedding_data);
+                }
+                
+                successCount++;
+              } catch (error) {
+                log.warn(`Error restoring embedding for item ${row.item_id}:`, error);
+              }
+            }
+            
+            log.info(`Successfully restored ${successCount} of ${backupRows.length} embeddings from backup`);
+          }
+        }
+        
+        // Get all notes with embeddings from main table as fallback
+        const notesWithEmbeddings = await this.findNotesWithEmbeddings();
+        
+        log.info(`Found ${notesWithEmbeddings.length} notes with embeddings to add to vector index`);
+        
+        // If we still don't have any embeddings, we can't continue
+        if (notesWithEmbeddings.length === 0) {
+          log.warn("No embeddings found in either main or backup table, cannot perform similarity search");
+          return [];
+        }
+        
+        // Insert each embedding into the VSS index
+        for (const note of notesWithEmbeddings) {
+          try {
+            // Get the embedding vector
+            const vector = note.embedding.data[0].embedding;
+            
+            // Convert the vector to a buffer
+            const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
+            
+            // Insert into the VSS index
+            db.prepare(`
+              INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
+            `).run(vectorBuffer, note.id);
+          } catch (error) {
+            log.warn(`Error adding embedding for note ${note.id} to vector index:`, error);
+          }
+        }
+        
+        // Re-check the count
+        const updatedCount = db.prepare(`
+          SELECT COUNT(*) as count FROM vector_index
+        `).get() as { count: number };
+        
+        log.info(`Vector index now contains ${updatedCount.count} embeddings`);
+        
+        if (updatedCount.count === 0) {
+          log.warn("Still no embeddings in vector index, falling back to manual method");
+          return this.performManualSimilaritySearch(queryEmbedding, limit);
+        }
+      }
+      
       // Query the VSS index for similar vectors
+      log.info("Performing VSS search with query embedding");
       const similarVectors = db.prepare(`
         SELECT item_id, distance 
         FROM vector_index 
@@ -209,6 +406,11 @@ export class SimilaritySearcher {
       
       log.info(`VSS search returned ${similarVectors.length} similar notes`);
       
+      if (similarVectors.length === 0) {
+        log.warn("VSS search returned no results, falling back to manual method");
+        return this.performManualSimilaritySearch(queryEmbedding, limit);
+      }
+   
       // Fetch complete note details for the similar vectors
       const results: SimilarNote[] = [];
       
@@ -257,18 +459,33 @@ export class SimilaritySearcher {
     // Get all notes with embeddings
     const notesWithEmbeddings = await this.findNotesWithEmbeddings();
     
+    log.info(`Found ${notesWithEmbeddings.length} notes with embeddings for manual similarity calculation`);
+    
+    if (notesWithEmbeddings.length === 0) {
+      log.warn("No notes with embeddings found for similarity search");
+      return [];
+    }
+    
     // Calculate similarity scores
     const notesWithScores = notesWithEmbeddings.map(note => {
-      const score = this.cosineSimilarity(
-        queryEmbedding.data[0].embedding,
-        note.embedding.data[0].embedding
-      );
-      return { id: note.id, score };
+      try {
+        const score = this.cosineSimilarity(
+          queryEmbedding.data[0].embedding,
+          note.embedding.data[0].embedding
+        );
+        return { id: note.id, score };
+      } catch (error) {
+        log.warn(`Error calculating similarity for note ${note.id}:`, error);
+        return { id: note.id, score: 0 }; // Default to 0 score on error
+      }
     });
     
+    // Sort by score and limit results
     const topResults = notesWithScores
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
+    
+    log.info(`Top ${topResults.length} similar notes have scores ranging from ${topResults[0]?.score || 0} to ${topResults[topResults.length-1]?.score || 0}`);
     
     // Fetch complete note details for the top results
     const results: SimilarNote[] = [];

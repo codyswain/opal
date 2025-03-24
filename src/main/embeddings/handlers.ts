@@ -14,6 +14,7 @@ import { getOpenAIKey } from "../file-system/loader";
 import { ChatCompletionMessageParam } from "openai/resources/chat";
 import { EmbeddingCreator, RAGChat, SimilaritySearcher } from "./embeddings";
 import log from 'electron-log';
+import DatabaseManager from "../database/db";
 
 let embeddingCreator: EmbeddingCreator;
 let similaritySearcher: SimilaritySearcher;
@@ -71,17 +72,44 @@ function registerIPCHandlers() {
     "perform-similarity-search",
     async (
       _,
-      query: string
+      query: string,
+      directoryStructures: DirectoryStructures
     ): Promise<SimilarNote[]> => {
       try {
         if (!embeddingCreator || !similaritySearcher) {
-          throw new Error("Embedding services not initialized");
+          log.warn("Embedding services not initialized, try initializing now");
+          
+          // Try to initialize if not done yet
+          try {
+            if (!openaiApiKey) {
+              openaiApiKey = await getOpenAIKey();
+            }
+            
+            if (!openaiApiKey) {
+              log.error("No OpenAI API key found. Cannot perform similarity search.");
+              throw new Error("OpenAI API key is required for similarity search");
+            }
+            
+            const openai = new OpenAI({ apiKey: openaiApiKey });
+            embeddingCreator = new EmbeddingCreator(openai);
+            similaritySearcher = new SimilaritySearcher();
+            log.info("Embedding services initialized on demand");
+          } catch (initError) {
+            log.error("Failed to initialize embedding services:", initError);
+            throw initError;
+          }
         }
         
+        log.info(`Performing similarity search for query of length ${query.length}`);
         const queryEmbedding = await embeddingCreator.createEmbedding(query);
-        return await similaritySearcher.performSimilaritySearch(
+        log.info(`Created query embedding, vector length: ${queryEmbedding.data[0].embedding.length}`);
+        
+        const similarNotes = await similaritySearcher.performSimilaritySearch(
           queryEmbedding
         );
+        
+        log.info(`Similarity search returned ${similarNotes.length} similar notes`);
+        return similarNotes;
       } catch (error) {
         log.error("Error performing similarity search:", error);
         throw error;
@@ -104,6 +132,99 @@ function registerIPCHandlers() {
       } catch (error) {
         log.error("Error performing RAG chat:", error);
         throw error;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "clear-vector-index",
+    async (): Promise<{ success: boolean, message?: string }> => {
+      try {
+        const dbManager = DatabaseManager.getInstance();
+        const db = dbManager.getDatabase();
+        
+        if (!db) throw new Error("Database not initialized");
+        
+        // Check if vector_index exists
+        const tableExists = db.prepare(`
+          SELECT name FROM sqlite_master 
+          WHERE type='table' AND name='vector_index'
+        `).get();
+        
+        if (!tableExists) {
+          log.warn("Vector index table not found, nothing to clear");
+          return { success: true, message: "No vector index found to clear" };
+        }
+        
+        // Clear the vector index table
+        log.info("Clearing vector index table");
+        db.prepare('DELETE FROM vector_index').run();
+        
+        // Verify the table is empty
+        const count = db.prepare('SELECT COUNT(*) as count FROM vector_index').get() as { count: number };
+        log.info(`Vector index table now has ${count.count} rows`);
+        
+        return { success: true, message: "Vector index cleared successfully" };
+      } catch (error) {
+        log.error("Error clearing vector index:", error);
+        return { success: false, message: `Failed to clear vector index: ${error.message}` };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "regenerate-all-embeddings",
+    async (): Promise<{ success: boolean, count?: number, message?: string }> => {
+      try {
+        const dbManager = DatabaseManager.getInstance();
+        const db = dbManager.getDatabase();
+        
+        if (!db) throw new Error("Database not initialized");
+        
+        // Get all notes from the database
+        const notes = db.prepare(`
+          SELECT i.id, i.name, n.content
+          FROM items i
+          JOIN notes n ON i.id = n.item_id
+          WHERE i.type = 'note'
+        `).all() as { id: string, name: string, content: string }[];
+        
+        log.info(`Found ${notes.length} notes to regenerate embeddings for`);
+        
+        if (notes.length === 0) {
+          return { success: true, count: 0, message: "No notes found to process" };
+        }
+        
+        let successCount = 0;
+        let errorCount = 0;
+        
+        // Process notes in batches of 10 to avoid overwhelming the system
+        const batchSize = 10;
+        for (let i = 0; i < notes.length; i += batchSize) {
+          const batch = notes.slice(i, i + batchSize);
+          
+          // Process each note in the batch
+          await Promise.all(batch.map(async (note) => {
+            try {
+              await generateEmbeddingsForNote(note.id, note.content, note.name);
+              successCount++;
+            } catch (error) {
+              log.error(`Error generating embedding for note ${note.id}:`, error);
+              errorCount++;
+            }
+          }));
+          
+          log.info(`Processed ${Math.min(i + batchSize, notes.length)} of ${notes.length} notes`);
+        }
+        
+        return { 
+          success: true, 
+          count: successCount,
+          message: `Successfully regenerated embeddings for ${successCount} notes. ${errorCount} errors.`
+        };
+      } catch (error) {
+        log.error("Error regenerating embeddings:", error);
+        return { success: false, message: `Failed to regenerate embeddings: ${error.message}` };
       }
     }
   );

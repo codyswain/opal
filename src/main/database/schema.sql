@@ -18,13 +18,19 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
+DROP TABLE IF EXISTS ai_metadata;
+
 CREATE TABLE IF NOT EXISTS ai_metadata (
     item_id TEXT PRIMARY KEY,
     summary TEXT,
     tags TEXT,  -- Consider a separate tags table later if needed
-    embedding TEXT,
+    embedding TEXT,  -- Storing JSON text representation of embeddings
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
+
+-- Ensure the column has a large enough capacity
+PRAGMA main.page_size = 32768;  -- 32 KB page size
+PRAGMA main.cache_size = 10000; -- 10000 pages in memory
 
 CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,  -- UUID
@@ -100,6 +106,6 @@ END;
 -- Vector search setup (using sqlite-vss)
 -- This will be enabled dynamically in the code by loading the extension
 -- CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
---     embedding(384), -- Specify your embedding dimension
+--     embedding(1536), -- OpenAI's ada-002 embedding dimension
 --     item_id TEXT
 -- ); 

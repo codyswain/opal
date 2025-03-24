@@ -3,8 +3,9 @@ import { ipcMain } from 'electron';
 import DatabaseManager from './db'; // Import DatabaseManager
 import log from 'electron-log';
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import fs from 'fs/promises';
+import fsSync from 'fs';
+import path from 'path';
 import { Item, ItemWithAIMetadata, Note } from './types';
 import { migrateNotesToDatabase } from './migration';
 import { cleanupOldNotes } from './cleanup';
@@ -12,6 +13,7 @@ import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
+import { app } from 'electron';
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
@@ -682,60 +684,81 @@ export async function registerDatabaseIPCHandlers() {
 
   ipcMain.handle('reset-database', async () => {
     try {
-      log.info('Database reset triggered');
+      log.info('Attempting to reset database...');
       
+      // Get database path
+      const userDataPath = app.getPath('userData');
+      const dbPath = path.join(userDataPath, 'tread.db');
+      
+      // Close the database connection
       const dbManager = DatabaseManager.getInstance();
-      const db = dbManager.getDatabase();
+      if (dbManager.getDatabase()) {
+        dbManager.close();
+        log.info('Closed database connection');
+      }
       
-      // Temporarily disable foreign key constraints
-      db.exec('PRAGMA foreign_keys = OFF;');
+      // Create a backup of the database
+      const backupPath = `${dbPath}.backup-${Date.now()}`;
+      if (fsSync.existsSync(dbPath)) {
+        await fs.copyFile(dbPath, backupPath);
+        log.info(`Created database backup at ${backupPath}`);
+        
+        // Delete the database file
+        await fs.unlink(dbPath);
+        log.info('Deleted database file');
+      }
       
-      let transactionStarted = false;
+      // Reinitialize the database
+      const db = await dbManager.initialize(dbPath);
+      
+      if (!db) {
+        throw new Error('Failed to reinitialize database');
+      }
+      
+      // Load the schema
+      const schemaPath = path.join(app.getAppPath(), 'src', 'main', 'database', 'schema.sql');
+      let schemaSQL;
       
       try {
-        // Start transaction
-        db.exec('BEGIN TRANSACTION;');
-        transactionStarted = true;
-        
-        // Drop tables in reverse order of dependencies
-        db.exec('DROP TABLE IF EXISTS items_fts;');
-        db.exec('DROP TABLE IF EXISTS ai_metadata;');
-        db.exec('DROP TABLE IF EXISTS notes;');
-        db.exec('DROP TABLE IF EXISTS items;');
-        
-        // Commit the transaction before reinitializing
-        db.exec('COMMIT;');
-        transactionStarted = false;
-        
-        // Re-enable foreign key constraints
-        db.exec('PRAGMA foreign_keys = ON;');
-        
-        // Reinitialize the database schema
-        await dbManager.initialize();
-        
-        return { success: true, message: 'Database reset successfully' };
-      } catch (error) {
-        // If there was an error and a transaction is active, roll it back
-        if (transactionStarted) {
-          try {
-            db.exec('ROLLBACK;');
-          } catch (rollbackError) {
-            log.error('Error during rollback:', rollbackError);
-          }
-        }
-        
-        // Re-enable foreign key constraints
-        try {
-          db.exec('PRAGMA foreign_keys = ON;');
-        } catch (pragmaError) {
-          log.error('Error re-enabling foreign keys:', pragmaError);
-        }
-        
-        throw error;
+        schemaSQL = await fs.readFile(schemaPath, 'utf-8');
+      } catch (err) {
+        // Try packaged app path
+        const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
+        const prodSchemaPath = path.join(resourcesPath, 'schema.sql');
+        schemaSQL = await fs.readFile(prodSchemaPath, 'utf-8');
       }
+      
+      // Execute the schema SQL
+      db.exec(schemaSQL);
+      log.info('Database schema reinitialized');
+      
+      // Re-register the VSS extension
+      try {
+        // Import dynamically to avoid require linter error
+        const sqlite_vss = await import('sqlite-vss');
+        sqlite_vss.default.load(db);
+        
+        // Create the vector index table
+        db.exec(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
+            embedding(1536), -- OpenAI's ada-002 embedding dimension
+            item_id TEXT
+          );
+        `);
+        
+        log.info('Vector search (VSS) extension reloaded');
+      } catch (vssError) {
+        log.warn('Could not load sqlite-vss extension:', vssError);
+      }
+      
+      log.info('Database reset complete');
+      return { success: true, message: 'Database reset successfully' };
     } catch (error) {
-      log.error('Error during database reset:', error);
-      return { success: false, error: String(error) };
+      log.error('Error resetting database:', error);
+      return { 
+        success: false, 
+        message: `Failed to reset database: ${error.message}`
+      };
     }
   });
 

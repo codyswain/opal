@@ -53,6 +53,10 @@ contextBridge.exposeInMainWorld("electron", {
     conversation: { role: string; content: string }[],
     directoryStructures: DirectoryStructures
   ) => ipcRenderer.invoke("perform-rag-chat", conversation, directoryStructures),
+  clearVectorIndex: () => 
+    ipcRenderer.invoke("clear-vector-index"),
+  regenerateAllEmbeddings: () => 
+    ipcRenderer.invoke("regenerate-all-embeddings"),
 
   // Database File Operations
   createFolder: (parentPath: string, folderName: string) =>

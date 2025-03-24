@@ -10,7 +10,10 @@ import { migrateNotesToDatabase, migrateEmbeddingsToDatabase } from './migration
 // Import the sqlite-vss module
 let sqlite_vss: any = null;
 try {
+  // Explicitly log the require attempt
+  log.info('Attempting to load sqlite-vss module...');
   sqlite_vss = require('sqlite-vss');
+  log.info('sqlite-vss module loaded successfully');
 } catch (error) {
   log.warn('sqlite-vss extension not available:', error);
 }
@@ -36,15 +39,40 @@ export async function initializeDatabase() {
     if (sqlite_vss) {
       try {
         log.info('Loading sqlite-vss extension for vector search');
-        sqlite_vss.load(db);
+        // Add explicit error handling and logging for VSS loading
+        try {
+          sqlite_vss.load(db);
+          log.info('VSS extension loaded into database successfully');
+        } catch (loadError) {
+          log.error('Error during VSS extension loading:', loadError);
+          throw loadError;
+        }
         
         // Create the vector index table if it doesn't exist
-        db.exec(`
-          CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
-            embedding(1536), -- OpenAI's ada-002 embedding dimension
-            item_id TEXT
-          );
-        `);
+        try {
+          db.exec(`
+            CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
+              embedding(1536), -- OpenAI's ada-002 embedding dimension
+              item_id TEXT
+            );
+          `);
+          
+          // Verify the table was created
+          const tableExists = db.prepare(`
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='vector_index'
+          `).get();
+          
+          if (tableExists) {
+            log.info('Vector index table created/exists successfully');
+          } else {
+            log.error('Failed to create vector_index table even though no error was thrown');
+          }
+        } catch (tableError) {
+          log.error('Error creating vector_index table:', tableError);
+          throw tableError;
+        }
+        
         log.info('Vector search (VSS) extension loaded successfully');
       } catch (vssError) {
         log.error('Error loading sqlite-vss extension:', vssError);
@@ -157,18 +185,37 @@ function getEmbeddedSchema(): string {
 
 // Function to migrate existing embeddings to the VSS index
 async function migrateEmbeddingsToVSS() {
+  // Get database instance
+  const dbManager = DatabaseManager.getInstance();
+  const db = dbManager.getDatabase();
+  
+  if (!db) {
+    log.error('Database not initialized, cannot migrate embeddings to VSS');
+    return;
+  }
+  
   try {
-    const dbManager = DatabaseManager.getInstance();
-    const db = dbManager.getDatabase();
+    log.info('Starting migration of embeddings to VSS vector index');
     
-    if (!db) {
-      log.error('Database not initialized, cannot migrate embeddings to VSS');
-      return;
+    // First check if the vector_index table exists
+    const tableExists = db.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name='vector_index'
+    `).get();
+    
+    if (!tableExists) {
+      log.warn('Vector index table does not exist, creating it now');
+      
+      // Create the vector index table
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
+          embedding(1536), -- OpenAI's ada-002 embedding dimension
+          item_id TEXT
+        );
+      `);
     }
     
-    log.info('Starting migration of embeddings to VSS vector index...');
-    
-    // Get all items with embeddings
+    // Get all notes with embeddings
     const notesWithEmbeddings = db.prepare(`
       SELECT i.id, a.embedding 
       FROM items i
