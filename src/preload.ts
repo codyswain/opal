@@ -146,4 +146,55 @@ contextBridge.exposeInMainWorld("chatAPI", {
     ipcRenderer.invoke('chat:add-message', conversationId, role, content),
   performRAG: (conversationId: string, query: string) => 
     ipcRenderer.invoke('chat:perform-rag', conversationId, query),
+  performRAGStreaming: (conversationId: string, query: string, callback: (chunk: string) => void) => {
+    // Create unique channel ID for this request to avoid conflicts
+    const responseChannel = `chat:rag-response:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    console.log(`Setting up streaming on channel: ${responseChannel}`);
+    
+    // Set up the listener for streaming chunks
+    const listener = (_event: any, chunk: string | null) => {
+      if (chunk === null) {
+        // Null chunk signals end of stream, clean up listener
+        console.log(`Received END SIGNAL on ${responseChannel} - cleaning up listener`);
+        // Send a special completion message to the callback
+        callback("__DONE__");
+        ipcRenderer.removeListener(responseChannel, listener);
+      } else if (chunk.startsWith("Error:")) {
+        // Handle error message from main process
+        console.error(`Streaming error received on ${responseChannel}:`, chunk);
+        // Pass the error as a chunk so the UI can display it
+        callback(chunk);
+        // Don't remove listener yet - wait for the null signal
+      } else {
+        // Pass the chunk to the callback
+        console.log(`Received chunk on ${responseChannel} (${chunk.length} chars):`, chunk.substring(0, 50) + (chunk.length > 50 ? "..." : ""));
+        callback(chunk);
+      }
+    };
+    
+    // Add the event listener
+    console.log(`Adding listener for ${responseChannel}`);
+    ipcRenderer.on(responseChannel, listener);
+    
+    // Start the streaming request and return cleanup function
+    console.log(`Invoking streaming request for conversation ${conversationId}`);
+    ipcRenderer.invoke('chat:perform-rag-streaming', conversationId, query, responseChannel)
+      .then(result => {
+        console.log(`Initial streaming response received:`, result);
+        if (!result.success) {
+          console.error(`Error starting streaming: ${result.error}`);
+          // Send the error as a chunk
+          callback(`Error: ${result.error}`);
+        }
+      })
+      .catch(err => {
+        console.error(`Exception invoking streaming: ${err}`);
+        callback(`Error: Failed to start streaming - ${err.message}`);
+      });
+    
+    return () => {
+      console.log(`Manual cleanup of listener for ${responseChannel}`);
+      ipcRenderer.removeListener(responseChannel, listener);
+    };
+  }
 });

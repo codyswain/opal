@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { cn } from "@/renderer/shared/utils";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { Button } from "@/renderer/shared/components/Button";
 import { Input } from "@/renderer/shared/components/Input";
 import { Send, RefreshCw, Bot, MessageSquare, Plus, History } from "lucide-react";
@@ -19,6 +20,7 @@ interface Message {
   content: string;
   id?: string;
   created_at?: string;
+  __updateKey?: number;
 }
 
 interface Conversation {
@@ -33,7 +35,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [_, setForceUpdate] = useState(0);
+  const forceUpdate = () => setForceUpdate(prev => prev + 1);
+  const messageRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   const [conversationId, setConversationId] = useState<string>(() => {
     // Generate a new ID and ensure it's stored immediately
     const storedId = localStorage.getItem("currentChatConversationId");
@@ -51,6 +56,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
   const selectedId = ui.selectedId;
   const selectedNode = selectedId ? entities.nodes[selectedId] : null;
   const selectedNote = selectedId && selectedNode?.type === 'note' ? entities.notes[selectedId] : null;
+
 
   const loadConversation = async (id: string) => {
     try {
@@ -131,17 +137,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     return () => clearInterval(intervalId);
   }, [showConversations]);
 
-  useEffect(() => {
-    // Scroll to bottom whenever messages change
-    if (scrollAreaRef.current) {
-      const scrollElement = scrollAreaRef.current;
-      setTimeout(() => {
-        scrollElement.scrollTop = scrollElement.scrollHeight;
-      }, 100);
-    }
-  }, [messages]);
-
-  // We need to modify the welcome message effect to avoid infinite loops
+  // Remove the useEffect for messages length
   useEffect(() => {
     // If the chat history is empty AND we're not in the process of loading, show a welcome message
     if (messages.length === 0 && !isLoading && !showConversations) {
@@ -158,6 +154,13 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
       }
     }
   }, [messages, isLoading, showConversations]);
+
+  // Remove the useEffect for streaming
+  useEffect(() => {
+    if (isStreaming && !showConversations) {
+      // No scrolling needed
+    }
+  }, [isStreaming, showConversations]);
 
   // Make sure to load the note content if it's not already loaded
   useEffect(() => {
@@ -191,13 +194,22 @@ const ChatPane: React.FC<ChatPaneProps> = ({ onClose }) => {
     }
   };
 
+  // Update the handleSend function
   const handleSend = async () => {
     if (!input.trim()) return;
     
-    const userMessage: Message = { role: "user", content: input.trim() };
-    setMessages((prev) => [...prev, userMessage]);
+    // Create user message
+    const userMessage: Message = { 
+      role: "user", 
+      content: input.trim(),
+      id: uuidv4()
+    };
+    
+    // Add to messages array
+    setMessages(prev => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(true);
     
     try {
       // Ensure we have a valid conversation ID
@@ -263,113 +275,233 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
       // Add system context to the final query
       const finalQuery = `SYSTEM CONTEXT: ${systemContext}\n\n${modifiedQuery}`;
       
-      // Perform the RAG query with the enhanced context
-      const result = await window.chatAPI.performRAG(chatId, finalQuery);
+      // Add assistant message
+      const messageId = uuidv4();
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: "",
+        id: messageId,
+        created_at: new Date().toISOString(),
+        __updateKey: Date.now()
+      };
       
-      if (result.success) {
-        // Add the assistant's response to the UI
-        const assistantMessage: Message = { 
-          role: "assistant", 
-          content: result.message.content 
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
-        toast("Failed to get response" + (result.error ? `: ${result.error}` : ""));
-      }
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      
+      // Use streaming API to get real-time updates
+      console.log("Starting RAG streaming request...");
+      
+      // Flag to track if we've received any chunks
+      let hasReceivedChunks = false;
+      
+      const cleanupFn = window.chatAPI.performRAGStreaming(chatId, finalQuery, (chunk: string) => {
+        // Check for the special completion signal
+        if (chunk === "__DONE__") {
+          console.log("Received streaming completion signal");
+          
+          // Immediately end loading and streaming states
+          setIsLoading(false);
+          setIsStreaming(false);
+          
+          // No need to update messages since this is just a control signal
+          return;
+        }
+        
+        // Mark that we've received at least one chunk
+        hasReceivedChunks = true;
+        
+        // Debug log to see if chunks are being received
+        console.log("Received chunk:", chunk);
+        
+        // Use a callback to get the latest messages state
+        setMessages(prevMessages => {
+          // Find the last assistant message
+          const lastIndex = prevMessages.length - 1;
+          
+          // Verify we have the assistant message at the end
+          if (lastIndex < 0 || prevMessages[lastIndex].role !== "assistant") {
+            console.warn("Could not find assistant message to update");
+            return prevMessages; // No change
+          }
+          
+          // Get the last message
+          const lastMessage = prevMessages[lastIndex];
+          
+          // Create a new updated message with the chunk appended
+          const updatedMessage = {
+            ...lastMessage,
+            content: lastMessage.content + chunk,
+            __updateKey: Date.now() // Force re-render with a new key
+          };
+          
+          // Create a new messages array with the updated message
+          const newMessages = [...prevMessages];
+          newMessages[lastIndex] = updatedMessage;
+          
+          console.log("Updated message content:", updatedMessage.content);
+          
+          // Force a separate UI update via the counter
+          setTimeout(() => {
+            forceUpdate(); // Force complete component re-render
+          }, 0);
+          
+          // Return the updated messages array
+          return newMessages;
+        });
+      });
+      
+      console.log("Started streaming request");
+      
+      // When streaming is finished, the cleanup function will be called automatically
+      // Now this just serves as a safety timeout in case the streaming never completes
+      setTimeout(() => {
+        // Only cleanup if we're still in loading/streaming state
+        if (isLoading || isStreaming) {
+          console.log("Safety timeout fired - cleaning up unfinished streaming");
+          
+          // Check if we received any chunks
+          if (!hasReceivedChunks) {
+            console.error("No chunks were received before timeout - this indicates a streaming error");
+            
+            // Update the message to indicate an error
+            setMessages(prevMessages => {
+              const lastIndex = prevMessages.length - 1;
+              if (lastIndex >= 0 && prevMessages[lastIndex].role === "assistant") {
+                const errorMessage = {
+                  ...prevMessages[lastIndex],
+                  content: "Sorry, there was an error generating a response. Please check your OpenAI API key in settings and try again.",
+                  __updateKey: Date.now()
+                };
+                const updatedMessages = [...prevMessages];
+                updatedMessages[lastIndex] = errorMessage;
+                return updatedMessages;
+              }
+              return prevMessages;
+            });
+          }
+          
+          setIsLoading(false);
+          setIsStreaming(false);
+          cleanupFn(); // Ensure we clean up the event listener
+        }
+      }, 15000); // Increase safety timeout to 15 seconds
     } catch (error) {
       console.error("Error in RAG Chat:", error);
       toast("Failed to get response. Please try again.");
-    } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
-  const renderMessage = (message: Message, index: number) => (
-    <div
-      key={message.id || index}
-      className={cn(
-        "mb-2 group",
-        message.role === "user" ? "ml-6" : "mr-6"
-      )}
-    >
-      <div className="flex items-start gap-2">
-        {message.role === "assistant" && (
-          <div className="flex-shrink-0 w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-            <Bot className="w-3 h-3 text-primary" />
-          </div>
+  const renderMessage = (message: Message, index: number) => {
+    // Generate a stable but unique key for this message render
+    const renderKey = message.id || message.__updateKey || `message-${index}`;
+    
+    return (
+      <div
+        key={renderKey}
+        id={`message-${index}`} // Add an ID for easier DOM targeting
+        ref={el => messageRefs.current[message.id || `message-${index}`] = el}
+        className={cn(
+          "mb-2 group",
+          message.role === "user" ? "ml-6" : "mr-6"
         )}
-        <div className={cn(
-          "flex-1 px-3 py-2 rounded-md text-xs",
-          message.role === "user"
-            ? "bg-primary/10 text-primary-foreground ml-auto"
-            : "bg-muted/30 text-foreground"
-        )}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              a: ({ href, children, ...props }) => {
-                if (href?.startsWith("note://")) {
-                  const noteId = href.replace("note://", "");
-                  return (
-                    <a
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        openNoteById(noteId);
-                      }}
-                      className="text-primary hover:underline"
+        data-message-role={message.role} // Add data attribute for potential CSS targeting
+      >
+        <div className="flex items-start gap-2">
+          {message.role === "assistant" && (
+            <div className="flex-shrink-0 w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+              <Bot className="w-3 h-3 text-primary" />
+            </div>
+          )}
+          <div className={cn(
+            "flex-1 px-3 py-2 rounded-md text-xs",
+            message.role === "user"
+              ? "bg-primary/10 text-primary-foreground ml-auto"
+              : "bg-muted/30 text-foreground"
+          )}>
+            {message.content ? (
+              <ReactMarkdown
+                key={`markdown-${renderKey}`}
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children, ...props }) => {
+                    if (href?.startsWith("note://")) {
+                      const noteId = href.replace("note://", "");
+                      return (
+                        <a
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openNoteById(noteId);
+                          }}
+                          className="text-primary hover:underline"
+                          {...props}
+                        >
+                          {children}
+                        </a>
+                      );
+                    }
+                    return (
+                      <a 
+                        href={href} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline"
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                  code: ({ className, children, ...props }: any) => (
+                    <code
+                      className={cn(
+                        "bg-muted/50 rounded px-1 py-0.5",
+                        className
+                      )}
                       {...props}
                     >
                       {children}
-                    </a>
-                  );
-                }
-                return (
-                  <a 
-                    href={href} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-primary hover:underline"
-                    {...props}
-                  >
-                    {children}
-                  </a>
-                );
-              },
-              code: ({ className, children, ...props }: any) => {
-                return (
-                  <code
-                    className={cn(
-                      "bg-muted/50 rounded px-1 py-0.5",
-                      className
-                    )}
-                    {...props}
-                  >
-                    {children}
-                  </code>
-                );
-              },
-              pre: ({ children, ...props }) => (
-                <pre
-                  className="bg-muted/50 p-3 rounded-md my-2 overflow-x-auto"
-                  {...props}
-                >
-                  {children}
-                </pre>
-              ),
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
+                    </code>
+                  ),
+                  pre: ({ children, ...props }) => (
+                    <pre
+                      className="bg-muted/50 p-3 rounded-md my-2 overflow-x-auto"
+                      {...props}
+                    >
+                      {children}
+                    </pre>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            ) : (
+              <div className="min-h-[16px]"></div>
+            )}
+            {index === messages.length - 1 && message.role === "assistant" && isStreaming && (
+              <div className="typing-indicator mt-1">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderLoader = () => (
-    <div className="flex items-center justify-center my-4">
-      <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
-      <span className="ml-2 text-sm text-muted-foreground">Thinking...</span>
+    <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-md my-3 animate-pulse">
+      <div className="flex-shrink-0 w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+        <Bot className="w-3 h-3 text-primary animate-bounce" />
+      </div>
+      <div className="flex-1">
+        <div className="h-2 bg-muted-foreground/20 rounded w-3/4 mb-2"></div>
+        <div className="h-2 bg-muted-foreground/15 rounded w-1/2"></div>
+      </div>
     </div>
   );
 
@@ -497,6 +629,18 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
     });
   };
 
+  // Clear message refs when component unmounts
+  useEffect(() => {
+    return () => {
+      messageRefs.current = {};
+    };
+  }, []);
+
+  // Force scroll to the bottom when the component mounts
+  useEffect(() => {
+    // Initial scroll to bottom when component mounts
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       {showConversations ? (
@@ -607,11 +751,22 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
             </div>
           </div>
           <div className="flex-grow overflow-hidden flex flex-col">
-            <ScrollArea className="flex-grow p-2" ref={scrollAreaRef}>
-              <div className="space-y-4">
-                {messages.map(renderMessage)}
-                {isLoading && renderLoader()}
-              </div>
+            <ScrollArea 
+              className="flex-grow p-2" 
+              scrollHideDelay={0}
+            >
+              <ScrollAreaPrimitive.Viewport 
+                className="h-full w-full rounded-[inherit]"
+                id="chat-messages-viewport"
+              >
+                <div 
+                  className="space-y-4 flex flex-col" 
+                  id="chat-messages-container"
+                >
+                  {messages.map(renderMessage)}
+                  {isLoading && !isStreaming && renderLoader()}
+                </div>
+              </ScrollAreaPrimitive.Viewport>
             </ScrollArea>
             <div className="p-2 border-t border-border">
               <form
@@ -641,6 +796,58 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           </div>
         </>
       )}
+      <style>
+        {`
+          .pulse-animation {
+            animation: pulse 1.5s infinite ease-in-out;
+          }
+          @keyframes pulse {
+            0% {
+              opacity: 0.6;
+              transform: scale(0.9);
+            }
+            50% {
+              opacity: 1;
+              transform: scale(1.1);
+            }
+            100% {
+              opacity: 0.6;
+              transform: scale(0.9);
+            }
+          }
+          .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 4px;
+          }
+          .typing-indicator .dot {
+            background-color: currentColor;
+            border-radius: 50%;
+            width: 4px;
+            height: 4px;
+            margin: 0 1px;
+            opacity: 0.7;
+            animation: typing 1.4s infinite ease-in-out;
+          }
+          .typing-indicator .dot:nth-child(1) {
+            animation-delay: 0s;
+          }
+          .typing-indicator .dot:nth-child(2) {
+            animation-delay: 0.2s;
+          }
+          .typing-indicator .dot:nth-child(3) {
+            animation-delay: 0.4s;
+          }
+          @keyframes typing {
+            0%, 60%, 100% {
+              transform: translateY(0);
+            }
+            30% {
+              transform: translateY(-4px);
+            }
+          }
+        `}
+      </style>
     </div>
   );
 };

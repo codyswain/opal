@@ -977,4 +977,185 @@ export async function registerDatabaseIPCHandlers() {
       return { success: false, error: String(error) };
     }
   });
+
+  ipcMain.handle('chat:perform-rag-streaming', async (event, conversationId: string, query: string, responseChannel: string) => {
+    try {
+      log.info(`Starting streaming RAG chat on channel ${responseChannel}`);
+      
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when chat:perform-rag-streaming was called');
+        event.sender.send(responseChannel, "Error: Database not initialized");
+        event.sender.send(responseChannel, null); // Signal completion with error
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get OpenAI API key and validate it
+      const openaiApiKey = await getOpenAIKey();
+      if (!openaiApiKey) {
+        log.error('OpenAI API key is missing or empty');
+        event.sender.send(responseChannel, "Error: OpenAI API key is missing. Please add your API key in settings.");
+        event.sender.send(responseChannel, null); // Signal completion
+        return { success: false, error: 'OpenAI API key is missing' };
+      }
+      
+      // Create the OpenAI client with the API key
+      try {
+        const openai = new OpenAI({ apiKey: openaiApiKey });
+        
+        // Test that the API key is valid by making a small request
+        log.info('Testing OpenAI API key validity...');
+        try {
+          // Create a quick test to validate the API key
+          await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: 'test' }],
+            max_tokens: 5
+          });
+          log.info('OpenAI API key is valid');
+        } catch (apiKeyError) {
+          log.error('Invalid OpenAI API key:', apiKeyError);
+          event.sender.send(responseChannel, "Error: Invalid OpenAI API key. Please check your API key in settings.");
+          event.sender.send(responseChannel, null); // Signal completion
+          return { success: false, error: 'Invalid OpenAI API key' };
+        }
+        
+        // Get conversation history - but limit it to last 10 messages to save tokens
+        const historyStmt = db.prepare(`
+          SELECT role, content
+          FROM chat_messages
+          WHERE conversation_id = ?
+          ORDER BY sequence DESC
+          LIMIT 10
+        `);
+        const recentHistory = historyStmt.all(conversationId) as { role: string; content: string }[];
+        // Reverse to get chronological order
+        const history = recentHistory.reverse();
+
+        // Use FTS to find most relevant notes based on the query
+        const notesStmt = db.prepare(`
+          SELECT n.content, i.name, i.id, i.path
+          FROM notes n
+          JOIN items i ON n.item_id = i.id
+          WHERE i.type = 'note'
+          ORDER BY (
+            CASE WHEN n.content LIKE ? THEN 3
+            WHEN i.name LIKE ? THEN 2
+            ELSE 1 END
+          ) DESC
+          LIMIT 5
+        `);
+        
+        const searchTerm = `%${query}%`;
+        const notes = notesStmt.all(searchTerm, searchTerm) as { content: string; name: string; id: string; path: string }[];
+
+        // Prepare context from relevant notes but limit each note content
+        let contextText = '';
+        for (const note of notes) {
+          // Extract just the first 300 chars of content for context to save tokens
+          const truncatedContent = note.content.slice(0, 300) + (note.content.length > 300 ? '...' : '');
+          contextText += `Note ID: ${note.id}\nTitle: ${note.name}\nPath: ${note.path}\nSnippet:\n${truncatedContent}\n\n`;
+        }
+        
+        // Limit overall context length
+        if (contextText.length > 2000) {
+          contextText = contextText.slice(0, 2000) + '...';
+        }
+
+        // Build messages for OpenAI API with token-saving strategy
+        const messages = [
+          { 
+            role: 'system', 
+            content: 'You are a helpful assistant. Use only the provided note snippets to answer questions. When you refer to a note, include a clickable link in the format [Note Title](note://noteId). Keep responses concise.' 
+          },
+          { 
+            role: 'user', 
+            content: `Here are some relevant note snippets that might help answer my question:\n\n${contextText}\n\nMy question is: ${query}` 
+          }
+        ];
+        
+        // Only include most recent conversation history if we have room
+        if (history.length > 0) {
+          // Add just the last few messages from history to save tokens
+          messages.push(...history.slice(-4));
+        }
+
+        // Setup for tracking full response
+        let fullResponse = '';
+        
+        // Create a streaming completion
+        log.info('Creating streaming completion with OpenAI...');
+        const stream = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: messages as any,
+          max_tokens: 1000, // Limit response length
+          stream: true, // Enable streaming
+        });
+
+        // Process each chunk as it arrives
+        log.info('Starting to process stream chunks');
+        for await (const chunk of stream) {
+          try {
+            // Log chunk info
+            log.debug(`Received chunk from OpenAI: ${JSON.stringify(chunk)}`);
+            
+            // Check if this is a completion signal (empty delta with finish_reason: "stop")
+            if (chunk.choices?.[0]?.finish_reason === "stop") {
+              log.info('Received completion signal from OpenAI with finish_reason: stop');
+              break; // Exit the loop as we're done receiving content
+            }
+            
+            // In newer OpenAI API versions, the content might be in different places
+            const content = chunk.choices?.[0]?.delta?.content || '';
+            
+            if (content) {
+              // Send the chunk to the renderer process
+              log.info(`Sending chunk to renderer (${content.length} chars): "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+              event.sender.send(responseChannel, content);
+              // Append to full response
+              fullResponse += content;
+            }
+          } catch (error) {
+            log.error(`Error processing chunk: ${error}`);
+            event.sender.send(responseChannel, `Error: Failed to process chunk - ${error}`);
+          }
+        }
+        
+        log.info(`Streaming complete, saving response of length ${fullResponse.length}`);
+
+        // Save the assistant's response
+        const seqStmt = db.prepare(`
+          SELECT COALESCE(MAX(sequence), -1) + 1 as next_seq
+          FROM chat_messages
+          WHERE conversation_id = ?
+        `);
+        const { next_seq } = seqStmt.get(conversationId) as { next_seq: number };
+
+        const insertStmt = db.prepare(`
+          INSERT INTO chat_messages (id, conversation_id, role, content, sequence)
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        const messageId = uuidv4();
+        insertStmt.run(messageId, conversationId, 'assistant', fullResponse, next_seq);
+
+        // Signal completion
+        log.info('Sending completion signal');
+        event.sender.send(responseChannel, null);
+        
+        return { success: true };
+      } catch (openaiError) {
+        log.error('Error creating OpenAI client:', openaiError);
+        event.sender.send(responseChannel, `Error: Failed to initialize OpenAI client - ${openaiError.message}`);
+        event.sender.send(responseChannel, null);
+        return { success: false, error: `OpenAI client initialization failed: ${openaiError.message}` };
+      }
+    } catch (error) {
+      log.error('Error performing streaming RAG chat:', error);
+      // Send error message to client
+      event.sender.send(responseChannel, `Error: ${String(error)}`);
+      // Signal completion
+      event.sender.send(responseChannel, null);
+      return { success: false, error: String(error) };
+    }
+  });
 }

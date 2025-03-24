@@ -32,6 +32,7 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [conversationId, setConversationId] = useState<string>(() => {
     // Use an existing conversation ID from localStorage or create a new one
@@ -149,6 +150,7 @@ const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setIsStreaming(true);
     
     try {
       // Add the user message to the database
@@ -207,24 +209,50 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
       // Add system context to the final query
       const finalQuery = `SYSTEM CONTEXT: ${systemContext}\n\n${modifiedQuery}`;
       
-      // Perform the RAG query with the enhanced context
-      const result = await window.chatAPI.performRAG(conversationId, finalQuery);
+      // Create an initial assistant message that will be updated progressively
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: "",
+        id: uuidv4(),
+        created_at: new Date().toISOString()
+      };
       
-      if (result.success) {
-        // Add the assistant's response to the UI
-        const assistantMessage: Message = { 
-          role: "assistant", 
-          content: result.message.content 
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
-        toast.error("Failed to get response" + (result.error ? `: ${result.error}` : ""));
-      }
+      // Add the empty message to start (it will be streamed in)
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Use streaming API to get real-time updates
+      const cleanupFn = window.chatAPI.performRAGStreaming(conversationId, finalQuery, (chunk: string) => {
+        // Update the assistant message with each new chunk
+        setMessages(prevMessages => {
+          const updatedMessages = [...prevMessages];
+          const lastMessageIndex = updatedMessages.length - 1;
+          
+          // Only update if it's the assistant's message (which it should be)
+          if (lastMessageIndex >= 0 && updatedMessages[lastMessageIndex].role === "assistant") {
+            updatedMessages[lastMessageIndex] = {
+              ...updatedMessages[lastMessageIndex],
+              content: updatedMessages[lastMessageIndex].content + chunk
+            };
+          }
+          
+          return updatedMessages;
+        });
+      });
+      
+      // When streaming is finished, the cleanup function will be called automatically
+      // We just need to set isLoading to false after the stream ends
+      setTimeout(() => {
+        setIsLoading(false);
+        setIsStreaming(false);
+        cleanupFn(); // Ensure we clean up the event listener
+        // Refresh conversation history for next time
+        loadAllConversations();
+      }, 500); // Small delay to ensure we don't cut off any final chunks
     } catch (error) {
       console.error("Error in RAG Chat:", error);
       toast.error("Failed to get response. Please try again.");
-    } finally {
       setIsLoading(false);
+      setIsStreaming(false);
       // Refresh conversation history for next time
       loadAllConversations();
     }
@@ -238,14 +266,14 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
         message.role === "user" ? "ml-8" : "mr-8"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         {message.role === "assistant" && (
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
             <Bot className="w-4 h-4 text-primary" />
           </div>
         )}
         <div className={cn(
-          "flex-1 px-4 py-2.5 rounded-lg",
+          "flex-1 px-3 py-2 rounded-md",
           message.role === "user"
             ? "bg-primary/10 text-primary-foreground ml-auto"
             : "bg-muted/30 text-foreground"
@@ -282,16 +310,24 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
                   </a>
                 );
               },
-              p: ({ children }) => <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>,
-              ul: ({ children }) => <ul className="list-disc ml-4 mb-2 text-sm">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 text-sm">{children}</ol>,
-              code: ({ children }) => (
-                <code className="bg-muted/50 px-1.5 py-0.5 rounded text-xs font-mono">
-                  {children}
-                </code>
-              ),
-              pre: ({ children }) => (
-                <pre className="bg-muted/50 p-3 rounded-md my-2 overflow-x-auto text-xs font-mono">
+              code: ({ className, children, ...props }: any) => {
+                return (
+                  <code
+                    className={cn(
+                      "bg-muted/50 rounded px-1 py-0.5",
+                      className
+                    )}
+                    {...props}
+                  >
+                    {children}
+                  </code>
+                );
+              },
+              pre: ({ children, ...props }) => (
+                <pre
+                  className="bg-muted/50 p-3 rounded-md my-2 overflow-x-auto text-sm"
+                  {...props}
+                >
                   {children}
                 </pre>
               ),
@@ -299,14 +335,16 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           >
             {message.content}
           </ReactMarkdown>
-        </div>
-        {message.role === "user" && (
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <div className="w-4 h-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
-              U
+          {index === messages.length - 1 && message.role === "assistant" && isStreaming && (
+            <div className="h-4 mt-1 flex items-center">
+              <span className="typing-indicator">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
+              </span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {message.created_at && (
         <div className={cn(
@@ -497,6 +535,41 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           </Button>
         </div>
       </div>
+      <style>
+        {`
+          .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding-left: 4px;
+          }
+          .typing-indicator .dot {
+            background-color: var(--primary);
+            border-radius: 50%;
+            width: 4px;
+            height: 4px;
+            margin: 0 2px;
+            opacity: 0.6;
+            animation: typing 1.4s infinite ease-in-out;
+          }
+          .typing-indicator .dot:nth-child(1) {
+            animation-delay: 0s;
+          }
+          .typing-indicator .dot:nth-child(2) {
+            animation-delay: 0.2s;
+          }
+          .typing-indicator .dot:nth-child(3) {
+            animation-delay: 0.4s;
+          }
+          @keyframes typing {
+            0%, 60%, 100% {
+              transform: translateY(0);
+            }
+            30% {
+              transform: translateY(-4px);
+            }
+          }
+        `}
+      </style>
     </div>
   );
 };

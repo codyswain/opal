@@ -150,6 +150,11 @@ declare global {
       getAllConversations: () => Promise<{success: boolean, conversations: any[], error?: string}>;
       addMessage: (conversationId: string, role: string, content: string) => Promise<{success: boolean, messageId: string, error?: string}>;
       performRAG: (conversationId: string, query: string) => Promise<{success: boolean, message: any, error?: string}>;
+      performRAGStreaming: (
+        conversationId: string, 
+        query: string, 
+        callback: (chunk: string) => void
+      ) => () => void; // Returns a cleanup function
     };
   }
 }

@@ -31,7 +31,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
         <TabsContent value="related" className="flex-grow overflow-auto p-0 m-0 border-none outline-none data-[state=inactive]:hidden">
           <RelatedNotes isOpen={isOpen} onClose={onClose} />
         </TabsContent>
-        <TabsContent value="chat" className="flex-grow overflow-auto p-0 m-0 border-none outline-none data-[state=inactive]:hidden">
+        <TabsContent value="chat" className="flex-grow overflow-hidden p-0 m-0 border-none outline-none data-[state=inactive]:hidden">
           <ChatPane onClose={onClose} />
         </TabsContent>
       </Tabs>
