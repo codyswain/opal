@@ -11,7 +11,9 @@ export interface FSEntry {
     createdAt: string;
     updatedAt: string;
     size: number;
-  }
+  };
+  isMounted?: boolean; // Whether this is a mounted folder
+  realPath?: string; // The real filesystem path for mounted folders
 }
 
 export interface Note {

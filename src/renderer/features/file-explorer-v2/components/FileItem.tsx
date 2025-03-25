@@ -29,6 +29,7 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
   const { ui, selectEntry, toggleFolder } = useFileExplorerStore();
   const isSelected = ui.selectedId === entry.id;
   const isExpanded = ui.expandedFolders.has(entry.id);
+  const isMounted = entry.isMounted;
   
   // Format date for display in user's local timezone
   const formatDate = formatLocalDate;
@@ -121,18 +122,23 @@ const FileItem: React.FC<FileItemProps> = ({ entry, level, isLastChild, onContex
           isExpanded={isExpanded} 
           onToggle={handleToggle} 
           name={entry.name}
+          isMounted={isMounted}
         />
         
         {/* Entry name with timestamp tooltip */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ml-${explorerStyles.iconMargin}`}>
+            <span className={`truncate z-10 relative text-${explorerStyles.itemTextSize} ml-${explorerStyles.iconMargin} ${isMounted ? 'text-green-400 font-medium' : ''}`}>
               {entry.name}
+              {isMounted && <span className="text-xs text-green-500 ml-1">(mounted)</span>}
             </span>
           </TooltipTrigger>
           <TooltipContent>
             <p>Last updated: {formatDate(entry.metadata.updatedAt)}</p>
             <p>Created: {formatDate(entry.metadata.createdAt)}</p>
+            {isMounted && entry.realPath && (
+              <p className="text-green-400">Mounted from: {entry.realPath}</p>
+            )}
           </TooltipContent>
         </Tooltip>
       </div>

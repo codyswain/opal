@@ -25,6 +25,7 @@ interface FileIconProps {
   isExpanded?: boolean;
   onToggle?: (e: React.MouseEvent) => void;
   name?: string;
+  isMounted?: boolean;
 }
 
 interface LoadingStateProps {
@@ -71,7 +72,8 @@ export const FileIcon: React.FC<FileIconProps> = ({
   type, 
   isExpanded, 
   onToggle,
-  name = ''
+  name = '',
+  isMounted = false
 }) => {
   // Determine icon based on file extension
   const getFileIcon = () => {
@@ -98,7 +100,7 @@ export const FileIcon: React.FC<FileIconProps> = ({
       {type === 'folder' ? (
         <button 
           onClick={onToggle}
-          className="flex items-center justify-center w-5 h-5 text-gray-500 hover:text-gray-400"
+          className={`flex items-center justify-center w-5 h-5 ${isMounted ? 'text-green-500' : 'text-gray-500'} hover:text-gray-400`}
         >
           {isExpanded ? 
             <ChevronDown size={16} className="stroke-[1.5]" /> : 

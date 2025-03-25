@@ -37,11 +37,43 @@ class DatabaseManager {
       // Enable foreign keys
       this.db.pragma('foreign_keys = ON');
       
+      // Migrate the database if needed
+      await this.migrateDatabase();
+      
       log.info('Database connection established successfully');
       
       return this.db;
     } catch (error) {
       log.error('Error creating database connection:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Performs database migrations as needed
+   */
+  private async migrateDatabase(): Promise<void> {
+    if (!this.db) return;
+    
+    try {
+      // Check if is_mounted column exists in items table
+      const tableInfo = this.db.prepare("PRAGMA table_info(items)").all() as {name: string}[];
+      const hasMountedColumn = tableInfo.some(col => col.name === 'is_mounted');
+      const hasRealPathColumn = tableInfo.some(col => col.name === 'real_path');
+      
+      if (!hasMountedColumn) {
+        log.info('Migrating database: Adding is_mounted column to items table');
+        this.db.prepare("ALTER TABLE items ADD COLUMN is_mounted BOOLEAN DEFAULT 0").run();
+      }
+      
+      if (!hasRealPathColumn) {
+        log.info('Migrating database: Adding real_path column to items table');
+        this.db.prepare("ALTER TABLE items ADD COLUMN real_path TEXT").run();
+      }
+      
+      log.info('Database migration completed successfully');
+    } catch (error) {
+      log.error('Error during database migration:', error);
       throw error;
     }
   }

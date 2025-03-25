@@ -14,6 +14,11 @@ import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
 import { app } from 'electron';
+import * as chokidar from 'chokidar';
+import * as fsExtra from 'fs-extra';
+
+// Map to keep track of file watchers for mounted folders
+const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
 
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
@@ -26,10 +31,11 @@ export async function registerDatabaseIPCHandlers() {
 
     try {
       const items = await db.prepare(`
-        SELECT  i.id, i.type, i.path, i.parent_path, i.name, i.created_at, i.updated_at, i.size, a.summary, a.tags
+        SELECT  i.id, i.type, i.path, i.parent_path, i.name, i.created_at, i.updated_at, i.size, 
+                i.is_mounted, i.real_path, a.summary, a.tags
         FROM items i
         LEFT JOIN ai_metadata a ON i.id = a.item_id
-      `).all() as ItemWithAIMetadata[];
+      `).all() as (ItemWithAIMetadata & { is_mounted: number, real_path: string })[];
 
       const entries = transformFileSystemData(items);
 
@@ -1148,4 +1154,452 @@ export async function registerDatabaseIPCHandlers() {
       return { success: false, error: String(error) };
     }
   });
+
+  // Add the mount folder handler
+  ipcMain.handle('file-explorer:mount-folder', async (event, targetPath: string, realFolderPath: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when mount-folder was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      log.info(`Mounting folder "${realFolderPath}" at "${targetPath}"`);
+      console.log(`Mounting folder "${realFolderPath}" at "${targetPath}"`);
+
+      // First verify the target path exists and is a folder
+      const targetStmt = db.prepare(`
+        SELECT id, type
+        FROM items
+        WHERE path = ?
+        LIMIT 1
+      `);
+      const targetItem = targetStmt.get(targetPath) as { id: string, type: string } | undefined;
+
+      if (!targetItem) {
+        log.error(`Target path not found: ${targetPath}`);
+        console.error(`Target path not found: ${targetPath}`);
+        return { success: false, error: 'Target path not found' };
+      }
+
+      if (targetItem.type !== 'folder') {
+        log.error(`Target path is not a folder: ${targetPath}`);
+        console.error(`Target path is not a folder: ${targetPath}`);
+        return { success: false, error: 'Target path must be a folder' };
+      }
+
+      // Make sure the real folder exists
+      if (!fsSync.existsSync(realFolderPath)) {
+        log.error(`Real folder path does not exist: ${realFolderPath}`);
+        console.error(`Real folder path does not exist: ${realFolderPath}`);
+        return { success: false, error: 'The selected folder does not exist' };
+      }
+
+      console.log('Target and source folders verified, proceeding with mount');
+
+      // Check if folder is already mounted
+      const mountedStmt = db.prepare(`
+        SELECT COUNT(*) as count
+        FROM items
+        WHERE parent_path = ? AND real_path = ? AND is_mounted = 1
+      `);
+      const { count } = mountedStmt.get(targetPath, realFolderPath) as { count: number };
+      
+      if (count > 0) {
+        log.error(`Folder is already mounted: ${realFolderPath}`);
+        console.error(`Folder is already mounted: ${realFolderPath}`);
+        return { success: false, error: 'This folder is already mounted' };
+      }
+
+      // Generate an ID for the mounted folder
+      const mountedFolderId = uuidv4();
+      const mountedFolderName = path.basename(realFolderPath);
+      const mountedFolderPath = path.join(targetPath, mountedFolderName);
+
+      console.log(`Mounting ${realFolderPath} as ${mountedFolderPath} with ID ${mountedFolderId}`);
+
+      // Add the mounted folder to the database
+      const insertStmt = db.prepare(`
+        INSERT INTO items (id, type, path, parent_path, name, is_mounted, real_path)
+        VALUES (?, 'folder', ?, ?, ?, 1, ?)
+      `);
+      insertStmt.run(mountedFolderId, mountedFolderPath, targetPath, mountedFolderName, realFolderPath);
+
+      console.log('Mounted folder added to database, now syncing contents');
+
+      // Clone the contents of the real folder into the virtual file system
+      await syncMountedFolder(realFolderPath, mountedFolderPath, mountedFolderId);
+
+      console.log('Folder contents synced, setting up watcher');
+
+      // Set up a watcher for the real folder to keep things in sync
+      setupFolderWatcher(realFolderPath, mountedFolderPath);
+
+      console.log('Mount complete, returning success');
+
+      return { success: true, id: mountedFolderId, path: mountedFolderPath };
+    } catch (error) {
+      log.error('Error mounting folder:', error);
+      console.error('Error mounting folder:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Add the unmount folder handler
+  ipcMain.handle('file-explorer:unmount-folder', async (event, mountedFolderPath: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when unmount-folder was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get the mounted folder information
+      const folderStmt = db.prepare(`
+        SELECT id, real_path, is_mounted
+        FROM items
+        WHERE path = ? AND is_mounted = 1
+        LIMIT 1
+      `);
+      const folder = folderStmt.get(mountedFolderPath) as { id: string, real_path: string, is_mounted: number } | undefined;
+
+      if (!folder) {
+        log.error(`Mounted folder not found: ${mountedFolderPath}`);
+        return { success: false, error: 'Mounted folder not found' };
+      }
+
+      // Stop watching the folder
+      if (mountedFolderWatchers.has(folder.real_path)) {
+        const watcher = mountedFolderWatchers.get(folder.real_path);
+        if (watcher) {
+          await watcher.close();
+          mountedFolderWatchers.delete(folder.real_path);
+          log.info(`Stopped watching folder: ${folder.real_path}`);
+        }
+      }
+
+      // Use a transaction to delete the mounted folder and all its children
+      const transaction = db.transaction(() => {
+        // Delete all children of the mounted folder
+        const deleteChildrenStmt = db.prepare(`
+          DELETE FROM items
+          WHERE path LIKE ? || '%' AND path != ?
+        `);
+        deleteChildrenStmt.run(mountedFolderPath, mountedFolderPath);
+
+        // Delete the mounted folder itself
+        const deleteFolderStmt = db.prepare(`
+          DELETE FROM items
+          WHERE path = ?
+        `);
+        deleteFolderStmt.run(mountedFolderPath);
+      });
+
+      log.info(`Unmounting folder: ${mountedFolderPath}`);
+      transaction();
+
+      return { success: true };
+    } catch (error) {
+      log.error('Error unmounting folder:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+}
+
+/**
+ * Recursively syncs a mounted folder from the real filesystem to the virtual database
+ */
+async function syncMountedFolder(realFolderPath: string, virtualFolderPath: string, parentId: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) {
+      throw new Error('Database not initialized');
+    }
+
+    // Read directory contents
+    const items = await fs.readdir(realFolderPath, { withFileTypes: true });
+    
+    for (const item of items) {
+      const realItemPath = path.join(realFolderPath, item.name);
+      const virtualItemPath = path.join(virtualFolderPath, item.name);
+      const itemId = uuidv4();
+      
+      if (item.isDirectory()) {
+        // Add folder to the database
+        const stmt = db.prepare(`
+          INSERT INTO items (id, type, path, parent_path, name, is_mounted, real_path)
+          VALUES (?, 'folder', ?, ?, ?, 1, ?)
+        `);
+        stmt.run(itemId, virtualItemPath, virtualFolderPath, item.name, realItemPath);
+        
+        // Recursively sync subfolders
+        await syncMountedFolder(realItemPath, virtualItemPath, itemId);
+      } else if (item.isFile()) {
+        // Add file to the database
+        const stats = await fs.stat(realItemPath);
+        const stmt = db.prepare(`
+          INSERT INTO items (id, type, path, parent_path, name, size, is_mounted, real_path)
+          VALUES (?, 'file', ?, ?, ?, ?, 1, ?)
+        `);
+        stmt.run(
+          itemId,
+          virtualItemPath,
+          virtualFolderPath,
+          item.name,
+          stats.size,
+          realItemPath
+        );
+      }
+    }
+  } catch (error) {
+    log.error('Error syncing mounted folder:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sets up a file watcher for a mounted folder to keep it in sync with the database
+ */
+function setupFolderWatcher(realFolderPath: string, virtualFolderPath: string): void {
+  try {
+    // Stop any existing watcher for this path
+    if (mountedFolderWatchers.has(realFolderPath)) {
+      const existingWatcher = mountedFolderWatchers.get(realFolderPath);
+      if (existingWatcher) {
+        existingWatcher.close();
+      }
+    }
+    
+    // Set up a new watcher
+    const watcher = chokidar.watch(realFolderPath, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 99, // Watch nested folders deeply
+      awaitWriteFinish: true, // Helps with file editors that do atomic saves
+    });
+    
+    // Handle file/folder creation
+    watcher.on('add', async (filePath) => {
+      await handleFileCreated(filePath, realFolderPath, virtualFolderPath);
+    });
+    
+    watcher.on('addDir', async (dirPath) => {
+      // Skip if it's the root folder we're already watching
+      if (dirPath === realFolderPath) return;
+      await handleFolderCreated(dirPath, realFolderPath, virtualFolderPath);
+    });
+    
+    // Handle file/folder deletion
+    watcher.on('unlink', async (filePath) => {
+      await handleFileDeleted(filePath, realFolderPath, virtualFolderPath);
+    });
+    
+    watcher.on('unlinkDir', async (dirPath) => {
+      await handleFolderDeleted(dirPath, realFolderPath, virtualFolderPath);
+    });
+    
+    // Handle file/folder changes
+    watcher.on('change', async (filePath) => {
+      await handleFileChanged(filePath, realFolderPath, virtualFolderPath);
+    });
+    
+    // Store the watcher reference
+    mountedFolderWatchers.set(realFolderPath, watcher);
+    
+    log.info(`Started watching mounted folder: ${realFolderPath}`);
+  } catch (error) {
+    log.error('Error setting up folder watcher:', error);
+    throw error;
+  }
+}
+
+/**
+ * Handler for when a file is created in a watched folder
+ */
+async function handleFileCreated(filePath: string, realFolderPath: string, virtualFolderPath: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) return;
+    
+    const relativePath = path.relative(realFolderPath, filePath);
+    const virtualItemPath = path.join(virtualFolderPath, relativePath);
+    const parentPath = path.dirname(virtualItemPath);
+    const fileName = path.basename(filePath);
+    
+    // Check if parent virtual folder exists
+    const parentStmt = db.prepare(`
+      SELECT id FROM items WHERE path = ? LIMIT 1
+    `);
+    const parent = parentStmt.get(parentPath) as { id: string } | undefined;
+    
+    if (!parent) {
+      log.warn(`Parent virtual folder not found for new file: ${parentPath}`);
+      return;
+    }
+    
+    // Check if the file already exists in the database
+    const existingStmt = db.prepare(`
+      SELECT COUNT(*) as count FROM items WHERE path = ? LIMIT 1
+    `);
+    const { count } = existingStmt.get(virtualItemPath) as { count: number };
+    
+    if (count > 0) {
+      log.warn(`File already exists in the database: ${virtualItemPath}`);
+      return;
+    }
+    
+    // Add the new file to the database
+    const stats = await fs.stat(filePath);
+    const insertStmt = db.prepare(`
+      INSERT INTO items (id, type, path, parent_path, name, size, is_mounted, real_path)
+      VALUES (?, 'file', ?, ?, ?, ?, 1, ?)
+    `);
+    insertStmt.run(
+      uuidv4(),
+      virtualItemPath,
+      parentPath,
+      fileName,
+      stats.size,
+      filePath
+    );
+    
+    log.info(`Added new file to database: ${virtualItemPath}`);
+  } catch (error) {
+    log.error('Error handling file creation:', error);
+  }
+}
+
+/**
+ * Handler for when a folder is created in a watched folder
+ */
+async function handleFolderCreated(dirPath: string, realFolderPath: string, virtualFolderPath: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) return;
+    
+    const relativePath = path.relative(realFolderPath, dirPath);
+    const virtualItemPath = path.join(virtualFolderPath, relativePath);
+    const parentPath = path.dirname(virtualItemPath);
+    const folderName = path.basename(dirPath);
+    
+    // Check if parent virtual folder exists
+    const parentStmt = db.prepare(`
+      SELECT id FROM items WHERE path = ? LIMIT 1
+    `);
+    const parent = parentStmt.get(parentPath) as { id: string } | undefined;
+    
+    if (!parent) {
+      log.warn(`Parent virtual folder not found for new folder: ${parentPath}`);
+      return;
+    }
+    
+    // Check if the folder already exists in the database
+    const existingStmt = db.prepare(`
+      SELECT COUNT(*) as count FROM items WHERE path = ? LIMIT 1
+    `);
+    const { count } = existingStmt.get(virtualItemPath) as { count: number };
+    
+    if (count > 0) {
+      log.warn(`Folder already exists in the database: ${virtualItemPath}`);
+      return;
+    }
+    
+    // Add the new folder to the database
+    const insertStmt = db.prepare(`
+      INSERT INTO items (id, type, path, parent_path, name, is_mounted, real_path)
+      VALUES (?, 'folder', ?, ?, ?, 1, ?)
+    `);
+    insertStmt.run(
+      uuidv4(),
+      virtualItemPath,
+      parentPath,
+      folderName,
+      dirPath
+    );
+    
+    log.info(`Added new folder to database: ${virtualItemPath}`);
+    
+    // Recursively sync the new folder's contents
+    await syncMountedFolder(dirPath, virtualItemPath, '');
+  } catch (error) {
+    log.error('Error handling folder creation:', error);
+  }
+}
+
+/**
+ * Handler for when a file is deleted in a watched folder
+ */
+async function handleFileDeleted(filePath: string, realFolderPath: string, virtualFolderPath: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) return;
+    
+    const relativePath = path.relative(realFolderPath, filePath);
+    const virtualItemPath = path.join(virtualFolderPath, relativePath);
+    
+    // Delete the file from the database
+    const deleteStmt = db.prepare(`
+      DELETE FROM items WHERE path = ? AND is_mounted = 1
+    `);
+    const result = deleteStmt.run(virtualItemPath);
+    
+    log.info(`Deleted file from database (changes: ${result.changes}): ${virtualItemPath}`);
+  } catch (error) {
+    log.error('Error handling file deletion:', error);
+  }
+}
+
+/**
+ * Handler for when a folder is deleted in a watched folder
+ */
+async function handleFolderDeleted(dirPath: string, realFolderPath: string, virtualFolderPath: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) return;
+    
+    const relativePath = path.relative(realFolderPath, dirPath);
+    const virtualItemPath = path.join(virtualFolderPath, relativePath);
+    
+    // Delete the folder and all its children from the database
+    const deleteStmt = db.prepare(`
+      DELETE FROM items
+      WHERE (path = ? OR path LIKE ? || '/%') AND is_mounted = 1
+    `);
+    const result = deleteStmt.run(virtualItemPath, virtualItemPath);
+    
+    log.info(`Deleted folder and contents from database (changes: ${result.changes}): ${virtualItemPath}`);
+  } catch (error) {
+    log.error('Error handling folder deletion:', error);
+  }
+}
+
+/**
+ * Handler for when a file is changed in a watched folder
+ */
+async function handleFileChanged(filePath: string, realFolderPath: string, virtualFolderPath: string): Promise<void> {
+  try {
+    const db = DatabaseManager.getInstance().getDatabase();
+    if (!db) return;
+    
+    const relativePath = path.relative(realFolderPath, filePath);
+    const virtualItemPath = path.join(virtualFolderPath, relativePath);
+    
+    // Update the file metadata in the database
+    const stats = await fs.stat(filePath);
+    const updateStmt = db.prepare(`
+      UPDATE items
+      SET size = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE path = ? AND is_mounted = 1
+    `);
+    const result = updateStmt.run(stats.size, virtualItemPath);
+    
+    if (result.changes === 0) {
+      // File might have been created while we weren't looking
+      await handleFileCreated(filePath, realFolderPath, virtualFolderPath);
+    } else {
+      log.info(`Updated file in database: ${virtualItemPath}`);
+    }
+  } catch (error) {
+    log.error('Error handling file change:', error);
+  }
 }

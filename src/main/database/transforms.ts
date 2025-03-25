@@ -1,5 +1,5 @@
 import { FSEntry } from "@/types";
-import { Item, ItemWithAIMetadata } from "./types";
+import { Item, ItemWithAIMetadata } from './types';
 
 /* 
 Idea is to transform the raw database rows 
@@ -12,44 +12,50 @@ and then use the pathToIdMap to load in the children.
 To load parents first, we can use the idToEntryMap. 
 */
 
+// Define an extended item type that includes our SQL result fields
+interface ExtendedItem extends Omit<ItemWithAIMetadata, 'is_mounted'> {
+  is_mounted: number;
+  real_path: string | null;
+}
 
-
-export function transformFileSystemData(items: ItemWithAIMetadata[]): Record<string, FSEntry> {
-  const entries: FSEntry[] = [];
+export function transformFileSystemData(items: ExtendedItem[]): Record<string, FSEntry> {
+  // Create a map to store the transformed entries
+  const entriesMap: Record<string, FSEntry> = {};
   
-  // first pass: create a path to id map 
+  // First, create a map of paths to IDs
   const pathToIdMap: Record<string, string> = {};
-  items.forEach((item) => {
+  items.forEach(item => {
     pathToIdMap[item.path] = item.id;
   });
-
-  // second pass: create an id to entry map
-  const idToEntryMap: Record<string, FSEntry> = {};
+  
+  // Then create all entries with the correct structure
   items.forEach(item => {
-    const entry: FSEntry = {
+    entriesMap[item.id] = {
       id: item.id,
       name: item.name,
+      type: item.type as 'folder' | 'file' | 'note',
       path: item.path,
-      type: item.type,
       parentId: item.parent_path ? pathToIdMap[item.parent_path] : null,
-      children: [],
+      children: [], // Will be populated in the next step
       metadata: {
-        size: item.size,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
+        createdAt: item.created_at || '',
+        updatedAt: item.updated_at || '',
+        size: item.size || 0,
+      },
+      isMounted: item.is_mounted === 1,
+      realPath: item.real_path || undefined
+    };
+  });
+  
+  // Finally, populate the children arrays
+  items.forEach(item => {
+    if (item.parent_path && pathToIdMap[item.parent_path]) {
+      const parentId = pathToIdMap[item.parent_path];
+      if (entriesMap[parentId]) {
+        entriesMap[parentId].children.push(item.id);
       }
     }
-
-    idToEntryMap[item.id] = entry;
-    entries.push(entry);
-  })
+  });
   
-  // third pass: append children ids to parent
-  entries.forEach(entry => {
-    if (entry.parentId) {
-      idToEntryMap[entry.parentId].children.push(entry.id);
-    }
-  })
-
-  return idToEntryMap;
+  return entriesMap;
 }

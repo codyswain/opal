@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("add-top-level-folder", folderPath),
   removeTopLevelFolder: (folderPath: string) =>
     ipcRenderer.invoke("remove-top-level-folder", folderPath),
-  openFolderDialog: () => ipcRenderer.invoke("open-folder-dialog"),
+  openFolderDialog: () => ipcRenderer.invoke("dialog:openDirectory"),
   getDirectoryStructure: (dirPath: string) =>
     ipcRenderer.invoke("get-directory-structure", dirPath),
   loadNote: (notePath: string) => ipcRenderer.invoke("load-note", notePath),
@@ -134,6 +134,10 @@ contextBridge.exposeInMainWorld("fileExplorer", {
   getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
   renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
+  mountFolder: (targetPath: string, realFolderPath: string) => 
+    ipcRenderer.invoke('file-explorer:mount-folder', targetPath, realFolderPath),
+  unmountFolder: (mountedFolderPath: string) => 
+    ipcRenderer.invoke('file-explorer:unmount-folder', mountedFolderPath),
 })
 
 // Expose chat API to the renderer process

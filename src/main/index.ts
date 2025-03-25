@@ -11,10 +11,30 @@ export { default as log } from "./logger";
 
 import { registerDatabaseIPCHandlers } from "./database/handlers";
 
-import { app } from "electron";
+import { app, ipcMain, dialog, BrowserWindow } from "electron";
 import log from "./logger";
 import { initializeDatabase } from "./database";
 import { registerEmbeddingIPCHandlers } from "./embeddings/handlers";
+
+// Register dialog handlers
+function registerDialogHandlers() {
+  // Add dialog handler for folder selection
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    
+    if (!mainWindow) {
+      return { canceled: true };
+    }
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory']
+    });
+    
+    return result;
+  });
+  
+  log.info("Dialog handlers registered");
+}
 
 app.whenReady().then(async () => {
   try {
@@ -31,6 +51,9 @@ app.whenReady().then(async () => {
     // Register embedding IPC handlers before migrating embeddings
     registerEmbeddingIPCHandlers();
     log.info("Embedding IPC handlers registered");
+    
+    // Register dialog handlers
+    registerDialogHandlers();
 
     log.info("Application initialization completed");
   } catch (error) {

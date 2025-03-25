@@ -27,7 +27,11 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   loadFileSystem: async () => {
     set({ loading: { isLoading: true, error: null } });
     try {
+      console.log('Calling getEntries API...');
       const {success, items} = await window.fileExplorer.getEntries();
+      console.log('getEntries response:', {success, itemsCount: items ? Object.keys(items).length : 0});
+      console.log('Sample items:', items ? Object.values(items).slice(0, 3) : 'No items');
+      
       if (success){
         set(state => ({
           entities: {
@@ -39,6 +43,8 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         
         // Find the root folder to select initially
         const rootNodes = Object.values(items).filter(node => node.parentId === null);
+        console.log('Root nodes found:', rootNodes.length);
+        
         if (rootNodes.length > 0) {
           const rootId = rootNodes[0].id;
           
@@ -57,6 +63,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
       }
       return false;
     } catch (error){
+      console.error('Error loading file system:', error);
       set({ loading: { isLoading: false, error: String(error) } });
       return false;
     }
