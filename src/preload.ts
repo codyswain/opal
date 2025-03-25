@@ -138,6 +138,8 @@ contextBridge.exposeInMainWorld("fileExplorer", {
     ipcRenderer.invoke('file-explorer:mount-folder', targetPath, realFolderPath),
   unmountFolder: (mountedFolderPath: string) => 
     ipcRenderer.invoke('file-explorer:unmount-folder', mountedFolderPath),
+  getImageData: (imagePath: string) => 
+    ipcRenderer.invoke('file-explorer:get-image-data', imagePath),
 })
 
 // Expose chat API to the renderer process

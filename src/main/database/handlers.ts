@@ -1304,6 +1304,77 @@ export async function registerDatabaseIPCHandlers() {
       return { success: false, error: String(error) };
     }
   });
+
+  // Add the get image data handler
+  ipcMain.handle('file-explorer:get-image-data', async (event, imagePath: string) => {
+    try {
+      // Check if path is a real_path from the database or a direct file path
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when get-image-data was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Get file info from database if available
+      let realPath = imagePath;
+      if (!fsSync.existsSync(imagePath)) {
+        const fileStmt = db.prepare(`
+          SELECT real_path
+          FROM items
+          WHERE path = ? OR real_path = ?
+          LIMIT 1
+        `);
+        const fileInfo = fileStmt.get(imagePath, imagePath) as { real_path: string } | undefined;
+        
+        if (fileInfo && fileInfo.real_path) {
+          realPath = fileInfo.real_path;
+        }
+      }
+
+      // Check if the file exists and is accessible
+      if (!fsSync.existsSync(realPath)) {
+        log.error(`Image file not found: ${realPath}`);
+        return { success: false, error: 'Image file not found' };
+      }
+
+      // Read the file as binary data
+      const data = await fs.readFile(realPath);
+      
+      // Convert to base64 string with appropriate mime type
+      const extension = path.extname(realPath).toLowerCase().substring(1);
+      let mimeType;
+      
+      switch (extension) {
+        case 'jpg':
+        case 'jpeg':
+          mimeType = 'image/jpeg';
+          break;
+        case 'png':
+          mimeType = 'image/png';
+          break;
+        case 'gif':
+          mimeType = 'image/gif';
+          break;
+        case 'webp':
+          mimeType = 'image/webp';
+          break;
+        case 'svg':
+          mimeType = 'image/svg+xml';
+          break;
+        case 'bmp':
+          mimeType = 'image/bmp';
+          break;
+        default:
+          mimeType = 'application/octet-stream';
+      }
+      
+      const dataUrl = `data:${mimeType};base64,${data.toString('base64')}`;
+      return { success: true, dataUrl };
+    } catch (error) {
+      log.error('Error getting image data:', error);
+      return { success: false, error: String(error) };
+    }
+  });
 }
 
 /**

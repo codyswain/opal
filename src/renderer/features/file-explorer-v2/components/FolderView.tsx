@@ -1,5 +1,5 @@
 import { FSEntry } from "@/types";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { formatLocalDate, getLocalDate } from "@/renderer/shared/utils";
 import { 
   ChevronDown, 
@@ -11,7 +11,8 @@ import {
   List, 
   Grid, 
   FileIcon,
-  Edit3
+  Edit3,
+  Image
 } from "lucide-react";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 
@@ -35,6 +36,39 @@ const FolderView: React.FC<FolderViewProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [imageCache, setImageCache] = useState<Record<string, string>>({});
+
+  // Load thumbnails for images
+  useEffect(() => {
+    if (!selectedNode?.children?.length) return;
+    
+    const loadImages = async () => {
+      const newImageCache: Record<string, string> = {};
+      
+      // Get all children that are images
+      const imageNodes = selectedNode.children
+        .map(childId => entities.nodes[childId])
+        .filter(node => node && isImage(node));
+      
+      // Load images in parallel
+      await Promise.all(imageNodes.map(async (node) => {
+        if (node.realPath) {
+          try {
+            const result = await window.fileExplorer.getImageData(node.realPath);
+            if (result.success) {
+              newImageCache[node.id] = result.dataUrl;
+            }
+          } catch (error) {
+            console.error(`Error loading image for ${node.name}:`, error);
+          }
+        }
+      }));
+      
+      setImageCache(newImageCache);
+    };
+    
+    loadImages();
+  }, [selectedNode?.children, entities.nodes]);
 
   // Toggle sort direction or change sort field
   const handleSort = (field: SortField) => {
@@ -50,7 +84,12 @@ const FolderView: React.FC<FolderViewProps> = ({
   const formatDate = formatLocalDate;
 
   // Get file/folder icon based on type
-  const getIcon = (type: string) => {
+  const getIcon = (type: string, entry: FSEntry) => {
+    // Check if it's an image file with a real path
+    if (isImage(entry)) {
+      return <Image className="w-4 h-4 text-purple-500" />;
+    }
+
     switch (type) {
       case 'folder':
         return <Folder className="w-4 h-4 text-blue-500" />;
@@ -59,6 +98,16 @@ const FolderView: React.FC<FolderViewProps> = ({
       default:
         return <FileIcon className="w-4 h-4 text-gray-500" />;
     }
+  };
+
+  // Check if a file is an image
+  const isImage = (entry: FSEntry): boolean => {
+    if (!entry.realPath) return false;
+    
+    const extension = entry.name.split('.').pop()?.toLowerCase();
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
+    
+    return !!extension && imageExtensions.includes(extension);
   };
 
   // Sort and filter children
@@ -73,6 +122,12 @@ const FolderView: React.FC<FolderViewProps> = ({
         if (sortField === 'type') {
           if (a.type === 'folder' && b.type !== 'folder') return sortDirection === 'asc' ? 1 : -1;
           if (a.type !== 'folder' && b.type === 'folder') return sortDirection === 'asc' ? -1 : 1;
+          
+          // Then sort images
+          const aIsImage = isImage(a);
+          const bIsImage = isImage(b);
+          if (aIsImage && !bIsImage) return sortDirection === 'asc' ? 1 : -1;
+          if (!aIsImage && bIsImage) return sortDirection === 'asc' ? -1 : 1;
         }
         
         // Then sort by the selected field
@@ -198,7 +253,7 @@ const FolderView: React.FC<FolderViewProps> = ({
                   >
                     <td className="p-2">
                       <div className="flex items-center gap-2">
-                        {getIcon(child.type)}
+                        {getIcon(child.type, child)}
                         <span className="truncate">{child.name}</span>
                       </div>
                     </td>
@@ -225,9 +280,17 @@ const FolderView: React.FC<FolderViewProps> = ({
                 onClick={() => selectEntry(child.id)}
                 className="flex flex-col bg-card hover:bg-card/80 rounded-md cursor-pointer border border-muted overflow-hidden transition-all hover:shadow-sm"
               >
-                {/* Smaller preview area */}
+                {/* Preview area showing thumbnails for images */}
                 <div className="h-16 bg-muted/20 flex items-center justify-center">
-                  {getIcon(child.type)}
+                  {isImage(child) && imageCache[child.id] ? (
+                    <img 
+                      src={imageCache[child.id]} 
+                      alt={child.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    getIcon(child.type, child)
+                  )}
                 </div>
                 
                 {/* More compact info area */}

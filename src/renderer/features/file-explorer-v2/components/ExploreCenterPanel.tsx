@@ -4,6 +4,7 @@ import { useFileExplorerStore } from "../store/fileExplorerStore";
 import { toast } from "@/renderer/shared/components/Toast";
 import FolderView from "./FolderView";
 import NoteView from "./NoteView";
+import ImageView from "./ImageView";
 
 function ExploreCenterPanel() {
   const { entities, ui, selectEntry, updateNoteContent } = useFileExplorerStore();
@@ -13,6 +14,16 @@ function ExploreCenterPanel() {
   // Get the current note if a note is selected
   const selectedNote = ui.selectedId ? entities.notes[ui.selectedId] : null;
   const selectedNode = ui.selectedId ? entities.nodes[ui.selectedId] : null;
+
+  // Check if the selected node is an image
+  const isImage = (node: typeof selectedNode): boolean => {
+    if (!node || !node.realPath) return false;
+    
+    const extension = node.name.split('.').pop()?.toLowerCase();
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
+    
+    return !!extension && imageExtensions.includes(extension);
+  };
 
   // Debounce save to prevent too many saves
   const debouncedSaveContent = useDebouncedCallback(
@@ -79,6 +90,8 @@ function ExploreCenterPanel() {
         handleContentChange={handleContentChange}
       />
     );
+  } else if (isImage(selectedNode)) {
+    return <ImageView selectedNode={selectedNode!} />;
   } else {
     return <div className="flex justify-center items-center h-full">Select a file or folder to view</div>;
   }

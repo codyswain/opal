@@ -143,6 +143,9 @@ declare global {
       getNote: (id: string) => Promise<{success: boolean, note: Note}>;
       updateNoteContent: (id: string, content: string) => Promise<{success: boolean, error?: string}>;
       renameItem: (itemPath: string, newName: string) => Promise<{success: boolean, newPath: string, error?: string}>;
+      mountFolder: (targetPath: string, realFolderPath: string) => Promise<{success: boolean, id?: string, path?: string, error?: string}>;
+      unmountFolder: (mountedFolderPath: string) => Promise<{success: boolean, error?: string}>;
+      getImageData: (imagePath: string) => Promise<{success: boolean, dataUrl?: string, error?: string}>;
     };
     
     chatAPI: {
