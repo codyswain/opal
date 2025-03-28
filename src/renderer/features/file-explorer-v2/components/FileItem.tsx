@@ -20,6 +20,7 @@ export interface FileItemProps {
   level: number;
   isLastChild: boolean;
   onContextMenu: (e: React.MouseEvent, entry: FSEntry) => void;
+  onDragStart?: (itemId: string, e: React.DragEvent) => void;
 }
 
 /**
@@ -30,6 +31,7 @@ const FileItem: React.FC<FileItemProps> = ({
   level,
   isLastChild,
   onContextMenu,
+  onDragStart,
 }) => {
   const { ui, selectEntry, toggleFolder } = useFileExplorerStore();
   const isSelected = ui.selectedId === entry.id;
@@ -91,6 +93,32 @@ const FileItem: React.FC<FileItemProps> = ({
     onContextMenu(e, entry);
   };
 
+  // Add handler for drag start
+  const handleDragStart = (e: React.DragEvent) => {
+    if (onDragStart) {
+      // Prevent event propagation to avoid parent container handling
+      e.stopPropagation();
+      
+      // Clear any existing data
+      e.dataTransfer.clearData();
+      
+      // Set drag effect to copy
+      e.dataTransfer.effectAllowed = 'copy';
+      
+      // Set item data
+      e.dataTransfer.setData('application/tread-item-id', entry.id);
+      e.dataTransfer.setData('application/tread-item-type', entry.type);
+      e.dataTransfer.setData('application/tread-item-name', entry.name);
+      e.dataTransfer.setData('text/plain', entry.name);
+      
+      // Call the parent's onDragStart as a callback
+      onDragStart(entry.id, e);
+      
+      // Add this explicit logging to help debug
+      console.log(`Starting drag of item: ${entry.name} (${entry.id}) - Type: ${entry.type}`);
+    }
+  };
+
   return (
     <div className="relative group">
       {/* Render vertical guide lines for nesting */}
@@ -116,6 +144,8 @@ const FileItem: React.FC<FileItemProps> = ({
         style={{ paddingLeft: `${level * explorerStyles.indentationWidth}px` }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        draggable={!!onDragStart}
+        onDragStart={handleDragStart}
       >
         {/* Background div that doesn't cover the vertical lines */}
         {isSelected && (

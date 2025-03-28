@@ -20,6 +20,96 @@ import * as fsExtra from 'fs-extra';
 // Map to keep track of file watchers for mounted folders
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
 
+// Add this helper function at the top of the file before registerDatabaseIPCHandlers
+async function ensureEmbeddedItemsTableExists(db: any) {
+  try {
+    // Check if the table exists
+    const tableExists = db.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name='embedded_items'
+    `).get();
+    
+    if (!tableExists) {
+      log.info('Creating missing embedded_items table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS embedded_items (
+          id TEXT PRIMARY KEY,
+          note_id TEXT NOT NULL,
+          embedded_item_id TEXT NOT NULL,
+          position_in_note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (note_id) REFERENCES items(id) ON DELETE CASCADE,
+          FOREIGN KEY (embedded_item_id) REFERENCES items(id) ON DELETE CASCADE
+        )
+      `);
+      return true;
+    }
+    
+    // Fix linter error by specifying the proper type
+    interface ColumnInfo {
+      cid: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: any;
+      pk: number;
+    }
+    
+    // Check if the table has the expected columns
+    const columnInfo = db.prepare(`PRAGMA table_info(embedded_items)`).all() as ColumnInfo[];
+    const columns = columnInfo.map(col => col.name);
+    
+    const requiredColumns = ['id', 'note_id', 'embedded_item_id', 'position_in_note', 'created_at', 'updated_at'];
+    const missingColumns = requiredColumns.filter(col => !columns.includes(col));
+    
+    if (missingColumns.length > 0) {
+      log.warn(`Embedded items table missing columns: ${missingColumns.join(', ')}`);
+      
+      // For SQLite, we need to recreate the table to add columns
+      // First, rename the current table
+      db.exec(`ALTER TABLE embedded_items RENAME TO embedded_items_old`);
+      
+      // Create new table with all required columns
+      db.exec(`
+        CREATE TABLE embedded_items (
+          id TEXT PRIMARY KEY,
+          note_id TEXT NOT NULL,
+          embedded_item_id TEXT NOT NULL,
+          position_in_note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (note_id) REFERENCES items(id) ON DELETE CASCADE,
+          FOREIGN KEY (embedded_item_id) REFERENCES items(id) ON DELETE CASCADE
+        )
+      `);
+      
+      // Copy existing data if possible
+      try {
+        const columnsToTransfer = columns.filter(col => requiredColumns.includes(col));
+        if (columnsToTransfer.length > 0) {
+          db.exec(`
+            INSERT INTO embedded_items (${columnsToTransfer.join(', ')})
+            SELECT ${columnsToTransfer.join(', ')} FROM embedded_items_old
+          `);
+        }
+      } catch (copyError) {
+        log.error('Error copying data from old embedded_items table:', copyError);
+      }
+      
+      // Drop the old table
+      db.exec(`DROP TABLE embedded_items_old`);
+      
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    log.error('Error checking or creating embedded_items table:', error);
+    throw error;
+  }
+}
+
 // Example: Get all data from a table (replace 'your_table' with your actual table name)
 export async function registerDatabaseIPCHandlers() {
   const dbManager = DatabaseManager.getInstance();
@@ -1315,28 +1405,44 @@ export async function registerDatabaseIPCHandlers() {
         return { success: false, error: 'Database not initialized' };
       }
 
+      log.info(`Attempting to load image data for path: ${imagePath}`);
+      
       // Get file info from database if available
       let realPath = imagePath;
       if (!fsSync.existsSync(imagePath)) {
+        log.info(`Path doesn't exist directly, looking up in database: ${imagePath}`);
         const fileStmt = db.prepare(`
-          SELECT real_path
+          SELECT id, real_path, path, type
           FROM items
           WHERE path = ? OR real_path = ?
           LIMIT 1
         `);
-        const fileInfo = fileStmt.get(imagePath, imagePath) as { real_path: string } | undefined;
+        const fileInfo = fileStmt.get(imagePath, imagePath) as { id: string, real_path?: string, path: string, type: string } | undefined;
         
-        if (fileInfo && fileInfo.real_path) {
-          realPath = fileInfo.real_path;
+        if (fileInfo) {
+          log.info(`Found file info in database: ${JSON.stringify(fileInfo)}`);
+          if (fileInfo.real_path) {
+            realPath = fileInfo.real_path;
+            log.info(`Using real_path from database: ${realPath}`);
+          } else {
+            realPath = fileInfo.path;
+            log.info(`Using path from database: ${realPath}`);
+          }
+        } else {
+          log.error(`No database entry found for image path: ${imagePath}`);
         }
+      } else {
+        log.info(`Path exists directly, using it: ${imagePath}`);
       }
 
       // Check if the file exists and is accessible
       if (!fsSync.existsSync(realPath)) {
-        log.error(`Image file not found: ${realPath}`);
-        return { success: false, error: 'Image file not found' };
+        log.error(`Image file not found at path: ${realPath}`);
+        return { success: false, error: `Image file not found at path: ${realPath}` };
       }
 
+      log.info(`Reading image file: ${realPath}`);
+      
       // Read the file as binary data
       const data = await fs.readFile(realPath);
       
@@ -1368,10 +1474,229 @@ export async function registerDatabaseIPCHandlers() {
           mimeType = 'application/octet-stream';
       }
       
+      log.info(`Successfully read image file (${data.length} bytes) with mime type: ${mimeType}`);
+      
       const dataUrl = `data:${mimeType};base64,${data.toString('base64')}`;
       return { success: true, dataUrl };
     } catch (error) {
       log.error('Error getting image data:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Add the embedded items handlers
+  ipcMain.handle('file-explorer:create-embedded-item', async (event, noteId: string, embeddedItemId: string, positionData: any) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when file-explorer:create-embedded-item was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Ensure the embedded_items table exists with the right schema
+      await ensureEmbeddedItemsTableExists(db);
+
+      // Check if both the note and the item to embed exist
+      const checkNoteStmt = db.prepare('SELECT id, type FROM items WHERE id = ?');
+      const note = checkNoteStmt.get(noteId) as { id: string, type: string } | undefined;
+      
+      if (!note) {
+        log.error('Note not found for ID:', noteId);
+        return { success: false, error: 'Note not found' };
+      }
+      
+      if (note.type !== 'note') {
+        log.error('Item is not a note:', noteId);
+        return { success: false, error: 'Target item is not a note' };
+      }
+      
+      const checkItemStmt = db.prepare('SELECT id FROM items WHERE id = ?');
+      const item = checkItemStmt.get(embeddedItemId) as { id: string } | undefined;
+      
+      if (!item) {
+        log.error('Item to embed not found for ID:', embeddedItemId);
+        return { success: false, error: 'Item to embed not found' };
+      }
+
+      // Create a new embedded item entry
+      const embeddedId = uuidv4();
+      const positionJSON = JSON.stringify(positionData || {});
+      
+      const insertStmt = db.prepare(`
+        INSERT INTO embedded_items (id, note_id, embedded_item_id, position_in_note)
+        VALUES (?, ?, ?, ?)
+      `);
+      insertStmt.run(embeddedId, noteId, embeddedItemId, positionJSON);
+      
+      return { 
+        success: true, 
+        embeddedId, 
+        embeddingCode: `{{embedded:${embeddedId}}}` 
+      };
+    } catch (error) {
+      log.error('Error creating embedded item:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('file-explorer:get-embedded-item', async (event, embeddedId: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when file-explorer:get-embedded-item was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+      
+      // Ensure the embedded_items table exists with the right schema
+      await ensureEmbeddedItemsTableExists(db);
+
+      const stmt = db.prepare(`
+        SELECT 
+          e.id as embedded_id,
+          e.note_id,
+          e.embedded_item_id,
+          e.position_in_note,
+          i.type as item_type,
+          i.path as item_path,
+          i.name as item_name,
+          i.real_path
+        FROM embedded_items e
+        JOIN items i ON e.embedded_item_id = i.id
+        WHERE e.id = ?
+      `);
+      
+      const embeddedItem = stmt.get(embeddedId) as {
+        embedded_id: string;
+        note_id: string;
+        embedded_item_id: string;
+        position_in_note: string;
+        item_type: string;
+        item_path: string;
+        item_name: string;
+        real_path?: string;
+      } | undefined;
+      
+      if (!embeddedItem) {
+        log.error('Embedded item not found for ID:', embeddedId);
+        return { success: false, error: 'Embedded item not found' };
+      }
+      
+      // Parse the position data
+      if (embeddedItem.position_in_note) {
+        embeddedItem.position_in_note = JSON.parse(embeddedItem.position_in_note);
+      }
+      
+      return { success: true, embeddedItem };
+    } catch (error) {
+      log.error('Error getting embedded item:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('file-explorer:get-note-embedded-items', async (event, noteId: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when file-explorer:get-note-embedded-items was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Ensure the embedded_items table exists with the right schema
+      await ensureEmbeddedItemsTableExists(db);
+
+      const stmt = db.prepare(`
+        SELECT 
+          e.id as embedded_id,
+          e.embedded_item_id,
+          e.position_in_note,
+          i.type as item_type,
+          i.path as item_path,
+          i.name as item_name,
+          i.real_path
+        FROM embedded_items e
+        JOIN items i ON e.embedded_item_id = i.id
+        WHERE e.note_id = ?
+      `);
+      
+      const embeddedItems = stmt.all(noteId) as Array<{
+        embedded_id: string;
+        embedded_item_id: string;
+        position_in_note: string;
+        item_type: string;
+        item_path: string;
+        item_name: string;
+        real_path?: string;
+      }>;
+      
+      // Parse the position data for each item
+      embeddedItems.forEach(item => {
+        if (item.position_in_note) {
+          item.position_in_note = JSON.parse(item.position_in_note);
+        }
+      });
+      
+      return { success: true, embeddedItems };
+    } catch (error) {
+      log.error('Error getting note embedded items:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('file-explorer:update-embedded-item', async (event, embeddedId: string, positionData: any) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when file-explorer:update-embedded-item was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Ensure the embedded_items table exists with the right schema
+      await ensureEmbeddedItemsTableExists(db);
+
+      const positionJSON = JSON.stringify(positionData || {});
+      
+      const updateStmt = db.prepare(`
+        UPDATE embedded_items
+        SET position_in_note = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      
+      const result = updateStmt.run(positionJSON, embeddedId);
+      
+      if (result.changes === 0) {
+        log.error('Embedded item not found for ID:', embeddedId);
+        return { success: false, error: 'Embedded item not found' };
+      }
+      
+      return { success: true };
+    } catch (error) {
+      log.error('Error updating embedded item:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('file-explorer:delete-embedded-item', async (event, embeddedId: string) => {
+    try {
+      const db = dbManager.getDatabase();
+      if (!db) {
+        log.error('Database not initialized when file-explorer:delete-embedded-item was called');
+        return { success: false, error: 'Database not initialized' };
+      }
+
+      // Ensure the embedded_items table exists with the right schema
+      await ensureEmbeddedItemsTableExists(db);
+
+      const deleteStmt = db.prepare('DELETE FROM embedded_items WHERE id = ?');
+      const result = deleteStmt.run(embeddedId);
+      
+      if (result.changes === 0) {
+        log.error('Embedded item not found for ID:', embeddedId);
+        return { success: false, error: 'Embedded item not found' };
+      }
+      
+      return { success: true };
+    } catch (error) {
+      log.error('Error deleting embedded item:', error);
       return { success: false, error: String(error) };
     }
   });
@@ -1672,5 +1997,27 @@ async function handleFileChanged(filePath: string, realFolderPath: string, virtu
     }
   } catch (error) {
     log.error('Error handling file change:', error);
+  }
+}
+
+// Add this near the top of the file
+export async function ensureAllTablesExist() {
+  try {
+    const dbManager = DatabaseManager.getInstance();
+    const db = dbManager.getDatabase();
+    if (!db) {
+      log.error('Database not initialized when ensureAllTablesExist was called');
+      return false;
+    }
+    
+    // Check and create the embedded_items table if needed
+    await ensureEmbeddedItemsTableExists(db);
+    
+    // Add more table checks here as needed
+    
+    return true;
+  } catch (error) {
+    log.error('Error ensuring all tables exist:', error);
+    return false;
   }
 }

@@ -144,6 +144,7 @@ const NoteView: React.FC<NoteViewProps> = ({
           content={selectedNote.content}
           onUpdate={handleEditorUpdate}
           filePath={selectedNode.path}
+          noteId={selectedNode.id}
         />
       </div>
       

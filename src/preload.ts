@@ -140,6 +140,16 @@ contextBridge.exposeInMainWorld("fileExplorer", {
     ipcRenderer.invoke('file-explorer:unmount-folder', mountedFolderPath),
   getImageData: (imagePath: string) => 
     ipcRenderer.invoke('file-explorer:get-image-data', imagePath),
+  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: any) =>
+    ipcRenderer.invoke('file-explorer:create-embedded-item', noteId, embeddedItemId, positionData),
+  getEmbeddedItem: (embeddedId: string) =>
+    ipcRenderer.invoke('file-explorer:get-embedded-item', embeddedId),
+  getNoteEmbeddedItems: (noteId: string) =>
+    ipcRenderer.invoke('file-explorer:get-note-embedded-items', noteId),
+  updateEmbeddedItem: (embeddedId: string, positionData: any) =>
+    ipcRenderer.invoke('file-explorer:update-embedded-item', embeddedId, positionData),
+  deleteEmbeddedItem: (embeddedId: string) =>
+    ipcRenderer.invoke('file-explorer:delete-embedded-item', embeddedId),
 })
 
 // Expose chat API to the renderer process

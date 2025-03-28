@@ -3,7 +3,7 @@ import path from "path";
 import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
 import { closeDatabase, initializeDatabase } from "./main/database";
 import { registerConfigIPCHandlers, registerEmbeddingIPCHandlers, registerFileSystemIPCHandlers, log } from "./main/index";
-import { registerDatabaseIPCHandlers } from "./main/database/handlers";
+import { registerDatabaseIPCHandlers, ensureAllTablesExist } from "./main/database/handlers";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -111,6 +111,11 @@ app.whenReady().then(async () => {
     await registerConfigIPCHandlers();
     await registerEmbeddingIPCHandlers();
     await initializeDatabase();
+    
+    // Ensure all database tables exist with correct schema
+    await ensureAllTablesExist();
+    log.info("Database tables verified");
+    
     createWindow();
   } catch (error) {
     log.error(`Error during app setup: ${error}`);

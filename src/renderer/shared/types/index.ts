@@ -19,6 +19,26 @@ export interface FSEntry {
   }
 }
 
+// New interface for embedded items
+export interface EmbeddedItem {
+  embedded_id: string;
+  note_id: string;
+  embedded_item_id: string;
+  position_in_note: {
+    type: string;  // 'image', 'folder', etc.
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    scale?: number;
+    [key: string]: any;  // Allow additional properties for different embed types
+  };
+  item_type: FSEntryType;
+  item_path: string;
+  item_name: string;
+  real_path?: string;
+}
+
 export interface AIMetadata {
   id?: string;
   item_id: string;
@@ -146,6 +166,16 @@ declare global {
       mountFolder: (targetPath: string, realFolderPath: string) => Promise<{success: boolean, id?: string, path?: string, error?: string}>;
       unmountFolder: (mountedFolderPath: string) => Promise<{success: boolean, error?: string}>;
       getImageData: (imagePath: string) => Promise<{success: boolean, dataUrl?: string, error?: string}>;
+      createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: any) => 
+        Promise<{success: boolean, embeddedId?: string, embeddingCode?: string, error?: string}>;
+      getEmbeddedItem: (embeddedId: string) => 
+        Promise<{success: boolean, embeddedItem?: EmbeddedItem, error?: string}>;
+      getNoteEmbeddedItems: (noteId: string) => 
+        Promise<{success: boolean, embeddedItems?: EmbeddedItem[], error?: string}>;
+      updateEmbeddedItem: (embeddedId: string, positionData: any) => 
+        Promise<{success: boolean, error?: string}>;
+      deleteEmbeddedItem: (embeddedId: string) => 
+        Promise<{success: boolean, error?: string}>;
     };
     
     chatAPI: {

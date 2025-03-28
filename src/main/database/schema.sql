@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
+-- New table for embedded items
+CREATE TABLE IF NOT EXISTS embedded_items (
+    id TEXT PRIMARY KEY,  -- UUID for the embedding
+    note_id TEXT NOT NULL,  -- The note containing this embedded item
+    embedded_item_id TEXT NOT NULL,  -- The item that is embedded
+    position_in_note TEXT,  -- JSON field to store positioning info
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (note_id) REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (embedded_item_id) REFERENCES items(id) ON DELETE CASCADE
+);
+
 DROP TABLE IF EXISTS ai_metadata;
 
 CREATE TABLE IF NOT EXISTS ai_metadata (
