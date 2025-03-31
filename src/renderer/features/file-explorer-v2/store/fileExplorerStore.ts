@@ -79,7 +79,12 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
             ...state.entities,
             notes: {
               ...state.entities.notes,
-              [id]: note
+              [id]: {
+                id: note.id,
+                content: note.content || '',
+                createdAt: note.createdAt || '',
+                updatedAt: note.updatedAt || ''
+              }
             }
           }
         }));

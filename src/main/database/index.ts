@@ -5,7 +5,6 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import log from 'electron-log';
 import DatabaseManager from './db';
-import { migrateNotesToDatabase, migrateEmbeddingsToDatabase } from './migration';
 
 // Import the sqlite-vss module
 let sqlite_vss: any = null;
@@ -113,12 +112,6 @@ export async function initializeDatabase() {
     if (!fsSync.existsSync(workspacePath)) {
       await fs.mkdir(workspacePath, { recursive: true });
     }
-    
-    // Migrate any existing notes from the filesystem to the database
-    await migrateNotesToDatabase();
-    
-    // Migrate any existing embeddings from the filesystem to the database
-    await migrateEmbeddingsToDatabase();
     
     // Migrate existing embeddings to VSS if available
     if (sqlite_vss) {

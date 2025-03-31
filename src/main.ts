@@ -1,9 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
 import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
-import { closeDatabase, initializeDatabase } from "./main/database";
-import { registerConfigIPCHandlers, registerEmbeddingIPCHandlers, registerFileSystemIPCHandlers, log } from "./main/index";
-import { registerDatabaseIPCHandlers, ensureAllTablesExist } from "./main/database/handlers";
+import { 
+  closeDatabase, 
+  initializeDatabase,
+  registerConfigIPCHandlers, 
+  registerEmbeddingIPCHandlers, 
+  registerFileSystemIPCHandlers,
+  registerDatabaseIPCHandlers,
+  log 
+} from "./main/index";
+import { ensureAllTablesExist } from "./main/database/handlers";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -101,24 +108,33 @@ process.on("uncaughtException", (error) => {
 
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
-  process.on('uncaughtException', (error) => { // Keep this for early errors
-    console.log('error-1', error);
-  });
-
   try {
+    log.info("Initializing application...");
+    
     await registerFileSystemIPCHandlers();
+    log.info("File system IPC handlers registered");
+    
     await registerDatabaseIPCHandlers();
+    log.info("Database IPC handlers registered");
+    
     await registerConfigIPCHandlers();
+    log.info("Config IPC handlers registered");
+    
     await registerEmbeddingIPCHandlers();
+    log.info("Embedding IPC handlers registered");
+    
     await initializeDatabase();
+    log.info("Database initialized successfully");
     
     // Ensure all database tables exist with correct schema
     await ensureAllTablesExist();
     log.info("Database tables verified");
     
     createWindow();
+    log.info("Application initialization completed");
   } catch (error) {
     log.error(`Error during app setup: ${error}`);
+    dialog.showErrorBox('Initialization Error', `Failed to initialize the application: ${error.message}`);
   }
 });
 

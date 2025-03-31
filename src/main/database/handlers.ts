@@ -7,7 +7,6 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { Item, ItemWithAIMetadata, Note } from './types';
-import { migrateNotesToDatabase } from './migration';
 import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
@@ -755,17 +754,6 @@ export async function registerDatabaseIPCHandlers() {
             return { success: false, error: String(error) };
         }
     });
-
-  ipcMain.handle('trigger-migration', async () => {
-    try {
-      log.info('Manual migration triggered');
-      await migrateNotesToDatabase();
-      return { success: true, message: 'Migration completed successfully' };
-    } catch (error) {
-      log.error('Error during manual migration:', error);
-      return { success: false, error: String(error) };
-    }
-  });
 
   ipcMain.handle('cleanup-old-notes', async () => {
     try {

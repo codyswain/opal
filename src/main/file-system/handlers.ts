@@ -1,114 +1,114 @@
-import { ipcMain, app } from "electron";
+import { ipcMain, app, dialog, BrowserWindow } from "electron";
 import fs from "fs/promises";
 import path from "path";
 import { Config, Note } from "@/renderer/shared/types";
-import { loadDirectoryStructure } from "./loader";
+import { log } from "../index";
 
 const NOTES_DIR = path.join(app.getPath("userData"), "notes");
 const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");
 
 export async function registerFileSystemIPCHandlers(){
   // Ensure the notes directory exists
-  await fs.mkdir(NOTES_DIR, { recursive: true });
+  // await fs.mkdir(NOTES_DIR, { recursive: true });
 
-  // Ensure the config file exists
-  try {
-    await fs.access(CONFIG_FILE);
-  } catch {
-    await fs.writeFile(CONFIG_FILE, JSON.stringify({}));
-  }
+  // // Ensure the config file exists
+  // try {
+  //   await fs.access(CONFIG_FILE);
+  // } catch {
+  //   await fs.writeFile(CONFIG_FILE, JSON.stringify({}));
+  // }
 
-  ipcMain.handle("get-directory-structure", async (_, dirPath: string) => {
-    if (!dirPath || typeof dirPath !== 'string') {
-      console.error('dirPath is not a string or is undefined');
-      throw new Error('dirPath is not a string or is undefined');
-    }
+  // ipcMain.handle("get-directory-structure", async (_, dirPath: string) => {
+  //   if (!dirPath || typeof dirPath !== 'string') {
+  //     console.error('dirPath is not a string or is undefined');
+  //     throw new Error('dirPath is not a string or is undefined');
+  //   }
 
-    try {
-      const dirStructure = await loadDirectoryStructure(dirPath);
-      return dirStructure;
-    } catch (error) {
-      console.error(`Error loading directory structure for dirPath=${dirPath}`);
-      throw error;
-    }
-  });
+  //   try {
+  //     const dirStructure = await loadDirectoryStructure(dirPath);
+  //     return dirStructure;
+  //   } catch (error) {
+  //     console.error(`Error loading directory structure for dirPath=${dirPath}`);
+  //     throw error;
+  //   }
+  // });
 
-  ipcMain.handle("load-note", async (_, notePath: string) => {
-    try {
-      const noteContent = await fs.readFile(notePath, "utf-8");
-      const note: Note = JSON.parse(noteContent);
-      return note;
-    } catch (error) {
-      console.error("Error loading note:", error);
-      throw error;
-    }
-  });
+  // ipcMain.handle("load-note", async (_, notePath: string) => {
+  //   try {
+  //     const noteContent = await fs.readFile(notePath, "utf-8");
+  //     const note: Note = JSON.parse(noteContent);
+  //     return note;
+  //   } catch (error) {
+  //     console.error("Error loading note:", error);
+  //     throw error;
+  //   }
+  // });
 
-  ipcMain.handle("save-note", async (_, note: Note, dirPath: string) => {
-    try {
-      const fileName = `${note.id}.json`;
-      const filePath = path.join(dirPath, fileName);
-      await fs.mkdir(dirPath, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(note));
-      console.log(`Note saved successfully at filePath=${filePath}`);
-      return filePath;
-    } catch (error) {
-      console.error("Error saving note:", error);
-      throw error;
-    }
-  });
+  // ipcMain.handle("save-note", async (_, note: Note, dirPath: string) => {
+  //   try {
+  //     const fileName = `${note.id}.json`;
+  //     const filePath = path.join(dirPath, fileName);
+  //     await fs.mkdir(dirPath, { recursive: true });
+  //     await fs.writeFile(filePath, JSON.stringify(note));
+  //     console.log(`Note saved successfully at filePath=${filePath}`);
+  //     return filePath;
+  //   } catch (error) {
+  //     console.error("Error saving note:", error);
+  //     throw error;
+  //   }
+  // });
 
-  ipcMain.handle("delete-file-node", async (_, fileNodeType: string, fileNodePath: string) => {
-  try {
-    if (fileNodeType === "directory") {
-      // Deletes the directory and all its contents, including embedding files
-      await fs.rm(fileNodePath, { recursive: true, force: true });
-    } else if (fileNodeType === "note") {
-      // Delete the note file
-      await fs.unlink(fileNodePath);
+  // ipcMain.handle("delete-file-node", async (_, fileNodeType: string, fileNodePath: string) => {
+  // try {
+  //   if (fileNodeType === "directory") {
+  //     // Deletes the directory and all its contents, including embedding files
+  //     await fs.rm(fileNodePath, { recursive: true, force: true });
+  //   } else if (fileNodeType === "note") {
+  //     // Delete the note file
+  //     await fs.unlink(fileNodePath);
 
-      // Construct the embedding file path
-      const embeddingFilePath = fileNodePath.replace(/\.json$/, ".embedding.json");
+  //     // Construct the embedding file path
+  //     const embeddingFilePath = fileNodePath.replace(/\.json$/, ".embedding.json");
 
-      // Attempt to delete the embedding file
-      try {
-        await fs.unlink(embeddingFilePath);
-        console.log(`Embedding file deleted at path: ${embeddingFilePath}`);
-      } catch (error: any) {
-        if (error.code !== "ENOENT") {
-          // Log errors other than file not existing
-          console.error(`Error deleting embedding file at path: ${embeddingFilePath}`, error);
-        }
-        // If the embedding file doesn't exist, ignore the error
-      }
-    }
-  } catch (err) {
-    console.error(`Error deleting fileNode with path: ${fileNodePath}`, err);
-  }
-  });
+  //     // Attempt to delete the embedding file
+  //     try {
+  //       await fs.unlink(embeddingFilePath);
+  //       console.log(`Embedding file deleted at path: ${embeddingFilePath}`);
+  //     } catch (error: any) {
+  //       if (error.code !== "ENOENT") {
+  //         // Log errors other than file not existing
+  //         console.error(`Error deleting embedding file at path: ${embeddingFilePath}`, error);
+  //       }
+  //       // If the embedding file doesn't exist, ignore the error
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error(`Error deleting fileNode with path: ${fileNodePath}`, err);
+  // }
+  // });
 
 
-  ipcMain.handle("create-directory", async (_, dirPath: string) => {
-    try {
-      await fs.mkdir(dirPath, { recursive: true });
-    } catch (error) {
-      console.error("Error creating directory:", error);
-      throw error;
-    }
-  });
+  // ipcMain.handle("create-directory", async (_, dirPath: string) => {
+  //   try {
+  //     await fs.mkdir(dirPath, { recursive: true });
+  //   } catch (error) {
+  //     console.error("Error creating directory:", error);
+  //     throw error;
+  //   }
+  // });
 
-  ipcMain.handle("delete-directory", async (_, dirPath: string) => {
-    try {
-      await fs.rm(dirPath, { recursive: true, force: true });
-    } catch (error) {
-      console.error("Error deleting directory:", error);
-      throw error;
-    }
-  });
+  // ipcMain.handle("delete-directory", async (_, dirPath: string) => {
+  //   try {
+  //     await fs.rm(dirPath, { recursive: true, force: true });
+  //   } catch (error) {
+  //     console.error("Error deleting directory:", error);
+  //     throw error;
+  //   }
+  // });
 
-  ipcMain.handle("get-note-path", async (_, noteId: string) => {
-    return path.join(NOTES_DIR, `${noteId}.json`);
-  });
+  // ipcMain.handle("get-note-path", async (_, noteId: string) => {
+  //   return path.join(NOTES_DIR, `${noteId}.json`);
+  // });
 
   ipcMain.handle("get-openai-key", async () => {
     try {
@@ -136,5 +136,19 @@ export async function registerFileSystemIPCHandlers(){
       console.error("Error saving OpenAI API key:", error);
       throw error;
     }
+  });
+
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    
+    if (!mainWindow) {
+      return { canceled: true };
+    }
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory']
+    });
+    
+    return result;
   });
 }
