@@ -34,26 +34,3 @@ async function writeConfig(config: Config): Promise<void> {
     log.error('Error writing config:', error);
   }
 }
-
-export async function getTopLevelFolders(): Promise<string[]> {
-  log.info('Entering getTopLevelFolders');
-  const config = await readConfig();
-  log.info('Exiting getTopLevelFolders');
-  return config.topLevelFolders;
-}
-
-export async function addTopLevelFolder(folderPath: string): Promise<void> {
-  log.info(`Adding top-level folder: ${folderPath}`);
-  const config = await readConfig();
-  if (!config.topLevelFolders.includes(folderPath)) {
-    config.topLevelFolders.push(folderPath);
-    await writeConfig(config);
-  }
-}
-
-export async function removeTopLevelFolder(folderPath: string): Promise<void> {
-  log.info(`Removing top-level folder: ${folderPath}`);
-  const config = await readConfig();
-  config.topLevelFolders = config.topLevelFolders.filter(path => path !== folderPath);
-  await writeConfig(config);
-}

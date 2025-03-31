@@ -1,8 +1,7 @@
 // src/shared/types/index.ts
 
-import OpenAI from "openai";
+import type { default as OpenAI } from "openai";
 
-// FSEntry type for file explorer
 export type FSEntryType = 'folder' | 'file' | 'note';
 
 export interface FSEntry {
@@ -19,7 +18,6 @@ export interface FSEntry {
   }
 }
 
-// New interface for embedded items
 export interface EmbeddedItem {
   embedded_id: string;
   note_id: string;

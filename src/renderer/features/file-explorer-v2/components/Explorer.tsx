@@ -1,5 +1,4 @@
 import React from "react";
-import { FileExplorerProvider } from "../context/FileExplorerContext";
 import ExplorerPanels from "./ExplorerPanels";
 
 /**
@@ -17,14 +16,12 @@ const Explorer: React.FC<{
   setIsRightSidebarOpen,
 }) => {
   return (
-    <FileExplorerProvider>
-      <ExplorerPanels
-        isLeftSidebarOpen={isLeftSidebarOpen}
-        isRightSidebarOpen={isRightSidebarOpen}
-        setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-        setIsRightSidebarOpen={setIsRightSidebarOpen}
-      />
-    </FileExplorerProvider>
+    <ExplorerPanels
+      isLeftSidebarOpen={isLeftSidebarOpen}
+      isRightSidebarOpen={isRightSidebarOpen}
+      setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+      setIsRightSidebarOpen={setIsRightSidebarOpen}
+    />
   );
 };
 

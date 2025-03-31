@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { Note, FileNode, DirectoryStructures, Embedding, SimilarNote } from "./renderer/shared/types";
+import { Note, FileNode, DirectoryStructures } from "./renderer/shared/types";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
