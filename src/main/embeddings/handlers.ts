@@ -1,20 +1,13 @@
 import {
   Note,
-  FileNode,
-  DirectoryStructures,
-  Embedding,
   SimilarNote,
 } from "@/renderer/shared/types";
 import { ipcMain } from "electron";
 import OpenAI from "openai";
-import fs from "fs/promises";
-import path from "path";
-import { parse } from "node-html-parser";
-import { getOpenAIKey } from "../file-system/loader";
-import { ChatCompletionMessageParam } from "openai/resources/chat";
-import { EmbeddingCreator, RAGChat, SimilaritySearcher } from "./embeddings";
 import log from 'electron-log';
 import DatabaseManager from "../database/db";
+import { getOpenAIKey } from "../file-system/loader";
+import { EmbeddingCreator, RAGChat, SimilaritySearcher } from "./embeddings";
 
 let embeddingCreator: EmbeddingCreator;
 let similaritySearcher: SimilaritySearcher;
@@ -72,8 +65,7 @@ function registerIPCHandlers() {
     "perform-similarity-search",
     async (
       _,
-      query: string,
-      directoryStructures: DirectoryStructures
+      query: string
     ): Promise<SimilarNote[]> => {
       try {
         if (!embeddingCreator || !similaritySearcher) {

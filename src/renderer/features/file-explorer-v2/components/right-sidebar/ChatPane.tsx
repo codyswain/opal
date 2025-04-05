@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { cn } from "@/renderer/shared/utils";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { Button } from "@/renderer/shared/components/Button";
 import { Input } from "@/renderer/shared/components/Input";
 import { Send, RefreshCw, Bot, MessageSquare, Plus, History } from "lucide-react";

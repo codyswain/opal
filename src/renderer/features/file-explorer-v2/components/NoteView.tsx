@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/renderer/shared/components/Input";
-import { Loader2, Check } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -10,7 +10,6 @@ import { cn } from '@/renderer/shared/utils/cn';
 import NoteEditor from "./NoteEditor";
 import { FSEntry, Note } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
-import { Button } from "@/renderer/shared/components/Button";
 
 interface NoteViewProps {
   selectedNode: FSEntry;
@@ -141,9 +140,9 @@ const NoteView: React.FC<NoteViewProps> = ({
 
       <div className="flex-1 overflow-hidden bg-background">
         <NoteEditor
+          key={selectedNode.id}
           content={selectedNote.content}
           onUpdate={handleEditorUpdate}
-          filePath={selectedNode.path}
           noteId={selectedNode.id}
         />
       </div>

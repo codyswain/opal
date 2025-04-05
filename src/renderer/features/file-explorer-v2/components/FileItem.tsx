@@ -3,8 +3,7 @@ import { FSEntry } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import explorerStyles from "./styles/explorerStyles";
 import { VerticalGuideLine, FileIcon } from "./elements/ExplorerElements";
-import { useFileExplorerContextMenu } from "../hooks/useFileExplorerContextMenu";
-import { formatLocalDate, getLocalDate } from "@/renderer/shared/utils";
+import { formatLocalDate } from "@/renderer/shared/utils";
 import {
   Tooltip,
   TooltipContent,

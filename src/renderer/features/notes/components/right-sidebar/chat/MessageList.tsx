@@ -5,7 +5,7 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { Bot, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Message } from "../ChatPane";
+import { Message } from '@/renderer/shared/types';
 import { useScrollToBottom } from "./useScrollToBottom";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
@@ -72,7 +72,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   const renderMessage = (message: Message, index: number) => {
-    const renderKey = message.id || message.__updateKey || `message-${index}`;
+    const renderKey = message.id || `message-${index}`;
     
     return (
       <div

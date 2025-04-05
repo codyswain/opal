@@ -100,6 +100,20 @@ export interface DirectoryEntry {
   children?: DirectoryEntry[];
 }
 
+export interface Message {
+  role: "user" | "assistant";
+  content: string;
+  id?: string;
+  created_at?: string;
+}
+
+export interface Conversation {
+  conversation_id: string;
+  last_updated: string;
+  latest_user_message: string;
+  message_count: number;
+}
+
 // Consolidated global type definitions
 declare global {
   interface Window {
@@ -124,6 +138,8 @@ declare global {
       generateNoteEmbeddings: (note: Note, fileNode: any) => Promise<any>;
       findSimilarNotes: (query: string, directoryStructures: any) => Promise<any>;
       performRAGChat: (conversation: { role: string; content: string }[], directoryStructures: any) => Promise<any>;
+      clearVectorIndex: () => Promise<any>;
+      regenerateAllEmbeddings: () => Promise<any>;
       
       // Database File Operations
       createFolder: (parentPath: string, folderName: string) => Promise<any>;

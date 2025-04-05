@@ -18,8 +18,8 @@ import {
   Heading3,
   Minus,
 } from 'lucide-react';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/shared/components/Tooltip';
-import { Button } from '@/shared/components/Button';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/renderer/shared/components/Tooltip';
+import { Button } from '@/renderer/shared/components/Button';
 
 interface MarkdownEditorProps {
   value: string;

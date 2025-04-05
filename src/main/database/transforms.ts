@@ -1,5 +1,6 @@
 import { FSEntry } from "@/types";
-import { Item, ItemWithAIMetadata } from './types';
+// import { Item } from './types'; // Unused import already handled/commented
+import { ItemWithAIMetadata } from './types';
 
 /* 
 Idea is to transform the raw database rows 

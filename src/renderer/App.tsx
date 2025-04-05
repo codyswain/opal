@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -19,6 +19,7 @@ import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
 import { Feed } from "@/renderer/features/feed";
+import { KBarProvider, KBarPortal, KBarPositioner, KBarAnimator, KBarSearch } from 'kbar';
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();

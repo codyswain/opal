@@ -9,23 +9,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { v4 as uuidv4 } from "uuid";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
+import { Message, Conversation } from "@/renderer/shared/types";
 
 interface BottomPaneProps {
   onClose: () => void;
-}
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  id?: string;
-  created_at?: string;
-}
-
-interface Conversation {
-  conversation_id: string;
-  last_updated: string;
-  latest_user_message: string;
-  message_count: number;
 }
 
 const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {

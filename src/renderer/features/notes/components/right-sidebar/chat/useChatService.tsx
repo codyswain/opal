@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "@/renderer/shared/components/Toast";
-import { Message, Conversation } from "../ChatPane";
+import { Message, Conversation } from "@/renderer/shared/types";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
-export const useChatService = (isNoteSelected = false, selectedNodeId: string | null = null) => {
+export const useChatService = (selectedNodeId: string | null = null) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -297,7 +297,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
         content: "",
         id: messageId,
         created_at: new Date().toISOString(),
-        __updateKey: Date.now()
       };
       
       setMessages(prev => [...prev, assistantMessage]);
@@ -327,19 +326,20 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
             return prevMessages; // No change
           }
           
-          // Get the last message
-          const lastMessage = prevMessages[lastIndex];
+          // Update the assistant message with each new chunk
+          const updatedMessages = [...prevMessages];
+          const lastMessageIndex = updatedMessages.length - 1;
           
-          // Create a new updated message with the chunk appended
-          const updatedMessage = {
-            ...lastMessage,
-            content: lastMessage.content + chunk,
-            __updateKey: Date.now() // Force re-render with a new key
-          };
-          
-          // Create a new messages array with the updated message
-          const newMessages = [...prevMessages];
-          newMessages[lastIndex] = updatedMessage;
+          if (lastMessageIndex >= 0 && updatedMessages[lastMessageIndex].role === "assistant") {
+            // Ensure the ID is preserved if it exists
+            const existingId = updatedMessages[lastMessageIndex].id;
+            updatedMessages[lastMessageIndex] = {
+              ...updatedMessages[lastMessageIndex],
+              content: updatedMessages[lastMessageIndex].content + chunk,
+              // Remove __updateKey, React handles updates based on state changes
+              // id: existingId || assistantMessage.id // Keep existing or initial ID
+            };
+          }
           
           // Force a separate UI update via the counter
           setTimeout(() => {
@@ -347,7 +347,7 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           }, 0);
           
           // Return the updated messages array
-          return newMessages;
+          return updatedMessages;
         });
       });
       
@@ -368,7 +368,6 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
                 const errorMessage = {
                   ...prevMessages[lastIndex],
                   content: "Sorry, there was an error generating a response. Please check your OpenAI API key in settings and try again.",
-                  __updateKey: Date.now()
                 };
                 const updatedMessages = [...prevMessages];
                 updatedMessages[lastIndex] = errorMessage;
@@ -383,6 +382,21 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           cleanupFn(); // Ensure we clean up the event listener
         }
       }, 15000); // 15 seconds timeout
+
+      // Add the assistant's completed message to the database
+      const finalAssistantMessage = messages.find(msg => msg.id === assistantMessage.id);
+      if (finalAssistantMessage) {
+        try {
+          await window.chatAPI.addMessage(
+            conversationId,
+            finalAssistantMessage.role,
+            finalAssistantMessage.content,
+          );
+        } catch (dbError) {
+          console.error("Error saving final assistant message:", dbError);
+          // Don't necessarily show error to user, maybe log it
+        }
+      }
     } catch (error) {
       console.error("Error in RAG Chat:", error);
       toast("Failed to get response. Please try again.");

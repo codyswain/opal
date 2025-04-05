@@ -5,6 +5,14 @@ import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Clock } from "lucide-react";
 import { Note, FileNode } from "@/renderer/shared/types";
 
+// Re-add props interface
+interface FeedProps {
+  isLeftSidebarOpen: boolean;
+  isRightSidebarOpen: boolean;
+  setIsLeftSidebarOpen: (isOpen: boolean) => void;
+  setIsRightSidebarOpen: (isOpen: boolean) => void;
+}
+
 // Local formatDate function
 const formatDate = (dateString: string): string => {
   if (!dateString) return "Unknown";
@@ -47,13 +55,7 @@ const formatDate = (dateString: string): string => {
   }
 };
 
-interface FeedProps {
-  isLeftSidebarOpen: boolean;
-  isRightSidebarOpen: boolean;
-  setIsLeftSidebarOpen: (isOpen: boolean) => void;
-  setIsRightSidebarOpen: (isOpen: boolean) => void;
-}
-
+// Accept props again
 const Feed: React.FC<FeedProps> = ({
   isLeftSidebarOpen,
   isRightSidebarOpen,

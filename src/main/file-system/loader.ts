@@ -1,13 +1,8 @@
 import { ipcMain, app } from "electron";
-import fs from "fs/promises";
 import path from "path";
+import fs from "fs/promises";
 import { Config, DirectoryEntry, Note, NoteMetadata } from "@/renderer/shared/types";
-import { v4 as uuidv4 } from "uuid";
 import logger from "../logger";
-const NOTES_DIR = path.join(app.getPath("userData"), "notes");
-
-// Special delimiter used for parsing notes from non-notes
-const NOTE_DELIMITER = "___";
 
 // Create a config file path
 const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");

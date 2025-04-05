@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FSExplorerState, FSEntry, Note, AIMetadata } from '@/types';
+import { FSExplorerState, FSEntry, Note, AIMetadata } from '@/types'; // Reverted imports
 
 /**
  * Zustand store for file explorer state management

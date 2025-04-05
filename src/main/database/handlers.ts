@@ -1,5 +1,5 @@
 // src/main/database/ipc-handlers.ts (New file for IPC handlers)
-import { ipcMain } from 'electron';
+import { ipcMain, app } from 'electron';
 import DatabaseManager from './db'; // Import DatabaseManager
 import log from 'electron-log';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,9 +12,7 @@ import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
-import { app } from 'electron';
 import * as chokidar from 'chokidar';
-import * as fsExtra from 'fs-extra';
 
 // Map to keep track of file watchers for mounted folders
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
@@ -495,7 +493,7 @@ export async function registerDatabaseIPCHandlers() {
       }
     );
 
-    ipcMain.handle('get-item-by-path', async (event, itemPath: string): Promise<{ success: boolean; item?: Item; error?: string }> => {
+  ipcMain.handle('get-item-by-path', async (_, itemPath: string): Promise<{ success: boolean; item?: Item; error?: string }> => {
         try {
             const db = dbManager.getDatabase();
             if (!db) {
@@ -723,7 +721,7 @@ export async function registerDatabaseIPCHandlers() {
   });
 
     // --- File Handling ---
-    ipcMain.handle('import-file', async (event, sourceFilePath: string, destinationPath: string) => {
+    ipcMain.handle('import-file', async (_, sourceFilePath: string, destinationPath: string) => {
         try {
             const db = dbManager.getDatabase();
             if (!db) {

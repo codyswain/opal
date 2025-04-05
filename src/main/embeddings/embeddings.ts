@@ -1,19 +1,24 @@
-import {
-  Note,
-  FileNode,
-  DirectoryStructures,
+import { ipcMain } from 'electron';
+import Database from 'better-sqlite3';
+import { 
+  Note, 
+  SimilarNote, 
   Embedding,
-  SimilarNote,
-} from "@/renderer/shared/types";
-import OpenAI from "openai";
+  FileNode,
+  DirectoryStructures
+} from '@/renderer/shared/types';
+import OpenAI from 'openai';
+import SqliteVss from 'sqlite-vss';
+import path from 'path';
+import fs from 'fs/promises';
 import { parse } from "node-html-parser";
 import { ChatCompletionMessageParam } from "openai/resources/chat";
+import log from 'electron-log';
 import DatabaseManager from "../database/db";
 import { AIMetadata, Item } from "../database/types";
-import log from 'electron-log';
 
 const TEXT_EMBEDDING_MODEL = "text-embedding-ada-002";
-const EMBEDDING_DIMENSION = 1536; // OpenAI's text-embedding-ada-002 dimension
+const EMBEDDING_DIMENSION = 1536;
 
 export class EmbeddingCreator {
   private openai: OpenAI;

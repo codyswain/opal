@@ -3,7 +3,7 @@ import { Button } from "@/renderer/shared/components/Button";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { MessageSquare, RefreshCw, Plus } from "lucide-react";
 import { cn } from "@/renderer/shared/utils";
-import { Conversation } from "../ChatPane";
+import { Conversation } from '@/renderer/shared/types';
 
 interface ConversationsListProps {
   conversations: Conversation[];
@@ -47,11 +47,12 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
   const getConversationTitle = (conversation: Conversation) => {
     if (!conversation) return 'Conversation';
     
-    if (conversation.title) {
-      return conversation.title;
+    // Use latest_user_message as title if available, fallback to date
+    if (conversation.latest_user_message) {
+      return conversation.latest_user_message;
     }
     
-    const date = formatDate(conversation.created_at);
+    const date = formatDate(conversation.last_updated); // Use last_updated
     return `Conversation (${date})`;
   };
 
@@ -59,13 +60,10 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
   const getConversationPreview = (conversation: Conversation) => {
     if (!conversation) return '';
     
-    if (conversation.title) {
-      return `"${conversation.title}"`;
-    }
-    
-    return conversation.last_message_at ? 
-      `Last activity: ${formatDate(conversation.last_message_at)}` :
-      `Created: ${formatDate(conversation.created_at)}`;
+    // Display last updated time
+    return conversation.last_updated ? 
+      `Last updated: ${formatDate(conversation.last_updated)}` :
+      'No activity recorded'; // Fallback if last_updated is missing
   };
 
   return (
@@ -109,15 +107,15 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
           ) : (
             conversations.map((conversation) => {
               // Skip rendering if conversation lacks required data
-              if (!conversation || !conversation.id) return null;
+              if (!conversation || !conversation.conversation_id) return null; // Use conversation_id
               
               return (
                 <div 
-                  key={conversation.id}
+                  key={conversation.conversation_id} // Use conversation_id
                   className={cn(
                     "p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors text-xs"
                   )}
-                  onClick={() => switchToConversation(conversation.id)}
+                  onClick={() => switchToConversation(conversation.conversation_id)} // Use conversation_id
                 >
                   <div className="flex items-start space-x-2">
                     <MessageSquare className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
@@ -125,6 +123,7 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
                       <h4 className="font-medium truncate">{getConversationTitle(conversation)}</h4>
                       <p className="text-muted-foreground text-[10px] truncate">
                         {getConversationPreview(conversation)}
+                        {/* message_count already exists and is used correctly */}
                         {conversation.message_count > 0 && ` • ${conversation.message_count} messages`}
                       </p>
                     </div>

@@ -48,7 +48,6 @@ const getFileExtension = (filename: string): string => {
  * VerticalGuideLine - Renders the vertical guide lines for folder nesting
  */
 export const VerticalGuideLine: React.FC<VerticalGuideLineProps> = ({ 
-  level, 
   index, 
   isLastChild 
 }) => (

@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { useFileExplorerStore } from '../store/fileExplorerStore';
-import explorerStyles from './styles/explorerStyles';
 import { LoadingState } from './elements/ExplorerElements';
 import FolderContents from './FolderContents';
+import { FSEntry } from '@/renderer/shared/types';
 import { useFileExplorerContextMenu } from '../hooks/useFileExplorerContextMenu';
 import FileExplorerContextMenu from './FileExplorerContextMenu';
 import { FilePlus, FolderPlus } from 'lucide-react';
@@ -26,7 +26,7 @@ export default function ExplorerLeftPanel() {
   useEffect(() => {
     loadFileSystem();
   }, [loadFileSystem]);
-
+  
   // Handle creating a new note
   const handleCreateNote = async () => {
     const selectedId = ui.selectedId;
@@ -73,17 +73,22 @@ export default function ExplorerLeftPanel() {
     await createFolder(parentPath, 'New Folder');
   };
 
-  // Function to make items draggable for embedding in notes
-  const makeItemDraggable = (itemId: string, event: React.DragEvent) => {
-    // Since the FileItem component now handles setting the data directly,
-    // this function primarily serves as a callback handler and for logging
-    console.log(`Drag started for item ${itemId}`, entities.nodes[itemId]);
+  // Corrected function signature and implementation
+  const handleDragStart = (itemId: string, event: React.DragEvent<Element>) => {
+    // Prevent default browser drag behavior if necessary (usually handled by setting draggable=true)
+    // event.preventDefault(); 
     
-    // We don't need to set the data here anymore since FileItem does it
-    // But we can still log for debugging
     const item = entities.nodes[itemId];
     if (item) {
-      console.log(`Item being dragged: ${item.name} (${item.id}) - Type: ${item.type}`);
+      console.log(`Drag started for item ${item.id}: ${item.name}`);
+      // Set custom data for the drop target (e.g., NoteEditor)
+      event.dataTransfer.setData('application/tread-item-id', item.id);
+      event.dataTransfer.setData('application/tread-item-type', item.type);
+      event.dataTransfer.setData('application/tread-item-name', item.name);
+      // Optional: Set drag effect
+      event.dataTransfer.effectAllowed = 'copy'; 
+    } else {
+      console.error(`Item with ID ${itemId} not found for drag start.`);
     }
   };
 
@@ -116,9 +121,10 @@ export default function ExplorerLeftPanel() {
         
         {!loading.isLoading && !loading.error && (
           <FolderContents 
-            parentId={null} 
+            level={0}
+            parentId={null}
             onContextMenu={handleContextMenu}
-            onDragStart={makeItemDraggable}
+            onDragStart={handleDragStart}
           />
         )}
         

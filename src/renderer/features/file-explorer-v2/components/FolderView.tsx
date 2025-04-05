@@ -1,20 +1,22 @@
-import { FSEntry } from "@/types";
-import React, { useState, useMemo, useEffect } from "react";
-import { formatLocalDate, getLocalDate } from "@/renderer/shared/utils";
+import React, { useState, useEffect, useMemo } from 'react';
+// import { motion } from 'framer-motion'; // Removed unused import causing error
+import { FSEntry } from '@/renderer/shared/types';
+import FileItem from './FileItem';
+import { cn } from '@/renderer/shared/utils/cn';
 import { 
   ChevronDown, 
   ChevronUp, 
-  Calendar, 
   Clock, 
-  FileText, 
   Folder, 
   List, 
   Grid, 
   FileIcon,
   Edit3,
-  Image
+  Image,
+  Calendar,
+  FileText
 } from "lucide-react";
-import { useFileExplorerStore } from "../store/fileExplorerStore";
+import { formatLocalDate } from '@/renderer/shared/utils';
 
 interface FolderViewProps {
   selectedNode: FSEntry;
@@ -52,14 +54,14 @@ const FolderView: React.FC<FolderViewProps> = ({
       
       // Load images in parallel
       await Promise.all(imageNodes.map(async (node) => {
-        if (node.realPath) {
+        if (node.path && !newImageCache[node.id]) {
           try {
-            const result = await window.fileExplorer.getImageData(node.realPath);
+            const result = await window.fileExplorer.getImageData(node.path);
             if (result.success) {
               newImageCache[node.id] = result.dataUrl;
             }
           } catch (error) {
-            console.error(`Error loading image for ${node.name}:`, error);
+            console.error(`Failed to load image ${node.path}:`, error);
           }
         }
       }));
@@ -80,9 +82,6 @@ const FolderView: React.FC<FolderViewProps> = ({
     }
   };
 
-  // Format date for display in user's local timezone
-  const formatDate = formatLocalDate;
-
   // Get file/folder icon based on type
   const getIcon = (type: string, entry: FSEntry) => {
     // Check if it's an image file with a real path
@@ -102,12 +101,10 @@ const FolderView: React.FC<FolderViewProps> = ({
 
   // Check if a file is an image
   const isImage = (entry: FSEntry): boolean => {
-    if (!entry.realPath) return false;
+    if (!entry.path) return false;
     
     const extension = entry.name.split('.').pop()?.toLowerCase();
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
-    
-    return !!extension && imageExtensions.includes(extension);
+    return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(`.${extension}`);
   };
 
   // Sort and filter children
@@ -136,19 +133,13 @@ const FolderView: React.FC<FolderViewProps> = ({
             ? a.name.localeCompare(b.name)
             : b.name.localeCompare(a.name);
         } else if (sortField === 'updatedAt') {
-          // Use our utility function to get dates in local timezone
-          const dateA = getLocalDate(a.metadata.updatedAt);
-          const dateB = getLocalDate(b.metadata.updatedAt);
-          return sortDirection === 'asc'
-            ? dateA.getTime() - dateB.getTime()
-            : dateB.getTime() - dateA.getTime();
+          const dateA = new Date(a.metadata.updatedAt).getTime();
+          const dateB = new Date(b.metadata.updatedAt).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
         } else if (sortField === 'createdAt') {
-          // Use our utility function to get dates in local timezone
-          const dateA = getLocalDate(a.metadata.createdAt);
-          const dateB = getLocalDate(b.metadata.createdAt);
-          return sortDirection === 'asc'
-            ? dateA.getTime() - dateB.getTime()
-            : dateB.getTime() - dateA.getTime();
+          const dateA = new Date(a.metadata.createdAt).getTime();
+          const dateB = new Date(b.metadata.createdAt).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
         }
         
         return 0;
@@ -258,10 +249,10 @@ const FolderView: React.FC<FolderViewProps> = ({
                       </div>
                     </td>
                     <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDate(child.metadata.updatedAt)}
+                      {formatLocalDate(child.metadata.updatedAt)}
                     </td>
                     <td className="p-2 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                      {formatDate(child.metadata.createdAt)}
+                      {formatLocalDate(child.metadata.createdAt)}
                     </td>
                     <td className="p-2 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
                       {child.type !== 'folder' ? getFileSize(child.metadata.size) : '-'}
@@ -298,7 +289,7 @@ const FolderView: React.FC<FolderViewProps> = ({
                   <div className="font-medium truncate">{child.name}</div>
                   <div className="flex items-center gap-1 mt-1 text-muted-foreground text-[10px]">
                     <Clock className="w-3 h-3" />
-                    <span className="truncate">{formatDate(child.metadata.updatedAt)}</span>
+                    <span className="truncate">{formatLocalDate(child.metadata.updatedAt)}</span>
                   </div>
                 </div>
               </div>

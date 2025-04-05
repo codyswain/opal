@@ -1,7 +1,11 @@
 import React from 'react';
 import { FSEntry } from '@/types';
-import { FilePlus, FolderPlus, Trash2, Copy, Edit, HardDrive } from 'lucide-react';
+import { FilePlus, FolderPlus, HardDrive } from 'lucide-react';
 import { useFileExplorerStore } from '../store/fileExplorerStore';
+import {
+  DropdownMenuItem,
+  DropdownMenuContent,
+} from "@/renderer/shared/components/DropdownMenu";
 
 interface ContextMenuProps {
   x: number;

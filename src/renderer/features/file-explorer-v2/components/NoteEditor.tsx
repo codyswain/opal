@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback, useState, useRef } from "react";
-import { EditorContent, useEditor, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from "@tiptap/react";
+import React, { useEffect, useCallback, useState } from "react";
+import { EditorContent, useEditor, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -25,19 +25,8 @@ import Toolbar from "@/renderer/features/notes/components/NoteEditor/Toolbar";
 import { FSEntry, EmbeddedItem } from "@/renderer/shared/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import { Loader2 } from "lucide-react";
-
-// Create a simple extension for keyboard shortcuts
-const KeyboardShortcuts = {
-  name: 'keyboardShortcuts',
-  addKeyboardShortcuts() {
-    return {
-      'Mod-b': () => this.editor.commands.toggleBold(),
-      'Mod-i': () => this.editor.commands.toggleItalic(),
-      'Mod-u': () => this.editor.commands.toggleUnderline(),
-      'Mod-k': () => this.editor.commands.toggleLink(),
-    };
-  },
-};
+import Underline from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
 
 // Custom node view component for embedded items
 const EmbedNodeView = (props: any) => {
@@ -435,18 +424,15 @@ interface NoteEditorProps {
   content: string;
   onUpdate: ({ editor, wordCount }: { editor: any, wordCount?: { words: number, characters: number } }) => void;
   readOnly?: boolean;
-  filePath?: string;
-  noteId?: string;  // Add noteId prop
+  noteId?: string;
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({ 
   content, 
   onUpdate,
   readOnly = false,
-  filePath,
-  noteId  // Add noteId
+  noteId
 }) => {
-  const [wordCount, setWordCount] = useState({ words: 0, characters: 0 });
   // Move the store to the component level so it can be used in callbacks
   const { entities } = useFileExplorerStore();
   
@@ -475,6 +461,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           class: 'code-block',
         },
       }),
+      Underline,
+      Highlight,
       Markdown.configure({
         transformPastedText: true,
       }),
@@ -557,8 +545,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         characters: characterCount,
       };
       
-      setWordCount(newWordCount);
-      
       // Pass the word count to the parent component
       onUpdate({ editor, wordCount: newWordCount });
     },
@@ -601,7 +587,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               return true;
             }
             // If not in a list, add indentation
-            const { from, to } = editor.state.selection;
+            const { from } = editor.state.selection;
             const indentation = USE_TABS ? '\t' : ' '.repeat(SPACES_PER_TAB);
             editor.chain()
               .focus()
@@ -651,7 +637,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   
   // Handle file drop for image upload
   const handleFileDrop = useCallback((files: File[]) => {
-    if (!editor || !noteId) return;
+    if (!editor) return;
     
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
     
@@ -665,7 +651,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       };
       reader.readAsDataURL(file);
     });
-  }, [editor, noteId]);
+  }, [editor]);
   
   // Handle item drop from the file explorer
   const handleItemDrop = useCallback(async (item: FSEntry, clientX: number, clientY: number) => {

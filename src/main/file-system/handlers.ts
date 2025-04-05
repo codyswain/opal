@@ -4,7 +4,6 @@ import path from "path";
 import { Config, Note } from "@/renderer/shared/types";
 import { log } from "../index";
 
-const NOTES_DIR = path.join(app.getPath("userData"), "notes");
 const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");
 
 export async function registerFileSystemIPCHandlers(){

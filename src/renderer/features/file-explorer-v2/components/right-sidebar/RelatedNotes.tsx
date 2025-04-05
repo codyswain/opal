@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Button } from "@/renderer/shared/components/Button";
+import React, { /* useCallback, useEffect, useState */ } from 'react';
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import { Loader2, RefreshCw } from "lucide-react";
-import { toast } from "@/renderer/shared/components/Toast";
-import { SimilarNote } from "@/renderer/shared/types";
-import { NoteItem } from "./RelatedNoteListItem";
-import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
+// import { Button } from '@/renderer/shared/components/Button';
+// import { Loader2, RefreshCw } from 'lucide-react';
+// import { toast } from '@/renderer/shared/components/Toast';
+// import { SimilarNote } from '@/renderer/shared/types';
+// import { NoteItem } from './RelatedNoteListItem';
+// import { useFileExplorerStore } from '../../store/fileExplorerStore';
 import { useRelatedNotes } from "./related-notes/useRelatedNotes";
 import { RelatedNotesContent } from "./related-notes/RelatedNotesContent";
 
