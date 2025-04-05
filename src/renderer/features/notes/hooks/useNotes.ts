@@ -21,6 +21,7 @@ export const useNotes = () => {
   const [activeFileNodeId, setActiveFileNodeId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [recentNotes, setRecentNotes] = useState<Note[]>([]);
 
   // File System Explorer State
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
@@ -72,6 +73,14 @@ export const useNotes = () => {
           );
           if (isCurrent) {
             setActiveNote(loadedNote);
+            
+            // Update recent notes when a note is loaded
+            setRecentNotes(prevRecentNotes => {
+              // Remove the note if it's already in the list
+              const filteredNotes = prevRecentNotes.filter(note => note.id !== loadedNote.id);
+              // Add the note to the beginning of the list
+              return [loadedNote, ...filteredNotes].slice(0, 10); // Keep only the 10 most recent notes
+            });
           }
         } catch (err) {
           console.error("Failed to load note:", err);
@@ -573,5 +582,6 @@ export const useNotes = () => {
     error,
     performRAGChat,
     openNoteById,
+    recentNotes,
   };
 };

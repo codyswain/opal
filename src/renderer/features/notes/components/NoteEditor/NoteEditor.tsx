@@ -26,6 +26,8 @@ import Toolbar from "./Toolbar";
 import { BulletList } from '@tiptap/extension-bullet-list'
 import { OrderedList } from '@tiptap/extension-ordered-list'
 import { ListItem } from '@tiptap/extension-list-item'
+import { TaskList } from '@tiptap/extension-task-list'
+import { TaskItem } from '@tiptap/extension-task-item'
 
 const lowlight = createLowlight();
 lowlight.register("js", js);
@@ -161,7 +163,18 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note }) => {
           class: 'ordered-list',
         },
       }),
-      ListItem
+      ListItem,
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'task-list',
+        },
+      }),
+      TaskItem.configure({
+        nested: true,
+        HTMLAttributes: {
+          class: 'task-item',
+        },
+      }),
     ],
     content: localNote.content || "",
     onUpdate: handleContentChange,

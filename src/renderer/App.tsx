@@ -18,6 +18,7 @@ import { commandRegistry, useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
+import { Feed } from "@/renderer/features/feed";
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
@@ -92,44 +93,58 @@ const App: React.FC = () => {
         <KBar />
         <ThemeProvider>
           <SettingsProvider>
-            <TooltipProvider>
-              <div className="flex flex-col h-screen w-screen overflow-hidden">
-                <Toaster />
-                <div className="flex flex-col flex-grow overflow-hidden">
-                  <Navbar
-                    toggleLeftSidebar={toggleLeftSidebar}
-                    toggleRightSidebar={toggleRightSidebar}
-                    toggleBottomPane={toggleBottomPane}
-                    isLeftSidebarOpen={isLeftSidebarOpen}
-                    isRightSidebarOpen={isRightSidebarOpen}
-                    isBottomPaneOpen={isBottomPaneOpen}
-                    items={navbarItems}
-                  />
-                  <main className="flex-grow overflow-hidden mt-10">
-                    <Routes>
-                      <Route
-                        path="/"
-                        element={<Navigate to="/explorer" replace />}
-                      />
+            <NotesProvider>
+              <TooltipProvider>
+                <div className="flex flex-col h-screen w-screen overflow-hidden">
+                  <Toaster />
+                  <div className="flex flex-col flex-grow overflow-hidden">
+                    <Navbar
+                      toggleLeftSidebar={toggleLeftSidebar}
+                      toggleRightSidebar={toggleRightSidebar}
+                      toggleBottomPane={toggleBottomPane}
+                      isLeftSidebarOpen={isLeftSidebarOpen}
+                      isRightSidebarOpen={isRightSidebarOpen}
+                      isBottomPaneOpen={isBottomPaneOpen}
+                      items={navbarItems}
+                    />
+                    <main className="flex-grow overflow-hidden mt-10">
+                      <Routes>
+                        <Route
+                          path="/"
+                          element={<Navigate to="/explorer" replace />}
+                        />
 
-                      <Route path="/settings" element={<Settings />} />
+                        <Route path="/settings" element={<Settings />} />
 
-                      <Route
-                        path="/explorer"
-                        element={
-                          <Explorer
-                            isLeftSidebarOpen={isLeftSidebarOpen}
-                            isRightSidebarOpen={isRightSidebarOpen}
-                            setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                            setIsRightSidebarOpen={setIsRightSidebarOpen}
-                          />
-                        }
-                      />
-                    </Routes>
-                  </main>
+                        <Route
+                          path="/explorer"
+                          element={
+                            <Explorer
+                              isLeftSidebarOpen={isLeftSidebarOpen}
+                              isRightSidebarOpen={isRightSidebarOpen}
+                              setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+                              setIsRightSidebarOpen={setIsRightSidebarOpen}
+                            />
+                          }
+                        />
+                        
+                        <Route
+                          path="/feed"
+                          element={
+                            <Feed
+                              isLeftSidebarOpen={isLeftSidebarOpen}
+                              isRightSidebarOpen={isRightSidebarOpen}
+                              setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+                              setIsRightSidebarOpen={setIsRightSidebarOpen}
+                            />
+                          }
+                        />
+                      </Routes>
+                    </main>
+                  </div>
                 </div>
-              </div>
-            </TooltipProvider>
+              </TooltipProvider>
+            </NotesProvider>
           </SettingsProvider>
         </ThemeProvider>
       </KBarActionsProvider>

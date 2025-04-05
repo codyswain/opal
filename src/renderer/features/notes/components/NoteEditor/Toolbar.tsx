@@ -7,6 +7,7 @@ import {
   Code,
   List,
   ListOrdered,
+  ListChecks,
   Quote,
   Code2,
   Heading1,
@@ -107,6 +108,14 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         size="icon"
       >
         <ListOrdered className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        className={buttonClass(editor.isActive('taskList'))}
+        variant="ghost"
+        size="icon"
+      >
+        <ListChecks className="h-3.5 w-3.5" />
       </Button>
       <div className="border-l border-muted h-4 mx-1" />
       <Button
