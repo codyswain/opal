@@ -13,7 +13,7 @@
     "package": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge package",
     "make": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge make",
     "publish": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "npx eslint --ext .ts,.tsx ."
   },
   "config": {
     "forge": {
@@ -54,7 +54,7 @@
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.10",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3",
+    "typescript": "^5.1.6",
     "vite": "^5.4.3"
   },
   "keywords": [],
