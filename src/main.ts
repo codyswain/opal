@@ -14,8 +14,11 @@ import { ensureAllTablesExist } from "./main/database/handlers";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require("electron-squirrel-startup")) {
-  app.quit();
+// Only run this check on Windows
+if (process.platform === 'win32') { 
+  if (require("electron-squirrel-startup")) {
+    app.quit();
+  }
 }
 
 const isDevelopment = process.env.NODE_ENV === "development";
@@ -58,13 +61,32 @@ const createWindow = () => {
   });
 
   const loadPage = () => {  // Helper function for loading page
-    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      log.info(`Loading URL: ${MAIN_WINDOW_VITE_DEV_SERVER_URL}`);
-      mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-    } else {
-      const filePath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
-      log.info(`Loading file: ${filePath}`);
-      mainWindow.loadFile(filePath);
+    try {
+      // Check if we're in development mode with Vite's dev server
+      if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined' && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+        log.info(`Loading URL: ${MAIN_WINDOW_VITE_DEV_SERVER_URL}`);
+        mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+      } else {
+        // Production mode: load from the packaged files
+        try {
+          const rendererPath = typeof MAIN_WINDOW_VITE_NAME !== 'undefined' 
+            ? `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html` 
+            : '../renderer/main_window/index.html';
+          
+          const filePath = path.join(__dirname, rendererPath);
+          log.info(`Loading file: ${filePath}`);
+          mainWindow.loadFile(filePath);
+        } catch (pathErr) {
+          // Fallback approach if the above fails
+          log.warn(`Error with standard path, trying fallback: ${pathErr.message}`);
+          const fallbackPath = path.join(__dirname, '../renderer/main_window/index.html');
+          log.info(`Loading fallback file: ${fallbackPath}`);
+          mainWindow.loadFile(fallbackPath);
+        }
+      }
+    } catch (err) {
+      log.error(`Failed to load page: ${err.message}`);
+      dialog.showErrorBox('Loading Error', `Failed to load application: ${err.message}`);
     }
   }
 

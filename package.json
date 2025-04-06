@@ -4,23 +4,40 @@
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
+  "packageManager": "npm@10.9.0",
+  "type": "commonjs",
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
+    "package": "npx vite build --config vite.main.config.ts && electron-forge package",
+    "make": "npx vite build --config vite.main.config.ts && electron-forge make",
+    "publish": "npx vite build --config vite.main.config.ts && electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
+  "config": {
+    "forge": {
+      "electronWinstallerConfig": {
+        "name": "tread"
+      },
+      "entryPoints": [
+        {
+          "name": "main_window",
+          "js": ".vite/build/main.js"
+        }
+      ]
+    }
+  },
   "devDependencies": {
-    "@electron-forge/cli": "^7.4.0",
-    "@electron-forge/maker-deb": "^7.4.0",
-    "@electron-forge/maker-rpm": "^7.4.0",
-    "@electron-forge/maker-squirrel": "^7.4.0",
-    "@electron-forge/maker-zip": "^7.4.0",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
-    "@electron-forge/plugin-fuses": "^7.4.0",
-    "@electron-forge/plugin-vite": "^7.4.0",
+    "@electron-forge/cli": "^7.8.0",
+    "@electron-forge/maker-deb": "^7.8.0",
+    "@electron-forge/maker-rpm": "^7.8.0",
+    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.8.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
+    "@electron-forge/plugin-fuses": "^7.8.0",
+    "@electron-forge/plugin-vite": "^7.8.0",
     "@electron/fuses": "^1.8.0",
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/lodash": "^4.17.7",
     "@types/uuid": "^10.0.0",

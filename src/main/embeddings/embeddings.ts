@@ -10,9 +10,10 @@ import OpenAI from 'openai'; // Reverted to default import and disabled rule
 // import SqliteVss from 'sqlite-vss'; // Unused
 // import path from 'path'; // Unused
 // import fs from 'fs/promises'; // Unused
-import { parse } from "node-html-parser";
+import * as nodeHtmlParser from "node-html-parser"; // Import the whole module
 import { ChatCompletionMessageParam } from "openai/resources/chat";
-import log from 'electron-log';
+// Import electron-log using require to avoid default import issues
+const log = require('electron-log');
 import DatabaseManager from "../database/db";
 // import { AIMetadata, Item } from "../database/types"; // Unused
 
@@ -36,7 +37,7 @@ export class EmbeddingCreator {
   async parseNoteForEmbedding(note: Note): Promise<string> {
     // Handle case where content might be undefined
     const content = note.content || '';
-    const root = parse(content);
+    const root = nodeHtmlParser.parse(content);
     const textContent = root.textContent.trim();
     return `${note.title}\n\n${textContent}`;
   }

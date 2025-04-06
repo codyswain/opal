@@ -4,13 +4,14 @@ import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import path from 'path';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: false,
     extraResource: [
       path.resolve(__dirname, 'src', 'main', 'database', 'schema.sql')
     ],
@@ -27,6 +28,20 @@ const config: ForgeConfig = {
           // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
           entry: 'src/main.ts',
           config: 'vite.main.config.ts',
+          // Set explicit output configuration for the main process
+          viteConfig: {
+            build: {
+              outDir: '.vite/build',
+              rollupOptions: {
+                output: {
+                  entryFileNames: 'main.js',
+                  format: 'cjs',
+                },
+                // Explicitly externalize problematic dependencies
+                external: ['electron', 'electron-log', 'better-sqlite3', 'node-html-parser', 'fs', 'path', 'crypto'],
+              },
+            },
+          },
         },
         {
           entry: 'src/preload.ts',
@@ -40,6 +55,7 @@ const config: ForgeConfig = {
         },
       ],
     }),
+    new AutoUnpackNativesPlugin({}),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application
     new FusesPlugin({

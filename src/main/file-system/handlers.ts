@@ -86,14 +86,17 @@ export async function registerFileSystemIPCHandlers(){
   // });
 
 
-  // ipcMain.handle("create-directory", async (_, dirPath: string) => {
-  //   try {
-  //     await fs.mkdir(dirPath, { recursive: true });
-  //   } catch (error) {
-  //     console.error("Error creating directory:", error);
-  //     throw error;
-  //   }
-  // });
+  // Uncomment the handler for create-directory
+  ipcMain.handle("create-directory", async (_, dirPath: string) => {
+    try {
+      // fs.mkdir now correctly uses the imported fs/promises version
+      await fs.mkdir(dirPath, { recursive: true });
+      console.log(`Directory created successfully at path: ${dirPath}`); // Added logging
+    } catch (error) {
+      console.error("Error creating directory:", error);
+      throw error;
+    }
+  });
 
   // ipcMain.handle("delete-directory", async (_, dirPath: string) => {
   //   try {
