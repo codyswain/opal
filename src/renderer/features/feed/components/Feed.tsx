@@ -1,9 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useNotesContext } from "../../notes/context/notesContext";
+import { useFileExplorerStore } from "../../file-explorer-v2/store/fileExplorerStore";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Clock } from "lucide-react";
-import { Note, FileNode } from "@/renderer/shared/types";
+import { Note, FSEntry } from "@/renderer/shared/types";
 
 // Local formatDate function
 const formatDate = (dateString: string): string => {
@@ -49,20 +50,21 @@ const formatDate = (dateString: string): string => {
 
 // Accept props again
 const Feed: React.FC = () => {
-  const { recentNotes, setActiveFileNode, directoryStructures } = useNotesContext();
+  const { recentNotes } = useNotesContext();
+  const fileNodes = useFileExplorerStore(state => state.entities.nodes);
+  const selectEntry = useFileExplorerStore(state => state.selectEntry);
   const navigate = useNavigate();
 
-  // Find the FileNode that corresponds to a note
-  const findFileNodeForNote = (note: Note): FileNode | null => {
-    const nodes = directoryStructures.nodes;
+  // Find the FSEntry that corresponds to a note
+  const findFileNodeForNote = (note: Note): FSEntry | null => {
+    const nodes = fileNodes;
     
-    // Find the FileNode that has this note's id in its noteMetadata
+    // Find the FSEntry whose ID matches the Note's ID
     for (const nodeId in nodes) {
       const node = nodes[nodeId];
       if (
-        node.type === "note" && 
-        node.noteMetadata && 
-        node.noteMetadata.id === note.id
+        node.type === "note" &&
+        node.id === note.id
       ) {
         return node;
       }
@@ -72,9 +74,9 @@ const Feed: React.FC = () => {
   };
 
   const handleNoteClick = (note: Note) => {
-    const fileNode = findFileNodeForNote(note);
-    if (fileNode) {
-      setActiveFileNode(fileNode);
+    const fsEntry = findFileNodeForNote(note);
+    if (fsEntry) {
+      selectEntry(fsEntry.id);
       
       // Navigate to the explorer view after selecting a note
       navigate("/explorer");

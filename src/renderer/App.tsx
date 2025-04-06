@@ -8,7 +8,6 @@ import {
 import "@/renderer/index.css";
 
 import { ThemeProvider } from "@/renderer/features/theme";
-import { NotesProvider } from "@/renderer/features/notes/context/notesContext";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Navbar, navbarItems } from "@/renderer/features/navbar";
@@ -18,7 +17,6 @@ import { useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
-import { Feed } from "@/renderer/features/feed";
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
@@ -93,51 +91,42 @@ const App: React.FC = () => {
         <KBar />
         <ThemeProvider>
           <SettingsProvider>
-            <NotesProvider>
-              <TooltipProvider>
-                <div className="flex flex-col h-screen w-screen overflow-hidden">
-                  <Toaster />
-                  <div className="flex flex-col flex-grow overflow-hidden">
-                    <Navbar
-                      toggleLeftSidebar={toggleLeftSidebar}
-                      toggleRightSidebar={toggleRightSidebar}
-                      isLeftSidebarOpen={isLeftSidebarOpen}
-                      isRightSidebarOpen={isRightSidebarOpen}
-                      items={navbarItems}
-                    />
-                    <main className="flex-grow overflow-hidden mt-10">
-                      <Routes>
-                        <Route
-                          path="/"
-                          element={<Navigate to="/explorer" replace />}
-                        />
+            <TooltipProvider>
+              <div className="flex flex-col h-screen w-screen overflow-hidden">
+                <Toaster />
+                <div className="flex flex-col flex-grow overflow-hidden">
+                  <Navbar
+                    toggleLeftSidebar={toggleLeftSidebar}
+                    toggleRightSidebar={toggleRightSidebar}
+                    isLeftSidebarOpen={isLeftSidebarOpen}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    items={navbarItems}
+                  />
+                  <main className="flex-grow overflow-hidden mt-10">
+                    <Routes>
+                      <Route
+                        path="/"
+                        element={<Navigate to="/explorer" replace />}
+                      />
 
-                        <Route path="/settings" element={<Settings />} />
+                      <Route path="/settings" element={<Settings />} />
 
-                        <Route
-                          path="/explorer"
-                          element={
-                            <Explorer
-                              isLeftSidebarOpen={isLeftSidebarOpen}
-                              isRightSidebarOpen={isRightSidebarOpen}
-                              setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                              setIsRightSidebarOpen={setIsRightSidebarOpen}
-                            />
-                          }
-                        />
-                        
-                        <Route
-                          path="/feed"
-                          element={
-                            <Feed />
-                          }
-                        />
-                      </Routes>
-                    </main>
-                  </div>
+                      <Route
+                        path="/explorer"
+                        element={
+                          <Explorer
+                            isLeftSidebarOpen={isLeftSidebarOpen}
+                            isRightSidebarOpen={isRightSidebarOpen}
+                            setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+                            setIsRightSidebarOpen={setIsRightSidebarOpen}
+                          />
+                        }
+                      />
+                    </Routes>
+                  </main>
                 </div>
-              </TooltipProvider>
-            </NotesProvider>
+              </div>
+            </TooltipProvider>
           </SettingsProvider>
         </ThemeProvider>
       </KBarActionsProvider>

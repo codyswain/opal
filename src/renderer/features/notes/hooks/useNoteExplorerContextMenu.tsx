@@ -1,12 +1,12 @@
 // src/features/notes/hooks/useNoteExplorerContextMenu.tsx
 
-import { FileNode } from "@/renderer/shared/types";
+import { FSEntry } from "@/renderer/shared/types";
 import { useState, useCallback, useEffect } from "react";
 
 interface ContextMenuState {
   x: number;
   y: number;
-  fileNode: FileNode;
+  entry: FSEntry;
 }
 
 export const useNoteExplorerContextMenu = () => {
@@ -15,14 +15,14 @@ export const useNoteExplorerContextMenu = () => {
   const handleContextMenu = useCallback(
     (
       e: React.MouseEvent,
-      fileNode: FileNode
+      entry: FSEntry
     ) => {
       e.preventDefault();
       e.stopPropagation();
       setContextMenu({
         x: e.clientX,
         y: e.clientY,
-        fileNode
+        entry
       });
     },
     []

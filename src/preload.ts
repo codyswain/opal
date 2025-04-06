@@ -128,29 +128,18 @@ contextBridge.exposeInMainWorld('databaseAPI', {
     ipcRenderer.invoke('reset-database'),
 });
 
-
+// Define the entire fileExplorer API block
 contextBridge.exposeInMainWorld("fileExplorer", {
-  getEntries: () => ipcRenderer.invoke('file-explorer:get-entries'),
+  openDialogToMountDirpath: () => ipcRenderer.invoke("open-folder-dialog"),
+  getEntries: () => ipcRenderer.invoke("file-explorer:get-entries"),
   getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
   renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
-  mountFolder: (targetPath: string, realFolderPath: string) => 
-    ipcRenderer.invoke('file-explorer:mount-folder', targetPath, realFolderPath),
-  unmountFolder: (mountedFolderPath: string) => 
-    ipcRenderer.invoke('file-explorer:unmount-folder', mountedFolderPath),
-  getImageData: (imagePath: string) => 
-    ipcRenderer.invoke('file-explorer:get-image-data', imagePath),
-  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) =>
-    ipcRenderer.invoke('file-explorer:create-embedded-item', noteId, embeddedItemId, positionData),
-  getEmbeddedItem: (embeddedId: string) =>
-    ipcRenderer.invoke('file-explorer:get-embedded-item', embeddedId),
-  getNoteEmbeddedItems: (noteId: string) =>
-    ipcRenderer.invoke('file-explorer:get-note-embedded-items', noteId),
-  updateEmbeddedItem: (embeddedId: string, positionData: Record<string, unknown>) =>
-    ipcRenderer.invoke('file-explorer:update-embedded-item', embeddedId, positionData),
-  deleteEmbeddedItem: (embeddedId: string) =>
-    ipcRenderer.invoke('file-explorer:delete-embedded-item', embeddedId),
-})
+  createFolder: (parentPath: string, folderName: string) => ipcRenderer.invoke('file-explorer:create-folder', parentPath, folderName),
+  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke('file-explorer:create-note', parentPath, noteName, initialContent),
+  deleteItem: (itemPath: string) => ipcRenderer.invoke('file-explorer:delete-item', itemPath),
+  moveItem: (oldPath: string, newParentPath: string) => ipcRenderer.invoke('file-explorer:move-item', oldPath, newParentPath),
+});
 
 // Expose chat API to the renderer process
 contextBridge.exposeInMainWorld("chatAPI", {

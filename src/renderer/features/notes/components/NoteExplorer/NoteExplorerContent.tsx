@@ -5,53 +5,61 @@ import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
 import { Loader, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/renderer/shared/components/input";
 import { cn } from "@/renderer/shared/utils";
-import { DirectoryStructures, FileNode } from "@/renderer/shared/types";
-import { useNotesContext } from "../../context/notesContext";
+import { FSEntry } from "@/renderer/shared/types";
+import type { FSExplorerState } from "@/types";
+import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
 interface NoteExplorerContentProps {
   isLoadingFolders: boolean;
   loadError: string | null;
-  directoryStructures: DirectoryStructures;
-  selectedFileNode: FileNode | null;
-  onSelectNote: (file: FileNode) => void;
+  fileSystemTree: { rootIds: string[]; nodes: Record<string, FSEntry> };
+  selectedEntry: FSEntry | null;
+  onSelectNote: (entry: FSEntry) => void;
   handleContextMenu: (
     e: React.MouseEvent,
-    fileNode: FileNode
+    entry: FSEntry
   ) => void;
 }
 
 export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
   isLoadingFolders,
   loadError,
-  directoryStructures,
-  selectedFileNode,
+  fileSystemTree,
+  selectedEntry,
   onSelectNote,
   handleContextMenu,
 }) => {
-  const { toggleDirectory, expandedDirs, setActiveFileNodeId } = useNotesContext();
-  const { newFolderState } = useNotesContext();
+  const toggleFolder = useFileExplorerStore((state: FSExplorerState) => state.toggleFolder);
+  const expandedFolders = useFileExplorerStore((state: FSExplorerState) => state.ui.expandedFolders);
+  const selectEntry = useFileExplorerStore((state: FSExplorerState) => state.selectEntry);
+  const creatingFolderInParentId = useFileExplorerStore((state: FSExplorerState) => state.ui.creatingFolderInParentId);
+  const newFolderName = useFileExplorerStore((state: FSExplorerState) => state.ui.newFolderName);
+  const createFolderError = useFileExplorerStore((state: FSExplorerState) => state.ui.createFolderError);
+  const setNewFolderName = useFileExplorerStore((state: FSExplorerState) => state.setNewFolderName);
+  const confirmCreateFolder = useFileExplorerStore((state: FSExplorerState) => state.confirmCreateFolder);
+  const cancelCreatingFolder = useFileExplorerStore((state: FSExplorerState) => state.cancelCreatingFolder);
 
   // For the folder that renders when creating a new folder
   const newFolderInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (newFolderState.isCreatingFolder) {
+    if (creatingFolderInParentId !== null) {
       newFolderInputRef.current?.focus();
     }
-  }, [newFolderState.isCreatingFolder]);
+  }, [creatingFolderInParentId]);
   const handleNewFolderKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      newFolderState.confirmCreateFolder();
+      confirmCreateFolder();
     } else if (e.key === 'Escape') {
-      newFolderState.cancelCreateFolder();
+      cancelCreatingFolder();
     }
   };
 
   const renderFileNode = (nodeId: string, depth = 0) => {
-    const node = directoryStructures.nodes[nodeId];
+    const node = fileSystemTree.nodes[nodeId];
     if (!node) return null;
 
-    const isExpanded = expandedDirs.has(node.id);
-    const isSelected = selectedFileNode?.id === node.id;
+    const isExpanded = expandedFolders.has(node.id);
+    const isSelected = selectedEntry?.id === node.id;
 
     // Add a container with relative positioning and the vertical line
     const nodeContainer = (content: React.ReactNode) => (
@@ -70,7 +78,7 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
       </div>
     );
 
-    if (node.type === "directory") {
+    if (node.type === "folder") {
       return nodeContainer(
         <div>
           <div
@@ -79,7 +87,7 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              toggleDirectory(node);
+              toggleFolder(node.id);
             }}
             onContextMenu={(e) => handleContextMenu(e, node)}
           >
@@ -90,22 +98,21 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
             )}
             <span>{node.name}</span>
           </div>
-          {isExpanded && node.childIds && node.childIds.map((childId) => renderFileNode(childId, depth + 1))}
-          {newFolderState.isCreatingFolder &&
-            selectedFileNode?.id === node.id && (
-              <div className="ml-4 px-2 py-1">
-                <Input
-                  variant="minimal"
-                  ref={newFolderInputRef}
-                  value={newFolderState.newFolderName}
-                  onChange={(e) => newFolderState.setNewFolderName(e.target.value)}
-                  onKeyDown={handleNewFolderKeyDown}
-                  onBlur={newFolderState.cancelCreateFolder}
-                  placeholder="New folder name"
-                  className="w-full"
-                />
-              </div>
-            )}
+          {isExpanded && node.children && node.children.map((childId: string) => renderFileNode(childId, depth + 1))}
+          {creatingFolderInParentId === node.id && (
+            <div className="ml-4 px-2 py-1">
+              <Input
+                variant="minimal"
+                ref={newFolderInputRef}
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={handleNewFolderKeyDown}
+                onBlur={cancelCreatingFolder}
+                placeholder="New folder name"
+                className="w-full"
+              />
+            </div>
+          )}
         </div>
       );
     } else if (node.type === "note") {
@@ -121,7 +128,7 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setActiveFileNodeId(node.id);
+            selectEntry(node.id);
             onSelectNote(node);
           }}
           onContextMenu={(e) => {
@@ -139,8 +146,8 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
 
   return (
     <ScrollArea className="h-[calc(100%-2.5rem)] w-full">
-      {newFolderState.error && (
-        <div className="text-red-500 text-sm p-2">{newFolderState.error}</div>
+      {createFolderError && (
+        <div className="text-red-500 text-sm p-2">{createFolderError}</div>
       )}
       <div className="p-2">
         {isLoadingFolders ? (
@@ -149,12 +156,12 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
           </div>
         ) : loadError ? (
           <div className="text-red-500 text-sm p-2">{loadError}</div>
-        ) : directoryStructures.rootIds.length === 0 ? (
+        ) : fileSystemTree.rootIds.length === 0 ? (
           <div className="text-sm text-muted-foreground p-2">
             No folders added yet.
           </div>
         ) : (
-          directoryStructures.rootIds.map((rootId) => renderFileNode(rootId))
+          fileSystemTree.rootIds.map((rootId) => renderFileNode(rootId))
         )}
       </div>
     </ScrollArea>

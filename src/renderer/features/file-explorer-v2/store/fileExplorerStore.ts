@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { FSExplorerState } from '@/types'; // Removed FSEntry, Note, AIMetadata
+import { FSExplorerState } from '@/types';
+import { FSEntry } from '@/renderer/shared/types';
 
 /**
  * Zustand store for file explorer state management
@@ -18,6 +19,9 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     historyIndex: -1,
     isNavigatingHistory: false,
     rightSidebarTab: 'related',
+    creatingFolderInParentId: null,
+    newFolderName: '',
+    createFolderError: null,
   },
   loading: {
     isLoading: false,
@@ -289,6 +293,95 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         searchQuery: query
       }
     }));
+  },
+
+  startCreatingFolder: (parentId: string) => {
+    set((state: FSExplorerState) => {
+      const newExpandedFolders = new Set(state.ui.expandedFolders).add(parentId);
+      const nextUiState = {
+        ...state.ui,
+        selectedId: parentId,
+        expandedFolders: newExpandedFolders,
+        creatingFolderInParentId: parentId,
+        newFolderName: '',
+        createFolderError: null,
+      };
+      return { ui: nextUiState };
+    });
+  },
+
+  setNewFolderName: (name: string) => {
+    set((state: FSExplorerState) => {
+      const nextUiState = {
+        ...state.ui,
+        newFolderName: name,
+        createFolderError: null,
+      };
+      return { ui: nextUiState };
+    });
+  },
+
+  cancelCreatingFolder: () => {
+    set((state: FSExplorerState) => {
+      const nextUiState = {
+        ...state.ui,
+        creatingFolderInParentId: null,
+        newFolderName: '',
+        createFolderError: null,
+      };
+      return { ui: nextUiState };
+    });
+  },
+
+  confirmCreateFolder: async (): Promise<boolean> => {
+    const { ui, entities } = get();
+    const parentId = ui.creatingFolderInParentId;
+    const folderName = ui.newFolderName.trim();
+
+    if (!parentId || !folderName) {
+      set((state: FSExplorerState) => ({
+        ui: { ...state.ui, createFolderError: 'Folder name cannot be empty' }
+      }));
+      return false;
+    }
+
+    const parentNode = entities.nodes[parentId];
+    if (!parentNode) {
+      console.error('Parent node not found:', parentId);
+      set((state: FSExplorerState) => ({
+        ui: { ...state.ui, createFolderError: 'Parent folder not found' }
+      }));
+      return false;
+    }
+
+    try {
+      const result = await window.databaseAPI.createFolder(parentNode.path, folderName);
+
+      if (result.success) {
+        set((state: FSExplorerState) => {
+          const nextUiState = {
+            ...state.ui,
+            creatingFolderInParentId: null,
+            newFolderName: '',
+            createFolderError: null,
+          };
+          return { ui: nextUiState };
+        });
+        await get().loadFileSystem();
+        return true;
+      } else {
+        set((state: FSExplorerState) => ({
+          ui: { ...state.ui, createFolderError: result.error || 'Failed to create folder' }
+        }));
+        return false;
+      }
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      set((state: FSExplorerState) => ({
+        ui: { ...state.ui, createFolderError: String(error) }
+      }));
+      return false;
+    }
   },
 
   createNote: async (parentPath: string, noteName: string) => {

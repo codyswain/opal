@@ -8,7 +8,7 @@ import {
 import NoteEditor from "./NoteEditor/NoteEditor";
 import NoteExplorer from "./NoteExplorer/NoteExplorer";
 import RightSidebar from "./right-sidebar/RightSidebar";
-import { useNotesContext } from "../context/notesContext";
+import { useNotesStore, NotesState } from "../store/notesStore";
 
 const Notes: React.FC<{
   isLeftSidebarOpen: boolean;
@@ -21,7 +21,7 @@ const Notes: React.FC<{
   setIsLeftSidebarOpen,
   setIsRightSidebarOpen,
 }) => {
-  const { activeNote } = useNotesContext();
+  const activeNote = useNotesStore((state: NotesState) => state.activeNote);
   const [leftSidebarSize, setLeftSidebarSize] = useState(18);
   const [rightSidebarSize, setRightSidebarSize] = useState(25); // Increased default size for better readability
 
