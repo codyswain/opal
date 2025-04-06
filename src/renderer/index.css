@@ -6,28 +6,29 @@
  
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
-    --primary: 210 100% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 0 0% 0%;
-    --muted: 210 20% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 20% 96%;
-    --accent-foreground: 0 0% 0%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 142 76% 36%;
+    --background: 0 0% 100%; /* White */
+    --foreground: 222 47% 11%; /* Near-black */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 222 47% 11%; /* Near-black */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 222 47% 11%; /* Near-black */
+    --primary: 217 91% 60%; /* Brighter Blue */
+    --primary-foreground: 0 0% 100%; /* White */
+    --secondary: 215 28% 97%; /* Lighter Gray */
+    --secondary-foreground: 222 47% 11%; /* Near-black */
+    --muted: 215 28% 93%; /* Light Gray */
+    --muted-foreground: 215 20% 50%; /* Medium Gray */
+    --accent: 215 28% 93%; /* Light Gray */
+    --accent-foreground: 222 47% 11%; /* Near-black */
+    --destructive: 0 72% 51%; /* Standard Red */
+    --destructive-foreground: 0 0% 100%; /* White */
+    --border: 215 20% 90%; /* Slightly Darker Border */
+    --input: 215 20% 90%; /* Slightly Darker Input Border */
+    --ring: 217 91% 60%; /* Brighter Blue for focus */
     --radius: 0.5rem;
-    --gradient-start: 142 76% 33%;
-    --gradient-end: 142 76% 39%;
+    /* Optional: Adjust gradient if used extensively in light mode */
+    /* --gradient-start: 217 91% 58%; */
+    /* --gradient-end: 217 91% 62%; */
   }
  
   .dark {
