@@ -1,6 +1,7 @@
 // src/shared/types/index.ts
 
 import type { default as OpenAI } from "openai";
+import { FSEntry } from '@/types'; // Import FSEntry from shared types
 
 // Duplicate Item interface from src/main/database/types.ts
 export interface Item {
@@ -17,20 +18,6 @@ export interface Item {
 }
 
 export type FSEntryType = 'folder' | 'file' | 'note';
-
-export interface FSEntry {
-  id: string;
-  name: string;
-  type: FSEntryType;
-  path: string;
-  parentId: string | null;
-  children: string[]; // empty for files and notes
-  metadata: {
-    createdAt: string;
-    updatedAt: string;
-    size: number;
-  }
-}
 
 export interface EmbeddedItem {
   embedded_id: string;
@@ -134,51 +121,6 @@ export interface Conversation {
   last_message_at: string;
   title: string | null; // Title derived from first user message
   message_count: number;
-}
-
-// Add this interface for the Zustand store state
-export interface FSExplorerState {
-  entities: {
-    nodes: Record<string, FSEntry>;
-    notes: Record<string, NoteContent>; // Store note content separately
-    aiMetadata: Record<string, AIMetadata>; // Store AI metadata separately
-  };
-  ui: {
-    selectedId: string | null;
-    expandedFolders: Set<string>;
-    searchQuery: string;
-    history: string[];
-    historyIndex: number;
-    isNavigatingHistory: boolean;
-    rightSidebarTab: 'related' | 'chat' | 'search' | 'embeddings';
-    // New state for inline folder creation
-    creatingFolderInParentId: string | null;
-    newFolderName: string;
-    createFolderError: string | null;
-  };
-  loading: {
-    isLoading: boolean;
-    error: string | null;
-  };
-  // Actions
-  loadFileSystem: () => Promise<boolean>;
-  getNote: (id: string) => Promise<boolean>;
-  updateNoteContent: (id: string, content: string) => Promise<boolean>;
-  selectEntry: (id: string) => void;
-  goBack: () => void;
-  goForward: () => void;
-  canGoBack: () => boolean;
-  canGoForward: () => boolean;
-  toggleFolder: (folderId: string) => void;
-  setSearchQuery: (query: string) => void;
-  createNote: (parentPath: string, noteName: string) => Promise<boolean>;
-  createFolder: (parentPath: string, folderName: string) => Promise<boolean>;
-  renameItem: (id: string, newName: string) => Promise<boolean>;
-  // New actions for inline folder creation
-  startCreatingFolder: (parentId: string) => void;
-  setNewFolderName: (name: string) => void;
-  cancelCreatingFolder: () => void;
-  confirmCreateFolder: () => Promise<boolean>;
 }
 
 // Consolidated global type definitions

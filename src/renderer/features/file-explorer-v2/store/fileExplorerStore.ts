@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { FSExplorerState } from '@/types';
-import { FSEntry } from '@/renderer/shared/types';
+import { FSExplorerState } from './types';
+import { FSEntry } from '@/types';
 
 /**
  * Zustand store for file explorer state management
@@ -339,18 +339,26 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     const folderName = ui.newFolderName.trim();
 
     if (!parentId || !folderName) {
-      set((state: FSExplorerState) => ({
-        ui: { ...state.ui, createFolderError: 'Folder name cannot be empty' }
-      }));
+      set((state: FSExplorerState) => {
+        const nextUiState: FSExplorerState['ui'] = {
+          ...state.ui,
+          createFolderError: 'Folder name cannot be empty' 
+        };
+        return { ui: nextUiState };
+      });
       return false;
     }
 
     const parentNode = entities.nodes[parentId];
     if (!parentNode) {
       console.error('Parent node not found:', parentId);
-      set((state: FSExplorerState) => ({
-        ui: { ...state.ui, createFolderError: 'Parent folder not found' }
-      }));
+      set((state: FSExplorerState) => {
+        const nextUiState: FSExplorerState['ui'] = {
+          ...state.ui, 
+          createFolderError: 'Parent folder not found' 
+        };
+        return { ui: nextUiState };
+      });
       return false;
     }
 
@@ -359,7 +367,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
 
       if (result.success) {
         set((state: FSExplorerState) => {
-          const nextUiState = {
+          const nextUiState: FSExplorerState['ui'] = {
             ...state.ui,
             creatingFolderInParentId: null,
             newFolderName: '',
@@ -370,16 +378,24 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         await get().loadFileSystem();
         return true;
       } else {
-        set((state: FSExplorerState) => ({
-          ui: { ...state.ui, createFolderError: result.error || 'Failed to create folder' }
-        }));
+        set((state: FSExplorerState) => {
+          const nextUiState: FSExplorerState['ui'] = {
+            ...state.ui, 
+            createFolderError: result.error || 'Failed to create folder' 
+          };
+          return { ui: nextUiState };
+        });
         return false;
       }
     } catch (error) {
       console.error('Error creating folder:', error);
-      set((state: FSExplorerState) => ({
-        ui: { ...state.ui, createFolderError: String(error) }
-      }));
+      set((state: FSExplorerState) => {
+        const nextUiState: FSExplorerState['ui'] = {
+          ...state.ui, 
+          createFolderError: String(error) 
+        };
+        return { ui: nextUiState };
+      });
       return false;
     }
   },
