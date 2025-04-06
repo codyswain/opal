@@ -5,9 +5,10 @@ import { pluginExposeRenderer } from './vite.base.config';
 import path from 'path';
 
 export default defineConfig((env) => {
-  const forgeEnv = env as ConfigEnv<'renderer'>;
-  const { root, mode, forgeConfigSelf } = forgeEnv;
-  const name = forgeConfigSelf.name ?? '';
+  const { root, mode } = env;
+  
+  // Hardcode the name from forge.config.ts
+  const name = 'main_window';
 
   return {
     root,
