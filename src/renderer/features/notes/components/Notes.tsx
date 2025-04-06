@@ -7,7 +7,6 @@ import {
 } from "react-resizable-panels";
 import { Editor } from "@tiptap/react";
 import { ScrollArea } from '@/renderer/shared/components/ScrollArea';
-// import { SplitPane } from '@/renderer/shared/components/SplitPane'; // Removed potentially non-existent component import
 import NoteEditor from '../../file-explorer-v2/components/NoteEditor';
 import NoteExplorer from "./NoteExplorer/NoteExplorer";
 import RightSidebar from "./right-sidebar/RightSidebar";
@@ -20,13 +19,11 @@ const Notes: React.FC<{
   setIsRightSidebarOpen: (isOpen: boolean) => void;
 }> = ({ 
   isLeftSidebarOpen, 
-  // setIsLeftSidebarOpen, // Unused prop
   isRightSidebarOpen, 
   setIsRightSidebarOpen 
 }) => {
   const { selectedId, updateNoteContent } = useFileExplorerStore(state => ({ // Removed unused nodes
     selectedId: state.ui.selectedId,
-    // nodes: state.entities.nodes, // Removed unused nodes
     updateNoteContent: state.updateNoteContent,
   }));
   const notes = useFileExplorerStore(state => state.entities.notes);
@@ -46,8 +43,6 @@ const Notes: React.FC<{
       updateNoteContent(activeNote.id, newContent);
     }
   };
-
-  // Removed SplitPane related logic
 
   return (
     <PanelGroup direction="horizontal" className="flex-grow">

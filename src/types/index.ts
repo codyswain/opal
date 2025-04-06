@@ -24,4 +24,4 @@ export interface Note {
 export interface AIMetadata {
   summary: string | null;
   tags: string[] | null;
-}
+} 
