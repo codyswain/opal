@@ -139,10 +139,10 @@ const FileItem: React.FC<FileItemProps> = ({
       <div
         className={`flex items-center py-${explorerStyles.itemPaddingY} px-${
           explorerStyles.itemPaddingX
-        } hover:bg-gray-800/30 rounded cursor-pointer relative h-${
+        } ${explorerStyles.hoverBgColorClass} rounded cursor-pointer relative h-${
           explorerStyles.itemHeight
         } text-${explorerStyles.itemTextSize} ${
-          isSelected ? "text-white" : "text-gray-300"
+          isSelected ? explorerStyles.selectedTextColorClass : "text-[hsl(var(--foreground)_/_0.8)]"
         }`}
         style={{ paddingLeft: `${level * explorerStyles.indentationWidth}px` }}
         onClick={handleClick}
@@ -153,11 +153,11 @@ const FileItem: React.FC<FileItemProps> = ({
         {/* Background div that doesn't cover the vertical lines */}
         {isSelected && (
           <div
-            className="absolute inset-0"
+            className={`absolute inset-0 ${explorerStyles.selectedBgColorClass} border-l-2 border-primary`}
             style={{
               left: `0px`,
-              backgroundColor: "rgb(37, 37, 38)",
-              borderLeft: "2px solid rgb(0, 122, 204)",
+              // backgroundColor: "rgb(37, 37, 38)", // Removed hardcoded color
+              // borderLeft: "2px solid rgb(0, 122, 204)", // Removed hardcoded border
             }}
           />
         )}
@@ -178,12 +178,12 @@ const FileItem: React.FC<FileItemProps> = ({
               className={`truncate z-10 relative text-${
                 explorerStyles.itemTextSize
               } ml-${explorerStyles.iconMargin} ${
-                isMounted ? "text-green-400 font-medium" : ""
+                isMounted ? `${explorerStyles.mountedColorClass} font-medium` : ""
               }`}
             >
               {entry.name}
               {entry.type === "folder" && isMounted && (
-                <span className="text-xs text-green-500 ml-1">(mounted)</span>
+                <span className={`text-xs ${explorerStyles.mountedColorClass} ml-1`}>(mounted)</span>
               )}
             </span>
           </TooltipTrigger>

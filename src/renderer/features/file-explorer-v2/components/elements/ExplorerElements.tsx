@@ -52,14 +52,12 @@ export const VerticalGuideLine: React.FC<VerticalGuideLineProps> = ({
   isLastChild 
 }) => (
   <div 
-    className="absolute border-l"
+    className={`absolute border-l ${explorerStyles.lineColorClass}`}
     style={{ 
       left: `${index * explorerStyles.indentationWidth + 10}px`, 
       top: 0, 
       bottom: isLastChild ? '50%' : 0,
       height: isLastChild ? 'auto' : '100%',
-      borderColor: 'rgb(83, 83, 83)',
-      opacity: 0.4
     }}
   />
 );
@@ -88,9 +86,9 @@ export const FileIcon: React.FC<FileIconProps> = ({
       case 'sql':
         return <Database size={14} className="text-yellow-500" />;
       case 'md':
-        return <FileText size={14} className="text-gray-300" />;
+        return <FileText size={14} className="text-muted-foreground" />;
       default:
-        return <File size={14} className="text-gray-400" />;
+        return <File size={14} className="text-muted-foreground" />;
     }
   };
 
@@ -99,7 +97,7 @@ export const FileIcon: React.FC<FileIconProps> = ({
       {type === 'folder' ? (
         <button 
           onClick={onToggle}
-          className={`flex items-center justify-center w-5 h-5 ${isMounted ? 'text-green-500' : 'text-gray-500'} hover:text-gray-400`}
+          className={`flex items-center justify-center w-5 h-5 ${isMounted ? explorerStyles.mountedColorClass : 'text-muted-foreground'} hover:text-foreground`}
         >
           {isExpanded ? 
             <ChevronDown size={16} className="stroke-[1.5]" /> : 
@@ -124,7 +122,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <div className={`p-1 ${explorerStyles.loadingTextColor} text-${explorerStyles.itemTextSize}`}>
+      <div className={`p-1 ${explorerStyles.loadingTextColorClass} text-${explorerStyles.itemTextSize}`}>
         Loading...
       </div>
     );
@@ -132,7 +130,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
   
   if (error) {
     return (
-      <div className={`p-1 ${explorerStyles.errorTextColor} text-${explorerStyles.itemTextSize}`}>
+      <div className={`p-1 ${explorerStyles.errorTextColorClass} text-${explorerStyles.itemTextSize}`}>
         Error: {error}
       </div>
     );

@@ -28,6 +28,7 @@ export interface FSExplorerState {
   updateNoteContent: (id: string, content: string) => Promise<boolean>;
   createNote: (parentPath: string, noteName: string) => Promise<boolean>;
   renameItem: (id: string, newName: string) => Promise<boolean>;
+  createFolder: (parentPath: string, folderName: string) => Promise<boolean>;
   // Removed createFolder and renameItem as they are now handled via databaseAPI or specific actions
   
   // Actions for inline folder creation

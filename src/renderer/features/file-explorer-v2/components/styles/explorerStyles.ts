@@ -16,12 +16,14 @@ const explorerStyles = {
   itemTextSize: 'sm',   // Increased from xs to sm for better legibility
   headerTextSize: 'sm', // text-sm
   
-  // Colors
-  lineColor: 'border-gray-700 dark:border-gray-700',
-  selectedBgColor: 'bg-blue-800 dark:bg-blue-800',
-  hoverBgColor: 'hover:bg-gray-700/30 dark:hover:bg-gray-700/30',
-  loadingTextColor: 'text-gray-500',
-  errorTextColor: 'text-red-500',
+  // Colors (Now using theme variables via Tailwind classes)
+  lineColorClass: 'border-[hsl(var(--border)_/_0.4)]', // Using border color with opacity
+  selectedBgColorClass: 'bg-accent', // Using accent color for selected background
+  selectedTextColorClass: 'text-accent-foreground', // Using accent foreground for selected text
+  hoverBgColorClass: 'hover:bg-accent/50', // Using accent color with opacity for hover
+  loadingTextColorClass: 'text-muted-foreground', // Using muted foreground for loading
+  errorTextColorClass: 'text-destructive', // Using destructive color for errors
+  mountedColorClass: 'text-primary', // Using primary color for mounted status
 };
 
 export default explorerStyles; 

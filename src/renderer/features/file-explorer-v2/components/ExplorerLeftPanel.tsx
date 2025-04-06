@@ -94,18 +94,18 @@ export default function ExplorerLeftPanel() {
   return (
     <div className="flex flex-col h-full w-full overflow-auto">
       {/* Header with action buttons */}
-      <div className="flex justify-between items-center p-1 border-b border-gray-800">
+      <div className="flex justify-between items-center p-1 border-b border-[hsl(var(--border))]">
         <div className="text-sm font-medium">Files</div>
         <div className="flex space-x-1">
           <button
-            className="p-1 hover:bg-gray-700/30 rounded"
+            className="p-1 hover:bg-accent/50 rounded"
             onClick={handleCreateNote}
             title="Create new note"
           >
             <FilePlus size={16} />
           </button>
           <button
-            className="p-1 hover:bg-gray-700/30 rounded"
+            className="p-1 hover:bg-accent/50 rounded"
             onClick={handleCreateFolder}
             title="Create new folder"
           >
