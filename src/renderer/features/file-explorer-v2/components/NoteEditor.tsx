@@ -19,10 +19,11 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { EditorView } from "@tiptap/pm/view";
 import { Node } from '@tiptap/core';
 import { cn } from '@/renderer/shared/utils/cn';
-import '@/renderer/styles/NoteEditor.css';
+import './NoteEditor.css';
 import { configureLowlight } from "./editorConfig";
-import Toolbar from "@/renderer/features/notes/components/NoteEditor/Toolbar";
-import { FSEntry, EmbeddedItem } from "@/renderer/shared/types";
+import Toolbar from "./Toolbar";
+import { EmbeddedItem } from "@/renderer/shared/types";
+import { FSEntry } from '@/types';
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import { Loader2 } from "lucide-react";
 import UnderlineExtension from '@tiptap/extension-underline';
@@ -182,7 +183,7 @@ const EmbedNodeView = (props: NodeViewProps) => {
               alt={embeddedItem.item_name}
               className="max-w-full rounded-md shadow-sm"
               style={{
-                maxHeight: embeddedItem.position_in_note.maxHeight || '400px',
+                maxHeight: (embeddedItem.position_in_note.maxHeight as string | number) || '400px',
                 width: 'auto',
                 display: 'block',
                 margin: '0 auto'
@@ -335,7 +336,7 @@ const FileHandler = ({
 }: { 
   children: React.ReactNode, 
   onFileDrop: (files: File[]) => void,
-  onItemDrop: (item: FSEntry, clientX: number, clientY: number) => void,
+  onItemDrop: (item: FSEntry, clientX: number, clientY: number, noteId: string) => void,
   noteId: string,
   entities: { nodes: Record<string, FSEntry> }
 }) => {
@@ -362,7 +363,7 @@ const FileHandler = ({
       if (itemId && entities.nodes[itemId]) {
         const item = entities.nodes[itemId];
         console.log('Found item in store:', item);
-        onItemDrop(item, e.clientX, e.clientY);
+        onItemDrop(item, e.clientX, e.clientY, noteId);
         return;
       } else if (itemId) {
         console.error('Item ID found but not in store:', itemId);
@@ -378,7 +379,7 @@ const FileHandler = ({
     }
     
     console.log('No valid item or files found in drop event');
-  }, [entities.nodes, onFileDrop, onItemDrop]);
+  }, [entities.nodes, onFileDrop, onItemDrop, noteId]);
   
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -652,7 +653,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   }, [editor]);
   
   // Handle item drop from the file explorer
-  const handleItemDrop = useCallback(async (item: FSEntry, clientX: number, clientY: number) => {
+  const handleItemDrop = useCallback(async (item: FSEntry, clientX: number, clientY: number, noteId: string) => {
     if (!editor) return;
     
     try {
@@ -715,7 +716,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       console.log('Creating embedded item with position data:', positionData);
       
       // Create the embedded item in the database
-      const result = await window.fileExplorer.createEmbeddedItem(item.id, positionData);
+      const result = await window.fileExplorer.createEmbeddedItem(noteId, item.id, positionData);
       
       if (!result.success || !result.embeddedId) {
         console.error('Failed to create embedded item:', result.error);
