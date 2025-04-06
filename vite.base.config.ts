@@ -3,9 +3,11 @@ import type { AddressInfo } from 'node:net';
 import type { ConfigEnv, Plugin, UserConfig } from 'vite';
 import pkg from './package.json';
 
+// Node builtins that should always be externalized
 export const builtins = ['electron', ...builtinModules.map((m) => [m, `node:${m}`]).flat()];
 
-export const external = [...builtins, ...Object.keys('dependencies' in pkg ? (pkg.dependencies as Record<string, unknown>) : {})];
+// Externalize problematic modules that need special handling
+export const external = [...builtins, 'electron-log', 'better-sqlite3'];
 
 export function getBuildConfig(env: ConfigEnv<'build'>): UserConfig {
   const { root, mode, command } = env;
@@ -18,7 +20,8 @@ export function getBuildConfig(env: ConfigEnv<'build'>): UserConfig {
       emptyOutDir: false,
       // 🚧 Multiple builds may conflict.
       outDir: '.vite/build',
-      watch: command === 'serve' ? {} : null,
+      // Let the Electron Forge Vite plugin handle watching during 'serve'
+      // watch: command === 'serve' ? {} : null, // Removed conditional watch
       minify: command === 'build',
     },
     clearScreen: false,
@@ -41,7 +44,7 @@ export function getDefineKeys(names: string[]) {
 
 export function getBuildDefine(env: ConfigEnv<'build'>) {
   const { command, forgeConfig } = env;
-  const names = forgeConfig.renderer.filter(({ name }) => name != null).map(({ name }) => name!);
+  const names = forgeConfig.renderer.filter(({ name }) => name != null).map(({ name }) => name);
   const defineKeys = getDefineKeys(names);
   const define = Object.entries(defineKeys).reduce((acc, [name, keys]) => {
     const { VITE_DEV_SERVER_URL, VITE_NAME } = keys;
@@ -50,7 +53,7 @@ export function getBuildDefine(env: ConfigEnv<'build'>) {
       [VITE_NAME]: JSON.stringify(name),
     };
     return { ...acc, ...def };
-  }, {} as Record<string, any>);
+  }, {} as Record<string, string>);
 
   return define;
 }
@@ -66,7 +69,7 @@ export function pluginExposeRenderer(name: string): Plugin {
       process.viteDevServers[name] = server;
 
       server.httpServer?.once('listening', () => {
-        const addressInfo = server.httpServer!.address() as AddressInfo;
+        const addressInfo = server.httpServer?.address() as AddressInfo;
         // Expose env constant for main process use.
         process.env[VITE_DEV_SERVER_URL] = `http://localhost:${addressInfo?.port}`;
       });

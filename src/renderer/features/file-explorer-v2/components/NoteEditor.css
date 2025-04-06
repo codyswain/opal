@@ -1,0 +1,737 @@
+.ProseMirror {
+  /* Base editor spacing */
+  font-size: 14px;
+  margin: 0 auto; /* Center content */
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, 'Helvetica Neue', sans-serif;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+  color: var(--foreground);
+  padding: 1.5rem; /* Even padding all around */
+  min-height: 100%;
+  width: 100%;
+  max-width: 900px; /* Cap the maximum width for better readability */
+
+  /* Focus state */
+  &:focus {
+    outline: none;
+  }
+
+  /* Set white-space to pre-wrap to preserve new lines but wrap text */
+  white-space: pre-wrap;
+
+  /* Regular paragraphs - zero spacing */
+  p, .paragraph {
+    margin: 0;
+    padding: 0;
+    line-height: 1.5; /* Match the container's line height */
+  }
+
+  /* All elements should have the same line-height for consistency */
+  * {
+    line-height: 1.5;
+  }
+  
+  /* Remove all spacing between paragraphs to match line height exactly */
+  p + p {
+    margin-top: 0; /* No extra space between paragraphs */
+  }
+
+  /* Remove spacing from all block elements */
+  & > * + * {
+    margin-top: 0; /* No spacing between blocks */
+  }
+
+  /* This maintains consistent line spacing across the editor */
+  & > :not(p) + p,
+  & > p + :not(p) {
+    margin-top: 0; /* No extra spacing */
+  }
+  
+  /* Headings with consistent line height */
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    padding: 0;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--foreground);
+  }
+
+  h1 {
+    font-size: 1.8em;
+    border-bottom: 1px solid hsla(var(--muted) / 0.2);
+    padding-bottom: 0.2em;
+  }
+
+  h2 {
+    font-size: 1.4em;
+  }
+
+  h3 {
+    font-size: 1.2em;
+  }
+
+  h4 {
+    font-size: 1.1em;
+  }
+
+  /* Lists - improved spacing to match paragraph line height */
+  ul, ol {
+    margin: 0;
+    padding-left: 1.6em;
+  }
+
+  /* Lists with consistent line height */
+  li {
+    margin: 0;
+    line-height: 1.5;
+    position: relative;
+  }
+
+  /* No extra spacing between list items */
+  li + li {
+    margin-top: 0;
+  }
+  
+  /* No extra spacing for nested lists */
+  li > ul, li > ol {
+    margin: 0;
+  }
+
+  /* Better bullet styling with consistent spacing */
+  ul.bullet-list {
+    list-style-type: none; /* Remove default bullets */
+  }
+
+  ul.bullet-list li {
+    position: relative;
+    padding-left: 0.4em;
+  }
+
+  /* Bullet points with consistent line height */
+  ul.bullet-list li::before {
+    content: "•";
+    position: absolute;
+    left: -1.1em;
+    top: 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 1em;
+    line-height: 1.5;
+  }
+
+  ul.bullet-list ul li::before {
+    content: "◦";
+    font-size: 0.95em;
+    left: -1.2em;
+  }
+
+  ul.bullet-list ul ul li::before {
+    content: "▪";
+    font-size: 0.8em;
+    left: -1.3em;
+  }
+
+  /* Zero-margin paragraphs inside list items */
+  ul.bullet-list li > p,
+  ol.ordered-list li > p {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Zero-margin between paragraphs inside list items */
+  ul.bullet-list li > p + p,
+  ol.ordered-list li > p + p {
+    margin-top: 0;
+  }
+
+  /* Ordered lists - improved styling */
+  ol.ordered-list {
+    list-style-type: decimal;
+  }
+
+  ol.ordered-list ol {
+    list-style-type: lower-alpha;
+  }
+
+  ol.ordered-list ol ol {
+    list-style-type: lower-roman;
+  }
+  
+  /* Task lists */
+  ul[data-type="taskList"] {
+    list-style: none;
+    padding: 0;
+    margin-left: 0.3em;  /* Small indent for task lists */
+  }
+  
+  ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.4em;
+    padding-left: 1.2em;
+  }
+  
+  ul[data-type="taskList"] li > label {
+    margin-right: 0.6em;
+    user-select: none;
+  }
+  
+  ul[data-type="taskList"] li > div {
+    flex: 1;
+  }
+
+  /* Code blocks */
+  pre {
+    margin: 1.2em 0;
+    padding: 1em;
+    border-radius: 6px;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    overflow-x: auto;
+    font-size: 0.9em;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+    background: hsla(var(--muted-foreground) / 0.1);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  /* Blockquotes with consistent spacing */
+  blockquote {
+    margin: 0;
+    padding: 0 0 0 0.8em;
+    border-left: 3px solid hsl(var(--muted) / 0.8);
+    color: hsl(var(--muted-foreground));
+    font-style: italic;
+    background-color: hsla(var(--muted) / 0.05);
+    border-radius: 0 3px 3px 0;
+  }
+  
+  /* Blockquotes with consistent line height */
+  blockquote p {
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+  }
+  
+  /* Zero-margin between paragraphs in blockquotes */
+  blockquote p + p {
+    margin-top: 0;
+  }
+
+  /* Tables */
+  table {
+    margin: 1em 0;
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.95em;
+  }
+
+  td, th {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5em;
+  }
+  
+  th {
+    background-color: hsla(var(--muted) / 0.3);
+    font-weight: 600;
+  }
+
+  /* Horizontal rule */
+  hr {
+    margin: 1.5em 0;
+    border: none;
+    height: 1px;
+    background: hsl(var(--border));
+  }
+  
+  /* Links */
+  a {
+    color: hsl(var(--primary));
+    text-decoration: none;
+    border-bottom: 1px solid hsla(var(--primary) / 0.2);
+    transition: all 0.2s ease;
+  }
+  
+  a:hover {
+    border-bottom-color: hsl(var(--primary));
+  }
+  
+  /* Images */
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 5px;
+    margin: 0.75em 0;
+  }
+  
+  /* Selection */
+  ::selection {
+    background: hsla(var(--primary) / 0.2);
+  }
+}
+
+/* Placeholder styling */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}
+
+/* Active line highlighting */
+.ProseMirror .has-focus {
+  background-color: hsla(var(--muted) / 0.1);
+}
+
+/* ===== Syntax Highlighting ===== */
+
+/* Default (Light Theme) Styles */
+.ProseMirror pre {
+  color: hsl(var(--foreground)); /* Ensure base text in pre is dark */
+}
+
+.ProseMirror pre code.hljs {
+  color: hsl(var(--foreground)); /* Match pre base color */
+  background: none;
+}
+
+.ProseMirror .hljs-comment,
+.ProseMirror .hljs-quote {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.ProseMirror .hljs-keyword,
+.ProseMirror .hljs-selector-tag,
+.ProseMirror .hljs-subst {
+  color: hsl(215, 70%, 50%); /* Darker Blue */
+}
+
+.ProseMirror .hljs-number,
+.ProseMirror .hljs-literal,
+.ProseMirror .hljs-variable,
+.ProseMirror .hljs-template-variable,
+.ProseMirror .hljs-tag .hljs-attr {
+  color: hsl(25, 80%, 45%); /* Dark Orange */
+}
+
+.ProseMirror .hljs-string,
+.ProseMirror .hljs-doctag {
+  color: hsl(100, 50%, 40%); /* Dark Green */
+}
+
+.ProseMirror .hljs-title,
+.ProseMirror .hljs-section,
+.ProseMirror .hljs-selector-id {
+  color: hsl(280, 60%, 50%); /* Purple */
+}
+
+.ProseMirror .hljs-subst {
+  font-weight: normal;
+}
+
+.ProseMirror .hljs-type,
+.ProseMirror .hljs-class .hljs-title {
+  color: hsl(35, 70%, 55%); /* Darker Yellow/Orange */
+  font-weight: bold;
+}
+
+.ProseMirror .hljs-tag,
+.ProseMirror .hljs-name,
+.ProseMirror .hljs-attribute {
+  color: hsl(5, 60%, 50%); /* Dark Reddish */
+  font-weight: normal;
+}
+
+.ProseMirror .hljs-regexp,
+.ProseMirror .hljs-link {
+  color: hsl(330, 70%, 50%); /* Pink/Magenta */
+}
+
+.ProseMirror .hljs-symbol,
+.ProseMirror .hljs-bullet {
+  color: hsl(100, 50%, 40%); /* Dark Green */
+}
+
+.ProseMirror .hljs-built_in,
+.ProseMirror .hljs-builtin-name {
+  color: hsl(25, 80%, 45%); /* Dark Orange */
+}
+
+.ProseMirror .hljs-meta {
+  color: hsl(var(--muted-foreground));
+  font-weight: bold;
+}
+
+.ProseMirror .hljs-deletion {
+  background: hsl(0, 100%, 90%);
+  color: hsl(0, 60%, 40%);
+}
+
+.ProseMirror .hljs-addition {
+  background: hsl(120, 100%, 90%);
+  color: hsl(120, 60%, 35%);
+}
+
+.ProseMirror .hljs-emphasis {
+  font-style: italic;
+}
+
+.ProseMirror .hljs-strong {
+  font-weight: bold;
+}
+
+
+/* Dark Mode Syntax Highlighting Overrides */
+.dark .ProseMirror pre {
+  color: hsl(var(--foreground)); /* Ensure base text is light in dark mode */
+}
+
+.dark .ProseMirror pre code.hljs {
+  color: hsl(var(--foreground)); /* Match pre base color */
+}
+
+.dark .ProseMirror .hljs-comment,
+.dark .ProseMirror .hljs-quote {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .ProseMirror .hljs-variable,
+.dark .ProseMirror .hljs-template-variable,
+.dark .ProseMirror .hljs-attribute,
+.dark .ProseMirror .hljs-tag,
+.dark .ProseMirror .hljs-name,
+.dark .ProseMirror .hljs-regexp,
+.dark .ProseMirror .hljs-link,
+.dark .ProseMirror .hljs-selector-id,
+.dark .ProseMirror .hljs-selector-class {
+  color: hsl(0, 75%, 70%); /* Brighter Red */
+}
+
+.dark .ProseMirror .hljs-number,
+.dark .ProseMirror .hljs-meta,
+.dark .ProseMirror .hljs-built_in,
+.dark .ProseMirror .hljs-builtin-name,
+.dark .ProseMirror .hljs-literal,
+.dark .ProseMirror .hljs-type,
+.dark .ProseMirror .hljs-params {
+  color: hsl(35, 90%, 65%); /* Brighter Orange */
+}
+
+.dark .ProseMirror .hljs-string,
+.dark .ProseMirror .hljs-symbol,
+.dark .ProseMirror .hljs-bullet {
+  color: hsl(120, 60%, 65%); /* Brighter Green */
+}
+
+.dark .ProseMirror .hljs-title,
+.dark .ProseMirror .hljs-section {
+  color: hsl(210, 80%, 70%); /* Brighter Blue */
+}
+
+.dark .ProseMirror .hljs-keyword,
+.dark .ProseMirror .hljs-selector-tag {
+  color: hsl(300, 70%, 75%); /* Brighter Purple */
+}
+
+.dark .ProseMirror .hljs-emphasis {
+  font-style: italic;
+}
+
+.dark .ProseMirror .hljs-strong {
+  font-weight: bold;
+}
+
+/* Callout styling */
+.callout {
+  margin: 1.5em 0;
+  padding: 1em;
+  border-radius: 6px;
+  border-left: 4px solid;
+  background-color: hsla(var(--muted) / 0.2);
+}
+
+.callout-info {
+  border-left-color: hsl(210, 100%, 50%);
+  background-color: hsla(210, 100%, 50%, 0.1);
+}
+
+.callout-warning {
+  border-left-color: hsl(40, 100%, 50%);
+  background-color: hsla(40, 100%, 50%, 0.1);
+}
+
+.callout-error {
+  border-left-color: hsl(0, 100%, 50%);
+  background-color: hsla(0, 100%, 50%, 0.1);
+}
+
+.callout-success {
+  border-left-color: hsl(120, 100%, 30%);
+  background-color: hsla(120, 100%, 30%, 0.1);
+}
+
+.callout-note {
+  border-left-color: hsl(230, 100%, 50%);
+  background-color: hsla(230, 100%, 50%, 0.1);
+}
+
+.callout-tip {
+  border-left-color: hsl(280, 100%, 50%);
+  background-color: hsla(280, 100%, 50%, 0.1);
+}
+
+/* Front Matter styling */
+.frontmatter {
+  margin: 1em 0;
+  padding: 1em;
+  border-radius: 6px;
+  background-color: hsla(var(--muted) / 0.2);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.9em;
+  border: 1px solid hsl(var(--border));
+}
+
+/* Table styling */
+.editor-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.editor-table td,
+.editor-table th {
+  position: relative;
+  min-width: 1em;
+  border: 1px solid hsl(var(--border));
+  padding: 0.5em;
+  vertical-align: top;
+}
+
+.editor-table th {
+  font-weight: bold;
+  text-align: left;
+  background-color: hsla(var(--muted) / 0.3);
+}
+
+/* Handle selected cells */
+.selectedCell:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: hsla(var(--primary) / 0.2);
+  pointer-events: none;
+}
+
+/* File Drop styling */
+.drag-active {
+  position: relative;
+}
+
+.drag-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: hsla(var(--primary) / 0.1);
+  border: 2px dashed hsl(var(--primary));
+  border-radius: 6px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Read-only styling */
+.editor-readonly {
+  opacity: 0.8;
+  cursor: default !important;
+}
+
+/* Link styling */
+.editor-link {
+  color: hsl(var(--primary));
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid hsla(var(--primary) / 0.2);
+  transition: border-color 0.2s ease;
+}
+
+.editor-link:hover {
+  border-bottom-color: hsl(var(--primary));
+}
+
+/* Image styling */
+.editor-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 5px;
+  margin: 1em auto;
+}
+
+.editor-image img {
+  max-width: 100%;
+  border-radius: 5px;
+}
+
+.editor-image.ProseMirror-selectednode {
+  outline: 2px solid hsl(var(--primary));
+}
+
+/* Highlight styling */
+.editor-highlight {
+  background-color: hsla(60, 100%, 50%, 0.3);
+  padding: 0.2em 0;
+  border-radius: 2px;
+}
+
+/* Split view styling */
+.split-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+.split-view > div {
+  overflow: auto;
+  padding: 0 1rem;
+}
+
+/* Responsive editor container styles */
+@media (max-width: 768px) {
+  .ProseMirror {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .ProseMirror {
+    padding: 1rem 0.75rem;
+  }
+}
+
+/* Style for document-like reading experience */
+.document-mode {
+  background-color: hsl(var(--background));
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Add styles for embedded items */
+.embed-node-wrapper {
+  position: relative;
+  margin: 1.5rem 0;
+}
+
+.embedded-image-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.embedded-image-container:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.embedded-image-container img {
+  max-width: 100%;
+  border-radius: 0.375rem;
+  object-fit: contain;
+}
+
+/* Dark mode adjustments */
+.dark .embedded-image-container {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark .embedded-image-container img {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Styling for Placeholder States */
+.embed-node-wrapper .placeholder {
+  border: 1px dashed #ccc;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.dark .embed-node-wrapper .placeholder {
+  border-color: #666;
+  color: #aaa;
+}
+
+/* Error state styling */
+.embed-node-wrapper .error-state {
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  background-color: rgba(220, 38, 38, 0.05);
+  color: rgb(220, 38, 38);
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+/* Drag and drop indicators */
+.drag-over-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #3b82f6; /* blue-500 */
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.tiptap .dropzone {
+  position: relative;
+}
+
+.tiptap .dropzone::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(59, 130, 246, 0.05);
+  border: 2px dashed rgba(59, 130, 246, 0.4);
+  border-radius: 0.5rem;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* When dragging a file or item over the editor */
+.tiptap-drag-active {
+  background-color: rgba(59, 130, 246, 0.03);
+  outline: 2px dashed rgba(59, 130, 246, 0.2);
+  border-radius: 0.375rem;
+}

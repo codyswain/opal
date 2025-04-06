@@ -2,7 +2,7 @@ import log from 'electron-log';
 import path from 'path';
 import { app } from 'electron';
 import os from 'os';
-import { createDirectoryIfNotExists } from '../renderer/shared/utils/fileUtils';
+import fs from 'fs/promises';
 
 /* 
   Logging destinations:
@@ -32,7 +32,9 @@ class Logger {
   private static instance: Logger; 
 
   private constructor(){
-    this.configureFileLogger();
+    this.configureFileLogger().catch(error => {
+      console.error('Failed to configure file logger:', error);
+    });
     // this.configureConsoleLogger();
   }
 
@@ -43,32 +45,36 @@ class Logger {
     return Logger.instance;
   }
 
-  private configureFileLogger(){
+  private async configureFileLogger() {
     log.transports.file.level = 'debug'; 
     log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
     log.transports.file.maxSize = 5 * 1024 * 1024;
 
     const platform = os.platform();
+    let logFilePath: string;
     switch (platform) {
       case 'win32': {
-        const dirPath = path.dirname(WINDOWS_FILE_LOG_PATH);
-        createDirectoryIfNotExists(dirPath);
-        log.transports.file.resolvePathFn = () => WINDOWS_FILE_LOG_PATH;
+        logFilePath = WINDOWS_FILE_LOG_PATH;
         break;
       }
       case 'darwin': { // macOS
-        const dirPath = path.dirname(MACOS_FILE_LOG_PATH);
-        createDirectoryIfNotExists(dirPath);
-        log.transports.file.resolvePathFn = () => MACOS_FILE_LOG_PATH;
+        logFilePath = MACOS_FILE_LOG_PATH;
         break;
       }
       case 'linux': 
       default: {
-        const dirPath = path.dirname(LINUX_FILE_LOG_PATH);
-        createDirectoryIfNotExists(dirPath);
-        log.transports.file.resolvePathFn = () => LINUX_FILE_LOG_PATH;
+        logFilePath = LINUX_FILE_LOG_PATH;
       }
     } 
+
+    const dirPath = path.dirname(logFilePath);
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+      log.transports.file.resolvePathFn = () => logFilePath;
+    } catch (error) {
+      console.error(`Failed to create log directory: ${dirPath}`, error);
+      throw new Error(`Failed to create log directory: ${error.message}`);
+    }
   }
 
   private configureConsoleLogger() {

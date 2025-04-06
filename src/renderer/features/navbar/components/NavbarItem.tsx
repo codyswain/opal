@@ -13,11 +13,11 @@ export const NavbarItem: React.FC<NavbarItemProps> = ({ to, icon: Icon, text, is
   <li>
     <Link
       to={to}
-      className={`flex items-center px-3 py-1 rounded-md text-sm ${
+      className={`flex items-center px-2 py-0.5 rounded-md text-xs ${
         isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
       }`}
     >
-      <Icon className="h-4 w-4 mr-2" />
+      <Icon className="h-3.5 w-3.5 mr-1.5" />
       {text}
     </Link>
   </li>

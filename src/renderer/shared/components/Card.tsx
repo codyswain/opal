@@ -1,15 +1,15 @@
-import React from "react";
+import * as React from "react";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: "default" | "primary";
 }
 
-export const Card: React.FC<CardProps> = ({
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   children,
   className,
   variant = "default",
   ...props
-}) => {
+}, ref) => {
   const baseClasses = "rounded-2xl p-4 transition-shadow duration-200";
   const variantClasses =
     variant === "primary"
@@ -18,6 +18,7 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
+      ref={ref}
       className={`${baseClasses} ${variantClasses} hover:shadow-md ${
         className || ""
       }`}
@@ -26,4 +27,4 @@ export const Card: React.FC<CardProps> = ({
       {children}
     </div>
   );
-};
+});
