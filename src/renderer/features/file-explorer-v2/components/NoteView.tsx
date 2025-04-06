@@ -10,19 +10,18 @@ import { cn } from '@/renderer/shared/utils/cn';
 import NoteEditor from "./NoteEditor";
 import { FSEntry, Note } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
+import { Editor } from "@tiptap/react";
 
 interface NoteViewProps {
   selectedNode: FSEntry;
   selectedNote: Note;
-  isSaving: boolean;
   indicatorStatus: "green" | "yellow";
-  handleContentChange: ({ editor }: { editor: any }) => void;
+  handleContentChange: ({ editor }: { editor: Editor }) => void;
 }
 
 const NoteView: React.FC<NoteViewProps> = ({
   selectedNode,
   selectedNote,
-  isSaving,
   indicatorStatus,
   handleContentChange,
 }) => {
@@ -96,7 +95,7 @@ const NoteView: React.FC<NoteViewProps> = ({
     }
   };
 
-  const handleEditorUpdate = ({ editor, wordCount }: { editor: any, wordCount?: { words: number, characters: number } }) => {
+  const handleEditorUpdate = ({ editor, wordCount }: { editor: Editor, wordCount?: { words: number, characters: number } }) => {
     // Update word count if provided by the editor
     if (wordCount) {
       setWordCount(wordCount);

@@ -131,7 +131,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </a>
                     );
                   },
-                  code: ({ className, children, ...props }: any) => (
+                  code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) => (
                     <code
                       className={cn(
                         "bg-muted/50 rounded px-1 py-0.5",

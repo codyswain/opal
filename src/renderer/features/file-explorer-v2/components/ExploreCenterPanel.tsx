@@ -5,10 +5,10 @@ import { toast } from "@/renderer/shared/components/Toast";
 import FolderView from "./FolderView";
 import NoteView from "./NoteView";
 import ImageView from "./ImageView";
+import { Editor } from "@tiptap/react";
 
 function ExploreCenterPanel() {
   const { entities, ui, selectEntry, updateNoteContent } = useFileExplorerStore();
-  const [isSaving, setIsSaving] = useState(false);
   const [indicatorStatus, setIndicatorStatus] = useState<"green" | "yellow">("green");
 
   // Get the current note if a note is selected
@@ -36,7 +36,6 @@ function ExploreCenterPanel() {
         return;
       }
 
-      setIsSaving(true);
       try {
         const success = await updateNoteContent(noteId, content);
         if (success) {
@@ -50,8 +49,6 @@ function ExploreCenterPanel() {
         toast("Error saving note", {
           description: "An error occurred while saving the note. Please try again.",
         });
-      } finally {
-        setIsSaving(false);
       }
     },
     1000,
@@ -60,7 +57,7 @@ function ExploreCenterPanel() {
 
   // Content change handler
   const handleContentChange = useCallback(
-    ({ editor }: { editor: any }) => {
+    ({ editor }: { editor: Editor }) => {
       if (ui.selectedId) {
         const content = editor.getHTML();
         if (selectedNote && selectedNote.content !== content) {
@@ -80,18 +77,17 @@ function ExploreCenterPanel() {
         selectEntry={selectEntry} 
       />
     );
-  } else if (selectedNode?.type === 'note') {
+  } else if (selectedNode?.type === 'note' && selectedNote) {
     return (
       <NoteView
         selectedNode={selectedNode}
-        selectedNote={selectedNote!}
-        isSaving={isSaving}
+        selectedNote={selectedNote}
         indicatorStatus={indicatorStatus}
         handleContentChange={handleContentChange}
       />
     );
   } else if (isImage(selectedNode)) {
-    return <ImageView selectedNode={selectedNode!} />;
+    return <ImageView selectedNode={selectedNode} />;
   } else {
     return <div className="flex justify-center items-center h-full">Select a file or folder to view</div>;
   }

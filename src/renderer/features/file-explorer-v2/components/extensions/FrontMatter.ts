@@ -1,7 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 
 export interface FrontMatterOptions {
-  HTMLAttributes: Record<string, any>;
+  HTMLAttributes: Record<string, string>;
 }
 
 declare module '@tiptap/core' {

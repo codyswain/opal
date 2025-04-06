@@ -5,9 +5,15 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import log from 'electron-log';
 import DatabaseManager from './db';
+import BetterSqlite3 from 'better-sqlite3';
+
+// Define a minimal interface for the sqlite-vss module
+interface SqliteVssModule {
+  load(db: BetterSqlite3.Database): void;
+}
 
 // Import the sqlite-vss module
-let sqlite_vss: any = null;
+let sqlite_vss: SqliteVssModule | null = null;
 try {
   // Explicitly log the require attempt
   log.info('Attempting to load sqlite-vss module...');

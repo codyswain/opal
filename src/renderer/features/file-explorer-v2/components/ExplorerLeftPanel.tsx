@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { useFileExplorerStore } from '../store/fileExplorerStore';
 import { LoadingState } from './elements/ExplorerElements';
 import FolderContents from './FolderContents';
-import { FSEntry } from '@/renderer/shared/types';
 import { useFileExplorerContextMenu } from '../hooks/useFileExplorerContextMenu';
 import FileExplorerContextMenu from './FileExplorerContextMenu';
 import { FilePlus, FolderPlus } from 'lucide-react';

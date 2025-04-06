@@ -11,14 +11,12 @@ import { RelatedNotesContent } from "./related-notes/RelatedNotesContent";
 
 interface RelatedNotesProps {
   isOpen: boolean;
-  onClose: () => void;
 }
 
-const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
+const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen }) => {
   const { 
     similarNotes, 
     similarNotesIsLoading, 
-    findSimilarNotes, 
     openNote 
   } = useRelatedNotes(isOpen);
 

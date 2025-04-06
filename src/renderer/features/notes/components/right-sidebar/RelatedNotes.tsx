@@ -1,24 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Button } from "@/renderer/shared/components/Button";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import { Loader2, RefreshCw, Target } from "lucide-react";
+
+import { Loader2 } from "lucide-react";
 import { toast } from "@/renderer/shared/components/Toast";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/renderer/shared/components/Tooltip";
 import { SimilarNote } from "@/renderer/shared/types";
 import { NoteItem } from "./RelatedNoteListItem";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
+
 interface RelatedNotesProps {
   isOpen: boolean;
-  onClose: () => void;
+
 }
 
-const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
+const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen }) => {
   const [similarNotes, setSimilarNotes] = useState<SimilarNote[]>([]);
   const [similarNotesIsLoading, setSimilarNotesIsLoading] =
     useState<boolean>(false);
@@ -71,23 +66,25 @@ const RelatedNotes: React.FC<RelatedNotesProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea className="flex-grow w-full px-4">
-        <div className="py-4">
-          {similarNotesIsLoading ? (
-            <div className="flex items-center justify-center h-20">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : similarNotes.length > 0 ? (
-            <div className="space-y-4">
-              {similarNotes.map((note) => (
-                <NoteItem key={note.id} note={note} openNote={openNote} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-8">
-              No similar notes found
-            </p>
-          )}
+      <ScrollArea className="flex-grow w-full px-1">
+        <div className="p-2">
+          {
+            similarNotesIsLoading ? (
+              <div className="flex items-center justify-center h-20">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : similarNotes.length > 0 ? (
+              <div className="space-y-4">
+                {similarNotes.map((note) => (
+                  <NoteItem key={note.id} note={note} openNote={openNote} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                No similar notes found.
+              </div>
+            )
+          }
         </div>
       </ScrollArea>
     </div>

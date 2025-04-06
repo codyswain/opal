@@ -8,12 +8,7 @@ import NoteExplorerContextMenu from "./NoteExplorerContextMenu";
 import { NoteExplorerContent } from "./NoteExplorerContent";
 import { useNotesContext } from "../../context/notesContext";
 
-interface NoteExplorerProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-const NoteExplorer: React.FC<NoteExplorerProps> = ({ isOpen, onClose }) => {
+const NoteExplorer: React.FC = () => {
   const { contextMenu, handleContextMenu, closeContextMenu } = useNoteExplorerContextMenu();
   const {
     directoryStructures,
@@ -24,7 +19,7 @@ const NoteExplorer: React.FC<NoteExplorerProps> = ({ isOpen, onClose }) => {
     handleCreateFolder,
     isLoading,
     error
-  } = useNotesContext();                              
+  } = useNotesContext();
 
   const handleDelete = () => {
     if (contextMenu?.fileNode) {

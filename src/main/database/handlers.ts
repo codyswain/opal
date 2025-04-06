@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import BetterSqlite3 from 'better-sqlite3'; // Added import
 import { Item, ItemWithAIMetadata, Note } from './types';
 import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
@@ -18,7 +19,7 @@ import * as chokidar from 'chokidar';
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
 
 // Add this helper function at the top of the file before registerDatabaseIPCHandlers
-async function ensureEmbeddedItemsTableExists(db: any) {
+async function ensureEmbeddedItemsTableExists(db: BetterSqlite3.Database) {
   try {
     // Check if the table exists
     const tableExists = db.prepare(`
@@ -49,7 +50,7 @@ async function ensureEmbeddedItemsTableExists(db: any) {
       name: string;
       type: string;
       notnull: number;
-      dflt_value: any;
+      dflt_value: string | number | null; // Updated type from any
       pk: number;
     }
     
@@ -868,7 +869,7 @@ export async function registerDatabaseIPCHandlers() {
     }
   });
 
-  ipcMain.handle('chat:get-all-conversations', async (event) => {
+  ipcMain.handle('chat:get-all-conversations', async () => {
     try {
       const db = dbManager.getDatabase();
       if (!db) {
@@ -1032,7 +1033,7 @@ export async function registerDatabaseIPCHandlers() {
       // Get response from OpenAI with explicit token limit
       const completion = await openai.chat.completions.create({
         model: 'gpt-4',
-        messages: messages as any,
+        messages: messages as OpenAI.ChatCompletionMessageParam[],
         max_tokens: 1000, // Limit response length
       });
 
@@ -1166,7 +1167,7 @@ export async function registerDatabaseIPCHandlers() {
         // Create a streaming completion
         const stream = await openai.chat.completions.create({
           model: 'gpt-4',
-          messages: messages as any,
+          messages: messages as OpenAI.ChatCompletionMessageParam[],
           max_tokens: 1000, // Limit response length
           stream: true, // Enable streaming
         });
@@ -1304,7 +1305,7 @@ export async function registerDatabaseIPCHandlers() {
       console.log('Mounted folder added to database, now syncing contents');
 
       // Clone the contents of the real folder into the virtual file system
-      await syncMountedFolder(realFolderPath, mountedFolderPath, mountedFolderId);
+      await syncMountedFolder(realFolderPath, mountedFolderPath);
 
       console.log('Folder contents synced, setting up watcher');
 
@@ -1471,7 +1472,7 @@ export async function registerDatabaseIPCHandlers() {
   });
 
   // Add the embedded items handlers
-  ipcMain.handle('file-explorer:create-embedded-item', async (event, noteId: string, embeddedItemId: string, positionData: any) => {
+  ipcMain.handle('file-explorer:create-embedded-item', async (event, noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) => {
     try {
       const db = dbManager.getDatabase();
       if (!db) {
@@ -1628,7 +1629,7 @@ export async function registerDatabaseIPCHandlers() {
     }
   });
 
-  ipcMain.handle('file-explorer:update-embedded-item', async (event, embeddedId: string, positionData: any) => {
+  ipcMain.handle('file-explorer:update-embedded-item', async (event, embeddedId: string, positionData: Record<string, unknown>) => {
     try {
       const db = dbManager.getDatabase();
       if (!db) {
@@ -1691,7 +1692,7 @@ export async function registerDatabaseIPCHandlers() {
 /**
  * Recursively syncs a mounted folder from the real filesystem to the virtual database
  */
-async function syncMountedFolder(realFolderPath: string, virtualFolderPath: string, parentId: string): Promise<void> {
+async function syncMountedFolder(realFolderPath: string, virtualFolderPath: string): Promise<void> {
   try {
     const db = DatabaseManager.getInstance().getDatabase();
     if (!db) {
@@ -1715,7 +1716,7 @@ async function syncMountedFolder(realFolderPath: string, virtualFolderPath: stri
         stmt.run(itemId, virtualItemPath, virtualFolderPath, item.name, realItemPath);
         
         // Recursively sync subfolders
-        await syncMountedFolder(realItemPath, virtualItemPath, itemId);
+        await syncMountedFolder(realItemPath, virtualItemPath);
       } else if (item.isFile()) {
         // Add file to the database
         const stats = await fs.stat(realItemPath);
@@ -1902,7 +1903,7 @@ async function handleFolderCreated(dirPath: string, realFolderPath: string, virt
     log.info(`Added new folder to database: ${virtualItemPath}`);
     
     // Recursively sync the new folder's contents
-    await syncMountedFolder(dirPath, virtualItemPath, '');
+    await syncMountedFolder(dirPath, virtualItemPath);
   } catch (error) {
     log.error('Error handling folder creation:', error);
   }

@@ -4,16 +4,11 @@ import { cn } from "@/renderer/shared/utils";
 interface ContextMenuProps {
   x: number;
   y: number;
-  onClose: () => void;
+
   children: React.ReactNode;
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({
-  x,
-  y,
-  onClose,
-  children,
-}) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, children }) => {
   return (
     <div
       className={cn(

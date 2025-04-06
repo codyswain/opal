@@ -1,6 +1,6 @@
-import styled from 'styled-components';
+import styledApi from 'styled-components';
 
-export const Button = styled.button`
+export const Button = styledApi.button`
   background-color: ${({ theme }) => theme.primary};
   color: ${({ theme }) => theme.buttonText};
   border: none;
@@ -19,7 +19,7 @@ export const Button = styled.button`
   }
 `;
 
-export const Input = styled.input`
+export const Input = styledApi.input`
   font-size: 16px;
   padding: 0.5rem;
   border: 1px solid ${({ theme }) => theme.border};
@@ -34,9 +34,13 @@ export const Input = styled.input`
   }
 `;
 
-export const Card = styled.div`
+export const Card = styledApi.div`
   background-color: ${({ theme }) => theme.cardBackground};
   border-radius: 12px;
   padding: 1rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+export const FlexContainer = styledApi.div`
+  // ... existing code ...
 `;

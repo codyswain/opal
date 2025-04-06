@@ -1,7 +1,7 @@
-import { ipcMain, app } from "electron";
+import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
-import { Config, DirectoryEntry, Note, NoteMetadata } from "@/renderer/shared/types";
+import { DirectoryEntry, Note } from "@/renderer/shared/types";
 import logger from "../logger";
 
 // Create a config file path

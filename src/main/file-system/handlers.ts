@@ -1,8 +1,7 @@
 import { ipcMain, app, dialog, BrowserWindow } from "electron";
 import fs from "fs/promises";
 import path from "path";
-import { Config, Note } from "@/renderer/shared/types";
-import { log } from "../index";
+import { Config } from "@/renderer/shared/types";
 
 const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");
 

@@ -32,7 +32,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/renderer/shared/components/DropdownMenu';
 
 interface ToolbarProps {

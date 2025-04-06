@@ -3,13 +3,14 @@
 import { v4 as uuidv4 } from "uuid";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Note,
   FileNode,
   DirectoryStructures,
-  SimilarNote,
   FileNodeMap,
 } from "@/renderer/shared/types";
 import { toast } from "@/renderer/shared/components/Toast";
+import { useNotesStore } from "../store/notesStore";
+import { useCommandRegistry } from "../../commands";
+import { useSettingsContext } from "../../settings";
 
 export const useNotes = () => {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -30,13 +31,9 @@ export const useNotes = () => {
   const [newFolderName, setNewFolderName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Mounted Folder States
-  const [mountedDirPaths, setMountedDirPaths] = useState<string[]>([]);
-  const [isLoadingMountedDirPaths, setIsLoadingMountedDirPaths] =
-    useState(false);
-  const [mountedDirPathsLoadError, setMountedDirPathsLoadError] = useState<
-    string | null
-  >(null);
+  const [noteContent, setNoteContent] = useState<Note | null>(null);
+  const [isLoadingNoteContent, setIsLoadingNoteContent] = useState(false);
+  const [noteContentLoadError, setNoteContentLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeFileNodeId) {
@@ -50,7 +47,7 @@ export const useNotes = () => {
   }, [activeFileNodeId, directoryStructures]);
 
   // Compute activeFileNode
-  const activeFileNode = useMemo(() => {
+  const activeFileNode = useCallback(() => {
     return activeFileNodeId
       ? directoryStructures.nodes[activeFileNodeId]
       : null;
@@ -66,10 +63,10 @@ export const useNotes = () => {
     let isCurrent = true;
 
     const loadActiveNote = async () => {
-      if (activeFileNode?.type === "note") {
+      if (activeFileNode()?.type === "note") {
         try {
           const loadedNote = await window.electron.loadNote(
-            activeFileNode.fullPath
+            activeFileNode().fullPath
           );
           if (isCurrent) {
             setActiveNote(loadedNote);
@@ -347,9 +344,6 @@ export const useNotes = () => {
         if (topLevelFolderPaths.includes(fileNode.fullPath)) {
           console.info(`Removing top-level folder: ${fileNode.fullPath}`);
           await window.electron.removeTopLevelFolder(fileNode.fullPath);
-          setMountedDirPaths((prev) =>
-            prev.filter((path) => path !== fileNode.fullPath)
-          );
         }
 
         // Clear active node if it was deleted
@@ -425,38 +419,14 @@ export const useNotes = () => {
     setError(null);
   }, []);
 
-  const loadMountedDirPaths = useCallback(async () => {
-    setIsLoadingMountedDirPaths(true);
-    setMountedDirPathsLoadError(null);
-
-    try {
-      const mountedDirPaths = await window.electron.getTopLevelFolders();
-      setMountedDirPaths(mountedDirPaths);
-
-      if (mountedDirPaths.length === 0) {
-        console.info('No mounted directory paths found');
-      }
-    } catch (error) {
-      console.error('Error loading mounted directory paths:', error);
-      setMountedDirPathsLoadError('Failed to load mounted directory paths');
-    } finally {
-      setIsLoadingMountedDirPaths(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadMountedDirPaths();
-  }, [loadMountedDirPaths]);
-
   const openDialogToMountDirpath = useCallback(async () => {
     const result = await window.electron.openFolderDialog();
     if (result && result.length > 0) {
       console.info(`Adding top-level folder: ${result}`);
       await window.electron.addTopLevelFolder(result[0]);
-      await loadMountedDirPaths();
       await loadNotes();
     }
-  }, [loadMountedDirPaths, loadNotes]);
+  }, [loadNotes]);
 
   const createEmbedding = useCallback(async (): Promise<boolean> => {
     if (activeFileNode?.type === "note" && activeNote) {
@@ -548,6 +518,13 @@ export const useNotes = () => {
     [directoryStructures]
   );
 
+  // Get notes associated with the selected file node
+  const getNotes = useCallback(async (fileNode: FileNode) => {
+    // const _notes = await window.electron.loadNotes(fileNode.fullPath);
+    // setNotes(_notes);
+    console.log('getNotes called for', fileNode);
+  }, []);
+
   return {
     notes,
     directoryStructures,
@@ -583,5 +560,6 @@ export const useNotes = () => {
     performRAGChat,
     openNoteById,
     recentNotes,
+    getNotes,
   };
 };

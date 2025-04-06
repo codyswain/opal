@@ -2,19 +2,14 @@ import React from 'react';
 import { FSEntry } from '@/types';
 import { FilePlus, FolderPlus, HardDrive } from 'lucide-react';
 import { useFileExplorerStore } from '../store/fileExplorerStore';
-import {
-  DropdownMenuItem,
-  DropdownMenuContent,
-} from "@/renderer/shared/components/DropdownMenu";
 
 interface ContextMenuProps {
   x: number;
   y: number;
-  onClose: () => void;
   children: React.ReactNode;
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onClose, children }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, children }) => {
   return (
     <div
       className="absolute z-50 min-w-[180px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg overflow-hidden"
@@ -79,9 +74,9 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
     onClose();
   };
 
-  // Access window.electron and window.fileExplorer using any type
-  const electronApi = (window as any).electron;
-  const fileExplorerApi = (window as any).fileExplorer;
+  // Access window.electron and window.fileExplorer
+  const electronApi = window.electron;
+  const fileExplorerApi = window.fileExplorer;
 
   const handleMountFolder = async () => {
     try {
@@ -139,7 +134,7 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
   };
 
   return (
-    <ContextMenu x={x} y={y} onClose={onClose}>
+    <ContextMenu x={x} y={y}>
       {entry.type === 'folder' && (
         <>
           <ContextMenuItem

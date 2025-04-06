@@ -11,6 +11,8 @@ interface UseResizablePaneProps {
   setWidth?: (width: number) => void;
   paneRef: React.RefObject<HTMLDivElement>;
   direction: 'horizontal' | 'vertical';
+  initialWidth?: number;
+  initialHeight?: number;
 }
 
 export const useResizablePane = ({
@@ -24,6 +26,8 @@ export const useResizablePane = ({
   setWidth,
   paneRef,
   direction,
+  initialWidth,
+  initialHeight,
 }: UseResizablePaneProps) => {
   const isResizing = useRef(false);
 

@@ -2,6 +2,20 @@
 
 import type { default as OpenAI } from "openai";
 
+// Duplicate Item interface from src/main/database/types.ts
+export interface Item {
+  id: string;
+  type: 'folder' | 'file' | 'note';
+  path: string;
+  parent_path: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+  size?: number;
+  is_mounted?: boolean;
+  real_path?: string;
+}
+
 export type FSEntryType = 'folder' | 'file' | 'note';
 
 export interface FSEntry {
@@ -29,7 +43,7 @@ export interface EmbeddedItem {
     width?: number;
     height?: number;
     scale?: number;
-    [key: string]: any;  // Allow additional properties for different embed types
+    [key: string]: unknown;
   };
   item_type: FSEntryType;
   item_path: string;
@@ -107,10 +121,17 @@ export interface Message {
   created_at?: string;
 }
 
-export interface Conversation {
+// Correct type for chat messages from DB
+export interface ChatMessage extends Message {
+  sequence: number;
   conversation_id: string;
-  last_updated: string;
-  latest_user_message: string;
+}
+
+export interface Conversation {
+  id: string; // Renamed from conversation_id for consistency
+  created_at: string;
+  last_message_at: string;
+  title: string | null; // Title derived from first user message
   message_count: number;
 }
 
@@ -118,58 +139,58 @@ export interface Conversation {
 declare global {
   interface Window {
     electron: {
-      saveNote: (note: Note, dirPath: string) => Promise<any>;
-      deleteNote: (noteId: string, dirPath: string) => Promise<any>;
+      saveNote: (note: Note, dirPath: string) => Promise<{ success: boolean; error?: string; }>;
+      deleteNote: (noteId: string, dirPath: string) => Promise<{ success: boolean; error?: string; }>;
       minimize: () => void;
       maximize: () => void;
       close: () => void;
       getNotePath: (noteId: string) => Promise<string>;
       getOpenAIKey: () => Promise<string>;
       setOpenAIKey: (key: string) => Promise<void>;
-      createDirectory: (dirPath: string) => Promise<any>;
-      deleteDirectory: (dirPath: string) => Promise<any>;
+      createDirectory: (dirPath: string) => Promise<{ success: boolean; error?: string; }>;
+      deleteDirectory: (dirPath: string) => Promise<{ success: boolean; error?: string; }>;
       getTopLevelFolders: () => Promise<string[]>;
-      addTopLevelFolder: (folderPath: string) => Promise<any>;
-      removeTopLevelFolder: (folderPath: string) => Promise<any>;
-      openFolderDialog: () => Promise<string>;
-      getDirectoryStructure: (dirPath: string) => Promise<any>;
-      loadNote: (notePath: string) => Promise<any>;
-      deleteFileNode: (fileNodeType: string, fileNodePath: string) => Promise<any>;
-      generateNoteEmbeddings: (note: Note, fileNode: any) => Promise<any>;
-      findSimilarNotes: (query: string, directoryStructures: any) => Promise<any>;
-      performRAGChat: (conversation: { role: string; content: string }[], directoryStructures: any) => Promise<any>;
-      clearVectorIndex: () => Promise<any>;
-      regenerateAllEmbeddings: () => Promise<any>;
+      addTopLevelFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
+      removeTopLevelFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
+      openFolderDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
+      getDirectoryStructure: (dirPath: string) => Promise<DirectoryEntry>;
+      loadNote: (notePath: string) => Promise<Note>;
+      deleteFileNode: (fileNodeType: string, fileNodePath: string) => Promise<{ success: boolean; error?: string; }>;
+      generateNoteEmbeddings: (note: Note, fileNode: FileNode) => Promise<void>;
+      findSimilarNotes: (query: string, directoryStructures: DirectoryStructures) => Promise<SimilarNote[]>;
+      performRAGChat: (conversation: Message[], directoryStructures: DirectoryStructures) => Promise<{ role: string; content: string }>;
+      clearVectorIndex: () => Promise<{ success: boolean; message?: string }>;
+      regenerateAllEmbeddings: () => Promise<{ success: boolean; count?: number; message?: string }>;
       
       // Database File Operations
-      createFolder: (parentPath: string, folderName: string) => Promise<any>;
-      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<any>;
-      listItems: (directoryPath: string) => Promise<any>;
-      getItemByPath: (itemPath: string) => Promise<any>;
-      deleteItem: (itemPath: string) => Promise<any>;
-      renameItem: (itemPath: string, newName: string) => Promise<any>;
-      moveItem: (oldPath: string, newParentPath: string) => Promise<any>;
-      getNoteContent: (notePath: string) => Promise<any>;
-      updateNoteContent: (notePath: string, newContent: string) => Promise<any>;
-      importFile: (sourceFilePath: string, newPath: string) => Promise<any>;
-      addRootFolder: (folderPath: string) => Promise<any>;
+      createFolder: (parentPath: string, folderName: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      listItems: (directoryPath: string) => Promise<{ success: boolean; items?: Item[]; error?: string }>;
+      getItemByPath: (itemPath: string) => Promise<{ success: boolean; item?: Item; error?: string }>;
+      deleteItem: (itemPath: string) => Promise<{ success: boolean; error?: string; }>;
+      renameItem: (itemPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      moveItem: (oldPath: string, newParentPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      getNoteContent: (notePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+      updateNoteContent: (notePath: string, newContent: string) => Promise<{ success: boolean; error?: string; }>;
+      importFile: (sourceFilePath: string, newPath: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      addRootFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
     };
     
     databaseAPI: {
-      createFolder: (parentPath: string, folderName: string) => Promise<any>;
-      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<any>;
-      getNoteContent: (notePath: string) => Promise<any>;
-      updateNoteContent: (notePath: string, newContent: string) => Promise<any>;
-      listItems: (directoryPath: string) => Promise<any>;
-      getItemByPath: (itemPath: string) => Promise<any>;
-      deleteItem: (itemPath: string) => Promise<any>;
-      renameItem: (itemPath: string, newName: string) => Promise<any>;
-      moveItem: (oldPath: string, newParentPath: string) => Promise<any>;
-      addRootFolder: (folderPath: string) => Promise<any>;
-      importFile: (sourceFilePath: string, destinationPath: string) => Promise<any>;
-      triggerMigration: () => Promise<any>;
-      cleanupOldNotes: () => Promise<any>;
-      resetDatabase: () => Promise<any>;
+      createFolder: (parentPath: string, folderName: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      getNoteContent: (notePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+      updateNoteContent: (notePath: string, newContent: string) => Promise<{ success: boolean; error?: string; }>;
+      listItems: (directoryPath: string) => Promise<{ success: boolean; items?: Item[]; error?: string }>;
+      getItemByPath: (itemPath: string) => Promise<{ success: boolean; item?: Item; error?: string }>;
+      deleteItem: (itemPath: string) => Promise<{ success: boolean; error?: string; }>;
+      renameItem: (itemPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      moveItem: (oldPath: string, newParentPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      addRootFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
+      importFile: (sourceFilePath: string, destinationPath: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+      triggerMigration: () => Promise<void>;
+      cleanupOldNotes: () => Promise<{ success: boolean; message?: string }>;
+      resetDatabase: () => Promise<{ success: boolean; message?: string }>;
     };
     
     fileExplorer: {
@@ -180,23 +201,23 @@ declare global {
       mountFolder: (targetPath: string, realFolderPath: string) => Promise<{success: boolean, id?: string, path?: string, error?: string}>;
       unmountFolder: (mountedFolderPath: string) => Promise<{success: boolean, error?: string}>;
       getImageData: (imagePath: string) => Promise<{success: boolean, dataUrl?: string, error?: string}>;
-      createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: any) => 
+      createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) => 
         Promise<{success: boolean, embeddedId?: string, embeddingCode?: string, error?: string}>;
       getEmbeddedItem: (embeddedId: string) => 
         Promise<{success: boolean, embeddedItem?: EmbeddedItem, error?: string}>;
       getNoteEmbeddedItems: (noteId: string) => 
         Promise<{success: boolean, embeddedItems?: EmbeddedItem[], error?: string}>;
-      updateEmbeddedItem: (embeddedId: string, positionData: any) => 
+      updateEmbeddedItem: (embeddedId: string, positionData: Record<string, unknown>) => 
         Promise<{success: boolean, error?: string}>;
       deleteEmbeddedItem: (embeddedId: string) => 
         Promise<{success: boolean, error?: string}>;
     };
     
     chatAPI: {
-      getConversation: (conversationId: string) => Promise<{success: boolean, messages: any[], error?: string}>;
-      getAllConversations: () => Promise<{success: boolean, conversations: any[], error?: string}>;
+      getConversation: (conversationId: string) => Promise<{success: boolean, messages: ChatMessage[], error?: string}>;
+      getAllConversations: () => Promise<{success: boolean, conversations: Conversation[], error?: string}>;
       addMessage: (conversationId: string, role: string, content: string) => Promise<{success: boolean, messageId: string, error?: string}>;
-      performRAG: (conversationId: string, query: string) => Promise<{success: boolean, message: any, error?: string}>;
+      performRAG: (conversationId: string, query: string) => Promise<{success: boolean, message: Message, error?: string}>;
       performRAGStreaming: (
         conversationId: string, 
         query: string, 
@@ -205,3 +226,6 @@ declare global {
     };
   }
 }
+
+// This ensures the file is treated as a module.
+export {};

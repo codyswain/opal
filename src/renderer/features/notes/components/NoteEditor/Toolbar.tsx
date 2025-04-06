@@ -41,10 +41,6 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
     );
 
-  const setLanguage = (language: string) => {
-    editor.chain().focus().toggleCodeBlock({ language }).run();
-  };
-
   const LANGUAGES = [
     { label: 'Plain Text', value: 'plaintext' },
     { label: 'JavaScript', value: 'js' },

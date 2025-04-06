@@ -3,7 +3,7 @@ import {
   SimilarNote,
 } from "@/renderer/shared/types";
 import { ipcMain } from "electron";
-import OpenAI from "openai";
+import OpenAIApi from "openai";
 import log from 'electron-log';
 import DatabaseManager from "../database/db";
 import { getOpenAIKey } from "../file-system/loader";
@@ -26,12 +26,12 @@ export async function registerEmbeddingIPCHandlers(){
     
     log.info("Initializing OpenAI with API key");
     // Create OpenAI instance with the key
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    const openaiClient = new OpenAIApi({ apiKey: openaiApiKey });
     
     // Initialize embedding classes
-    embeddingCreator = new EmbeddingCreator(openai);
+    embeddingCreator = new EmbeddingCreator(openaiClient);
     similaritySearcher = new SimilaritySearcher();
-    ragChat = new RAGChat(openai, embeddingCreator, similaritySearcher);
+    ragChat = new RAGChat(openaiClient, embeddingCreator, similaritySearcher);
     
     log.info("Embedding handlers initialized successfully");
 
@@ -82,8 +82,8 @@ function registerIPCHandlers() {
               throw new Error("OpenAI API key is required for similarity search");
             }
             
-            const openai = new OpenAI({ apiKey: openaiApiKey });
-            embeddingCreator = new EmbeddingCreator(openai);
+            const openaiClient = new OpenAIApi({ apiKey: openaiApiKey });
+            embeddingCreator = new EmbeddingCreator(openaiClient);
             similaritySearcher = new SimilaritySearcher();
             log.info("Embedding services initialized on demand");
           } catch (initError) {
@@ -238,8 +238,8 @@ export async function generateEmbeddingsForNote(noteId: string, noteContent: str
       }
       
       try {
-        const openai = new OpenAI({ apiKey: openaiApiKey });
-        embeddingCreator = new EmbeddingCreator(openai);
+        const openaiClient = new OpenAIApi({ apiKey: openaiApiKey });
+        embeddingCreator = new EmbeddingCreator(openaiClient);
         log.info("Embedding creator initialized on-demand");
       } catch (initError) {
         log.error("Failed to initialize embedding creator:", initError);

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import { Note, FileNode, DirectoryStructures } from "./renderer/shared/types";
 
 /* 
@@ -140,13 +140,13 @@ contextBridge.exposeInMainWorld("fileExplorer", {
     ipcRenderer.invoke('file-explorer:unmount-folder', mountedFolderPath),
   getImageData: (imagePath: string) => 
     ipcRenderer.invoke('file-explorer:get-image-data', imagePath),
-  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: any) =>
+  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) =>
     ipcRenderer.invoke('file-explorer:create-embedded-item', noteId, embeddedItemId, positionData),
   getEmbeddedItem: (embeddedId: string) =>
     ipcRenderer.invoke('file-explorer:get-embedded-item', embeddedId),
   getNoteEmbeddedItems: (noteId: string) =>
     ipcRenderer.invoke('file-explorer:get-note-embedded-items', noteId),
-  updateEmbeddedItem: (embeddedId: string, positionData: any) =>
+  updateEmbeddedItem: (embeddedId: string, positionData: Record<string, unknown>) =>
     ipcRenderer.invoke('file-explorer:update-embedded-item', embeddedId, positionData),
   deleteEmbeddedItem: (embeddedId: string) =>
     ipcRenderer.invoke('file-explorer:delete-embedded-item', embeddedId),
@@ -168,7 +168,7 @@ contextBridge.exposeInMainWorld("chatAPI", {
     console.log(`Starting streaming on channel ${responseChannel}`);
     
     // Set up the listener for streaming chunks
-    const listener = (_event: any, chunk: string | null) => {
+    const listener = (_event: IpcRendererEvent, chunk: string | null) => {
       if (chunk === null) {
         // Null chunk signals end of stream, clean up listener
         console.log(`Streaming complete on ${responseChannel}`);

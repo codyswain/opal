@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from "react";
-import { EditorContent, useEditor, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
+import { EditorContent, useEditor, NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps, Editor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -25,11 +25,11 @@ import Toolbar from "@/renderer/features/notes/components/NoteEditor/Toolbar";
 import { FSEntry, EmbeddedItem } from "@/renderer/shared/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import { Loader2 } from "lucide-react";
-import Underline from '@tiptap/extension-underline';
-import Highlight from '@tiptap/extension-highlight';
+import UnderlineExtension from '@tiptap/extension-underline';
+import HighlightExtension from '@tiptap/extension-highlight';
 
 // Custom node view component for embedded items
-const EmbedNodeView = (props: any) => {
+const EmbedNodeView = (props: NodeViewProps) => {
   const { node } = props;
   const embedId = node.attrs.embedId;
   const embedType = node.attrs.type;
@@ -311,7 +311,7 @@ const EmbedNode = Node.create({
     ];
   },
   
-  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, any> }) {
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, string> }) {
     return ['div', { 
       class: 'embedded-item', 
       'data-embed-id': HTMLAttributes.embedId,
@@ -422,16 +422,14 @@ const SPACES_PER_TAB = 4;
 
 interface NoteEditorProps {
   content: string;
-  onUpdate: ({ editor, wordCount }: { editor: any, wordCount?: { words: number, characters: number } }) => void;
+  onUpdate: ({ editor, wordCount }: { editor: Editor, wordCount?: { words: number, characters: number } }) => void;
   readOnly?: boolean;
-  noteId?: string;
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({ 
   content, 
   onUpdate,
   readOnly = false,
-  noteId
 }) => {
   // Move the store to the component level so it can be used in callbacks
   const { entities } = useFileExplorerStore();
@@ -461,8 +459,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           class: 'code-block',
         },
       }),
-      Underline,
-      Highlight,
+      UnderlineExtension,
+      HighlightExtension,
       Markdown.configure({
         transformPastedText: true,
       }),
@@ -655,7 +653,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   
   // Handle item drop from the file explorer
   const handleItemDrop = useCallback(async (item: FSEntry, clientX: number, clientY: number) => {
-    if (!editor || !noteId) return;
+    if (!editor) return;
     
     try {
       console.log('Item drop details:', {
@@ -717,7 +715,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       console.log('Creating embedded item with position data:', positionData);
       
       // Create the embedded item in the database
-      const result = await window.fileExplorer.createEmbeddedItem(noteId, item.id, positionData);
+      const result = await window.fileExplorer.createEmbeddedItem(item.id, positionData);
       
       if (!result.success || !result.embeddedId) {
         console.error('Failed to create embedded item:', result.error);
@@ -750,7 +748,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     } catch (error) {
       console.error('Error embedding item in note:', error);
     }
-  }, [editor, noteId, entities]);
+  }, [editor, entities]);
 
   return (
     <div className="flex flex-col h-full w-full relative">
@@ -766,7 +764,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         <FileHandler 
           onFileDrop={handleFileDrop} 
           onItemDrop={handleItemDrop} 
-          noteId={noteId || ''}
+          noteId={''}
           entities={entities}
         >
           <div className="h-full w-full">

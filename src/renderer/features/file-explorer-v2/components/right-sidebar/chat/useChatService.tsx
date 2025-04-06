@@ -4,12 +4,12 @@ import { toast } from "@/renderer/shared/components/Toast";
 import { Message, Conversation } from "../ChatPane";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
-export const useChatService = (isNoteSelected = false, selectedNodeId: string | null = null) => {
+export const useChatService = (/* isNoteSelected = false, */ selectedNodeId: string | null = null) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [_, setForceUpdate] = useState(0);
+  const [, setForceUpdate] = useState(0);
   const forceUpdate = () => setForceUpdate(prev => prev + 1);
   
   const [conversationId, setConversationId] = useState<string>(() => {

@@ -1,29 +1,19 @@
 import React from "react";
 import { Button } from "@/renderer/shared/components/Button";
-import { Pencil, FolderPlus, Plus } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import { useNotesContext } from "../../context/notesContext";
 
-interface NoteExplorerHeaderProps {
-  onCreateNote: () => void;
-  onCreateFolder: () => void;
-}
-
-export const NoteExplorerHeader: React.FC<NoteExplorerHeaderProps> = ({
-  onCreateNote,
-  onCreateFolder,
-}) => {
+export const NoteExplorerHeader: React.FC = () => {
   
-  const {
-    openDialogToMountDirpath
-  } = useNotesContext();
+  useNotesContext();
 
 
 
   async function handleFolderCreation() {
     const result = await window.electron.openFolderDialog();
-    if (result && result.length > 0) {
+    if (!result.canceled && result.filePaths.length > 0) {
       try {
-        const response = await window.electron.addRootFolder(result[0]);
+        const response = await window.electron.addRootFolder(result.filePaths[0]);
         console.log('response: ', response);
       } catch (error) {
         console.error('Error adding folder:', error);

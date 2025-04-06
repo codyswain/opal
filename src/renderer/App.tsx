@@ -14,12 +14,11 @@ import { Toaster } from "@/renderer/shared/components/Toast";
 import { Navbar, navbarItems } from "@/renderer/features/navbar";
 import { Settings, SettingsProvider } from "@/renderer/features/settings";
 import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
-import { commandRegistry, useCommands } from "@/renderer/features/commands";
+import { useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
 import { Feed } from "@/renderer/features/feed";
-import { KBarProvider, KBarPortal, KBarPositioner, KBarAnimator, KBarSearch } from 'kbar';
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
@@ -102,10 +101,8 @@ const App: React.FC = () => {
                     <Navbar
                       toggleLeftSidebar={toggleLeftSidebar}
                       toggleRightSidebar={toggleRightSidebar}
-                      toggleBottomPane={toggleBottomPane}
                       isLeftSidebarOpen={isLeftSidebarOpen}
                       isRightSidebarOpen={isRightSidebarOpen}
-                      isBottomPaneOpen={isBottomPaneOpen}
                       items={navbarItems}
                     />
                     <main className="flex-grow overflow-hidden mt-10">
@@ -132,12 +129,7 @@ const App: React.FC = () => {
                         <Route
                           path="/feed"
                           element={
-                            <Feed
-                              isLeftSidebarOpen={isLeftSidebarOpen}
-                              isRightSidebarOpen={isRightSidebarOpen}
-                              setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                              setIsRightSidebarOpen={setIsRightSidebarOpen}
-                            />
+                            <Feed />
                           }
                         />
                       </Routes>

@@ -1,7 +1,6 @@
 // src/features/notes/components/MarkdownEditor.tsx
 
 import React, { useRef, useState, useEffect } from 'react';
-import { cn } from '@/renderer/shared/utils';
 import {
   Bold,
   Italic,
@@ -74,10 +73,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange }) => {
 
   const handleItalic = () => {
     insertAtCursor('*', '*', 'italic text');
-  };
-
-  const handleUnderline = () => {
-    insertAtCursor('<u>', '</u>', 'underlined text');
   };
 
   const handleStrikethrough = () => {

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // import { motion } from 'framer-motion'; // Removed unused import causing error
 import { FSEntry } from '@/renderer/shared/types';
-import FileItem from './FileItem';
-import { cn } from '@/renderer/shared/utils/cn';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -13,9 +11,7 @@ import {
   FileIcon,
   Edit3,
   Image,
-  Calendar,
-  FileText
-} from "lucide-react";
+} from "lucide-react"; // Removed Calendar, FileText
 import { formatLocalDate } from '@/renderer/shared/utils';
 
 interface FolderViewProps {

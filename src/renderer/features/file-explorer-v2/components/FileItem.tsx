@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { FSEntry } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import explorerStyles from "./styles/explorerStyles";
@@ -43,9 +43,9 @@ const FileItem: React.FC<FileItemProps> = ({
   // State to track if a double click is in progress
   const [isDoubleClickInProgress, setIsDoubleClickInProgress] =
     React.useState(false);
-  const doubleClickTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const doubleClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = (/* _e: React.MouseEvent */) => {
     // For folders, detect potential double clicks
     if (entry.type === "folder") {
       // If this is the first click, set a timeout to handle it as a single click

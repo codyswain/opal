@@ -11,11 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 import { Message, Conversation } from "@/renderer/shared/types";
 
-interface BottomPaneProps {
-  onClose: () => void;
-}
-
-const ChatPane: React.FC<BottomPaneProps> = ({ onClose }) => {
+const ChatPane: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -297,7 +293,7 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
                   </a>
                 );
               },
-              code: ({ className, children, ...props }: any) => {
+              code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) => {
                 return (
                   <code
                     className={cn(

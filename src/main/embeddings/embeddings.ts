@@ -1,5 +1,3 @@
-import { ipcMain } from 'electron';
-import Database from 'better-sqlite3';
 import { 
   Note, 
   SimilarNote, 

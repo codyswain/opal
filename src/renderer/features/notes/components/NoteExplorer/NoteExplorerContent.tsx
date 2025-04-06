@@ -2,9 +2,8 @@
 
 import React, { useEffect, useRef } from "react";
 import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import { Loader, ChevronDown, ChevronRight, Folder, File } from "lucide-react";
+import { Loader, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/renderer/shared/components/input";
-import { Button } from "@/renderer/shared/components/Button";
 import { cn } from "@/renderer/shared/utils";
 import { DirectoryStructures, FileNode } from "@/renderer/shared/types";
 import { useNotesContext } from "../../context/notesContext";
@@ -29,10 +28,8 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
   onSelectNote,
   handleContextMenu,
 }) => {
-  const { toggleDirectory, expandedDirs, setActiveFileNodeId, activeFileNodeId } = useNotesContext();
+  const { toggleDirectory, expandedDirs, setActiveFileNodeId } = useNotesContext();
   const { newFolderState } = useNotesContext();
-
-  const activeFileNode = activeFileNodeId ? directoryStructures.nodes[activeFileNodeId] : null;
 
   // For the folder that renders when creating a new folder
   const newFolderInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +88,6 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
             ) : (
               <ChevronRight className="h-4 w-4 mr-1" />
             )}
-            {/* <Folder className="h-4 w-4 mr-1" /> */}
             <span>{node.name}</span>
           </div>
           {isExpanded && node.childIds && node.childIds.map((childId) => renderFileNode(childId, depth + 1))}
@@ -126,6 +122,7 @@ export const NoteExplorerContent: React.FC<NoteExplorerContentProps> = ({
             e.preventDefault();
             e.stopPropagation();
             setActiveFileNodeId(node.id);
+            onSelectNote(node);
           }}
           onContextMenu={(e) => {
             e.preventDefault();

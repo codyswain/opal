@@ -12,7 +12,7 @@ import { Note } from "@/renderer/shared/types";
 import { useNotesContext } from "../../context/notesContext";
 import { useDebouncedCallback } from "use-debounce";
 import "katex/dist/katex.min.css";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, Editor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -118,7 +118,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note }) => {
   );
 
   const handleContentChange = useCallback(
-    ({ editor }: { editor: any }) => {
+    ({ editor }: { editor: Editor }) => {
       const content = editor.getHTML();
       setLocalNote((prev) => {
         if (prev.content !== content) {
@@ -199,7 +199,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note }) => {
               return true;
             }
             // If not in a list, add indentation
-            const { from, to } = editor.state.selection;
+            const { from } = editor.state.selection;
             const indentation = USE_TABS ? '\t' : ' '.repeat(SPACES_PER_TAB);
             editor.chain()
               .focus()

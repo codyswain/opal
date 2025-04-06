@@ -1,12 +1,7 @@
 import React from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/renderer/shared/components/Tooltip";
+
 import { SimilarNote } from "@/renderer/shared/types";
-import { Target } from "lucide-react";
+
 import { ScoreTooltip } from "./RelatedNoteScore";
 import { cn } from "@/renderer/shared/utils";
 

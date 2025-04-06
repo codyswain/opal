@@ -17,20 +17,18 @@ import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store
 interface NavbarProps {
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
-  toggleBottomPane: () => void;
+  
   isLeftSidebarOpen: boolean;
   isRightSidebarOpen: boolean;
-  isBottomPaneOpen: boolean;
+  
   items: NavbarItemProps[];
 }
 
 const Navbar: React.FC<NavbarProps> = ({
   toggleLeftSidebar,
   toggleRightSidebar,
-  toggleBottomPane,
   isLeftSidebarOpen,
   isRightSidebarOpen,
-  isBottomPaneOpen,
   items,
 }) => {
   const location = useLocation();
