@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { builtinModules } from 'module';
-import { defineConfig, Plugin, UserConfig, mergeConfig, type ConfigEnv } from 'vite';
+import { defineConfig, UserConfig, mergeConfig, type ConfigEnv } from 'vite';
 import { getBuildConfig, pluginHotRestart } from './vite.base.config';
 
 const PACKAGE_ROOT = __dirname;

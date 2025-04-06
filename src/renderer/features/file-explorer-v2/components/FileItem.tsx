@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FSEntry } from "@/types";
 import { useFileExplorerStore } from "../store/fileExplorerStore";
 import explorerStyles from "./styles/explorerStyles";
@@ -32,7 +32,11 @@ const FileItem: React.FC<FileItemProps> = ({
   onContextMenu,
   onDragStart,
 }) => {
-  const { ui, selectEntry, toggleFolder } = useFileExplorerStore();
+  const { 
+    ui, 
+    selectEntry, 
+    toggleFolder, 
+  } = useFileExplorerStore();
   const isSelected = ui.selectedId === entry.id;
   const isExpanded = ui.expandedFolders.has(entry.id);
   const isMounted = entry.isMounted;
@@ -183,12 +187,14 @@ const FileItem: React.FC<FileItemProps> = ({
               )}
             </span>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Last updated: {formatDate(entry.metadata.updatedAt)}</p>
-            <p>Created: {formatDate(entry.metadata.createdAt)}</p>
-            {isMounted && entry.realPath && (
-              <p className="text-green-400">Mounted from: {entry.realPath}</p>
-            )}
+          <TooltipContent side="bottom" align="start" className="max-w-xs">
+            <div>Name: {entry.name}</div>
+            <div>Path: {entry.path}</div>
+            <div>Type: {entry.type}</div>
+            <div>Created: {formatLocalDate(entry.metadata.createdAt)}</div>
+            <div>Updated: {formatLocalDate(entry.metadata.updatedAt)}</div>
+            {entry.type !== 'folder' && <div>Size: {entry.metadata.size} bytes</div>}
+            {isMounted && <div>Mounted: Yes ({entry.realPath})</div>}
           </TooltipContent>
         </Tooltip>
       </div>

@@ -1,116 +1,114 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from 'react';
 import {
-  Panel,
   PanelGroup,
+  Panel,
   PanelResizeHandle,
   ImperativePanelHandle,
 } from "react-resizable-panels";
-import NoteEditor from "./NoteEditor/NoteEditor";
+import { Editor } from "@tiptap/react";
+import { ScrollArea } from '@/renderer/shared/components/ScrollArea';
+// import { SplitPane } from '@/renderer/shared/components/SplitPane'; // Removed potentially non-existent component import
+import NoteEditor from '../../file-explorer-v2/components/NoteEditor';
 import NoteExplorer from "./NoteExplorer/NoteExplorer";
 import RightSidebar from "./right-sidebar/RightSidebar";
-import { useNotesStore, NotesState } from "../store/notesStore";
+import { useFileExplorerStore } from '@/renderer/features/file-explorer-v2/store/fileExplorerStore';
 
 const Notes: React.FC<{
   isLeftSidebarOpen: boolean;
-  isRightSidebarOpen: boolean;
   setIsLeftSidebarOpen: (isOpen: boolean) => void;
+  isRightSidebarOpen: boolean;
   setIsRightSidebarOpen: (isOpen: boolean) => void;
-}> = ({
-  isLeftSidebarOpen,
-  isRightSidebarOpen,
-  setIsLeftSidebarOpen,
-  setIsRightSidebarOpen,
+}> = ({ 
+  isLeftSidebarOpen, 
+  // setIsLeftSidebarOpen, // Unused prop
+  isRightSidebarOpen, 
+  setIsRightSidebarOpen 
 }) => {
-  const activeNote = useNotesStore((state: NotesState) => state.activeNote);
+  const { selectedId, updateNoteContent } = useFileExplorerStore(state => ({ // Removed unused nodes
+    selectedId: state.ui.selectedId,
+    // nodes: state.entities.nodes, // Removed unused nodes
+    updateNoteContent: state.updateNoteContent,
+  }));
+  const notes = useFileExplorerStore(state => state.entities.notes);
+  const selectedNote = selectedId ? notes[selectedId] : null;
+
+  const activeNote = selectedNote;
   const [leftSidebarSize, setLeftSidebarSize] = useState(18);
-  const [rightSidebarSize, setRightSidebarSize] = useState(25); // Increased default size for better readability
+  const [rightSidebarSize, setRightSidebarSize] = useState(25);
 
-  const leftPanelRef = useRef<ImperativePanelHandle>(null);
-  const rightPanelRef = useRef<ImperativePanelHandle>(null);
+  const leftPanelRef = useRef<ImperativePanelHandle>(null); // Use direct useRef
+  const rightPanelRef = useRef<ImperativePanelHandle>(null); // Use direct useRef
 
-  const handlePanelCollapse = (panelName: string) => {
-    switch (panelName) {
-      case "leftSidebar":
-        setIsLeftSidebarOpen(false);
-        break;
-      case "rightSidebar":
-        setIsRightSidebarOpen(false);
-        break;
+  const handleEditorUpdate = ({ editor }: { editor: Editor }) => {
+    if (activeNote) {
+      const newContent = editor.getHTML();
+      // Debounce or throttle this update if necessary
+      updateNoteContent(activeNote.id, newContent);
     }
   };
 
-  useEffect(() => {
-    if (leftPanelRef.current) {
-      if (isLeftSidebarOpen) {
-        leftPanelRef.current.expand();
-      } else {
-        leftPanelRef.current.collapse();
-      }
-    }
-  }, [isLeftSidebarOpen]);
-
-  useEffect(() => {
-    if (rightPanelRef.current) {
-      if (isRightSidebarOpen) {
-        rightPanelRef.current.expand();
-      } else {
-        rightPanelRef.current.collapse();
-      }
-    }
-  }, [isRightSidebarOpen]);
-
-  const handleResize = (panelName: string) => (size: number) => {
-    switch (panelName) {
-      case "leftSidebar":
-        setLeftSidebarSize(size);
-        break;
-      case "rightSidebar":
-        setRightSidebarSize(size);
-        break;
-    }
-  };
+  // Removed SplitPane related logic
 
   return (
-    <PanelGroup direction="horizontal" className="h-screen w-screen">
-      <Panel
-        ref={leftPanelRef}
-        defaultSize={leftSidebarSize}
-        minSize={10}
-        maxSize={40}
-        onResize={handleResize("leftSidebar")}
-        collapsible={true}
-        onCollapse={() => handlePanelCollapse("leftSidebar")}
-      >
-        <NoteExplorer
-          isOpen={isLeftSidebarOpen}
-          onClose={() => setIsLeftSidebarOpen(false)}
-        />
-      </Panel>
-      <PanelResizeHandle className="w-1 bg-border hover:bg-accent/50 cursor-ew-resize" />
-      <Panel>
+    <PanelGroup direction="horizontal" className="flex-grow">
+      {/* Left Sidebar (Note Explorer) */}
+      {isLeftSidebarOpen && (
+        <>
+          <Panel
+            id="notes-left-sidebar"
+            ref={leftPanelRef}
+            defaultSize={leftSidebarSize}
+            minSize={10}
+            maxSize={30}
+            collapsible
+            onCollapse={() => setLeftSidebarSize(0)}
+            onExpand={() => setLeftSidebarSize(18)} // Restore default size
+            onResize={(size) => setLeftSidebarSize(size)}
+            className="bg-gray-850 flex flex-col"
+          >
+            <ScrollArea className="flex-grow">
+              <NoteExplorer />
+            </ScrollArea>
+          </Panel>
+          <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-500 transition-colors duration-200" />
+        </>
+      )}
+
+      {/* Main Content Area (Note Editor) */}
+      <Panel id="notes-main-content" className="flex-grow bg-gray-900">
         {activeNote ? (
-          <NoteEditor note={activeNote} />
+          <NoteEditor 
+            key={activeNote.id} // Add key to force re-render on note change
+            content={activeNote.content} 
+            onUpdate={handleEditorUpdate} 
+          />
         ) : (
-          <div className="flex w-full h-full justify-center items-center">
-            Please select a note
+          <div className="flex items-center justify-center h-full text-gray-500">
+            Select a note to view or edit.
           </div>
         )}
       </Panel>
-      <PanelResizeHandle className="w-1 bg-border hover:bg-accent/50 cursor-ew-resize" />
-      <Panel
-        ref={rightPanelRef}
-        defaultSize={rightSidebarSize}
-        minSize={15}
-        maxSize={45}
-        onResize={handleResize("rightSidebar")}
-        collapsible={true}
-        onCollapse={() => handlePanelCollapse("rightSidebar")}
-      >
-        <RightSidebar
-          isOpen={isRightSidebarOpen}
-          onClose={() => setIsRightSidebarOpen(false)}
-        />
-      </Panel>
+
+      {/* Right Sidebar */}
+      {isRightSidebarOpen && (
+        <>
+          <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-500 transition-colors duration-200" />
+          <Panel
+            id="notes-right-sidebar"
+            ref={rightPanelRef}
+            defaultSize={rightSidebarSize}
+            minSize={15} // Adjusted min size
+            maxSize={40} // Adjusted max size
+            collapsible
+            onCollapse={() => setIsRightSidebarOpen(false)} // Use prop setter
+            onExpand={() => setIsRightSidebarOpen(true)} // Use prop setter
+            onResize={(size) => setRightSidebarSize(size)}
+            className="bg-gray-850 flex flex-col"
+          >
+            <RightSidebar isOpen={isRightSidebarOpen} onClose={() => setIsRightSidebarOpen(false)} />
+          </Panel>
+        </>
+      )}
     </PanelGroup>
   );
 };

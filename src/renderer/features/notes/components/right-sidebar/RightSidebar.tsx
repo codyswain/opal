@@ -1,27 +1,27 @@
-import React from "react";
+import React, { useState } from 'react';
 import { cn } from "@/renderer/shared/utils";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/renderer/shared/components/Tabs";
-import { Note, SimilarNote } from "@/renderer/shared/types";
-import { ScrollArea } from "@/renderer/shared/components/ScrollArea";
-import ChatPane from "./ChatPane";
 import RelatedNotes from "./RelatedNotes";
-import { useNotesContext } from "../../context/notesContext";
-import { useState } from "react";
+import ChatPane from "./ChatPane";
 import { Button } from "@/renderer/shared/components/Button";
 import { Plus } from "lucide-react";
 
 interface RightSidebarProps {
+  className?: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
-  const { findSimilarNotes } = useNotesContext();
-  const [chatKey, setChatKey] = React.useState(0);
-  const [activeTab, setActiveTab] = React.useState("related");
-  const [similarNotes, setSimilarNotes] = useState<SimilarNote[]>([]);
-  const [similarNotesIsLoading, setSimilarNotesIsLoading] = useState<boolean>(false);
-  
+const RightSidebar: React.FC<RightSidebarProps> = ({ 
+  // className, // Unused prop
+  isOpen, 
+  // onClose // Unused prop
+}) => {
+  // const selectedId = useFileExplorerStore(state => state.ui.selectedId); // Unused variable
+  // const notes = useFileExplorerStore(state => state.entities.notes); // Unused variable
+  const [activeTab, setActiveTab] = useState("related");
+  const [chatKey, setChatKey] = useState(0);
+
   const handleNewChat = () => {
     setChatKey(prev => prev + 1);
     setActiveTab("chat");
@@ -56,10 +56,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
       
       <div className="flex-grow overflow-hidden">
         <TabsContent value="related" className="h-full mt-0 border-0 p-0">
-          <RelatedNotes isOpen={activeTab === "related"} onClose={onClose} />
+          <RelatedNotes 
+            isOpen={activeTab === "related"} 
+          />
         </TabsContent>
         <TabsContent value="chat" className="h-full mt-0 border-0 p-0">
-          <ChatPane key={chatKey} onClose={onClose} />
+          <ChatPane 
+            key={chatKey} 
+          />
         </TabsContent>
       </div>
     </div>

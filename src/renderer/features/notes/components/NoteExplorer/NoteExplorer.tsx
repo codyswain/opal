@@ -1,16 +1,14 @@
-import React from "react";
-import { useMemo } from "react";
+import React, { useMemo } from 'react';
 import { Settings } from "lucide-react";
 import { Button } from "@/renderer/shared/components/Button";
 import { toast } from "@/renderer/shared/components/Toast";
 import { useNoteExplorerContextMenu } from "../../hooks/useNoteExplorerContextMenu";
-import { NoteExplorerHeader } from "./NoteExplorerHeader";
-import NoteExplorerContextMenu from "./NoteExplorerContextMenu";
-import { NoteExplorerContent } from "./NoteExplorerContent";
-import { useNotesContext } from "../../context/notesContext";
-import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
-import type { FSExplorerState } from "@/types";
-import { FSEntry, FileNode } from "@/renderer/shared/types";
+import { NoteExplorerHeader } from './NoteExplorerHeader';
+import { NoteExplorerContent } from './NoteExplorerContent';
+import NoteExplorerContextMenu from './NoteExplorerContextMenu';
+import { useFileExplorerStore } from '@/renderer/features/file-explorer-v2/store/fileExplorerStore';
+import type { FSExplorerState } from '@/renderer/features/file-explorer-v2/store/types';
+import { FSEntry } from '@/types';
 
 const NoteExplorer: React.FC = () => {
   const { contextMenu, handleContextMenu, closeContextMenu } = useNoteExplorerContextMenu();
@@ -18,13 +16,11 @@ const NoteExplorer: React.FC = () => {
   const selectedId = useFileExplorerStore((state: FSExplorerState) => state.ui.selectedId);
   const loading = useFileExplorerStore((state: FSExplorerState) => state.loading);
   const selectEntry = useFileExplorerStore((state: FSExplorerState) => state.selectEntry);
-  const startCreatingFolder = useFileExplorerStore((state: FSExplorerState) => state.startCreatingFolder);
-  const { createNote, deleteFileNode } = useNotesContext();
 
   const rootIds = useMemo(() => {
     return Object.values(nodes)
-      .filter(node => node.parentId === null)
-      .map(node => node.id);
+      .filter((node: FSEntry) => node.parentId === null)
+      .map((node: FSEntry) => node.id);
   }, [nodes]);
 
   const selectedEntry = selectedId ? nodes[selectedId] : null;
@@ -34,7 +30,6 @@ const NoteExplorer: React.FC = () => {
     const entryToDelete = contextMenu?.entry;
     if (entryToDelete) {
       console.warn("Delete logic needs refactoring using entry ID/path and store action");
-      deleteFileNode(entryToDelete as unknown as FileNode);
     }
   }
 

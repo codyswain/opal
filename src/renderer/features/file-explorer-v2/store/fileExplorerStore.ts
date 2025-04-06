@@ -7,25 +7,25 @@ import { FSEntry } from '@/types';
  */
 export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   entities: {
-    nodes: {},
-    notes: {},
+    nodes: {} as Record<string, FSEntry>,
+    notes: {} as Record<string, { id: string; content: string; createdAt: string; updatedAt: string }>,
     aiMetadata: {},
   },
   ui: {
-    selectedId: null,
-    expandedFolders: new Set(),
+    selectedId: null as string | null,
+    expandedFolders: new Set<string>(),
     searchQuery: '',
-    history: [],
+    history: [] as string[],
     historyIndex: -1,
     isNavigatingHistory: false,
     rightSidebarTab: 'related',
-    creatingFolderInParentId: null,
+    creatingFolderInParentId: null as string | null,
     newFolderName: '',
-    createFolderError: null,
+    createFolderError: null as string | null,
   },
   loading: {
     isLoading: false,
-    error: null,
+    error: null as string | null,
   },
 
   loadFileSystem: async () => {
@@ -298,13 +298,13 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   startCreatingFolder: (parentId: string) => {
     set((state: FSExplorerState) => {
       const newExpandedFolders = new Set(state.ui.expandedFolders).add(parentId);
-      const nextUiState = {
+      const nextUiState: FSExplorerState['ui'] = {
         ...state.ui,
         selectedId: parentId,
         expandedFolders: newExpandedFolders,
         creatingFolderInParentId: parentId,
         newFolderName: '',
-        createFolderError: null,
+        createFolderError: null as string | null,
       };
       return { ui: nextUiState };
     });
@@ -312,10 +312,10 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
 
   setNewFolderName: (name: string) => {
     set((state: FSExplorerState) => {
-      const nextUiState = {
+      const nextUiState: FSExplorerState['ui'] = {
         ...state.ui,
         newFolderName: name,
-        createFolderError: null,
+        createFolderError: null as string | null,
       };
       return { ui: nextUiState };
     });
@@ -323,11 +323,11 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
 
   cancelCreatingFolder: () => {
     set((state: FSExplorerState) => {
-      const nextUiState = {
+      const nextUiState: FSExplorerState['ui'] = {
         ...state.ui,
-        creatingFolderInParentId: null,
+        creatingFolderInParentId: null as string | null,
         newFolderName: '',
-        createFolderError: null,
+        createFolderError: null as string | null,
       };
       return { ui: nextUiState };
     });

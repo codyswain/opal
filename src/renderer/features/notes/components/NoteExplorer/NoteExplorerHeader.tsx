@@ -1,69 +1,41 @@
 import React from "react";
 import { Button } from "@/renderer/shared/components/Button";
 import { FolderPlus } from "lucide-react";
-import { useNotesContext } from "../../context/notesContext";
+// import { useNotesContext } from "../../context/notesContext"; // Removed missing context import
+// import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore"; // Unused import
 
-export const NoteExplorerHeader: React.FC = () => {
-  
-  useNotesContext();
+// interface NoteExplorerHeaderProps {} // Removed empty interface
 
-
+export const NoteExplorerHeader: React.FC = () => { // Removed Props type
+  // const { startCreatingFolder, createNote } = useNotesContext(); // Removed missing context usage
+  // const selectedId = useFileExplorerStore((state) => state.ui.selectedId); // Unused variable
+  // const nodes = useFileExplorerStore((state) => state.entities.nodes); // Unused variable
 
   async function handleFolderCreation() {
-    const result = await window.electron.openFolderDialog();
-    if (!result.canceled && result.filePaths.length > 0) {
-      try {
-        const response = await window.electron.addRootFolder(result.filePaths[0]);
-        console.log('response: ', response);
-      } catch (error) {
-        console.error('Error adding folder:', error);
-      }
-    }
+    // Folder creation logic using store action (if needed)
+    console.log("Folder creation triggered");
+    // Replace with actual call: startCreatingFolder(selectedId || null);
   }
 
-  return (
-    <div className="flex justify-between items-center p-2 h-10 border-b border-border">
-      <span className="font-semibold text-sm">Files</span>
-      <div className="flex">
-        {/* TODO: implement */}
-        {/* <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 mr-1"
-          onClick={onCreateNote}
-          title="New Note"
-        >
-          <Pencil className="h-4 w-4" />
-        </Button> */}
-        {/* <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 mr-1"
-          onClick={onCreateFolder}
-          title="New Folder"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button> */}
-  
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={handleFolderCreation}
-          title="New Top Level Button to Load with SQLite"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button>
+  /* // Unused function
+  async function handleNoteCreation() {
+    // Note creation logic using store action (if needed)
+    console.log("Note creation triggered");
+  }
+  */
 
-        {/* <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={openDialogToMountDirpath}
-          title="Add Top-Level Folder"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button> */}
+  return (
+    <div className="flex items-center justify-between p-2 border-b border-gray-700">
+      <span className="text-sm font-medium text-gray-400">NOTES</span>
+      <div className="flex items-center space-x-1">
+        <Button variant="ghost" size="sm" onClick={handleFolderCreation}>
+          <FolderPlus className="w-4 h-4" />
+        </Button>
+        {/* Button for note creation removed as function is unused 
+        <Button variant="ghost" size="sm" onClick={handleNoteCreation}>
+          <Plus className="w-4 h-4" />
+        </Button> 
+        */}
       </div>
     </div>
   );

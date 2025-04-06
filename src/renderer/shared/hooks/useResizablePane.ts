@@ -3,35 +3,35 @@ import { useCallback, useRef, useEffect } from 'react';
 interface UseResizablePaneProps {
   minHeight?: number;
   maxHeight?: number;
-  minWidth?: number;
-  maxWidth?: number;
-  height?: number;
+  // minWidth?: number; // Unused
+  // maxWidth?: number; // Unused
+  // height?: number; // Unused
   setHeight?: (height: number) => void;
-  width?: number;
-  setWidth?: (width: number) => void;
+  // width?: number; // Unused
+  // setWidth?: (width: number) => void; // Unused
   paneRef: React.RefObject<HTMLDivElement>;
   direction: 'horizontal' | 'vertical';
-  initialWidth?: number;
-  initialHeight?: number;
+  // initialWidth?: number; // Unused
+  // initialHeight?: number; // Unused
 }
 
 export const useResizablePane = ({
   minHeight,
   maxHeight,
-  minWidth,
-  maxWidth,
-  height,
+  // minWidth, // Unused
+  // maxWidth, // Unused
+  // height, // Unused
   setHeight,
-  width,
-  setWidth,
+  // width, // Unused
+  // setWidth, // Unused
   paneRef,
   direction,
-  initialWidth,
-  initialHeight,
+  // initialWidth, // Unused
+  // initialHeight, // Unused
 }: UseResizablePaneProps) => {
   const isResizing = useRef(false);
 
-  const startResizing = useCallback((e: React.MouseEvent) => {
+  const startResizing = useCallback(() => {
     isResizing.current = true;
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResizing);

@@ -2,21 +2,22 @@ import {
   Note, 
   SimilarNote, 
   Embedding,
-  FileNode,
-  DirectoryStructures
+  // FileNode, // Unused
+  // DirectoryStructures // Unused
 } from '@/renderer/shared/types';
-import OpenAI from 'openai';
-import SqliteVss from 'sqlite-vss';
-import path from 'path';
-import fs from 'fs/promises';
+// eslint-disable-next-line import/no-named-as-default
+import OpenAI from 'openai'; // Reverted to default import and disabled rule
+// import SqliteVss from 'sqlite-vss'; // Unused
+// import path from 'path'; // Unused
+// import fs from 'fs/promises'; // Unused
 import { parse } from "node-html-parser";
 import { ChatCompletionMessageParam } from "openai/resources/chat";
 import log from 'electron-log';
 import DatabaseManager from "../database/db";
-import { AIMetadata, Item } from "../database/types";
+// import { AIMetadata, Item } from "../database/types"; // Unused
 
 const TEXT_EMBEDDING_MODEL = "text-embedding-ada-002";
-const EMBEDDING_DIMENSION = 1536;
+// const EMBEDDING_DIMENSION = 1536; // Unused
 
 export class EmbeddingCreator {
   private openai: OpenAI;

@@ -334,12 +334,10 @@ ${selectedNote.content.substring(0, 4000)}${selectedNote.content.length > 4000 ?
           
           if (lastMessageIndex >= 0 && updatedMessages[lastMessageIndex].role === "assistant") {
             // Ensure the ID is preserved if it exists
-            const existingId = updatedMessages[lastMessageIndex].id;
             updatedMessages[lastMessageIndex] = {
               ...updatedMessages[lastMessageIndex],
               content: updatedMessages[lastMessageIndex].content + chunk,
               // Remove __updateKey, React handles updates based on state changes
-              // id: existingId || assistantMessage.id // Keep existing or initial ID
             };
           }
           
