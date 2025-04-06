@@ -28,20 +28,6 @@ const config: ForgeConfig = {
           // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
           entry: 'src/main.ts',
           config: 'vite.main.config.ts',
-          // Set explicit output configuration for the main process
-          viteConfig: {
-            build: {
-              outDir: '.vite/build',
-              rollupOptions: {
-                output: {
-                  entryFileNames: 'main.js',
-                  format: 'cjs',
-                },
-                // Explicitly externalize problematic dependencies
-                external: ['electron', 'electron-log', 'better-sqlite3', 'node-html-parser', 'fs', 'path', 'crypto'],
-              },
-            },
-          },
         },
         {
           entry: 'src/preload.ts',

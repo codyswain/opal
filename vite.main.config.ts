@@ -3,51 +3,72 @@ import { defineConfig, mergeConfig } from 'vite';
 import { getBuildConfig, pluginHotRestart, external } from './vite.base.config';
 import commonjs from '@rollup/plugin-commonjs';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
+import path from 'path';
 
 // https://vitejs.dev/config
 export default defineConfig((env) => {
   const forgeEnv = env as ConfigEnv<'build'>;
   const { forgeConfigSelf } = forgeEnv;
-  
-  // Safe define without relying on forgeConfig.renderer
-  const define = {}; // Skip getBuildDefine since it might cause issues
 
   // Define config for main process
   const config: UserConfig = {
     build: {
-      outDir: '.vite/build',
+      // Enable watch mode for development
+      watch: env.command === 'serve' ? {} : null,
+      // Explicitly set the source file to be the main.ts file only
       lib: {
-        entry: forgeConfigSelf?.entry || 'src/main.ts', // Default to src/main.ts if not provided
-        fileName: () => '[name].js',
+        entry: path.resolve(__dirname, 'src/main.ts'),
         formats: ['cjs'],
+        fileName: () => 'main.js',
       },
+      // Keep rollup options, especially external
       rollupOptions: {
-        // Use external from vite.base.config.ts
-        external, 
+        // Preserve entry signatures to avoid trying to bundle deep imports
+        preserveEntrySignatures: 'strict',
+        // Explicitly ignore all renderer imports
+        external: [
+          ...external,
+          // Regex to exclude all renderer-related imports
+          /^@\/renderer/,
+          /^react/,
+          /^@radix-ui/,
+          /^@tiptap/,
+        ],
         output: {
+          // Ensure CJS format as required by Electron main process
           format: 'cjs',
+          dir: '.vite/build',
+          entryFileNames: 'main.js',
         },
       },
+      // Ensure minify is only applied during 'build' command
+      minify: env.command === 'build',
+      // Don't clean output directory to avoid conflicts with other builds
+      emptyOutDir: false,
     },
     plugins: [
       commonjs({
-        // Enhanced CommonJS plugin options to handle node modules
         transformMixedEsModules: true,
       }),
       nodeResolve({
         preferBuiltins: true,
-        browser: false, // Not targeting a browser environment
-        // Make sure all types of dependencies are processed
+        browser: false,
         exportConditions: ['node', 'require', 'default'],
       }),
+      // Keep hot restart for development
       pluginHotRestart('restart'),
     ],
-    define,
+    // define should be managed by forge plugin or base config
     resolve: {
       // Load Node.js entry points
       mainFields: ['main', 'module', 'jsnext:main', 'jsnext'],
+      // Add path alias for @ to fix import resolution
+      alias: {
+        '@': path.resolve(__dirname, './src')
+      },
     },
   };
 
+  // Merge with base config, let forge plugin handle specifics
   return mergeConfig(getBuildConfig(forgeEnv), config);
 });

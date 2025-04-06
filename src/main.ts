@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
-import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
+import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./main/config/window";
 import { 
   closeDatabase, 
   initializeDatabase,
@@ -21,7 +21,10 @@ if (process.platform === 'win32') {
   }
 }
 
+// More reliable detection of development mode in Electron Forge
 const isDevelopment = process.env.NODE_ENV === "development";
+// Always consider it development mode when VITE_DEV_SERVER_URL is defined
+const forceDevTools = typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined';
 let mainWindow: BrowserWindow | null = null;
 
 // CSP Configuration
@@ -92,9 +95,9 @@ const createWindow = () => {
 
   loadPage();
 
-  if (isDevelopment) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Always open DevTools for debugging
+  mainWindow.webContents.openDevTools();
+  console.log("Opening DevTools - development mode:", isDevelopment, "forceDevTools:", forceDevTools);
 
   mainWindow.webContents.on('did-finish-load', () => {
     log.info('Main window finished loading');

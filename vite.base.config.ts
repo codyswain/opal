@@ -20,7 +20,8 @@ export function getBuildConfig(env: ConfigEnv<'build'>): UserConfig {
       emptyOutDir: false,
       // 🚧 Multiple builds may conflict.
       outDir: '.vite/build',
-      watch: command === 'serve' ? {} : null,
+      // Let the Electron Forge Vite plugin handle watching during 'serve'
+      // watch: command === 'serve' ? {} : null, // Removed conditional watch
       minify: command === 'build',
     },
     clearScreen: false,
