@@ -1,5 +1,5 @@
 // Use the globally exposed electron API from the preload script
-const electron = (window as any).electron;
+const electron = window.electron;
 
 export async function createDirectoryIfNotExists(dirPath: string): Promise<void> {
   // Check existence and creation should be handled in the main process via IPC
