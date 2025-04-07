@@ -1,5 +1,5 @@
 // src/main/database/ipc-handlers.ts (New file for IPC handlers)
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, dialog } from 'electron';
 import DatabaseManager from './db'; // Import DatabaseManager
 import log from 'electron-log';
 import { v4 as uuidv4 } from 'uuid';
@@ -844,6 +844,80 @@ export async function registerDatabaseIPCHandlers() {
       };
     }
   });
+
+  ipcMain.handle('backup-database', async () => {
+    const dbManager = DatabaseManager.getInstance();
+    // Use the default path logic to find the database file
+    const userDataPath = app.getPath('userData');
+    const currentDbPath = path.join(userDataPath, 'tread.db');
+
+    // Check if the default database file exists
+    if (!fsSync.existsSync(currentDbPath)) {
+      log.error('Cannot backup: Default database file not found at', currentDbPath);
+      return { success: false, message: 'Default database file not found.' };
+    }
+
+    try {
+      // Suggest a filename for the backup
+      const defaultBackupName = `tread-backup-${new Date().toISOString().split('T')[0]}.db`;
+      const defaultPath = path.join(app.getPath('documents'), defaultBackupName);
+
+      // Show save dialog to get the desired backup path
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Save Database Backup',
+        defaultPath: defaultPath,
+        filters: [
+          { name: 'SQLite Database', extensions: ['db'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (canceled || !filePath) {
+        log.info('Database backup cancelled by user.');
+        return { success: false, message: 'Backup cancelled by user.' };
+      }
+
+      // Close the database before copying to avoid corruption
+      if (dbManager.getDatabase()) {
+        dbManager.close();
+        log.info('Closed database connection for backup.');
+      }
+
+      // Copy the database file to the selected path
+      await fs.copyFile(currentDbPath, filePath);
+      log.info(`Database backup created successfully at: ${filePath}`);
+
+      // Re-open the database connection
+      try {
+        await dbManager.initialize(currentDbPath); 
+        log.info('Re-opened database connection after backup.');
+      } catch (reopenError) {
+        log.error('Failed to reopen database after backup:', reopenError);
+        // Inform the user, but the backup itself was successful
+        return { 
+          success: true, 
+          filePath, 
+          message: 'Backup created, but failed to reopen the main database. Please restart the application.'
+        };
+      }
+
+      return { success: true, filePath };
+    } catch (error) {
+      log.error('Error creating database backup:', error);
+      // Attempt to re-open the database even if backup failed
+      try {
+        if (!dbManager.getDatabase()) {
+          await dbManager.initialize(currentDbPath);
+          log.info('Re-opened database connection after failed backup attempt.');
+        }
+      } catch (reopenError) {
+        log.error('Failed to reopen database after failed backup:', reopenError);
+      }
+      return { success: false, message: `Failed to create backup: ${error.message}` };
+    }
+  });
+
+  
 
   // --- Chat Functionality ---
   ipcMain.handle('chat:get-conversation', async (event, conversationId: string) => {

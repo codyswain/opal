@@ -179,6 +179,7 @@ declare global {
       triggerMigration: () => Promise<void>;
       cleanupOldNotes: () => Promise<{ success: boolean; message?: string }>;
       resetDatabase: () => Promise<{ success: boolean; message?: string }>;
+      backupDatabase: () => Promise<{ success: boolean; filePath?: string; message?: string }>;
     };
     
     fileExplorer: {

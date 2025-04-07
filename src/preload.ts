@@ -123,9 +123,11 @@ contextBridge.exposeInMainWorld('databaseAPI', {
   cleanupOldNotes: () => 
     ipcRenderer.invoke('cleanup-old-notes'),
 
-  // Add this to your existing databaseAPI
+  // Database Management Utilities
   resetDatabase: () => 
     ipcRenderer.invoke('reset-database'),
+  backupDatabase: () => 
+    ipcRenderer.invoke('backup-database'),
 });
 
 // Define the entire fileExplorer API block
