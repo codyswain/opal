@@ -42,11 +42,11 @@ const FileItem: React.FC<FileItemProps> = ({
   const isMounted = entry.isMounted;
 
   // Format date for display in user's local timezone
-  const formatDate = formatLocalDate;
+  // const formatDate = formatLocalDate;
 
   // State to track if a double click is in progress
   const [isDoubleClickInProgress, setIsDoubleClickInProgress] =
-    React.useState(false);
+    useState(false);
   const doubleClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleClick = (/* _e: React.MouseEvent */) => {

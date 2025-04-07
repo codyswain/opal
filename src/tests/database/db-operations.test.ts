@@ -70,12 +70,16 @@ describe('Database Operations Tests', () => {
   });
 
   beforeEach(() => {
-    // Clear tables before each test - order matters due to foreign key constraints
-    // First delete child tables
+    // Temporarily disable foreign key constraints for test setup
+    db.pragma('foreign_keys = OFF');
+    
+    // Clear tables before each test
     db.exec('DELETE FROM notes');
     db.exec('DELETE FROM ai_metadata');
-    // Then delete parent tables
     db.exec('DELETE FROM items');
+    
+    // Re-enable foreign key constraints
+    db.pragma('foreign_keys = ON');
     
     // Create root folder first
     const rootId = uuidv4();

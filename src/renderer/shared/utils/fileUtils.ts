@@ -1,8 +1,3 @@
-import { Note } from "../types";
-
-// Remove the fs import as it's not available in the renderer process after build
-// import fs from 'fs';
-
 // Use the globally exposed electron API from the preload script
 const electron = (window as any).electron;
 

@@ -1,4 +1,4 @@
-import type { ConfigEnv, UserConfig } from 'vite';
+import type { UserConfig } from 'vite';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { pluginExposeRenderer } from './vite.base.config';

@@ -55,12 +55,15 @@ describe('Database Search Tests', () => {
   });
 
   beforeEach(() => {
-    // Clear tables before each test - order matters due to foreign key constraints
-    // First delete child tables
+    // Temporarily disable foreign key constraints for test setup
+    db.pragma('foreign_keys = OFF');
+    
+    // Clear tables before each test
     db.exec('DELETE FROM notes');
-    db.exec('DELETE FROM ai_metadata');
-    // Then delete parent tables
     db.exec('DELETE FROM items');
+    
+    // Re-enable foreign key constraints
+    db.pragma('foreign_keys = ON');
     
     // Create root folder first
     const rootId = uuidv4();
@@ -103,13 +106,6 @@ describe('Database Search Tests', () => {
         VALUES (?, ?)
       `);
       insertNote.run(itemId, note.content);
-      
-      // Insert metadata (using null for embedding)
-      const insertMetadata = db.prepare(`
-        INSERT INTO ai_metadata (item_id, summary, tags, embedding)
-        VALUES (?, ?, ?, ?)
-      `);
-      insertMetadata.run(itemId, note.content.substring(0, 50), 'test,search', null);
     }
     
     // Verify all notes were inserted
@@ -137,12 +133,6 @@ describe('Database Search Tests', () => {
       INSERT INTO notes (item_id, content)
       VALUES (?, ?)
     `).run(noteWithSearchTerms.id, noteWithSearchTerms.content);
-    
-    // Insert metadata
-    db.prepare(`
-      INSERT INTO ai_metadata (item_id, summary, tags, embedding)
-      VALUES (?, ?, ?, ?)
-    `).run(noteWithSearchTerms.id, noteWithSearchTerms.content.substring(0, 50), 'test,search', null);
     
     // Search for 'database' term using LIKE query
     const searchTerm = 'database';

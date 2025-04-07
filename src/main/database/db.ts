@@ -2,9 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-// Import electron-log as CommonJS-style require
-// The issue is that electron-log doesn't have a default export
-const log = require('electron-log');
+import log from 'electron-log';
 
 class DatabaseManager {
   private static instance: DatabaseManager;

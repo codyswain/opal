@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as childProcess from 'child_process';
 
 // Mock child_process.exec
 vi.mock('child_process', () => ({
