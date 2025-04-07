@@ -7,6 +7,7 @@
   "packageManager": "npm@10.9.0",
   "type": "commonjs",
   "scripts": {
+    "postinstall": "electron-rebuild",
     "start": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge start",
     "dev": "electron-forge start",
     "better-dev": "node fix-dev.js",
@@ -14,7 +15,7 @@
     "make": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge make",
     "publish": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge publish",
     "lint": "npx eslint --ext .ts,.tsx .",
-    "test": "vitest run",
+    "test": "npm rebuild --build-from-source better-sqlite3 && vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
@@ -22,9 +23,20 @@
   },
   "config": {
     "forge": {
+      "packagerConfig": {
+        "icon": "assets/icons/icon"
+      },
       "electronWinstallerConfig": {
         "name": "tread"
       },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        }
+      ],
       "entryPoints": [
         {
           "name": "main_window",
@@ -43,6 +55,7 @@
     "@electron-forge/plugin-fuses": "^7.8.0",
     "@electron-forge/plugin-vite": "^7.8.0",
     "@electron/fuses": "^1.8.0",
+    "@electron/rebuild": "^3.7.1",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@testing-library/jest-dom": "^6.6.3",
