@@ -98,6 +98,35 @@ This will create distributable packages for your current platform in the `out` d
   - `main.ts`: Electron main process
   - `preload.ts`: Preload script for Electron
   - `renderer.tsx`: Entry point for React application
+  - `tests/`: Unit and integration tests
+
+## Testing
+
+The application uses Vitest for testing the build processes and core functionality.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode during development
+npm run test:watch 
+
+# Run tests with UI
+npm run test:ui
+
+# Generate test coverage report
+npm run test:coverage
+```
+
+### Pre-commit Hooks
+
+The project uses Husky to run tests and linting before each commit to ensure code quality. This helps prevent introducing broken code into the repository.
+
+### Continuous Integration
+
+GitHub Actions are configured to run tests automatically on pull requests to the main branch. This helps ensure that all changes pass tests before they are merged.
 
 ## Technologies Used
 
