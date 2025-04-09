@@ -33,6 +33,7 @@ export default defineConfig((env) => {
           /^react/,
           /^@radix-ui/,
           /^@tiptap/,
+          'keytar',
         ],
         output: {
           // Ensure CJS format as required by Electron main process
