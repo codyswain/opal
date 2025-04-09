@@ -34,11 +34,6 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("create-directory", dirPath),
   deleteDirectory: (dirPath: string) =>
     ipcRenderer.invoke("delete-directory", dirPath),
-  getTopLevelFolders: () => ipcRenderer.invoke("get-top-level-folders"),
-  addTopLevelFolder: (folderPath: string) =>
-    ipcRenderer.invoke("add-top-level-folder", folderPath),
-  removeTopLevelFolder: (folderPath: string) =>
-    ipcRenderer.invoke("remove-top-level-folder", folderPath),
   openFolderDialog: () => ipcRenderer.invoke("dialog:openDirectory"),
   getDirectoryStructure: (dirPath: string) =>
     ipcRenderer.invoke("get-directory-structure", dirPath),
@@ -120,8 +115,6 @@ contextBridge.exposeInMainWorld('databaseAPI', {
   // Migration utilities
   triggerMigration: () => 
     ipcRenderer.invoke('trigger-migration'),
-  cleanupOldNotes: () => 
-    ipcRenderer.invoke('cleanup-old-notes'),
 
   // Database Management Utilities
   resetDatabase: () => 

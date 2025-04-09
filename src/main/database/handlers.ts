@@ -8,7 +8,6 @@ import fsSync from 'fs';
 import path from 'path';
 import BetterSqlite3 from 'better-sqlite3'; // Added import
 import { Item, ItemWithAIMetadata, Note } from './types';
-import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
@@ -768,17 +767,6 @@ export async function registerDatabaseIPCHandlers() {
             return { success: false, error: String(error) };
         }
     });
-
-  ipcMain.handle('cleanup-old-notes', async () => {
-    try {
-      log.info('Manual cleanup triggered');
-      await cleanupOldNotes();
-      return { success: true, message: 'Old notes cleaned up successfully' };
-    } catch (error) {
-      log.error('Error during cleanup:', error);
-      return { success: false, error: String(error) };
-    }
-  });
 
   ipcMain.handle('reset-database', async () => {
     try {

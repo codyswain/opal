@@ -155,25 +155,4 @@ export async function registerFileSystemIPCHandlers(){
     
     return result;
   });
-
-  // Add handler for getting top-level folders
-  ipcMain.handle("get-top-level-folders", async () => {
-    try {
-      let config: Config = {};
-      try {
-        const configContent = await fs.readFile(CONFIG_FILE, "utf-8");
-        config = JSON.parse(configContent);
-      } catch (error) {
-        // If the file doesn't exist or is invalid, assume no folders configured
-        console.warn("Config file not found or invalid, returning empty topLevelFolders array.", error);
-        return []; // Return empty array if config can't be read
-      }
-      // Return the topLevelFolders array, or an empty array if it doesn't exist
-      return config.topLevelFolders || [];
-    } catch (error) {
-      console.error("Error reading top-level folders:", error);
-      // In case of unexpected errors during processing
-      return [];
-    }
-  });
 }

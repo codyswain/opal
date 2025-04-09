@@ -137,9 +137,6 @@ declare global {
       setOpenAIKey: (key: string) => Promise<void>;
       createDirectory: (dirPath: string) => Promise<{ success: boolean; error?: string; }>;
       deleteDirectory: (dirPath: string) => Promise<{ success: boolean; error?: string; }>;
-      getTopLevelFolders: () => Promise<string[]>;
-      addTopLevelFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
-      removeTopLevelFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
       openFolderDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       getDirectoryStructure: (dirPath: string) => Promise<DirectoryEntry>;
       loadNote: (notePath: string) => Promise<Note>;
@@ -177,7 +174,6 @@ declare global {
       addRootFolder: (folderPath: string) => Promise<{ success: boolean; error?: string; }>;
       importFile: (sourceFilePath: string, destinationPath: string) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
       triggerMigration: () => Promise<void>;
-      cleanupOldNotes: () => Promise<{ success: boolean; message?: string }>;
       resetDatabase: () => Promise<{ success: boolean; message?: string }>;
       backupDatabase: () => Promise<{ success: boolean; filePath?: string; message?: string }>;
     };
