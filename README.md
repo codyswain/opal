@@ -1,4 +1,4 @@
-# Tread
+# Opal
 
 Notes
 
@@ -26,7 +26,7 @@ Notes
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/codyswain/tread.git && cd tread
+git clone https://github.com/codyswain/opal.git && cd opal
 ```
 
 2. Install Node.js dependencies:

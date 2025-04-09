@@ -15,7 +15,7 @@ const config: ForgeConfig = {
     extraResource: [
       path.resolve(__dirname, 'src', 'main', 'database', 'schema.sql')
     ],
-    icon: path.resolve(__dirname, 'assets', 'AppIcon.icns')
+    icon: path.resolve(__dirname, 'assets', 'icons', 'opal.icns')
   },
   rebuildConfig: {},
   makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],

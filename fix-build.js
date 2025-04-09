@@ -26,8 +26,8 @@ let targetDirectories = [];
 builds.forEach(build => {
   const buildPath = path.join(destDirRoot, build);
   if (fs.statSync(buildPath).isDirectory()) {
-    const appPath = path.join(buildPath, 'Tread.app', 'Contents', 'Resources', 'app');
-    const asarPath = path.join(buildPath, 'Tread.app', 'Contents', 'Resources', 'app.asar');
+    const appPath = path.join(buildPath, 'Opal.app', 'Contents', 'Resources', 'app');
+    const asarPath = path.join(buildPath, 'Opal.app', 'Contents', 'Resources', 'app.asar');
     
     if (fs.existsSync(appPath)) {
       targetDirectories.push({

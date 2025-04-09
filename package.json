@@ -1,6 +1,6 @@
 {
-  "name": "tread",
-  "productName": "Tread",
+  "name": "opal",
+  "productName": "Opal",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
@@ -24,10 +24,10 @@
   "config": {
     "forge": {
       "packagerConfig": {
-        "icon": "assets/icons/icon"
+        "icon": "assets/icons/opal"
       },
       "electronWinstallerConfig": {
-        "name": "tread"
+        "name": "opal"
       },
       "makers": [
         {

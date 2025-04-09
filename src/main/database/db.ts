@@ -22,7 +22,7 @@ class DatabaseManager {
   public async initialize(dbPath?: string): Promise<BetterSqlite3.Database> {
     try {
       // If dbPath is not provided, use the default location
-      const finalDbPath = dbPath || path.join(app.getPath('userData'), 'tread.db');
+      const finalDbPath = dbPath || path.join(app.getPath('userData'), 'opal.db');
 
       log.info(`Initializing database at: ${finalDbPath}`);
       log.info(`Database exists before connection: ${fs.existsSync(finalDbPath)}`);
@@ -37,10 +37,10 @@ class DatabaseManager {
       // Enable foreign keys
       this.db.pragma('foreign_keys = ON');
       
-      // Migrate the database if needed
-      await this.migrateDatabase();
+      // // Migrate the database if needed // <-- REMOVED THIS CALL
+      // await this.migrateDatabase();
       
-      log.info('Database connection established successfully');
+      log.info('Database connection established successfully (schema not applied yet)');
       
       return this.db;
     } catch (error) {
@@ -51,8 +51,9 @@ class DatabaseManager {
 
   /**
    * Performs database migrations as needed
+   * This should be called AFTER the schema is applied.
    */
-  private async migrateDatabase(): Promise<void> {
+  public async migrateDatabase(): Promise<void> {
     if (!this.db) return;
     
     try {

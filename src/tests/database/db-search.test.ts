@@ -6,7 +6,7 @@ import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 // We'll use a test database in a temporary location
-const tempDir = path.join(os.tmpdir(), 'tread-test-search-' + Date.now());
+const tempDir = path.join(os.tmpdir(), 'opal-test-search-' + Date.now());
 const testDbPath = path.join(tempDir, 'test-search.db');
 
 // Define interfaces for our database tables

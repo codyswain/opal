@@ -12,23 +12,28 @@ interface SqliteVssModule {
   load(db: BetterSqlite3.Database): void;
 }
 
-// Import the sqlite-vss module
+// Import the sqlite-vss module dynamically
 let sqlite_vss: SqliteVssModule | null = null;
-try {
-  // Explicitly log the require attempt
-  log.info('Attempting to load sqlite-vss module...');
-  sqlite_vss = require('sqlite-vss');
-  log.info('sqlite-vss module loaded successfully');
-} catch (error) {
-  log.warn('sqlite-vss extension not available:', error);
-}
+(async () => {
+  try {
+    // Explicitly log the require attempt
+    log.info('Attempting to dynamically load sqlite-vss module...');
+    // Use dynamic import() instead of require()
+    const vssModule = await import('sqlite-vss');
+    // Assuming the default export is what we need
+    sqlite_vss = vssModule.default || vssModule; 
+    log.info('sqlite-vss module loaded successfully');
+  } catch (error) {
+    log.warn('sqlite-vss extension not available (dynamic import failed):', error);
+  }
+})();
 
 let dbManager: DatabaseManager | null = null;
 
 export async function initializeDatabase() {
   try {
     const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'tread.db');
+    const dbPath = path.join(userDataPath, 'opal.db');
     
     log.info(`Initializing database at: ${dbPath}`);
     
@@ -88,28 +93,50 @@ export async function initializeDatabase() {
     
     // Load and execute schema.sql to create tables and indices
     let schemaSQL: string;
+    let schemaSource = 'unknown'; // Track source - removed explicit type
     
     try {
       const schemaPath = path.join(app.getAppPath(), 'src', 'main', 'database', 'schema.sql');
-      log.info(`Trying to load schema from: ${schemaPath}`);
+      log.info(`Attempting to load schema from development path: ${schemaPath}`);
       schemaSQL = await fs.readFile(schemaPath, 'utf-8');
-    } catch (err) {
+      log.info(`Schema successfully loaded from development path.`);
+      schemaSource = 'development';
+    } catch (devErr) {
+      log.warn(`Failed to load schema from development path: ${devErr.message}`);
       // Fallback for packaged app: read from resources directory
       try {
         const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
         const prodSchemaPath = path.join(resourcesPath, 'schema.sql');
-        log.info(`Trying to load schema from alternate path: ${prodSchemaPath}`);
+        log.info(`Attempting to load schema from resource/alternate path: ${prodSchemaPath}`);
         schemaSQL = await fs.readFile(prodSchemaPath, 'utf-8');
+        log.info(`Schema successfully loaded from resource/alternate path.`);
+        schemaSource = 'resource/alternate';
       } catch (prodErr) {
+        log.warn(`Failed to load schema from resource/alternate path: ${prodErr.message}`);
         // Last fallback: hardcoded schema
-        log.warn('Failed to read schema.sql from paths, using embedded schema');
+        log.warn('Using embedded schema as fallback.');
         schemaSQL = getEmbeddedSchema();
+        schemaSource = 'embedded';
       }
     }
     
+    log.info(`Executing schema from source: ${schemaSource}`);
     // Execute the schema SQL
-    db.exec(schemaSQL);
-    log.info('Database schema initialized successfully');
+    try {
+      db.exec(schemaSQL);
+      log.info('Database schema executed successfully');
+
+      // Now that schema is applied, run migrations
+      log.info('Attempting to run database migrations...');
+      await dbManager.migrateDatabase(); // Call migration explicitly
+      log.info('Database migrations completed successfully.');
+
+    } catch (execError) {
+      log.error(`Error executing database schema from source ${schemaSource}:`, execError);
+      log.error(`Schema content that failed (first 500 chars):
+${schemaSQL.substring(0, 500)}...`);
+      throw execError; // Re-throw the error to ensure initialization fails clearly
+    }
     
     // Perform migrations if needed
     const workspacePath = path.join(userDataPath, 'workspace');

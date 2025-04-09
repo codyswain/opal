@@ -109,9 +109,9 @@ const FileItem: React.FC<FileItemProps> = ({
       e.dataTransfer.effectAllowed = 'copy';
       
       // Set item data
-      e.dataTransfer.setData('application/tread-item-id', entry.id);
-      e.dataTransfer.setData('application/tread-item-type', entry.type);
-      e.dataTransfer.setData('application/tread-item-name', entry.name);
+      e.dataTransfer.setData('application/opal-item-id', entry.id);
+      e.dataTransfer.setData('application/opal-item-type', entry.type);
+      e.dataTransfer.setData('application/opal-item-name', entry.name);
       e.dataTransfer.setData('text/plain', entry.name);
       
       // Call the parent's onDragStart as a callback

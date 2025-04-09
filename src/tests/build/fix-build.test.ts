@@ -24,7 +24,7 @@ describe('fix-build.js Tests', () => {
     const content = fs.readFileSync(fixBuildPath, 'utf-8');
     
     // Check for electron-forge specific paths
-    expect(content).toContain("Tread.app");
+    expect(content).toContain("Opal.app");
     expect(content).toContain("'Contents', 'Resources', 'app'");
     expect(content).toContain("app.asar");
   });

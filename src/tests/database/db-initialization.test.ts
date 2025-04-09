@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 // We'll use a test database in a temporary location
-const tempDir = path.join(os.tmpdir(), 'tread-test-' + Date.now());
+const tempDir = path.join(os.tmpdir(), 'opal-test-' + Date.now());
 const testDbPath = path.join(tempDir, 'test.db');
 
 // Define table row type

@@ -202,11 +202,6 @@ export async function registerDatabaseIPCHandlers() {
         return { success: false, error: 'Node not found' };
       }
 
-      if (node.type !== 'note') {
-        log.error('Cannot update content for non-note item:', id, node.type);
-        return { success: false, error: 'Item is not a note' };
-      }
-
       // Use a transaction to ensure both updates succeed or fail together
       const transaction = db.transaction(() => {
         // Update the note content
@@ -404,29 +399,49 @@ export async function registerDatabaseIPCHandlers() {
 
   // --- Item Creation ---
 
-  ipcMain.handle('create-folder', async (event, parentPath: string, folderName: string) => {
-    try {
-      const db = dbManager.getDatabase();
-      if (!db) {
-        log.error('Database not initialized when create-folder was called');
-        return { success: false, error: 'Database not initialized' };
-      }
+  ipcMain.handle('create-folder', async (event, parentPath: string | null, folderName: string) => {
+    const db = dbManager.getDatabase();
+    if (!db) {
+      log.error('Database not initialized when create-folder was called');
+      return { success: false, error: 'Database not initialized' };
+    }
 
+    let finalFolderName = folderName;
+    let finalPath: string;
+    let counter = 1;
+    const isTopLevel = !parentPath || parentPath === '/';
+    const actualParentPath = isTopLevel ? null : parentPath;
+
+    // Function to check if a path exists
+    const checkPathExists = (p: string) => {
+      const stmt = db.prepare('SELECT 1 FROM items WHERE path = ?');
+      return stmt.get(p) !== undefined;
+    };
+
+    // Determine initial path
+    finalPath = isTopLevel ? `/${finalFolderName}` : path.join(parentPath, finalFolderName);
+
+    // Loop to find a unique name if the initial one exists
+    while (checkPathExists(finalPath)) {
+      finalFolderName = `${folderName} ${counter}`;
+      finalPath = isTopLevel ? `/${finalFolderName}` : path.join(parentPath, finalFolderName);
+      counter++;
+    }
+
+    try {
       const id = uuidv4();
-      const newPath = path.join(parentPath, folderName);
+      log.info(`Creating folder: name=${finalFolderName}, path=${finalPath}, parent=${actualParentPath}`);
 
       const stmt = db.prepare(`
         INSERT INTO items (id, type, path, parent_path, name)
         VALUES (?, 'folder', ?, ?, ?)
       `);
-      stmt.run(id, newPath, parentPath, folderName);
+      stmt.run(id, finalPath, actualParentPath, finalFolderName);
 
-      // Also create the folder on disk.  Use newPath directly.
-      await fs.mkdir(newPath, { recursive: true });
-
-      return { success: true, id, path: newPath };
+      return { success: true, id, path: finalPath };
     } catch (error) {
-      log.error('Error creating folder:', error);
+      // Catch potential errors during insert, although the check should prevent UNIQUE errors
+      log.error('Error creating folder during insert:', error);
       return { success: false, error: String(error) };
     }
   });
@@ -771,7 +786,7 @@ export async function registerDatabaseIPCHandlers() {
       
       // Get database path
       const userDataPath = app.getPath('userData');
-      const dbPath = path.join(userDataPath, 'tread.db');
+      const dbPath = path.join(userDataPath, 'opal.db');
       
       // Close the database connection
       const dbManager = DatabaseManager.getInstance();
@@ -849,7 +864,7 @@ export async function registerDatabaseIPCHandlers() {
     const dbManager = DatabaseManager.getInstance();
     // Use the default path logic to find the database file
     const userDataPath = app.getPath('userData');
-    const currentDbPath = path.join(userDataPath, 'tread.db');
+    const currentDbPath = path.join(userDataPath, 'opal.db');
 
     // Check if the default database file exists
     if (!fsSync.existsSync(currentDbPath)) {
@@ -859,7 +874,7 @@ export async function registerDatabaseIPCHandlers() {
 
     try {
       // Suggest a filename for the backup
-      const defaultBackupName = `tread-backup-${new Date().toISOString().split('T')[0]}.db`;
+      const defaultBackupName = `opal-backup-${new Date().toISOString().split('T')[0]}.db`;
       const defaultPath = path.join(app.getPath('documents'), defaultBackupName);
 
       // Show save dialog to get the desired backup path

@@ -5,8 +5,8 @@ const os = require('os');
 const BetterSqlite3 = require('better-sqlite3');
 
 // Find the database path
-const userDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'tread');
-const dbPath = path.join(userDataPath, 'tread.db');
+const userDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'opal');
+const dbPath = path.join(userDataPath, 'opal.db');
 
 console.log(`Looking for database at: ${dbPath}`);
 
