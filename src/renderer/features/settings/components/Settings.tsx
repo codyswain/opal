@@ -7,10 +7,9 @@ import { useSettings } from "../context/SettingsContext";
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const [showApiKey, setShowApiKey] = useState(false);
-  const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
-  const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const [embeddingsStatus, setEmbeddingsStatus] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
 
   const handleSave = () => {
     updateSettings({ openAIKey: settings.openAIKey });
@@ -18,34 +17,6 @@ export const Settings: React.FC = () => {
 
   const toggleApiKeyVisibility = () => {
     setShowApiKey(!showApiKey);
-  };
-
-  const handleMigration = async () => {
-    setMigrationStatus('Migration in progress...');
-    try {
-      const result = await window.databaseAPI.triggerMigration();
-      if (result.success) {
-        setMigrationStatus('Migration completed successfully!');
-      } else {
-        setMigrationStatus(`Migration failed: ${result.error}`);
-      }
-    } catch (error) {
-      setMigrationStatus(`Migration error: ${error}`);
-    }
-  };
-
-  const handleCleanup = async () => {
-    setCleanupStatus('Cleanup in progress...');
-    try {
-      const result = await window.databaseAPI.cleanupOldNotes();
-      if (result.success) {
-        setCleanupStatus('Old notes cleaned up successfully!');
-      } else {
-        setCleanupStatus(`Cleanup failed: ${result.error}`);
-      }
-    } catch (error) {
-      setCleanupStatus(`Cleanup error: ${error}`);
-    }
   };
 
   const handleResetDatabase = async () => {
@@ -57,7 +28,7 @@ export const Settings: React.FC = () => {
         if (result.success) {
           setResetStatus('Database reset successfully! You can now migrate your notes again.');
         } else {
-          setResetStatus(`Database reset failed: ${result.message || result.error}`);
+          setResetStatus(`Database reset failed: ${result.message || 'Unknown error'}`);
         }
       } catch (error) {
         setResetStatus(`Database reset error: ${error}`);
@@ -65,6 +36,20 @@ export const Settings: React.FC = () => {
     }
   };
   
+  const handleBackupDatabase = async () => {
+    setBackupStatus('Backup in progress...');
+    try {
+      const result = await window.databaseAPI.backupDatabase();
+      if (result.success && result.filePath) {
+        setBackupStatus(`Backup created successfully at ${result.filePath}!`);
+      } else {
+        setBackupStatus(`Backup failed: ${result.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setBackupStatus(`Backup error: ${error}`);
+    }
+  };
+
   const handleRebuildEmbeddings = async () => {
     // Show confirmation dialog
     if (window.confirm('Are you sure you want to rebuild all note embeddings? This may take a while but can fix issues with related notes.')) {
@@ -138,30 +123,18 @@ export const Settings: React.FC = () => {
       <div className="mt-8 border-t pt-6">
         <h2 className="text-xl font-semibold mb-4">Database Management</h2>
         <p className="mb-4">
-          Manage your database and migrate notes from the file system to the SQLite database for improved performance and reliability.
+          Manage your database settings and perform maintenance tasks.
         </p>
         <div className="flex flex-col space-y-4">
           <button
-            onClick={handleMigration}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            onClick={handleBackupDatabase}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
           >
-            Migrate Notes to Database
+            Backup Database
           </button>
-          {migrationStatus && (
-            <div className={`p-2 rounded ${migrationStatus.includes('failed') || migrationStatus.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-              {migrationStatus}
-            </div>
-          )}
-          
-          <button
-            onClick={handleCleanup}
-            className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
-          >
-            Clean Up Old Notes
-          </button>
-          {cleanupStatus && (
-            <div className={`p-2 rounded ${cleanupStatus.includes('failed') || cleanupStatus.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-              {cleanupStatus}
+          {backupStatus && (
+            <div className={`p-2 rounded ${backupStatus.includes('failed') || backupStatus.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+              {backupStatus}
             </div>
           )}
           

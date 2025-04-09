@@ -1,7 +1,6 @@
 import { builtinModules } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import type { ConfigEnv, Plugin, UserConfig } from 'vite';
-import pkg from './package.json';
 
 // Node builtins that should always be externalized
 export const builtins = ['electron', ...builtinModules.map((m) => [m, `node:${m}`]).flat()];

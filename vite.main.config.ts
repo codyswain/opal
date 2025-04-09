@@ -8,7 +8,7 @@ import path from 'path';
 // https://vitejs.dev/config
 export default defineConfig((env) => {
   const forgeEnv = env as ConfigEnv<'build'>;
-  const { forgeConfigSelf } = forgeEnv;
+  // const { forgeConfigSelf } = forgeEnv;
 
   // Define config for main process
   const config: UserConfig = {
@@ -33,6 +33,7 @@ export default defineConfig((env) => {
           /^react/,
           /^@radix-ui/,
           /^@tiptap/,
+          'keytar',
         ],
         output: {
           // Ensure CJS format as required by Electron main process

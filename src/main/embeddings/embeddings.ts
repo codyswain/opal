@@ -12,8 +12,7 @@ import OpenAI from 'openai'; // Reverted to default import and disabled rule
 // import fs from 'fs/promises'; // Unused
 import * as nodeHtmlParser from "node-html-parser"; // Import the whole module
 import { ChatCompletionMessageParam } from "openai/resources/chat";
-// Import electron-log using require to avoid default import issues
-const log = require('electron-log');
+import log from 'electron-log'
 import DatabaseManager from "../database/db";
 // import { AIMetadata, Item } from "../database/types"; // Unused
 

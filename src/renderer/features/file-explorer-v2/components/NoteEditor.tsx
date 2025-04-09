@@ -352,10 +352,10 @@ const FileHandler = ({
     console.log('Drop event data types:', Array.from(e.dataTransfer.types));
     
     // First check and log all custom data
-    if (e.dataTransfer.types.includes('application/tread-item-id')) {
-      const itemId = e.dataTransfer.getData('application/tread-item-id');
-      const itemType = e.dataTransfer.getData('application/tread-item-type');
-      const itemName = e.dataTransfer.getData('application/tread-item-name');
+    if (e.dataTransfer.types.includes('application/opal-item-id')) {
+      const itemId = e.dataTransfer.getData('application/opal-item-id');
+      const itemType = e.dataTransfer.getData('application/opal-item-type');
+      const itemName = e.dataTransfer.getData('application/opal-item-name');
       
       console.log('Dropped item details:', { itemId, itemType, itemName });
       
@@ -386,7 +386,7 @@ const FileHandler = ({
     
     // Check if the drag has files or a known item
     const hasFiles = e.dataTransfer.types.includes('Files');
-    const hasItemId = e.dataTransfer.types.includes('application/tread-item-id');
+    const hasItemId = e.dataTransfer.types.includes('application/opal-item-id');
     
     if (hasFiles || hasItemId) {
       e.dataTransfer.dropEffect = 'copy';

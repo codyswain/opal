@@ -49,27 +49,10 @@ export default function ExplorerLeftPanel() {
     await createNote(parentPath, 'New Note.md');
   };
 
-  // Handle creating a new folder
+  // Handle creating a new folder (TOP-LEVEL ONLY for this button)
   const handleCreateFolder = async () => {
-    const selectedId = ui.selectedId;
-    let parentPath = '/';
-    
-    if (selectedId) {
-      const selectedNode = entities.nodes[selectedId];
-      if (selectedNode) {
-        if (selectedNode.type === 'folder') {
-          parentPath = selectedNode.path;
-        } else if (selectedNode.parentId) {
-          // If a note is selected, create at the same level
-          const parentNode = entities.nodes[selectedNode.parentId];
-          if (parentNode) {
-            parentPath = parentNode.path;
-          }
-        }
-      }
-    }
-    
-    await createFolder(parentPath, 'New Folder');
+    // For the top-level button, always pass null as parentPath
+    await createFolder(null, 'New Folder'); // Pass null for parentPath
   };
 
   // Corrected function signature and implementation
@@ -81,9 +64,9 @@ export default function ExplorerLeftPanel() {
     if (item) {
       console.log(`Drag started for item ${item.id}: ${item.name}`);
       // Set custom data for the drop target (e.g., NoteEditor)
-      event.dataTransfer.setData('application/tread-item-id', item.id);
-      event.dataTransfer.setData('application/tread-item-type', item.type);
-      event.dataTransfer.setData('application/tread-item-name', item.name);
+      event.dataTransfer.setData('application/opal-item-id', item.id);
+      event.dataTransfer.setData('application/opal-item-type', item.type);
+      event.dataTransfer.setData('application/opal-item-name', item.name);
       // Optional: Set drag effect
       event.dataTransfer.effectAllowed = 'copy'; 
     } else {

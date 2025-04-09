@@ -1,5 +1,5 @@
 // src/main/database/ipc-handlers.ts (New file for IPC handlers)
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, dialog } from 'electron';
 import DatabaseManager from './db'; // Import DatabaseManager
 import log from 'electron-log';
 import { v4 as uuidv4 } from 'uuid';
@@ -8,7 +8,6 @@ import fsSync from 'fs';
 import path from 'path';
 import BetterSqlite3 from 'better-sqlite3'; // Added import
 import { Item, ItemWithAIMetadata, Note } from './types';
-import { cleanupOldNotes } from './cleanup';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { getOpenAIKey } from '../file-system/loader';
@@ -200,11 +199,6 @@ export async function registerDatabaseIPCHandlers() {
       if (!node) {
         log.error('Node not found for ID:', id);
         return { success: false, error: 'Node not found' };
-      }
-
-      if (node.type !== 'note') {
-        log.error('Cannot update content for non-note item:', id, node.type);
-        return { success: false, error: 'Item is not a note' };
       }
 
       // Use a transaction to ensure both updates succeed or fail together
@@ -404,29 +398,49 @@ export async function registerDatabaseIPCHandlers() {
 
   // --- Item Creation ---
 
-  ipcMain.handle('create-folder', async (event, parentPath: string, folderName: string) => {
-    try {
-      const db = dbManager.getDatabase();
-      if (!db) {
-        log.error('Database not initialized when create-folder was called');
-        return { success: false, error: 'Database not initialized' };
-      }
+  ipcMain.handle('create-folder', async (event, parentPath: string | null, folderName: string) => {
+    const db = dbManager.getDatabase();
+    if (!db) {
+      log.error('Database not initialized when create-folder was called');
+      return { success: false, error: 'Database not initialized' };
+    }
 
+    let finalFolderName = folderName;
+    let finalPath: string;
+    let counter = 1;
+    const isTopLevel = !parentPath || parentPath === '/';
+    const actualParentPath = isTopLevel ? null : parentPath;
+
+    // Function to check if a path exists
+    const checkPathExists = (p: string) => {
+      const stmt = db.prepare('SELECT 1 FROM items WHERE path = ?');
+      return stmt.get(p) !== undefined;
+    };
+
+    // Determine initial path
+    finalPath = isTopLevel ? `/${finalFolderName}` : path.join(parentPath, finalFolderName);
+
+    // Loop to find a unique name if the initial one exists
+    while (checkPathExists(finalPath)) {
+      finalFolderName = `${folderName} ${counter}`;
+      finalPath = isTopLevel ? `/${finalFolderName}` : path.join(parentPath, finalFolderName);
+      counter++;
+    }
+
+    try {
       const id = uuidv4();
-      const newPath = path.join(parentPath, folderName);
+      log.info(`Creating folder: name=${finalFolderName}, path=${finalPath}, parent=${actualParentPath}`);
 
       const stmt = db.prepare(`
         INSERT INTO items (id, type, path, parent_path, name)
         VALUES (?, 'folder', ?, ?, ?)
       `);
-      stmt.run(id, newPath, parentPath, folderName);
+      stmt.run(id, finalPath, actualParentPath, finalFolderName);
 
-      // Also create the folder on disk.  Use newPath directly.
-      await fs.mkdir(newPath, { recursive: true });
-
-      return { success: true, id, path: newPath };
+      return { success: true, id, path: finalPath };
     } catch (error) {
-      log.error('Error creating folder:', error);
+      // Catch potential errors during insert, although the check should prevent UNIQUE errors
+      log.error('Error creating folder during insert:', error);
       return { success: false, error: String(error) };
     }
   });
@@ -754,24 +768,13 @@ export async function registerDatabaseIPCHandlers() {
         }
     });
 
-  ipcMain.handle('cleanup-old-notes', async () => {
-    try {
-      log.info('Manual cleanup triggered');
-      await cleanupOldNotes();
-      return { success: true, message: 'Old notes cleaned up successfully' };
-    } catch (error) {
-      log.error('Error during cleanup:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
   ipcMain.handle('reset-database', async () => {
     try {
       log.info('Attempting to reset database...');
       
       // Get database path
       const userDataPath = app.getPath('userData');
-      const dbPath = path.join(userDataPath, 'tread.db');
+      const dbPath = path.join(userDataPath, 'opal.db');
       
       // Close the database connection
       const dbManager = DatabaseManager.getInstance();
@@ -844,6 +847,80 @@ export async function registerDatabaseIPCHandlers() {
       };
     }
   });
+
+  ipcMain.handle('backup-database', async () => {
+    const dbManager = DatabaseManager.getInstance();
+    // Use the default path logic to find the database file
+    const userDataPath = app.getPath('userData');
+    const currentDbPath = path.join(userDataPath, 'opal.db');
+
+    // Check if the default database file exists
+    if (!fsSync.existsSync(currentDbPath)) {
+      log.error('Cannot backup: Default database file not found at', currentDbPath);
+      return { success: false, message: 'Default database file not found.' };
+    }
+
+    try {
+      // Suggest a filename for the backup
+      const defaultBackupName = `opal-backup-${new Date().toISOString().split('T')[0]}.db`;
+      const defaultPath = path.join(app.getPath('documents'), defaultBackupName);
+
+      // Show save dialog to get the desired backup path
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Save Database Backup',
+        defaultPath: defaultPath,
+        filters: [
+          { name: 'SQLite Database', extensions: ['db'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (canceled || !filePath) {
+        log.info('Database backup cancelled by user.');
+        return { success: false, message: 'Backup cancelled by user.' };
+      }
+
+      // Close the database before copying to avoid corruption
+      if (dbManager.getDatabase()) {
+        dbManager.close();
+        log.info('Closed database connection for backup.');
+      }
+
+      // Copy the database file to the selected path
+      await fs.copyFile(currentDbPath, filePath);
+      log.info(`Database backup created successfully at: ${filePath}`);
+
+      // Re-open the database connection
+      try {
+        await dbManager.initialize(currentDbPath); 
+        log.info('Re-opened database connection after backup.');
+      } catch (reopenError) {
+        log.error('Failed to reopen database after backup:', reopenError);
+        // Inform the user, but the backup itself was successful
+        return { 
+          success: true, 
+          filePath, 
+          message: 'Backup created, but failed to reopen the main database. Please restart the application.'
+        };
+      }
+
+      return { success: true, filePath };
+    } catch (error) {
+      log.error('Error creating database backup:', error);
+      // Attempt to re-open the database even if backup failed
+      try {
+        if (!dbManager.getDatabase()) {
+          await dbManager.initialize(currentDbPath);
+          log.info('Re-opened database connection after failed backup attempt.');
+        }
+      } catch (reopenError) {
+        log.error('Failed to reopen database after failed backup:', reopenError);
+      }
+      return { success: false, message: `Failed to create backup: ${error.message}` };
+    }
+  });
+
+  
 
   // --- Chat Functionality ---
   ipcMain.handle('chat:get-conversation', async (event, conversationId: string) => {

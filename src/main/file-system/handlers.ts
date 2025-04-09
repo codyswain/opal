@@ -1,9 +1,15 @@
 import { ipcMain, app, dialog, BrowserWindow } from "electron";
-import fs from "fs/promises";
-import path from "path";
+import * as fs from "fs-extra";
+import * as path from "path";
 import { Config } from "@/renderer/shared/types";
+import * as keytar from 'keytar';
 
-const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");
+const APP_DATA_DIR = process.env.OPAL_DATA_DIR || path.join(__dirname, "../../../app-data");
+const NOTES_DIR = path.join(APP_DATA_DIR, "notes");
+const CONFIG_FILE = path.join(APP_DATA_DIR, "config.json");
+
+const TREAD_KEYTAR_SERVICE = "TreadApp";
+const TREAD_KEYTAR_ACCOUNT_OPENAI = "OpenAIKey";
 
 export async function registerFileSystemIPCHandlers(){
   // Ensure the notes directory exists
@@ -113,29 +119,26 @@ export async function registerFileSystemIPCHandlers(){
 
   ipcMain.handle("get-openai-key", async () => {
     try {
-      const config = await fs.readFile(CONFIG_FILE, "utf-8");
-      return JSON.parse(config).openaiApiKey || "";
+      const key = await keytar.getPassword(TREAD_KEYTAR_SERVICE, TREAD_KEYTAR_ACCOUNT_OPENAI);
+      return key || ""; // Return empty string if key is not found (null)
     } catch (error) {
-      console.error("Error reading OpenAI API key:", error);
-      return "";
+      console.error("Error retrieving OpenAI API key from keychain:", error);
+      return ""; // Return empty string on error
     }
   });
 
   ipcMain.handle("set-openai-key", async (_, key: string) => {
     try {
-      let config: Config = {};
-      try {
-        const configContent = await fs.readFile(CONFIG_FILE, "utf-8");
-        config = JSON.parse(configContent);
-      } catch (error) {
-        // If the file doesn't exist or is invalid, start with an empty config
-        config = {};
+      if (!key) {
+        // If the key is empty or null, delete the credential
+        await keytar.deletePassword(TREAD_KEYTAR_SERVICE, TREAD_KEYTAR_ACCOUNT_OPENAI);
+      } else {
+        // Otherwise, set the new key
+        await keytar.setPassword(TREAD_KEYTAR_SERVICE, TREAD_KEYTAR_ACCOUNT_OPENAI, key);
       }
-      config.openaiApiKey = key;
-      await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
     } catch (error) {
-      console.error("Error saving OpenAI API key:", error);
-      throw error;
+      console.error("Error saving OpenAI API key to keychain:", error);
+      throw error; // Rethrow the error to be handled by the caller
     }
   });
 
@@ -151,26 +154,5 @@ export async function registerFileSystemIPCHandlers(){
     });
     
     return result;
-  });
-
-  // Add handler for getting top-level folders
-  ipcMain.handle("get-top-level-folders", async () => {
-    try {
-      let config: Config = {};
-      try {
-        const configContent = await fs.readFile(CONFIG_FILE, "utf-8");
-        config = JSON.parse(configContent);
-      } catch (error) {
-        // If the file doesn't exist or is invalid, assume no folders configured
-        console.warn("Config file not found or invalid, returning empty topLevelFolders array.", error);
-        return []; // Return empty array if config can't be read
-      }
-      // Return the topLevelFolders array, or an empty array if it doesn't exist
-      return config.topLevelFolders || [];
-    } catch (error) {
-      console.error("Error reading top-level folders:", error);
-      // In case of unexpected errors during processing
-      return [];
-    }
   });
 }

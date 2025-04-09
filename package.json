@@ -1,25 +1,42 @@
 {
-  "name": "tread",
-  "productName": "Tread",
+  "name": "opal",
+  "productName": "Opal",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "packageManager": "npm@10.9.0",
   "type": "commonjs",
   "scripts": {
+    "postinstall": "electron-rebuild",
     "start": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge start",
     "dev": "electron-forge start",
     "better-dev": "node fix-dev.js",
     "package": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge package",
     "make": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge make",
     "publish": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && electron-forge publish",
-    "lint": "npx eslint --ext .ts,.tsx ."
+    "lint": "npx eslint --ext .ts,.tsx .",
+    "test": "npm rebuild --build-from-source better-sqlite3 && vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "husky install"
   },
   "config": {
     "forge": {
-      "electronWinstallerConfig": {
-        "name": "tread"
+      "packagerConfig": {
+        "icon": "assets/icons/opal"
       },
+      "electronWinstallerConfig": {
+        "name": "opal"
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        }
+      ],
       "entryPoints": [
         {
           "name": "main_window",
@@ -38,24 +55,32 @@
     "@electron-forge/plugin-fuses": "^7.8.0",
     "@electron-forge/plugin-vite": "^7.8.0",
     "@electron/fuses": "^1.8.0",
+    "@electron/rebuild": "^3.7.1",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/lodash": "^4.17.7",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/ui": "^3.1.1",
     "autoprefixer": "^10.4.20",
     "electron": "31.3.1",
     "eslint": "^8.57.0",
     "eslint-import-resolver-typescript": "^3.6.3",
     "eslint-plugin-import": "^2.29.1",
+    "happy-dom": "^17.4.4",
+    "husky": "^8.0.0",
+    "lint-staged": "^15.5.0",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.1.6",
-    "vite": "^5.4.3"
+    "vite": "^6.2.5",
+    "vitest": "^3.1.1"
   },
   "keywords": [],
   "author": {
@@ -112,6 +137,7 @@
     "highlight.js": "^11.10.0",
     "katex": "^0.16.11",
     "kbar": "^0.1.0-beta.45",
+    "keytar": "^7.9.0",
     "lodash": "^4.17.21",
     "lowlight": "^3.1.0",
     "lucide-react": "^0.436.0",
@@ -141,5 +167,16 @@
     "use-debounce": "^10.0.3",
     "uuid": "^10.0.0",
     "zustand": "^5.0.3"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "npm test"
+    ]
   }
 }

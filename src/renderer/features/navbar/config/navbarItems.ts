@@ -1,5 +1,5 @@
 import { NavbarItemProps } from "../components/NavbarItem";
-import { Book, Clock} from "lucide-react";
+import { Book } from "lucide-react";
 
 const navbarItems: NavbarItemProps[] = [
   // TODO: add this in

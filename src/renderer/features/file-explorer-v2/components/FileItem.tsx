@@ -42,11 +42,11 @@ const FileItem: React.FC<FileItemProps> = ({
   const isMounted = entry.isMounted;
 
   // Format date for display in user's local timezone
-  const formatDate = formatLocalDate;
+  // const formatDate = formatLocalDate;
 
   // State to track if a double click is in progress
   const [isDoubleClickInProgress, setIsDoubleClickInProgress] =
-    React.useState(false);
+    useState(false);
   const doubleClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleClick = (/* _e: React.MouseEvent */) => {
@@ -109,9 +109,9 @@ const FileItem: React.FC<FileItemProps> = ({
       e.dataTransfer.effectAllowed = 'copy';
       
       // Set item data
-      e.dataTransfer.setData('application/tread-item-id', entry.id);
-      e.dataTransfer.setData('application/tread-item-type', entry.type);
-      e.dataTransfer.setData('application/tread-item-name', entry.name);
+      e.dataTransfer.setData('application/opal-item-id', entry.id);
+      e.dataTransfer.setData('application/opal-item-type', entry.type);
+      e.dataTransfer.setData('application/opal-item-name', entry.name);
       e.dataTransfer.setData('text/plain', entry.name);
       
       // Call the parent's onDragStart as a callback

@@ -6,9 +6,9 @@ import fs from 'fs/promises';
 
 /* 
   Logging destinations:
-  - Windows: C:\Users\<username>\AppData\Local\Tread\logs
-  - macOS: ~/Library/Logs/Tread
-  - Linux: ~/.local/share/Tread/logs
+  - Windows: C:\Users\<username>\AppData\Local\Opal\logs
+  - macOS: ~/Library/Logs/Opal
+  - Linux: ~/.local/share/Opal/logs
 
   For Linux: 
   - XDG = "X Desktop Group"; They agreed on standards for Linux desktop apps
@@ -23,10 +23,10 @@ import fs from 'fs/promises';
 */
 
 const WINDOWS_FILE_LOG_PATH = path.join(app.getPath('userData'), 'logs');
-const MACOS_FILE_LOG_PATH = path.join(os.homedir(), 'Library/Logs/Tread/tread.log');
+const MACOS_FILE_LOG_PATH = path.join(os.homedir(), 'Library/Logs/Opal/opal.log');
 const LINUX_FILE_LOG_PATH = process.env.XDG_DATA_HOME
-  ? path.join(process.env.XDG_DATA_HOME, 'Tread/logs')
-  : path.join(os.homedir(), '.local/share/Tread/logs');
+  ? path.join(process.env.XDG_DATA_HOME, 'Opal/logs')
+  : path.join(os.homedir(), '.local/share/Opal/logs');
 
 class Logger {
   private static instance: Logger; 
