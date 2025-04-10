@@ -3,6 +3,7 @@ import path from 'path';
 import { app } from 'electron';
 import os from 'os';
 import fs from 'fs/promises';
+import { APP_NAME } from './config/constants';
 
 /* 
   Logging destinations:
@@ -23,10 +24,10 @@ import fs from 'fs/promises';
 */
 
 const WINDOWS_FILE_LOG_PATH = path.join(app.getPath('userData'), 'logs');
-const MACOS_FILE_LOG_PATH = path.join(os.homedir(), 'Library/Logs/Opal/opal.log');
+const MACOS_FILE_LOG_PATH = path.join(os.homedir(), `Library/Logs/${APP_NAME}/${APP_NAME}.log`);
 const LINUX_FILE_LOG_PATH = process.env.XDG_DATA_HOME
-  ? path.join(process.env.XDG_DATA_HOME, 'Opal/logs')
-  : path.join(os.homedir(), '.local/share/Opal/logs');
+  ? path.join(process.env.XDG_DATA_HOME, `${APP_NAME}/logs`)
+  : path.join(os.homedir(), `.local/share/${APP_NAME}/logs`);
 
 class Logger {
   private static instance: Logger; 

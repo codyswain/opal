@@ -11,15 +11,17 @@ import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Navbar, navbarItems } from "@/renderer/features/navbar";
-import { Settings, SettingsProvider } from "@/renderer/features/settings";
+import { Settings } from "@/renderer/features/settings";
 import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
 import { useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
+import { useSettingsStore } from "./store/settingsStore";
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
+  const loadSettings = useSettingsStore((state) => state.loadSettings);
 
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useLocalStorage(
     "isLeftSidebarOpen",
@@ -85,12 +87,16 @@ const App: React.FC = () => {
     toggleBottomPane,
   ]);
 
+  useEffect(() => {
+    loadSettings(); // load settings on app mount
+  }, [loadSettings]);
+
   return (
     <Router>
       <KBarActionsProvider>
         <KBar />
         <ThemeProvider>
-          <SettingsProvider>
+          
             <TooltipProvider>
               <div className="flex flex-col h-screen w-screen overflow-hidden">
                 <Toaster />
@@ -127,7 +133,6 @@ const App: React.FC = () => {
                 </div>
               </div>
             </TooltipProvider>
-          </SettingsProvider>
         </ThemeProvider>
       </KBarActionsProvider>
     </Router>

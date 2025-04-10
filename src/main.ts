@@ -1,16 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
-import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./main/config/window";
+import { DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from "./renderer/config/setup";
 import { 
   closeDatabase, 
   initializeDatabase,
-  registerConfigIPCHandlers, 
   registerEmbeddingIPCHandlers, 
   registerFileSystemIPCHandlers,
   registerDatabaseIPCHandlers,
   log 
 } from "./main/index";
 import { ensureAllTablesExist } from "./main/database/handlers";
+import { registerCredentialIPCHandlers } from "./main/credentials/handlers";
 
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -147,8 +147,8 @@ app.whenReady().then(async () => {
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");
     
-    await registerConfigIPCHandlers();
-    log.info("Config IPC handlers registered");
+    await registerCredentialIPCHandlers();
+    log.info("Credential IPC handlers registered");
     
     await registerEmbeddingIPCHandlers();
     log.info("Embedding IPC handlers registered");

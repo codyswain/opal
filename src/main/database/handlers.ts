@@ -10,9 +10,10 @@ import BetterSqlite3 from 'better-sqlite3'; // Added import
 import { Item, ItemWithAIMetadata, Note } from './types';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
-import { getOpenAIKey } from '../file-system/loader';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
 import * as chokidar from 'chokidar';
+import { CredentialManager } from '../credentials/manager';
+import { CredentialAccount } from '../../types/credentials';
 
 // Map to keep track of file watchers for mounted folders
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
@@ -1104,7 +1105,8 @@ export async function registerDatabaseIPCHandlers() {
       }
 
       // Get OpenAI API key
-      const openaiApiKey = await getOpenAIKey();
+      const credentialManager = CredentialManager.getInstance();
+      const openaiApiKey = await credentialManager.getCredential(CredentialAccount.OPENAI);
       const openai = new OpenAI({ apiKey: openaiApiKey });
 
       // Get response from OpenAI with explicit token limit
@@ -1151,7 +1153,8 @@ export async function registerDatabaseIPCHandlers() {
       }
 
       // Get OpenAI API key and validate it
-      const openaiApiKey = await getOpenAIKey();
+      const credentialManager = CredentialManager.getInstance();
+      const openaiApiKey = await credentialManager.getCredential(CredentialAccount.OPENAI);
       if (!openaiApiKey) {
         log.error('OpenAI API key is missing or empty');
         event.sender.send(responseChannel, "Error: OpenAI API key is missing. Please add your API key in settings.");
