@@ -9,33 +9,49 @@ import BetterSqlite3 from 'better-sqlite3';
 
 // Define a minimal interface for the sqlite-vss module
 interface SqliteVssModule {
-  load(db: BetterSqlite3.Database): void;
+  getVssLoadablePath(): string;
+  getVectorLoadablePath(): string;
 }
 
-// Import the sqlite-vss module dynamically
-let sqlite_vss: SqliteVssModule | null = null;
-(async () => {
+// Wrap dynamic import in a promise that resolves with the module or null
+const vssModulePromise: Promise<SqliteVssModule | null> = (async () => {
   try {
-    // Explicitly log the require attempt
     log.info('Attempting to dynamically load sqlite-vss module...');
-    // Use dynamic import() instead of require()
-    const vssModule = await import('sqlite-vss');
-    // Assuming the default export is what we need
-    sqlite_vss = vssModule.default || vssModule; 
-    log.info('sqlite-vss module loaded successfully');
+    // Import the module - could be CommonJS or ES Module
+    const vssModule: any = await import('sqlite-vss');
+    log.info('Dynamically imported sqlite-vss module keys:', Object.keys(vssModule).join(', '));
+
+    // Check if the function exists directly on the module object
+    if (typeof vssModule.getVssLoadablePath === 'function') {
+      log.info('sqlite-vss dynamic import successful (found getVssLoadablePath on root).');
+      // Treat the module itself as conforming to our interface
+      return vssModule as SqliteVssModule;
+    } 
+    // Optional: Check default export if direct access failed (less likely based on logs)
+    else if (vssModule.default && typeof vssModule.default.getVssLoadablePath === 'function') {
+      log.info('sqlite-vss dynamic import successful (found getVssLoadablePath on default export).');
+      return vssModule.default as SqliteVssModule;
+    } 
+    // If the function isn't found
+    else {
+      log.error('sqlite-vss module loaded, but required getVssLoadablePath function not found.');
+      return null;
+    }
   } catch (error) {
-    log.warn('sqlite-vss extension not available (dynamic import failed):', error);
+    log.warn('sqlite-vss dynamic import failed entirely:', error);
+    return null;
   }
 })();
 
 let dbManager: DatabaseManager | null = null;
 
 export async function initializeDatabase() {
+  // Wait for the dynamic import promise to settleI
+  const sqlite_vss = await vssModulePromise;
+
   try {
     const userDataPath = app.getPath('userData');
     const dbPath = path.join(userDataPath, 'opal.db');
-    
-    log.info(`Initializing database at: ${dbPath}`);
     
     // Initialize the database
     const dbManager = DatabaseManager.getInstance();
@@ -45,50 +61,53 @@ export async function initializeDatabase() {
       throw new Error('Failed to initialize database');
     }
     
-    // Initialize VSS extension if available
+    // Initialize VSS extension ONLY if the import succeeded
     if (sqlite_vss) {
       try {
-        log.info('Loading sqlite-vss extension for vector search');
-        // Add explicit error handling and logging for VSS loading
+        log.info('Attempting to prepare and load VSS extensions (vector0, vss0)...');
+
+        // --- Load vector0 first ---
+        const vectorLoadablePathFn = sqlite_vss.getVectorLoadablePath;
+        if (typeof vectorLoadablePathFn !== 'function') {
+          throw new Error('sqlite-vss module does not export getVectorLoadablePath as a function');
+        }
+        const vectorLoadablePath = vectorLoadablePathFn();
+        log.info(`Resolved vector0 loadable path: ${vectorLoadablePath}`);
         try {
-          sqlite_vss.load(db);
-          log.info('VSS extension loaded into database successfully');
-        } catch (loadError) {
-          log.error('Error during VSS extension loading:', loadError);
-          throw loadError;
+           log.info(`Attempting db.loadExtension for vector0: ${vectorLoadablePath}`);
+           db.loadExtension(vectorLoadablePath);
+           log.info('vector0 extension loaded successfully.');
+        } catch (vectorLoadError) {
+           log.error('Error loading vector0 extension:', vectorLoadError);
+           throw vectorLoadError; // Re-throw if vector0 fails
+        }
+
+        // --- Then load vss0 ---
+        const vssLoadablePathFn = sqlite_vss.getVssLoadablePath;
+        if (typeof vssLoadablePathFn !== 'function') {
+          throw new Error('sqlite-vss module does not export getVssLoadablePath as a function');
+        }
+        const vssLoadablePath = vssLoadablePathFn();
+        log.info(`Resolved vss0 loadable path: ${vssLoadablePath}`);
+        try {
+           log.info(`Attempting db.loadExtension for vss0: ${vssLoadablePath}`);
+           db.loadExtension(vssLoadablePath);
+           log.info('vss0 extension loaded successfully.');
+        } catch (vssLoadError) {
+           log.error('Error loading vss0 extension:', vssLoadError);
+           throw vssLoadError; // Re-throw if vss0 fails
         }
         
-        // Create the vector index table if it doesn't exist
-        try {
-          db.exec(`
-            CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
-              embedding(1536), -- OpenAI's ada-002 embedding dimension
-              item_id TEXT
-            );
-          `);
-          
-          // Verify the table was created
-          const tableExists = db.prepare(`
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='vector_index'
-          `).get();
-          
-          if (tableExists) {
-            log.info('Vector index table created/exists successfully');
-          } else {
-            log.error('Failed to create vector_index table even though no error was thrown');
-          }
-        } catch (tableError) {
-          log.error('Error creating vector_index table:', tableError);
-          throw tableError;
-        }
-        
-        log.info('Vector search (VSS) extension loaded successfully');
-      } catch (vssError) {
-        log.error('Error loading sqlite-vss extension:', vssError);
+        log.info('Both vector0 and vss0 extensions loaded successfully.');
+
+      } catch (vssPrepError) {
+        log.error('Error preparing or loading VSS extension:', vssPrepError);
+        // If loading failed, we want to prevent the app from proceeding 
+        // as if VSS is available, so re-throw or handle appropriately.
+        // For now, just log and let schema execution fail later if vss0 is needed.
       }
     } else {
-      log.warn('sqlite-vss extension not available, vector search will use fallback method');
+      log.warn('sqlite-vss module import failed or is null, skipping VSS setup.');
     }
     
     // Load and execute schema.sql to create tables and indices
@@ -235,19 +254,19 @@ async function migrateEmbeddingsToVSS() {
       // Create the vector index table
       db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
-          embedding(1536), -- OpenAI's ada-002 embedding dimension
-          item_id TEXT
+          embedding(1536) -- Define only the vector column and dimensions
+          // item_id TEXT -- Remove extra columns from constructor
         );
       `);
     }
     
-    // Get all notes with embeddings
+    // Get all notes with embeddings AND their rowid from the items table
     const notesWithEmbeddings = db.prepare(`
-      SELECT i.id, a.embedding 
+      SELECT i.rowid, i.id, a.embedding 
       FROM items i
       JOIN ai_metadata a ON i.id = a.item_id
       WHERE i.type = 'note' AND a.embedding IS NOT NULL
-    `).all() as { id: string, embedding: string }[];
+    `).all() as { rowid: number, id: string, embedding: string }[];
     
     log.info(`Found ${notesWithEmbeddings.length} notes with embeddings to migrate to VSS`);
     
@@ -265,10 +284,10 @@ async function migrateEmbeddingsToVSS() {
           continue;
         }
         
-        // Check if this note already exists in the VSS index
+        // Check if this note already exists in the VSS index using rowid
         const existingVectorItem = db.prepare(`
-          SELECT item_id FROM vector_index WHERE item_id = ?
-        `).get(note.id);
+          SELECT rowid FROM vector_index WHERE rowid = ?
+        `).get(note.rowid);
         
         if (existingVectorItem) {
           // Already exists, skip
@@ -278,10 +297,10 @@ async function migrateEmbeddingsToVSS() {
         // Convert the vector to a buffer
         const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
         
-        // Insert into the VSS index
+        // Insert into the VSS index using rowid and embedding
         db.prepare(`
-          INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
-        `).run(vectorBuffer, note.id);
+          INSERT INTO vector_index(rowid, embedding) VALUES (?, ?)
+        `).run(note.rowid, vectorBuffer);
         
         migratedCount++;
       } catch (error) {
@@ -296,6 +315,7 @@ async function migrateEmbeddingsToVSS() {
 }
 
 export async function closeDatabase() {
+  log.info('Closing database connection');
   if (dbManager) {
     try {
       log.info('Closing database connection');

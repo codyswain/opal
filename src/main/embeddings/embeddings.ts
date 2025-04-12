@@ -119,30 +119,39 @@ export class EmbeddingCreator {
       
       // Get the embedding vector
       const vector = embedding.data[0].embedding;
+      const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
+
+      // Get the corresponding rowid from items table
+      const itemRowidStmt = db.prepare(`SELECT rowid FROM items WHERE id = ?`);
+      const itemRow = itemRowidStmt.get(noteId) as { rowid: number } | undefined;
+
+      if (!itemRow) {
+        log.warn(`Could not find item rowid for note ${noteId} to update vector index.`);
+        return; // Cannot proceed without rowid
+      }
+
+      const itemRowid = itemRow.rowid;
       
-      // Check if the item already exists in the vector index
+      // Check if the item already exists in the vector index using rowid
       const existingVectorItem = db.prepare(`
-        SELECT item_id FROM vector_index WHERE item_id = ?
-      `).get(noteId);
+        SELECT rowid FROM vector_index WHERE rowid = ?
+      `).get(itemRowid);
       
       if (existingVectorItem) {
-        // Delete the existing vector first
+        // Delete the existing vector first using rowid
         db.prepare(`
-          DELETE FROM vector_index WHERE item_id = ?
-        `).run(noteId);
-        log.info(`Deleted existing vector index entry for note ${noteId}`);
+          DELETE FROM vector_index WHERE rowid = ?
+        `).run(itemRowid);
+        log.info(`Deleted existing vector index entry for item rowid ${itemRowid}`);
       }
       
       try {
-        // Insert into vector index
-        // Convert the embedding array to a buffer using Float32Array
-        const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
-        
+        // Insert into vector index using rowid
         db.prepare(`
-          INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
-        `).run(vectorBuffer, noteId);
+          INSERT INTO vector_index(rowid, embedding) VALUES (?, ?)
+        `).run(itemRowid, vectorBuffer);
         
-        log.info(`Updated vector index for note ${noteId}`);
+        log.info(`Updated vector index for item rowid ${itemRowid}`);
       } catch (vssError) {
         log.warn(`Could not insert into VSS index: ${vssError.message}`);
       }
@@ -325,26 +334,31 @@ export class SimilaritySearcher {
                 // Decode the base64 embedding
                 const jsonStr = Buffer.from(row.embedding_data, 'base64').toString();
                 const embedding = JSON.parse(jsonStr) as Embedding;
-                
-                // Get the embedding vector
                 const vector = embedding.data[0].embedding;
-                
-                // Convert the vector to a buffer and insert into the VSS index
                 const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
-                
-                db.prepare(`
-                  INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
-                `).run(vectorBuffer, row.item_id);
-                
-                // Also restore to the main table if missing
-                const existsInMain = db.prepare(`
-                  SELECT item_id FROM ai_metadata WHERE item_id = ?
-                `).get(row.item_id);
-                
-                if (!existsInMain) {
+
+                // Get the corresponding rowid from items table
+                const itemRowidStmt = db.prepare(`SELECT rowid FROM items WHERE id = ?`);
+                const itemRow = itemRowidStmt.get(row.item_id) as { rowid: number } | undefined;
+
+                if (itemRow) {
+                  // Insert using rowid
                   db.prepare(`
-                    INSERT INTO ai_metadata (item_id, embedding) VALUES (?, ?)
-                  `).run(row.item_id, row.embedding_data);
+                    INSERT INTO vector_index(rowid, embedding) VALUES (?, ?)
+                  `).run(itemRow.rowid, vectorBuffer);
+                  
+                  // Also restore to the main table if missing
+                  const existsInMain = db.prepare(`
+                    SELECT item_id FROM ai_metadata WHERE item_id = ?
+                  `).get(row.item_id);
+                  
+                  if (!existsInMain) {
+                    db.prepare(`
+                      INSERT INTO ai_metadata (item_id, embedding) VALUES (?, ?)
+                    `).run(row.item_id, row.embedding_data);
+                  }
+                } else {
+                  log.warn(`Could not find item rowid for note ${row.item_id} when populating VSS index.`);
                 }
                 
                 successCount++;
@@ -368,19 +382,24 @@ export class SimilaritySearcher {
           return [];
         }
         
-        // Insert each embedding into the VSS index
+        // Insert each embedding into the VSS index (from main table if backup wasn't used/successful)
         for (const note of notesWithEmbeddings) {
           try {
-            // Get the embedding vector
             const vector = note.embedding.data[0].embedding;
-            
-            // Convert the vector to a buffer
             const vectorBuffer = Buffer.from(new Float32Array(vector).buffer);
+
+            // Get the corresponding rowid from items table
+            const itemRowidStmt = db.prepare(`SELECT rowid FROM items WHERE id = ?`);
+            const itemRow = itemRowidStmt.get(note.id) as { rowid: number } | undefined;
             
-            // Insert into the VSS index
-            db.prepare(`
-              INSERT INTO vector_index(embedding, item_id) VALUES (?, ?)
-            `).run(vectorBuffer, note.id);
+            if (itemRow) {
+              // Insert using rowid
+              db.prepare(`
+                INSERT INTO vector_index(rowid, embedding) VALUES (?, ?)
+              `).run(itemRow.rowid, vectorBuffer);
+            } else {
+              log.warn(`Could not find item rowid for note ${note.id} when populating VSS index.`);
+            }
           } catch (error) {
             log.warn(`Error adding embedding for note ${note.id} to vector index:`, error);
           }
@@ -402,11 +421,12 @@ export class SimilaritySearcher {
       // Query the VSS index for similar vectors
       log.info("Performing VSS search with query embedding");
       const similarVectors = db.prepare(`
-        SELECT item_id, distance 
+        SELECT rowid, distance  -- Select rowid instead of item_id
         FROM vector_index 
         WHERE vss_search(embedding, ?) 
+        ORDER BY distance -- Order by distance (ascending, lower is better)
         LIMIT ?
-      `).all(vectorBuffer, limit) as { item_id: string, distance: number }[];
+      `).all(vectorBuffer, limit) as { rowid: number, distance: number }[];
       
       log.info(`VSS search returned ${similarVectors.length} similar notes`);
       
@@ -420,18 +440,17 @@ export class SimilaritySearcher {
       
       for (const vector of similarVectors) {
         // Convert VSS distance to cosine similarity score (distance → similarity)
-        // VSS returns cosine distance (1 - cosine similarity)
         const score = 1 - vector.distance;
         
-        // Get note details
+        // Get note details using the rowid to join with items table
         const noteStmt = db.prepare(`
           SELECT i.id, i.name as title, n.content
           FROM items i
           JOIN notes n ON i.id = n.item_id
-          WHERE i.id = ?
+          WHERE i.rowid = ? -- Use items.rowid for the join
         `);
         
-        const note = noteStmt.get(vector.item_id) as SimilarNote;
+        const note = noteStmt.get(vector.rowid) as SimilarNote;
         
         if (note) {
           results.push({

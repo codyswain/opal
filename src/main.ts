@@ -95,9 +95,11 @@ const createWindow = () => {
 
   loadPage();
 
-  // Always open DevTools for debugging
-  mainWindow.webContents.openDevTools();
-  console.log("Opening DevTools - development mode:", isDevelopment, "forceDevTools:", forceDevTools);
+  // Open dev tools if in development mode
+  if (isDevelopment) {
+    mainWindow.webContents.openDevTools();
+    console.log("Opening DevTools - development mode:", isDevelopment, "forceDevTools:", forceDevTools);
+  }
 
   mainWindow.webContents.on('did-finish-load', () => {
     log.info('Main window finished loading');

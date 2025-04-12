@@ -3,6 +3,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import log from 'electron-log';
+import { APP_NAME } from '../config/constants';
 
 class DatabaseManager {
   private static instance: DatabaseManager;
@@ -22,7 +23,7 @@ class DatabaseManager {
   public async initialize(dbPath?: string): Promise<BetterSqlite3.Database> {
     try {
       // If dbPath is not provided, use the default location
-      const finalDbPath = dbPath || path.join(app.getPath('userData'), 'opal.db');
+      const finalDbPath = dbPath || path.join(app.getPath('userData'), `${APP_NAME}.db`);
 
       log.info(`Initializing database at: ${finalDbPath}`);
       log.info(`Database exists before connection: ${fs.existsSync(finalDbPath)}`);
