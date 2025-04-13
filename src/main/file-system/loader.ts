@@ -1,11 +1,7 @@
-import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { DirectoryEntry, Note } from "@/renderer/shared/types";
 import logger from "../logger";
-
-// Create a config file path
-const CONFIG_FILE = path.join(app.getPath("userData"), "config.json");
 
 // Recursively create a tree representation of a directory
 export const loadDirectoryStructure = async (dirPath: string): Promise<DirectoryEntry> => {
@@ -56,16 +52,5 @@ export const loadDirectoryStructure = async (dirPath: string): Promise<Directory
   } catch (error) {
     console.error(`Error loading directory structure for ${dirPath}:`, error);
     throw error;
-  }
-};
-
-export const getOpenAIKey = async (): Promise<string> => {
-  try {
-    const configContent = await fs.readFile(CONFIG_FILE, "utf-8");
-    const config = JSON.parse(configContent);
-    return config.openaiApiKey || "";
-  } catch (error) {
-    console.error("Error reading OpenAI API key:", error);
-    return "";
   }
 };

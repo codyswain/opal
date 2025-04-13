@@ -10,14 +10,12 @@ import RightSidebar from "@/renderer/features/file-explorer-v2/components/right-
 import ExplorerLeftPanel from "./ExplorerLeftPanel";
 import ExploreCenterPanel from "./ExploreCenterPanel";
 
-const ResizeHandle: React.FC<{ className?: string }> = ({ className }) => (
+const ResizeHandle: React.FC<{
+  className?: string;
+}> = ({ className }) => (
   <PanelResizeHandle
-    className={`group relative w-1.5 transition-colors duration-200 flex items-center justify-center ${className}`}
-  >
-    <div className="absolute inset-y-0 left-1/2 w-[1px] bg-slate-200 dark:bg-slate-700/50" />
-    <div className="absolute h-16 w-0.5 bg-transparent group-hover:bg-accent/70 rounded-full transition-all duration-300" />
-    <div className="absolute inset-0 hover:bg-accent/10 transition-colors duration-200" />
-  </PanelResizeHandle>
+    className={`group relative w-px flex items-center justify-center bg-border data-[resize-handle-state=hover]:bg-[hsl(var(--primary)_/_0.7)] transition-colors duration-300 ${className}`}
+  ></PanelResizeHandle>
 );
 
 const Explorer: React.FC<{

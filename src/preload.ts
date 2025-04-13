@@ -28,8 +28,6 @@ contextBridge.exposeInMainWorld("electron", {
   maximize: () => ipcRenderer.send("maximize-window"),
   close: () => ipcRenderer.send("close-window"),
   getNotePath: (noteId: string) => ipcRenderer.invoke("get-note-path", noteId),
-  getOpenAIKey: () => ipcRenderer.invoke("get-openai-key"),
-  setOpenAIKey: (key: string) => ipcRenderer.invoke("set-openai-key", key),
   createDirectory: (dirPath: string) =>
     ipcRenderer.invoke("create-directory", dirPath),
   deleteDirectory: (dirPath: string) =>
@@ -192,4 +190,14 @@ contextBridge.exposeInMainWorld("chatAPI", {
       ipcRenderer.removeListener(responseChannel, listener);
     };
   }
+
+
+
+});
+
+
+contextBridge.exposeInMainWorld("credentialsAPI", {
+  getKey: (account: string) => ipcRenderer.invoke("get-key", account),
+  setKey: (account: string, password: string) => ipcRenderer.invoke("set-key", account, password),
+  deleteKey: (account: string) => ipcRenderer.invoke("delete-key", account),
 });

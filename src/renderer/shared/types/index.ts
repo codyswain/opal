@@ -2,6 +2,7 @@
 
 import type { default as OpenAI } from "openai";
 import { FSEntry } from '@/types'; // Import FSEntry from shared types
+import { CredentialAccount } from "@/types/credentials";
 
 // Duplicate Item interface from src/main/database/types.ts
 export interface Item {
@@ -208,6 +209,12 @@ declare global {
         query: string, 
         callback: (chunk: string) => void
       ) => () => void; // Returns a cleanup function
+    };
+
+    credentialsAPI: {
+      getKey: (account: CredentialAccount) => Promise<string>;
+      setKey: (account: CredentialAccount, password: string) => Promise<void>;
+      deleteKey: (account: CredentialAccount) => Promise<void>;
     };
   }
 }

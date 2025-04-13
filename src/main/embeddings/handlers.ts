@@ -6,8 +6,9 @@ import { ipcMain } from "electron";
 import OpenAIApi from "openai";
 import log from 'electron-log';
 import DatabaseManager from "../database/db";
-import { getOpenAIKey } from "../file-system/loader";
 import { EmbeddingCreator, RAGChat, SimilaritySearcher } from "./embeddings";
+import { CredentialManager } from "../credentials/manager";
+import { CredentialAccount } from "../../types/credentials";
 
 let embeddingCreator: EmbeddingCreator;
 let similaritySearcher: SimilaritySearcher;
@@ -16,19 +17,16 @@ let openaiApiKey: string;
 
 export async function registerEmbeddingIPCHandlers(){
   try {
-    // Get OpenAI key
-    openaiApiKey = await getOpenAIKey();
-    
+    log.info("Attemping to register embedding handlers with OpenAI Key");
+    const credentialManager = CredentialManager.getInstance();
+    openaiApiKey = await credentialManager.getCredential(CredentialAccount.OPENAI);
     if (!openaiApiKey) {
-      log.warn("No OpenAI API key found. Embedding functionality will not work.");
+      log.error("No OpenAI API key found. Embedding functionality will not work.");
       return;
     }
     
-    log.info("Initializing OpenAI with API key");
-    // Create OpenAI instance with the key
     const openaiClient = new OpenAIApi({ apiKey: openaiApiKey });
     
-    // Initialize embedding classes
     embeddingCreator = new EmbeddingCreator(openaiClient);
     similaritySearcher = new SimilaritySearcher();
     ragChat = new RAGChat(openaiClient, embeddingCreator, similaritySearcher);
@@ -73,10 +71,6 @@ function registerIPCHandlers() {
           
           // Try to initialize if not done yet
           try {
-            if (!openaiApiKey) {
-              openaiApiKey = await getOpenAIKey();
-            }
-            
             if (!openaiApiKey) {
               log.error("No OpenAI API key found. Cannot perform similarity search.");
               throw new Error("OpenAI API key is required for similarity search");
@@ -227,11 +221,6 @@ export async function generateEmbeddingsForNote(noteId: string, noteContent: str
   try {
     // Check if necessary services are initialized
     if (!embeddingCreator) {
-      // Try to initialize the embedding creator if it's not already initialized
-      if (!openaiApiKey) {
-        openaiApiKey = await getOpenAIKey();
-      }
-      
       if (!openaiApiKey) {
         log.warn("No OpenAI API key found. Skipping embedding generation.");
         return;

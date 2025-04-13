@@ -75,9 +75,8 @@ export default function ExplorerLeftPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-auto">
-      {/* Header with action buttons */}
-      <div className="flex justify-between items-center p-1 border-b border-[hsl(var(--border))]">
+    <div className="flex flex-col h-full w-full overflow-auto bg-secondary">
+      <div className="flex justify-between items-center p-1 border-b border-[hsl(var(--border))] bg-secondary">
         <div className="text-sm font-medium">Files</div>
         <div className="flex space-x-1">
           <button

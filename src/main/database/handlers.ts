@@ -10,9 +10,10 @@ import BetterSqlite3 from 'better-sqlite3'; // Added import
 import { Item, ItemWithAIMetadata, Note } from './types';
 import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
-import { getOpenAIKey } from '../file-system/loader';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
 import * as chokidar from 'chokidar';
+import { CredentialManager } from '../credentials/manager';
+import { CredentialAccount } from '../../types/credentials';
 
 // Map to keep track of file watchers for mounted folders
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
@@ -827,8 +828,7 @@ export async function registerDatabaseIPCHandlers() {
         // Create the vector index table
         db.exec(`
           CREATE VIRTUAL TABLE IF NOT EXISTS vector_index USING vss0(
-            embedding(1536), -- OpenAI's ada-002 embedding dimension
-            item_id TEXT
+            embedding(1536)
           );
         `);
         
@@ -1104,7 +1104,8 @@ export async function registerDatabaseIPCHandlers() {
       }
 
       // Get OpenAI API key
-      const openaiApiKey = await getOpenAIKey();
+      const credentialManager = CredentialManager.getInstance();
+      const openaiApiKey = await credentialManager.getCredential(CredentialAccount.OPENAI);
       const openai = new OpenAI({ apiKey: openaiApiKey });
 
       // Get response from OpenAI with explicit token limit
@@ -1151,7 +1152,8 @@ export async function registerDatabaseIPCHandlers() {
       }
 
       // Get OpenAI API key and validate it
-      const openaiApiKey = await getOpenAIKey();
+      const credentialManager = CredentialManager.getInstance();
+      const openaiApiKey = await credentialManager.getCredential(CredentialAccount.OPENAI);
       if (!openaiApiKey) {
         log.error('OpenAI API key is missing or empty');
         event.sender.send(responseChannel, "Error: OpenAI API key is missing. Please add your API key in settings.");
@@ -1190,24 +1192,80 @@ export async function registerDatabaseIPCHandlers() {
         // Reverse to get chronological order
         const history = recentHistory.reverse();
 
-        // Use FTS to find most relevant notes based on the query
-        const notesStmt = db.prepare(`
-          SELECT n.content, i.name, i.id, i.path
-          FROM notes n
-          JOIN items i ON n.item_id = i.id
-          WHERE i.type = 'note'
-          ORDER BY (
-            CASE WHEN n.content LIKE ? THEN 3
-            WHEN i.name LIKE ? THEN 2
-            ELSE 1 END
-          ) DESC
-          LIMIT 5
-        `);
-        
-        const searchTerm = `%${query}%`;
-        const notes = notesStmt.all(searchTerm, searchTerm) as { content: string; name: string; id: string; path: string }[];
+        // 1. Create Embedding for the User Query
+        event.sender.send(responseChannel, "\n*Generating query embedding...*");
+        const queryEmbeddingResponse = await openai.embeddings.create({
+          model: 'text-embedding-ada-002',
+          input: query,
+        });
+        const queryEmbeddingVector = queryEmbeddingResponse.data[0].embedding;
+        const queryEmbeddingBuffer = Buffer.from(new Float32Array(queryEmbeddingVector).buffer);
+        event.sender.send(responseChannel, "\n*Searching notes using vector similarity...*");
 
-        // Prepare context from relevant notes but limit each note content
+        // 2. Perform VSS Search
+        let relevantNoteIds: string[] = [];
+        const vssLimit = 5; // How many top results to retrieve
+        try {
+          const vssStmt = db.prepare(`
+            SELECT rowid, distance
+            FROM vector_index
+            WHERE vss_search(embedding, ?)
+            ORDER BY distance
+            LIMIT ?
+          `);
+          const vssResults = vssStmt.all(queryEmbeddingBuffer, vssLimit) as { rowid: number, distance: number }[];
+          
+          // Get the original item IDs using the rowids
+          if (vssResults.length > 0) {
+             const rowIds = vssResults.map(r => r.rowid);
+             // Construct placeholder string like (?, ?, ?)
+             const placeholders = rowIds.map(() => '?').join(',');
+             const idStmt = db.prepare(`SELECT id FROM items WHERE rowid IN (${placeholders})`);
+             relevantNoteIds = (idStmt.all(...rowIds) as { id: string }[]).map(item => item.id);
+             log.info(`Found ${relevantNoteIds.length} notes via VSS search.`);
+          } else {
+             log.info('VSS search returned no results.');
+          }
+        } catch (vssSearchError) {
+          log.error('Error performing VSS search:', vssSearchError);
+          event.sender.send(responseChannel, "\n*Error during vector search, falling back to keyword search...*");
+          // Fallback or error handling can go here - for now, we continue without VSS results
+          relevantNoteIds = [];
+        }
+        
+        // 3. Fetch Note Content based on VSS results (or fallback)
+        let notes: { content: string; name: string; id: string; path: string }[] = [];
+        if (relevantNoteIds.length > 0) {
+          const placeholders = relevantNoteIds.map(() => '?').join(',');
+          const notesContentStmt = db.prepare(`
+             SELECT n.content, i.name, i.id, i.path
+             FROM notes n
+             JOIN items i ON n.item_id = i.id
+             WHERE i.id IN (${placeholders})
+          `);
+          notes = notesContentStmt.all(...relevantNoteIds) as { content: string; name: string; id: string; path: string }[];
+        } else {
+          // Fallback to original FTS/keyword search if VSS failed or returned no results
+          log.info('Falling back to keyword search.');
+          event.sender.send(responseChannel, "\n*Using keyword search as fallback...*");
+          const fallbackNotesStmt = db.prepare(`
+            SELECT n.content, i.name, i.id, i.path
+            FROM notes n
+            JOIN items i ON n.item_id = i.id
+            WHERE i.type = 'note'
+            ORDER BY (
+              CASE WHEN n.content LIKE ? THEN 3
+              WHEN i.name LIKE ? THEN 2
+              ELSE 1 END
+            ) DESC
+            LIMIT ?
+          `);
+          const searchTerm = `%${query}%`;
+          notes = fallbackNotesStmt.all(searchTerm, searchTerm, vssLimit) as { content: string; name: string; id: string; path: string }[];
+        }
+
+        // Prepare context from relevant notes
+        event.sender.send(responseChannel, "\n*Preparing context for AI...*");
         let contextText = '';
         for (const note of notes) {
           // Extract just the first 300 chars of content for context to save tokens
