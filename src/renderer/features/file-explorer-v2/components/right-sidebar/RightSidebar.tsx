@@ -9,7 +9,7 @@ interface RightSidebarProps {
   onClose: () => void;
 }
 
-const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
+const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen }) => {
   const { ui, entities } = useFileExplorerStore();
   const selectedId = ui.selectedId;
   const selectedNode = selectedId ? entities.nodes[selectedId] : null;
@@ -33,7 +33,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
   }, [isNoteSelected, ui.rightSidebarTab]);
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-secondary">
       <Tabs defaultValue={defaultTab} value={ui.rightSidebarTab} onValueChange={(value) => useFileExplorerStore.setState(state => ({ ui: { ...state.ui, rightSidebarTab: value } }))} className="flex flex-col h-full">
         <div className="flex justify-between items-center h-8 px-1 border-b border-border bg-background/95">
           <TabsList className="h-full flex gap-2 bg-transparent border-none">
@@ -52,10 +52,10 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
           </TabsList>
         </div>
         <TabsContent value="related" className="flex-grow overflow-auto p-0 m-0 border-none outline-none data-[state=inactive]:hidden">
-          <RelatedNotes isOpen={isOpen} onClose={onClose} />
+          <RelatedNotes isOpen={isOpen} />
         </TabsContent>
         <TabsContent value="chat" className="flex-grow overflow-hidden p-0 m-0 border-none outline-none data-[state=inactive]:hidden">
-          <ChatPane onClose={onClose} isNoteSelected={isNoteSelected} selectedNodeId={selectedId} />
+          <ChatPane isNoteSelected={isNoteSelected} selectedNodeId={selectedId} />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,36 +1,36 @@
-@import 'katex/dist/katex.min.css';
+@import "katex/dist/katex.min.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
- 
+
 @layer base {
   :root {
-    --background: 215 28% 97%; /* Lighter Gray (was White) */
+    --background: 0 0% 100%; /* White */
     --foreground: 222 47% 11%; /* Near-black */
     --card: 0 0% 100%; /* White */
     --card-foreground: 222 47% 11%; /* Near-black */
     --popover: 0 0% 100%; /* White */
     --popover-foreground: 222 47% 11%; /* Near-black */
-    --primary: 217 91% 60%; /* Brighter Blue */
+    --primary: 212 92% 45%; /* Blue */
     --primary-foreground: 0 0% 100%; /* White */
-    --secondary: 0 0% 100%; /* White (was Lighter Gray) */
+    --secondary: 210 14% 97%; /* Light Gray */
     --secondary-foreground: 222 47% 11%; /* Near-black */
-    --muted: 215 28% 93%; /* Light Gray */
-    --muted-foreground: 215 25% 35%; /* Darker Gray (was Medium Gray) */
+    --muted: 210 14% 97%; /* Light Gray */
+    --muted-foreground: 213 8% 43%; /* Gray  */
     --accent: 215 28% 93%; /* Light Gray */
     --accent-foreground: 222 47% 11%; /* Near-black */
     --destructive: 0 72% 51%; /* Standard Red */
     --destructive-foreground: 0 0% 100%; /* White */
-    --border: 215 20% 90%; /* Slightly Darker Border */
-    --input: 215 20% 90%; /* Slightly Darker Input Border */
-    --ring: 217 91% 60%; /* Brighter Blue for focus */
+    --border: 212 13% 84%; /* Border Gray */
+    --input: 212 13% 84%; /* Border Gray */
+    --ring: 212 92% 45%; /* Blue for focus */
     --radius: 0.5rem;
     /* Optional: Adjust gradient if used extensively in light mode */
-    /* --gradient-start: 217 91% 58%; */
-    /* --gradient-end: 217 91% 62%; */
+    /* --gradient-start: 212 92% 43%; */
+    /* --gradient-end: 212 92% 47%; */
   }
- 
+
   .dark {
     --background: 220 6% 10%;
     --foreground: 210 6% 93%;
@@ -67,7 +67,11 @@
 
 @layer utilities {
   .bg-gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
+    background: linear-gradient(
+      135deg,
+      hsl(var(--gradient-start)),
+      hsl(var(--gradient-end))
+    );
   }
 }
 
