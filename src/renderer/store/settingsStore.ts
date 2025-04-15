@@ -32,7 +32,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   loadSettings: async () => {
     set({ loading: { isLoading: true, error: null } });
     try {
-      const key = await window.credentialsAPI.getKey(CredentialAccount.OPENAI);
+      const key = await window.credentialAPI.getKey(CredentialAccount.OPENAI);
       set({
         settings: { ...get().settings, openAIKey: key || "" },
         loading: { isLoading: false, error: null },
@@ -62,7 +62,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         newSettings.openAIKey !== undefined &&
         newSettings.openAIKey !== currentState.openAIKey
       ) {
-        await window.credentialsAPI.setKey(CredentialAccount.OPENAI, updatedSettings.openAIKey);
+        await window.credentialAPI.setKey(CredentialAccount.OPENAI, updatedSettings.openAIKey);
       } 
     } catch (err) {
       const errorMsg =

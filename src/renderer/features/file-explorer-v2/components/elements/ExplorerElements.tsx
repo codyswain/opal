@@ -85,10 +85,8 @@ export const FileIcon: React.FC<FileIconProps> = ({
         return <FileJson size={14} className="text-yellow-400" />;
       case 'sql':
         return <Database size={14} className="text-yellow-500" />;
-      case 'md':
-        return <FileText size={14} className="text-muted-foreground" />;
       default:
-        return <File size={14} className="text-muted-foreground" />;
+        return <FileText size={14} className="text-muted-foreground" />;
     }
   };
 

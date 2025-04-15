@@ -18,13 +18,13 @@ import { FilePlus, FolderPlus } from 'lucide-react';
  * 6. Supporting drag operations for embedding items in notes
  */
 export default function ExplorerLeftPanel() {
-  const { loading, loadFileSystem, createNote, createFolder, ui, entities } = useFileExplorerStore();
+  const { loading, loadVirtualFileSystem, createNote, createFolder, ui, entities } = useFileExplorerStore();
   const { contextMenu, handleContextMenu, closeContextMenu } = useFileExplorerContextMenu();
 
   // Load file system data on component mount
   useEffect(() => {
-    loadFileSystem();
-  }, [loadFileSystem]);
+    loadVirtualFileSystem();
+  }, [loadVirtualFileSystem]);
   
   // Handle creating a new note
   const handleCreateNote = async () => {

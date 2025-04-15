@@ -104,25 +104,6 @@ function registerIPCHandlers() {
   );
 
   ipcMain.handle(
-    "perform-rag-chat",
-    async (
-      _,
-      conversation: { role: string; content: string }[]
-    ): Promise<{ role: string; content: string }> => {
-      try {
-        if (!ragChat) {
-          throw new Error("RAG chat service not initialized");
-        }
-        
-        return await ragChat.performRAGChat(conversation);
-      } catch (error) {
-        log.error("Error performing RAG chat:", error);
-        throw error;
-      }
-    }
-  );
-
-  ipcMain.handle(
     "clear-vector-index",
     async (): Promise<{ success: boolean, message?: string }> => {
       try {

@@ -119,10 +119,22 @@ export async function registerDatabaseIPCHandlers() {
 
     try {
       const items = await db.prepare(`
-        SELECT  i.id, i.type, i.path, i.parent_path, i.name, i.created_at, i.updated_at, i.size, 
-                i.is_mounted, i.real_path, a.summary, a.tags
+        SELECT 
+          i.id, 
+          i.type, 
+          i.path, 
+          i.parent_path, 
+          i.name, 
+          i.created_at, 
+          i.updated_at, 
+          i.size, 
+          i.is_mounted, 
+          i.real_path, 
+          a.summary, 
+          a.tags
         FROM items i
-        LEFT JOIN ai_metadata a ON i.id = a.item_id
+        LEFT JOIN ai_metadata a 
+          ON i.id = a.item_id
       `).all() as (ItemWithAIMetadata & { is_mounted: number, real_path: string })[];
 
       const entries = transformFileSystemData(items);
@@ -323,81 +335,6 @@ export async function registerDatabaseIPCHandlers() {
       return { success: false, error: String(error) };
     }
   });
-
-  // First order of business
-  // When a user selects a top level folder, we need to recursively load all of the items
-  // in the folder and add them to the database. 
-  ipcMain.handle(
-    "add-root-folder",
-    async (
-      event,
-      folderPath: string
-    ): Promise<{ success: boolean; error?: string }> => {
-      const db = dbManager.getDatabase();
-      if (!db) throw new Error("Database not initialized");
-
-      // Recursively clone directory in virtual database
-      async function processDirectory(
-        dirPath: string,
-        parentPath: string | null = null
-      ) {
-        const items = await fs.readdir(dirPath, { withFileTypes: true });
-        for (const item of items) {
-          const itemPath = path.join(dirPath, item.name);
-          const id = uuidv4();
-          if (item.isDirectory()) {
-            const sql = `
-            INSERT INTO items (id, type, path, parent_path, name)
-            VALUES (?, 'folder', ?, ?, ?)
-          `;
-            const stmt = db.prepare(sql);
-            const parentPath = path.join(dirPath, item.name);
-            stmt.run(id, itemPath, parentPath, item.name);
-            await processDirectory(itemPath, parentPath);
-          } else if (item.isFile()) {
-            console.log("item is file");
-            const stats = await fs.stat(itemPath);
-            const stmt = db.prepare(`
-            INSERT INTO items (id, type, path, parent_path, name, size)
-            VALUES (?, 'file', ?, ?, ?, ?)
-          `);
-            stmt.run(
-              id,
-              itemPath,
-              parentPath || dirPath,
-              item.name,
-              stats.size
-            );
-          }
-        }
-      }
-
-      try {
-        // Create virtual copy of the directory
-        const sql = `
-          INSERT INTO items (id, type, path, parent_path, name)
-          VALUES (?, 'folder', ?, NULL, ?)
-        `;
-        const stmt = db.prepare(sql);
-        stmt.run(uuidv4(), folderPath, path.basename(folderPath));
-
-        log.info("Starting recursive process for folder: ", folderPath);
-
-        // Start the recursive process
-        await processDirectory(folderPath);
-
-        return { success: true };
-      } catch (error) {
-        log.error("Error adding top-level folder:", error);
-        return { success: false, error: String(error) };
-      }
-    }
-  );
-
-
-
-
-  // --- Item Creation ---
 
   ipcMain.handle('create-folder', async (event, parentPath: string | null, folderName: string) => {
     const db = dbManager.getDatabase();
@@ -1368,7 +1305,7 @@ export async function registerDatabaseIPCHandlers() {
   });
 
   // Add the mount folder handler
-  ipcMain.handle('file-explorer:mount-folder', async (event, targetPath: string, realFolderPath: string) => {
+  ipcMain.handle('mount-folder', async (event, targetPath: string, realFolderPath: string) => {
     try {
       const db = dbManager.getDatabase();
       if (!db) {
@@ -1458,7 +1395,7 @@ export async function registerDatabaseIPCHandlers() {
   });
 
   // Add the unmount folder handler
-  ipcMain.handle('file-explorer:unmount-folder', async (event, mountedFolderPath: string) => {
+  ipcMain.handle('unmount-folder', async (event, mountedFolderPath: string) => {
     try {
       const db = dbManager.getDatabase();
       if (!db) {
@@ -1518,7 +1455,7 @@ export async function registerDatabaseIPCHandlers() {
   });
 
   // Add the get image data handler
-  ipcMain.handle('file-explorer:get-image-data', async (event, imagePath: string) => {
+  ipcMain.handle('get-image-data', async (event, imagePath: string) => {
     try {
       // Check if path is a real_path from the database or a direct file path
       const db = dbManager.getDatabase();

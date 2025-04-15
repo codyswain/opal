@@ -5,7 +5,6 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import log from 'electron-log';
 import DatabaseManager from './db';
-import BetterSqlite3 from 'better-sqlite3';
 
 // Define a minimal interface for the sqlite-vss module
 interface SqliteVssModule {

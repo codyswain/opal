@@ -24,7 +24,7 @@ const ImageView: React.FC<ImageViewProps> = ({ selectedNode }) => {
 
       try {
         setLoading(true);
-        const result = await window.fileExplorer.getImageData(selectedNode.realPath);
+        const result = await window.syncAPI.getImageData(selectedNode.realPath);
         
         if (result.success) {
           setImageData(result.dataUrl);
