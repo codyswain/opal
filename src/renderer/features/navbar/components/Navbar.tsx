@@ -35,7 +35,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const { canGoBack, canGoForward, goBack, goForward } = useFileExplorerStore();
 
   const handleWindowAction = (action: "minimize" | "maximize" | "close") => {
-    window.electron[action]();
+    window.systemAPI[action]();
   };
 
   const renderWindowControls = () => (

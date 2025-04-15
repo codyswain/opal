@@ -49,7 +49,7 @@ interface FileExplorerContextMenuProps {
 }
 
 const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ contextMenu, onClose }) => {
-  const { createNote, createFolder, loadFileSystem } = useFileExplorerStore();
+  const { createNote, createFolder, loadVirtualFileSystem } = useFileExplorerStore();
   
   if (!contextMenu) return null;
   const { x, y, entry } = contextMenu;
@@ -74,14 +74,10 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
     onClose();
   };
 
-  // Access window.electron and window.fileExplorer
-  const electronApi = window.electron;
-  const fileExplorerApi = window.fileExplorer;
-
   const handleMountFolder = async () => {
     try {
       // Use the electron openFolderDialog API to select a folder
-      const result = await electronApi.openFolderDialog();
+      const result = await window.systemAPI.openFolderDialog();
       
       if (!result || result.canceled || !result.filePaths || result.filePaths.length === 0) {
         return;
@@ -90,11 +86,11 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
       const selectedFolderPath = result.filePaths[0];
       
       // Call our mount folder API
-      const mountResult = await fileExplorerApi.mountFolder(entry.path, selectedFolderPath);
+      const mountResult = await window.syncAPI.mountFolder(entry.path, selectedFolderPath);
       
       if (mountResult && mountResult.success) {
         // Reload the file system to show the mounted folder
-        await loadFileSystem();
+        await loadVirtualFileSystem();
       } else {
         const errorMessage = mountResult?.error || 'Unknown error';
         console.error('Error mounting folder:', errorMessage);
@@ -114,13 +110,12 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
         console.error('Cannot unmount a folder that is not mounted');
         return;
       }
-      
       // Call the unmount folder API
-      const unmountResult = await fileExplorerApi.unmountFolder(entry.path);
+      const unmountResult = await window.syncAPI.unmountFolder(entry.path);
       
       if (unmountResult && unmountResult.success) {
         // Reload the file system to update the UI
-        await loadFileSystem();
+        await loadVirtualFileSystem();
       } else {
         const errorMessage = unmountResult?.error || 'Unknown error';
         console.error('Error unmounting folder:', errorMessage);

@@ -52,7 +52,7 @@ const FolderView: React.FC<FolderViewProps> = ({
       await Promise.all(imageNodes.map(async (node) => {
         if (node.path && !newImageCache[node.id]) {
           try {
-            const result = await window.fileExplorer.getImageData(node.path);
+            const result = await window.syncAPI.getImageData(node.path);
             if (result.success) {
               newImageCache[node.id] = result.dataUrl;
             }

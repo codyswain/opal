@@ -23,7 +23,7 @@ export const Settings: React.FC = () => {
     ) {
       setResetStatus("Database reset in progress...");
       try {
-        const result = await window.databaseAPI.resetDatabase();
+        const result = await window.adminAPI.resetDatabase();
         if (result.success) {
           setResetStatus(
             "Database reset successfully! You can now migrate your notes again."
@@ -42,7 +42,7 @@ export const Settings: React.FC = () => {
   const handleBackupDatabase = async () => {
     setBackupStatus("Backup in progress...");
     try {
-      const result = await window.databaseAPI.backupDatabase();
+      const result = await window.adminAPI.backupDatabase();
       if (result.success && result.filePath) {
         setBackupStatus(`Backup created successfully at ${result.filePath}!`);
       } else {
@@ -64,7 +64,7 @@ export const Settings: React.FC = () => {
 
       try {
         // Check if the clearVectorIndex function exists
-        if (!window.electron.clearVectorIndex) {
+        if (!window.adminAPI.clearVectorIndex) {
           setEmbeddingsStatus(
             "This version of the application does not support the rebuild embeddings feature yet. Please restart the application first."
           );
@@ -72,7 +72,7 @@ export const Settings: React.FC = () => {
         }
 
         // First, clear the vector index
-        const clearResult = await window.electron.clearVectorIndex();
+        const clearResult = await window.adminAPI.clearVectorIndex();
         if (!clearResult.success) {
           setEmbeddingsStatus(
             `Failed to clear vector index: ${clearResult.message}`
@@ -81,7 +81,7 @@ export const Settings: React.FC = () => {
         }
 
         // Check if the regenerateAllEmbeddings function exists
-        if (!window.electron.regenerateAllEmbeddings) {
+        if (!window.adminAPI.regenerateAllEmbeddings) {
           setEmbeddingsStatus(
             "This version of the application does not support the regenerate embeddings feature yet. Please restart the application first."
           );
@@ -89,7 +89,7 @@ export const Settings: React.FC = () => {
         }
 
         // Then regenerate all embeddings
-        const result = await window.electron.regenerateAllEmbeddings();
+        const result = await window.adminAPI.regenerateAllEmbeddings();
         if (result.success) {
           setEmbeddingsStatus(
             `Successfully rebuilt embeddings for ${result.count} notes. Related notes should now work properly.`

@@ -57,7 +57,7 @@ const EmbedNodeView = (props: NodeViewProps) => {
         setError(null);
         
         console.log(`[EmbedNodeView] Fetching embedded item: ${embedId}, type: ${embedType}`);
-        const result = await window.fileExplorer.getEmbeddedItem(embedId);
+        const result = await window.vfsAPI.getEmbeddedItem(embedId);
         
         if (result.success && result.embeddedItem) {
           console.log('[EmbedNodeView] Embedded item retrieved:', JSON.stringify(result.embeddedItem, null, 2));
@@ -88,7 +88,7 @@ const EmbedNodeView = (props: NodeViewProps) => {
             console.log('[EmbedNodeView] Using image path:', imagePath);
             
             try {
-              const imageResult = await window.fileExplorer.getImageData(imagePath);
+              const imageResult = await window.syncAPI.getImageData(imagePath);
               
               console.log('[EmbedNodeView] Image data result:', {
                 success: imageResult.success,
@@ -716,7 +716,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       console.log('Creating embedded item with position data:', positionData);
       
       // Create the embedded item in the database
-      const result = await window.fileExplorer.createEmbeddedItem(noteId, item.id, positionData);
+      const result = await window.vfsAPI.createEmbeddedItem(noteId, item.id, positionData);
       
       if (!result.success || !result.embeddedId) {
         console.error('Failed to create embedded item:', result.error);

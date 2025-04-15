@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
-import { Note, FileNode, DirectoryStructures } from "./renderer/shared/types";
+import { DirectoryStructures } from "./renderer/shared/types";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
@@ -19,131 +19,25 @@ import { Note, FileNode, DirectoryStructures } from "./renderer/shared/types";
   |--Main Process--|   <--IPC-->   |--Renderer Process--|
 */
 
-contextBridge.exposeInMainWorld("electron", {
-  saveNote: (note: Note, dirPath: string) =>
-    ipcRenderer.invoke("save-note", note, dirPath),
-  deleteNote: (noteId: string, dirPath: string) =>
-    ipcRenderer.invoke("delete-note", noteId, dirPath),
-  minimize: () => ipcRenderer.send("minimize-window"),
-  maximize: () => ipcRenderer.send("maximize-window"),
-  close: () => ipcRenderer.send("close-window"),
-  getNotePath: (noteId: string) => ipcRenderer.invoke("get-note-path", noteId),
-  createDirectory: (dirPath: string) =>
-    ipcRenderer.invoke("create-directory", dirPath),
-  deleteDirectory: (dirPath: string) =>
-    ipcRenderer.invoke("delete-directory", dirPath),
-  openFolderDialog: () => ipcRenderer.invoke("dialog:openDirectory"),
-  getDirectoryStructure: (dirPath: string) =>
-    ipcRenderer.invoke("get-directory-structure", dirPath),
-  loadNote: (notePath: string) => ipcRenderer.invoke("load-note", notePath),
-  deleteFileNode: (fileNodeType: string, fileNodePath: string) =>
-    ipcRenderer.invoke("delete-file-node", fileNodeType, fileNodePath),
-  generateNoteEmbeddings: (note: Note, fileNode: FileNode) =>
-    ipcRenderer.invoke("generate-note-embeddings", note, fileNode),
-  findSimilarNotes: (query: string, directoryStructures: DirectoryStructures) =>
-    ipcRenderer.invoke("perform-similarity-search", query, directoryStructures),
-  performRAGChat: (
-    conversation: { role: string; content: string }[],
-    directoryStructures: DirectoryStructures
-  ) => ipcRenderer.invoke("perform-rag-chat", conversation, directoryStructures),
-  clearVectorIndex: () => 
-    ipcRenderer.invoke("clear-vector-index"),
-  regenerateAllEmbeddings: () => 
-    ipcRenderer.invoke("regenerate-all-embeddings"),
-
-  // Database File Operations
-  createFolder: (parentPath: string, folderName: string) =>
-    ipcRenderer.invoke("create-folder", parentPath, folderName),
-  createNote: (parentPath: string, noteName: string, initialContent: string) =>
-    ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
-  listItems: (directoryPath: string) =>
-    ipcRenderer.invoke("list-items", directoryPath),
-  getItemByPath: (itemPath: string) =>
-    ipcRenderer.invoke("get-item-by-path", itemPath),
-  deleteItem: (itemPath: string) =>
-    ipcRenderer.invoke("delete-item", itemPath),
-  renameItem: (itemPath: string, newName: string) =>
-    ipcRenderer.invoke("rename-item", itemPath, newName),
-  moveItem: (oldPath: string, newParentPath: string) =>
-    ipcRenderer.invoke("move-item", oldPath, newParentPath),
-  getNoteContent: (notePath: string) =>
-    ipcRenderer.invoke("get-note-content", notePath),
-  updateNoteContent: (notePath: string, newContent: string) =>
-    ipcRenderer.invoke("update-note-content", notePath, newContent),
-  importFile: (sourceFilePath: string, newPath: string) =>
-    ipcRenderer.invoke("import-file", sourceFilePath, newPath),
-  addRootFolder: (folderPath: string) =>
-    ipcRenderer.invoke("add-root-folder", folderPath),
+contextBridge.exposeInMainWorld("systemAPI", {
+  minimize: () => ipcRenderer.send("system:minimize-window"),
+  maximize: () => ipcRenderer.send("system:maximize-window"),
+  close: () => ipcRenderer.send("system:close-window"),
+  openFolderDialog: () => ipcRenderer.invoke(`system:open-folder-dialog`),
+  createDirectoryOnDisk: (dirPath: string) => ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
 });
 
-// Expose the database API to the renderer process
-contextBridge.exposeInMainWorld('databaseAPI', {
-  // Folder operations
-  createFolder: (parentPath: string, folderName: string) => 
-    ipcRenderer.invoke('create-folder', parentPath, folderName),
-  
-  // Note operations
-  createNote: (parentPath: string, noteName: string, initialContent: string) => 
-    ipcRenderer.invoke('create-note', parentPath, noteName, initialContent),
-  getNoteContent: (notePath: string) => 
-    ipcRenderer.invoke('get-note-content', notePath),
-  updateNoteContent: (notePath: string, newContent: string) => 
-    ipcRenderer.invoke('update-note-content', notePath, newContent),
-  
-  // Item operations
-  listItems: (directoryPath: string) => 
-    ipcRenderer.invoke('list-items', directoryPath),
-  getItemByPath: (itemPath: string) => 
-    ipcRenderer.invoke('get-item-by-path', itemPath),
-  deleteItem: (itemPath: string) => 
-    ipcRenderer.invoke('delete-item', itemPath),
-  renameItem: (itemPath: string, newName: string) => 
-    ipcRenderer.invoke('rename-item', itemPath, newName),
-  moveItem: (oldPath: string, newParentPath: string) => 
-    ipcRenderer.invoke('move-item', oldPath, newParentPath),
-  
-  // Root folder operations
-  addRootFolder: (folderPath: string) => 
-    ipcRenderer.invoke('add-root-folder', folderPath),
-  
-  // File operations
-  importFile: (sourceFilePath: string, destinationPath: string) => 
-    ipcRenderer.invoke('import-file', sourceFilePath, destinationPath),
-
-  // Migration utilities
-  triggerMigration: () => 
-    ipcRenderer.invoke('trigger-migration'),
-
-  // Database Management Utilities
-  resetDatabase: () => 
-    ipcRenderer.invoke('reset-database'),
-  backupDatabase: () => 
-    ipcRenderer.invoke('backup-database'),
-});
-
-// Define the entire fileExplorer API block
+// These need to be moved elsewhere or deprecated
 contextBridge.exposeInMainWorld("fileExplorer", {
-  openDialogToMountDirpath: () => ipcRenderer.invoke("open-folder-dialog"),
-  getEntries: () => ipcRenderer.invoke("file-explorer:get-entries"),
-  getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
   renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
-  createFolder: (parentPath: string, folderName: string) => ipcRenderer.invoke('file-explorer:create-folder', parentPath, folderName),
-  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke('file-explorer:create-note', parentPath, noteName, initialContent),
-  deleteItem: (itemPath: string) => ipcRenderer.invoke('file-explorer:delete-item', itemPath),
-  moveItem: (oldPath: string, newParentPath: string) => ipcRenderer.invoke('file-explorer:move-item', oldPath, newParentPath),
 });
 
-// Expose chat API to the renderer process
 contextBridge.exposeInMainWorld("chatAPI", {
-  getConversation: (conversationId: string) => 
-    ipcRenderer.invoke('chat:get-conversation', conversationId),
-  getAllConversations: () =>
-    ipcRenderer.invoke('chat:get-all-conversations'),
-  addMessage: (conversationId: string, role: string, content: string) => 
-    ipcRenderer.invoke('chat:add-message', conversationId, role, content),
-  performRAG: (conversationId: string, query: string) => 
-    ipcRenderer.invoke('chat:perform-rag', conversationId, query),
+  getConversation: (conversationId: string) => ipcRenderer.invoke('chat:get-conversation', conversationId),
+  getAllConversations: () => ipcRenderer.invoke('chat:get-all-conversations'),
+  addMessage: (conversationId: string, role: string, content: string) => ipcRenderer.invoke('chat:add-message', conversationId, role, content),
+  performRAG: (conversationId: string, query: string) => ipcRenderer.invoke('chat:perform-rag', conversationId, query),
   performRAGStreaming: (conversationId: string, query: string, callback: (chunk: string) => void) => {
     // Create unique channel ID for this request to avoid conflicts
     const responseChannel = `chat:rag-response:${Date.now()}:${Math.random().toString(36).slice(2)}`;
@@ -190,13 +84,48 @@ contextBridge.exposeInMainWorld("chatAPI", {
       ipcRenderer.removeListener(responseChannel, listener);
     };
   }
-
-
-
 });
 
+contextBridge.exposeInMainWorld("vfsAPI", {
+  getItems: () => ipcRenderer.invoke('file-explorer:get-entries'),
+  renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
 
-contextBridge.exposeInMainWorld("credentialsAPI", {
+  createDirectory: (parentPath: string, folderName: string) => ipcRenderer.invoke('create-folder', parentPath, folderName),
+  deleteDirectory: (dirPath: string) => ipcRenderer.invoke("delete-directory", dirPath),
+  renameDirectory: (directoryPath: string, newName: string) => ipcRenderer.invoke("rename-directory", directoryPath, newName),
+  moveDirectory: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-directory", oldPath, newParentPath),
+  getDirectory: (directoryPath: string) => ipcRenderer.invoke("get-directory", directoryPath),
+
+  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
+  deleteNote: (notePath: string) => ipcRenderer.invoke("delete-note", notePath),
+  renameNote: (notePath: string, newName: string) => ipcRenderer.invoke("rename-note", notePath, newName),
+  moveNote: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-note", oldPath, newParentPath),
+  getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
+  updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
+
+  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) => ipcRenderer.invoke("create-embedded-item", noteId, embeddedItemId, positionData),
+  getEmbeddedItem: (embeddedId: string) => ipcRenderer.invoke("get-embedded-item", embeddedId),
+  getNoteEmbeddedItems: (noteId: string) => ipcRenderer.invoke("get-note-embedded-items", noteId),
+  updateEmbeddedItem: (embeddedId: string, positionData: Record<string, unknown>) => ipcRenderer.invoke("update-embedded-item", embeddedId, positionData),
+  deleteEmbeddedItem: (embeddedId: string) => ipcRenderer.invoke("delete-embedded-item", embeddedId),
+
+  findSimilarNotes: (query: string, directoryStructures: DirectoryStructures) => ipcRenderer.invoke("perform-similarity-search", query, directoryStructures),
+});
+
+contextBridge.exposeInMainWorld("syncAPI", {
+  mountFolder: (targetPath: string, realFolderPath: string) => ipcRenderer.invoke("mount-folder", targetPath, realFolderPath),
+  unmountFolder: (mountedFolderPath: string) => ipcRenderer.invoke("unmount-folder", mountedFolderPath),
+  getImageData: (imagePath: string) => ipcRenderer.invoke("get-image-data", imagePath),
+});
+
+contextBridge.exposeInMainWorld("adminAPI", {
+  resetDatabase: () => ipcRenderer.invoke('reset-database'),
+  backupDatabase: () => ipcRenderer.invoke('backup-database'),
+  clearVectorIndex: () => ipcRenderer.invoke("clear-vector-index"),
+  regenerateAllEmbeddings: () => ipcRenderer.invoke("regenerate-all-embeddings"),
+});
+
+contextBridge.exposeInMainWorld("credentialAPI", {
   getKey: (account: string) => ipcRenderer.invoke("get-key", account),
   setKey: (account: string, password: string) => ipcRenderer.invoke("set-key", account, password),
   deleteKey: (account: string) => ipcRenderer.invoke("delete-key", account),

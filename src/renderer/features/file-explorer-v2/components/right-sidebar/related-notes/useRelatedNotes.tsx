@@ -22,10 +22,10 @@ export const useRelatedNotes = (isOpen: boolean) => {
     setSimilarNotesIsLoading(true);
     
     try {
-      // Using findSimilarNotes from the window.electron API
-      const similarNotes = await window.electron.findSimilarNotes(
+      
+      const similarNotes = await window.vfsAPI.findSimilarNotes(
         selectedNote.content,
-        {} // Empty directory structures since we're using SQLite embeddings now
+        { rootIds: [], nodes: {} }
       );
       
       setSimilarNotes(

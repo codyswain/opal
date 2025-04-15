@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "@/renderer/App";
-import "@/renderer/index.css";
+import "@/renderer/styles/index.css";
 
 // The global interface is already declared in @/renderer/shared/types
 

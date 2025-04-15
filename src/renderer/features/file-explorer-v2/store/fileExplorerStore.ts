@@ -1,11 +1,8 @@
 import { create } from 'zustand';
-import { FSExplorerState } from './types';
+import { FSExplorerStore } from './types';
 import { FSEntry } from '@/types';
 
-/**
- * Zustand store for file explorer state management
- */
-export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
+export const useFileExplorerStore = create<FSExplorerStore>((set, get) => ({
   entities: {
     nodes: {} as Record<string, FSEntry>,
     notes: {} as Record<string, { id: string; content: string; createdAt: string; updatedAt: string }>,
@@ -28,14 +25,10 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     error: null as string | null,
   },
 
-  loadFileSystem: async () => {
+  loadVirtualFileSystem: async () => {
     set({ loading: { isLoading: true, error: null } });
     try {
-      console.log('Calling getEntries API...');
-      const {success, items} = await window.fileExplorer.getEntries();
-      console.log('getEntries response:', {success, itemsCount: items ? Object.keys(items).length : 0});
-      console.log('Sample items:', items ? Object.values(items).slice(0, 3) : 'No items');
-      
+      const {success, items} = await window.vfsAPI.getItems();
       if (success){
         set(state => ({
           entities: {
@@ -75,7 +68,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
 
   getNote: async (id: string) => {
     try {
-      const { success, note } = await window.fileExplorer.getNote(id);
+      const { success, note } = await window.vfsAPI.getNote(id);
       
       if (success) {
         set(state => ({
@@ -116,7 +109,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
       }
 
       // Call the IPC method to update the note content in the database
-      const result = await window.fileExplorer.updateNoteContent(id, content);
+      const result = await window.vfsAPI.updateNoteContent(id, content);
       
       if (!result.success) {
         console.error('Failed to update note content:', result.error);
@@ -295,119 +288,14 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
     }));
   },
 
-  startCreatingFolder: (parentId: string) => {
-    set((state: FSExplorerState) => {
-      const newExpandedFolders = new Set(state.ui.expandedFolders).add(parentId);
-      const nextUiState: FSExplorerState['ui'] = {
-        ...state.ui,
-        selectedId: parentId,
-        expandedFolders: newExpandedFolders,
-        creatingFolderInParentId: parentId,
-        newFolderName: '',
-        createFolderError: null as string | null,
-      };
-      return { ui: nextUiState };
-    });
-  },
-
-  setNewFolderName: (name: string) => {
-    set((state: FSExplorerState) => {
-      const nextUiState: FSExplorerState['ui'] = {
-        ...state.ui,
-        newFolderName: name,
-        createFolderError: null as string | null,
-      };
-      return { ui: nextUiState };
-    });
-  },
-
-  cancelCreatingFolder: () => {
-    set((state: FSExplorerState) => {
-      const nextUiState: FSExplorerState['ui'] = {
-        ...state.ui,
-        creatingFolderInParentId: null as string | null,
-        newFolderName: '',
-        createFolderError: null as string | null,
-      };
-      return { ui: nextUiState };
-    });
-  },
-
-  confirmCreateFolder: async (): Promise<boolean> => {
-    const { ui, entities } = get();
-    const parentId = ui.creatingFolderInParentId;
-    const folderName = ui.newFolderName.trim();
-
-    if (!parentId || !folderName) {
-      set((state: FSExplorerState) => {
-        const nextUiState: FSExplorerState['ui'] = {
-          ...state.ui,
-          createFolderError: 'Folder name cannot be empty' 
-        };
-        return { ui: nextUiState };
-      });
-      return false;
-    }
-
-    const parentNode = entities.nodes[parentId];
-    if (!parentNode) {
-      console.error('Parent node not found:', parentId);
-      set((state: FSExplorerState) => {
-        const nextUiState: FSExplorerState['ui'] = {
-          ...state.ui, 
-          createFolderError: 'Parent folder not found' 
-        };
-        return { ui: nextUiState };
-      });
-      return false;
-    }
-
-    try {
-      const result = await window.databaseAPI.createFolder(parentNode.path, folderName);
-
-      if (result.success) {
-        set((state: FSExplorerState) => {
-          const nextUiState: FSExplorerState['ui'] = {
-            ...state.ui,
-            creatingFolderInParentId: null,
-            newFolderName: '',
-            createFolderError: null,
-          };
-          return { ui: nextUiState };
-        });
-        await get().loadFileSystem();
-        return true;
-      } else {
-        set((state: FSExplorerState) => {
-          const nextUiState: FSExplorerState['ui'] = {
-            ...state.ui, 
-            createFolderError: result.error || 'Failed to create folder' 
-          };
-          return { ui: nextUiState };
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error('Error creating folder:', error);
-      set((state: FSExplorerState) => {
-        const nextUiState: FSExplorerState['ui'] = {
-          ...state.ui, 
-          createFolderError: String(error) 
-        };
-        return { ui: nextUiState };
-      });
-      return false;
-    }
-  },
-
   createNote: async (parentPath: string, noteName: string) => {
     try {
       const initialContent = '# New Note\n\nStart writing here...';
       // Make sure we're using the create-note IPC method
-      await window.electron.createNote(parentPath, noteName, initialContent);
+      await window.vfsAPI.createNote(parentPath, noteName, initialContent);
       
       // Reload the file system to reflect the changes
-      return get().loadFileSystem();
+      return get().loadVirtualFileSystem();
     } catch (error) {
       console.error('Failed to create note:', error);
       set({ loading: { isLoading: false, error: String(error) } });
@@ -418,10 +306,10 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
   createFolder: async (parentPath: string, folderName: string) => {
     try {
       // Use the createFolder IPC method
-      await window.electron.createFolder(parentPath, folderName);
+      await window.vfsAPI.createFolder(parentPath, folderName);
       
       // Reload the file system to reflect the changes
-      return get().loadFileSystem();
+      return get().loadVirtualFileSystem();
     } catch (error) {
       console.error('Failed to create folder:', error);
       set({ loading: { isLoading: false, error: String(error) } });
@@ -437,8 +325,7 @@ export const useFileExplorerStore = create<FSExplorerState>((set, get) => ({
         return false;
       }
 
-      // Call the IPC method to rename the item in the database
-      const result = await window.fileExplorer.renameItem(node.path, newName);
+      const result = await window.vfsAPI.renameItem(node.path, newName);
       
       if (!result.success) {
         console.error('Failed to rename item:', result.error);
