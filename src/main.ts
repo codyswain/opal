@@ -14,6 +14,8 @@ import {
   log,
 } from "@/main/";
 import { ensureAllTablesExist } from "./main/database/handlers";
+import { registerVFSIPCHandlers } from "./main/services/vfs/register";
+import DatabaseManager from "./main/database/db";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -163,6 +165,9 @@ app.whenReady().then(async () => {
 
     registerSystemIPCHandlers(ipcMain, dialog, BrowserWindow);
     log.info("System IPC handlers registered");
+
+    registerVFSIPCHandlers(ipcMain, DatabaseManager.getInstance());
+    log.info("Virtual File System (VFS) IPC handlers registered");
 
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");

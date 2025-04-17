@@ -7,7 +7,7 @@ export interface Item {
   created_at?: string;
   updated_at?: string;
   size?: number;
-  is_mounted?: boolean;
+  is_mounted?: number;
   real_path?: string;
 }
 

@@ -91,8 +91,8 @@ class Logger {
     log.info(message);
   }
 
-  public error(...message: string[]) {
-    log.error(message);
+  public error(message: string, error?: Error) {
+    log.error(message, error);
   }
 
   public warn(message: string) {

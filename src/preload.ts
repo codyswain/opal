@@ -15,7 +15,7 @@ import { DirectoryStructures } from "./renderer/shared/types";
   the renderer process. 
 
   |--Main Process--|--Preload Script--|--Renderer Process--|
-  After preload script runs:
+  After preload script runs
   |--Main Process--|   <--IPC-->   |--Renderer Process--|
 */
 
@@ -87,7 +87,7 @@ contextBridge.exposeInMainWorld("chatAPI", {
 });
 
 contextBridge.exposeInMainWorld("vfsAPI", {
-  getItems: () => ipcRenderer.invoke('file-explorer:get-entries'),
+  getItems: () => ipcRenderer.invoke('vfs:get-items'),
   renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
 
   createDirectory: (parentPath: string, folderName: string) => ipcRenderer.invoke('create-folder', parentPath, folderName),

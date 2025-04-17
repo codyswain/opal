@@ -1,6 +1,6 @@
 import { IpcMain, Dialog, BrowserWindow } from "electron";
 
-import { SystemHandlers } from "./systemHandlers"; 
+import { SystemHandlers } from "./SystemHandlers"; 
 
 export function registerSystemIPCHandlers(
   ipc: IpcMain,

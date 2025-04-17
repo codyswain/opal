@@ -13,13 +13,8 @@ and then use the pathToIdMap to load in the children.
 To load parents first, we can use the idToEntryMap. 
 */
 
-// Define an extended item type that includes our SQL result fields
-interface ExtendedItem extends Omit<ItemWithAIMetadata, 'is_mounted'> {
-  is_mounted: number;
-  real_path: string | null;
-}
 
-export function transformFileSystemData(items: ExtendedItem[]): Record<string, FSEntry> {
+export function transformFileSystemData(items: ItemWithAIMetadata[]): Record<string, FSEntry> {
   // Create a map to store the transformed entries
   const entriesMap: Record<string, FSEntry> = {};
   
