@@ -94,8 +94,8 @@ contextBridge.exposeInMainWorld("vfsAPI", {
   moveFolder: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("vfs:move-folder", oldPath, newParentPath),
   getFolder: (directoryPath: string) => ipcRenderer.invoke("vfs:get-folder", directoryPath),
 
-  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
-  deleteNote: (notePath: string) => ipcRenderer.invoke("delete-note", notePath),
+  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke("vfs:create-note", parentPath, noteName, initialContent),
+  deleteNote: (noteId: string) => ipcRenderer.invoke("vfs:delete-note", noteId),
   renameNote: (noteId: string, newName: string) => ipcRenderer.invoke("vfs:rename-note", noteId, newName),
   moveNote: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-note", oldPath, newParentPath),
   getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
