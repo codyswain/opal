@@ -403,4 +403,54 @@ export const useFileExplorerStore = create<FSExplorerStore>((set, get) => ({
       return false;
     }
   },
+
+  /** 
+   * Delete a folder in the virtual file system
+   * @param folderId - The ID of the folder to delete
+   * @returns True if the folder was deleted successfully, false otherwise
+   */
+  deleteFolder: async (folderId: string) => {
+    try {
+      const { success, error } = await window.vfsAPI.deleteFolder(folderId);
+  
+      if (!success) {
+        console.error("Failed to delete folder:", error);
+        return false;
+      }
+
+      // Reload the file system to reflect the changes
+      return get().loadVirtualFileSystem(); 
+    } catch (error) {
+      console.error("Failed to delete folder:", error);
+      return false;
+    }
+  },
+
+
+  /**
+   * Delete a note in the virtual file system
+   * @param noteId - The ID of the note to delete
+   * @returns True if the note was deleted successfully, false otherwise
+   */
+  deleteNote: async (noteId: string) => {
+    try {
+      const { success, error } = await window.vfsAPI.deleteNote(noteId);
+  
+      if (!success) {
+        console.error("Failed to delete note:", error);
+        return false;
+      }
+
+      set((state) => {
+        const prevNodes = { ...state.entities.nodes };
+        delete prevNodes[noteId];
+        return { entities: { ...state.entities, nodes: prevNodes } };
+      });
+  
+      return true;
+    } catch (error) {
+      console.error("Failed to delete note:", error);
+      return false;
+    }
+  },
 }));

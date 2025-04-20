@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld("vfsAPI", {
   getItems: () => ipcRenderer.invoke('vfs:get-items'),
 
   createFolder: (parentPath: string, folderName: string) => ipcRenderer.invoke('vfs:create-folder', parentPath, folderName),
-  deleteFolder: (dirPath: string) => ipcRenderer.invoke("vfs:delete-folder", dirPath),
+  deleteFolder: (folderId: string) => ipcRenderer.invoke("vfs:delete-folder", folderId),
   renameFolder: (folderId: string, newName: string) => ipcRenderer.invoke("vfs:rename-folder", folderId, newName),
   moveFolder: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("vfs:move-folder", oldPath, newParentPath),
   getFolder: (directoryPath: string) => ipcRenderer.invoke("vfs:get-folder", directoryPath),

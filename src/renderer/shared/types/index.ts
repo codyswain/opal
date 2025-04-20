@@ -150,13 +150,13 @@ declare global {
       getItems: () => Promise<IPCResponse<Record<string, FSEntry>>>;
 
       createFolder: (parentPath: string, folderName: string) => Promise<IPCResponse<{ id: string; path: string }>>;
-      deleteFolder: (directoryPath: string) => Promise<IPCResponse>;
+      deleteFolder: (folderId: string) => Promise<IPCResponse>;
       renameFolder: (folderId: string, newName: string) => Promise<IPCResponse<{newPath: string}>>;
       moveFolder: (oldPath: string, newParentPath: string) => Promise<IPCResponse<{newPath: string}>>;
       getFolder: (directoryPath: string) => Promise<IPCResponse<{items: Item[]}>>;
 
       createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<{success: boolean, error?: string}>;
-      deleteNote: (notePath: string) => Promise<{success: boolean, error?: string}>;
+      deleteNote: (noteId: string) => Promise<IPCResponse>;
       renameNote: (noteId: string, newName: string) => Promise<IPCResponse<{newPath: string}>>;
       moveNote: (oldPath: string, newParentPath: string) => Promise<{success: boolean, newPath?: string, error?: string}>;
       getNote: (notePath: string) => Promise<{success: boolean, note: Note, error?: string}>;

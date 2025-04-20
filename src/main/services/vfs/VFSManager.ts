@@ -80,4 +80,30 @@ export class VFSManager {
       throw error;
     }
   }
+
+  /** 
+   * Delete a folder from the VFS
+   * @param folderId - The folder ID
+   */
+  public async deleteFolder(folderId: string){
+    try {
+      await this.deps.itemRepository.deleteItem(folderId);
+    } catch (error) {
+      logger.error("Error deleting folder:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a note from the VFS
+   * @param noteId - The note ID
+   */
+  public async deleteNote(noteId: string) {
+    try {
+      await this.deps.itemRepository.deleteItem(noteId);
+    } catch (error) {
+      logger.error("Error deleting note:", error);
+      throw error;
+    }
+  }
 }

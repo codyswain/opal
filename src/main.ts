@@ -14,7 +14,7 @@ import {
 import { ensureAllTablesExist } from "@/main/database/handlers";
 import { SystemHandlers } from "@/main/services/system/SystemHandlers";
 import { CredentialHandlers } from "@/main/services/credentials/CredentialHandlers";
-import { VFSManager } from "@/main/services/vfs/VFSManager";
+import { VFSManager } from "@/main/services/vfs/VfsManager";
 import { VFSHandlers } from "@/main/services/vfs/VfsHandlers";
 import { CredentialManager } from "@/main/services/credentials/CredentialManager";
 import DatabaseManager from "@/main/database/db";

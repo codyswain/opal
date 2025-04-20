@@ -17,7 +17,7 @@ interface ItemRepositoryDependencies {
  * ItemRepository - Manages operations on the items table
  * 
  * This class provides methods to interact with the items table in the database.
- * It includes functionality for retrieving items, renaming items, and creating folders.
+ * It includes functionality for retrieving items, renaming items, and deleting them.
  * 
  * @class ItemRepository
  * @static
@@ -222,6 +222,110 @@ export class ItemRepository {
     } catch (error) {
       logger.error("Error creating folder during insert:", error);
       throw error;
+    }
+  }
+
+  public async deleteItem(itemId: string): Promise<void> {
+    const db = this.deps.dbManager.getDatabase();
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      // Start transaction
+      const transaction = db.transaction(() => {
+        // 1. Find the item itself and all its descendants using path prefix
+        // We need both the original item and descendants for deletion.
+        const getRootItemStmt = db.prepare("SELECT id, path FROM items WHERE id = ?");
+        const rootItem = getRootItemStmt.get(itemId) as { id: string; path: string } | undefined;
+
+        if (!rootItem) {
+          logger.warn(`Item not found for deletion with id: ${itemId}`);
+          // Optionally throw if the root item absolutely must exist
+          // throw new NotFoundError("Item", `Item not found for id: ${itemId}`);
+          return; // Nothing to delete if root item doesn't exist
+        }
+
+        const getDescendantsStmt = db.prepare(
+          "SELECT id, path FROM items WHERE path LIKE ? || '/%' AND id != ?"
+        );
+        const descendants = getDescendantsStmt.all(rootItem.path, rootItem.id) as { id: string; path: string }[];
+
+        // Combine root item and descendants
+        const itemsToDelete = [rootItem, ...descendants];
+
+        if (itemsToDelete.length === 0) {
+           // Should not happen if rootItem was found, but defensive check
+           logger.warn(`No items identified for deletion with root id: ${itemId}`);
+           return; // Nothing to delete
+        }
+
+        const itemIdsToDelete = itemsToDelete.map((item) => item.id);
+        logger.info(`Identified ${itemIdsToDelete.length} items (including descendants) for deletion starting with root id: ${itemId}`);
+
+        // Helper to delete from related tables
+        const deleteRelated = (tableName: string, columnName: string) => {
+          if (itemIdsToDelete.length === 0) return; // Nothing to delete
+          // Limit the number of parameters per statement if necessary (e.g., SQLite limit is often 999 or 32766)
+          const BATCH_SIZE = 900; // Example batch size, adjust if needed
+          for (let i = 0; i < itemIdsToDelete.length; i += BATCH_SIZE) {
+            const batchIds = itemIdsToDelete.slice(i, i + BATCH_SIZE);
+            if (batchIds.length === 0) continue;
+            const placeholders = batchIds.map(() => "?").join(",");
+            const deleteStmt = db.prepare(`DELETE FROM ${tableName} WHERE ${columnName} IN (${placeholders})`);
+            const result = deleteStmt.run(...batchIds); // Use spread operator
+            logger.info(`Deleted ${result.changes} rows from ${tableName} (batch ${i / BATCH_SIZE + 1}) for deletion rooted at item id: ${itemId}`);
+          }
+        };
+
+        // 2. Delete related data from other tables for ALL items first
+        deleteRelated("ai_metadata", "item_id");
+        deleteRelated("embedded_items", "embedded_item_id");
+        deleteRelated("embeddings_backup", "item_id");
+        deleteRelated("notes", "item_id");
+        deleteRelated("mounted_folders", "virtual_item_id");
+        // Add any other tables that have a foreign key to items.id here
+
+        // Helper function to count slashes (depth)
+        const getPathDepth = (p: string | null | undefined): number => {
+          if (!p) return 0; // Handle null/undefined paths (e.g., root)
+          return (p.match(/\//g) || []).length;
+        };
+
+        // 3. Sort items by path depth (descending) using slash count
+        itemsToDelete.sort((a, b) => getPathDepth(b.path) - getPathDepth(a.path));
+
+        // 4. Delete items from the 'items' table in the sorted order
+        const deleteItemStmt = db.prepare("DELETE FROM items WHERE id = ?");
+        let deletedItemsCount = 0;
+        for (const item of itemsToDelete) {
+          const result = deleteItemStmt.run(item.id);
+          deletedItemsCount += result.changes;
+        }
+        logger.info(`Deleted ${deletedItemsCount} rows from items table for deletion rooted at item id: ${itemId}`);
+
+        if (deletedItemsCount !== itemsToDelete.length) {
+            logger.warn(`Expected to delete ${itemsToDelete.length} items but only deleted ${deletedItemsCount}. This might indicate concurrent modifications.`);
+        }
+
+      }); // End transaction definition
+
+      // Execute transaction
+      transaction();
+
+      logger.info(`Successfully deleted item and descendants for id: ${itemId}`);
+
+    } catch (error: unknown) {
+      // Keep specific error checks if needed, otherwise generalize
+       if (error instanceof NotFoundError) {
+         // This might occur if the initial getRootItemStmt fails, though we handle the 'undefined' case
+         logger.error(`NotFoundError during delete operation for item id ${itemId}:`, error);
+         throw error;
+       }
+      logger.error(`Error deleting item with id ${itemId}:`, error as Error);
+      throw new QueryExecutionError(
+        `Failed to delete item with id ${itemId}`,
+        error as Error,
+        "deleteItem"
+      );
     }
   }
 }

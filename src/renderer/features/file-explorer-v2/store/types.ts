@@ -25,12 +25,16 @@ export interface FSExplorerStore {
   };
   loadVirtualFileSystem: () => Promise<boolean>;
   getNote: (id: string) => Promise<boolean>;
-  updateNoteContent: (id: string, content: string) => Promise<boolean>;
-  createNote: (parentPath: string, noteName: string) => Promise<boolean>;
+
+  deleteNote: (noteId: string) => Promise<boolean>;
+  deleteFolder: (folderId: string) => Promise<boolean>;
   renameFolder: (folderId: string, newName: string) => Promise<boolean>;
   renameNote: (noteId: string, newName: string) => Promise<boolean>;
+
+  updateNoteContent: (id: string, content: string) => Promise<boolean>;
+  createNote: (parentPath: string, noteName: string) => Promise<boolean>;
+
   createFolder: (parentPath: string, folderName: string) => Promise<boolean>;
-  
   toggleFolder: (folderId: string) => void;
   setSearchQuery: (query: string) => void;
   selectEntry: (id: string) => void; // Changed from selectEntry to handle async note loading and history
