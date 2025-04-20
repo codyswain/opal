@@ -12,8 +12,8 @@ import { transformFileSystemData } from './transforms';
 import { OpenAI } from 'openai';
 import { generateEmbeddingsForNote } from '../embeddings/handlers';
 import * as chokidar from 'chokidar';
-import { CredentialManager } from '../credentials/manager';
-import { CredentialAccount } from '../../types/credentials';
+import { CredentialManager } from '@/main/services/credentials/CredentialManager';
+import { CredentialAccount } from '@/types/credentials';
 
 // Map to keep track of file watchers for mounted folders
 const mountedFolderWatchers = new Map<string, chokidar.FSWatcher>();
@@ -252,86 +252,6 @@ export async function registerDatabaseIPCHandlers() {
       return { success: true };
     } catch (error) {
       log.error('Error updating note content:', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Add the rename item handler for file-explorer namespace
-  ipcMain.handle('file-explorer:rename-item', async (event, itemPath: string, newName: string) => {
-    try {
-      const db = dbManager.getDatabase();
-      if (!db) {
-        log.error('Database not initialized when file-explorer:rename-item was called');
-        return { success: false, error: 'Database not initialized' };
-      }
-
-      // Get the item to check if it exists and get its parent path
-      const getItemStmt = db.prepare(`
-        SELECT id, parent_path, type, name
-        FROM items
-        WHERE path = ?
-      `);
-      const item = getItemStmt.get(itemPath) as Item | undefined;
-
-      if (!item) {
-        log.error(`Item not found for path: ${itemPath}`);
-        return { success: false, error: 'Item not found' };
-      }
-
-      // Create the new path
-      const newPath = path.join(item.parent_path, newName);
-      
-      // Check if an item with the new path already exists
-      const checkExistingStmt = db.prepare(`
-        SELECT COUNT(*) as count
-        FROM items
-        WHERE path = ?
-      `);
-      const existingCount = (checkExistingStmt.get(newPath) as { count: number }).count;
-      
-      if (existingCount > 0) {
-        log.error(`An item already exists at path: ${newPath}`);
-        return { success: false, error: 'An item with this name already exists in this location' };
-      }
-
-      // Use a transaction to update the item and its children (if it's a folder)
-      const transaction = db.transaction(() => {
-        // Update the item's name and path
-        const updateStmt = db.prepare(`
-          UPDATE items
-          SET name = ?, path = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE path = ?
-        `);
-        updateStmt.run(newName, newPath, itemPath);
-
-        // If it's a folder, update all child paths
-        if (item.type === 'folder') {
-          const updateChildrenStmt = db.prepare(`
-            UPDATE items
-            SET path = replace(path, ?, ?), updated_at = CURRENT_TIMESTAMP
-            WHERE path LIKE ? || '%' AND path != ?
-          `);
-          updateChildrenStmt.run(itemPath, newPath, itemPath, itemPath);
-        }
-      });
-
-      log.info(`Renaming item from ${itemPath} to ${newPath}`);
-      transaction();
-
-      // Also rename on disk if it's a folder or a file
-      if (item.type === 'folder' || item.type === 'file') {
-        try {
-          await fs.rename(itemPath, newPath);
-        } catch (fsError) {
-          log.error(`Error renaming item on disk: ${fsError}`);
-          // We don't return an error here because the database update was successful
-          // The file system and database might be out of sync now, but that's better than failing the operation
-        }
-      }
-
-      return { success: true, newPath };
-    } catch (error) {
-      log.error('Error renaming item:', error);
       return { success: false, error: String(error) };
     }
   });

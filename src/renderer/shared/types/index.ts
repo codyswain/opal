@@ -1,8 +1,9 @@
 // src/shared/types/index.ts
 
 import type { default as OpenAI } from "openai";
-import { FSEntry } from '@/types'; // Import FSEntry from shared types
+import { FSEntry } from '@/types';
 import { CredentialAccount } from "@/types/credentials";
+import { IPCResponse } from "@/types/ipc";
 
 // Duplicate Item interface from src/main/database/types.ts
 export interface Item {
@@ -146,18 +147,17 @@ declare global {
     };
 
     vfsAPI: {
-      getItems: () => Promise<{success: boolean, items: Record<string, FSEntry>}>;
-      renameItem: (itemPath: string, newName: string) => Promise<{success: boolean, newPath: string, error?: string}>;
+      getItems: () => Promise<IPCResponse<Record<string, FSEntry>>>;
 
-      createFolder: (parentPath: string, folderName: string) => Promise<{success: boolean, error?: string}>;
-      deleteFolder: (directoryPath: string) => Promise<{success: boolean, error?: string}>;
-      renameFolder: (directoryPath: string, newName: string) => Promise<{success: boolean, error?: string}>;
-      moveFolder: (oldPath: string, newParentPath: string) => Promise<{success: boolean, newPath?: string, error?: string}>;
-      getFolder: (directoryPath: string) => Promise<{success: boolean, items: Item[], error?: string}>;
+      createFolder: (parentPath: string, folderName: string) => Promise<IPCResponse<{ id: string; path: string }>>;
+      deleteFolder: (folderId: string) => Promise<IPCResponse>;
+      renameFolder: (folderId: string, newName: string) => Promise<IPCResponse<{newPath: string}>>;
+      moveFolder: (oldPath: string, newParentPath: string) => Promise<IPCResponse<{newPath: string}>>;
+      getFolder: (directoryPath: string) => Promise<IPCResponse<{items: Item[]}>>;
 
       createNote: (parentPath: string, noteName: string, initialContent: string) => Promise<{success: boolean, error?: string}>;
-      deleteNote: (notePath: string) => Promise<{success: boolean, error?: string}>;
-      renameNote: (notePath: string, newName: string) => Promise<{success: boolean, error?: string}>;
+      deleteNote: (noteId: string) => Promise<IPCResponse>;
+      renameNote: (noteId: string, newName: string) => Promise<IPCResponse<{newPath: string}>>;
       moveNote: (oldPath: string, newParentPath: string) => Promise<{success: boolean, newPath?: string, error?: string}>;
       getNote: (notePath: string) => Promise<{success: boolean, note: Note, error?: string}>;
       updateNoteContent: (id: string, content: string) => Promise<{success: boolean, error?: string}>;

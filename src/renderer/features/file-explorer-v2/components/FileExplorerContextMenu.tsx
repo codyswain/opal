@@ -1,7 +1,13 @@
-import React from 'react';
-import { FSEntry } from '@/types';
-import { FilePlus, FolderPlus, HardDrive } from 'lucide-react';
-import { useFileExplorerStore } from '../store/fileExplorerStore';
+import React from "react";
+import { FSEntry } from "@/types";
+import {
+  FilePlus,
+  FolderPlus,
+  HardDrive,
+  PenIcon,
+  TrashIcon,
+} from "lucide-react";
+import { useFileExplorerStore } from "@/renderer/features/file-explorer-v2/store/fileExplorerStore";
 
 interface ContextMenuProps {
   x: number;
@@ -27,10 +33,17 @@ interface ContextMenuItemProps {
   className?: string;
 }
 
-const ContextMenuItem: React.FC<ContextMenuItemProps> = ({ icon: Icon, label, onClick, className }) => {
+const ContextMenuItem: React.FC<ContextMenuItemProps> = ({
+  icon: Icon,
+  label,
+  onClick,
+  className,
+}) => {
   return (
     <button
-      className={`w-full px-3 py-2 text-sm flex items-center hover:bg-gray-100 dark:hover:bg-gray-700 ${className || ''}`}
+      className={`w-full px-3 py-2 text-sm flex items-center hover:bg-gray-100 dark:hover:bg-gray-700 ${
+        className || ""
+      }`}
       onClick={onClick}
     >
       <Icon className="mr-2 h-4 w-4" />
@@ -46,31 +59,42 @@ interface FileExplorerContextMenuProps {
     entry: FSEntry;
   } | null;
   onClose: () => void;
+  onStartRename: (entry: FSEntry) => void;
 }
 
-const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ contextMenu, onClose }) => {
-  const { createNote, createFolder, loadVirtualFileSystem } = useFileExplorerStore();
-  
+const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({
+  contextMenu,
+  onClose,
+  onStartRename,
+}) => {
+  const {
+    createNote,
+    createFolder,
+    loadVirtualFileSystem,
+    deleteFolder,
+    deleteNote,
+  } = useFileExplorerStore();
+
   if (!contextMenu) return null;
   const { x, y, entry } = contextMenu;
 
   const handleCreateNote = async () => {
     try {
-      await createNote(entry.path, 'New Note.md');
+      await createNote(entry.path, "New Note.md");
     } catch (error) {
-      console.error('Error creating note:', error);
+      console.error("Error creating note:", error);
     }
-    
+
     onClose();
   };
 
   const handleCreateFolder = async () => {
     try {
-      await createFolder(entry.path, 'New Folder');
+      await createFolder(entry.path, "New Folder");
     } catch (error) {
-      console.error('Error creating folder:', error);
+      console.error("Error creating folder:", error);
     }
-    
+
     onClose();
   };
 
@@ -78,28 +102,36 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
     try {
       // Use the electron openFolderDialog API to select a folder
       const result = await window.systemAPI.openFolderDialog();
-      
-      if (!result || result.canceled || !result.filePaths || result.filePaths.length === 0) {
+
+      if (
+        !result ||
+        result.canceled ||
+        !result.filePaths ||
+        result.filePaths.length === 0
+      ) {
         return;
       }
-      
+
       const selectedFolderPath = result.filePaths[0];
-      
+
       // Call our mount folder API
-      const mountResult = await window.syncAPI.mountFolder(entry.path, selectedFolderPath);
-      
+      const mountResult = await window.syncAPI.mountFolder(
+        entry.path,
+        selectedFolderPath
+      );
+
       if (mountResult && mountResult.success) {
         // Reload the file system to show the mounted folder
         await loadVirtualFileSystem();
       } else {
-        const errorMessage = mountResult?.error || 'Unknown error';
-        console.error('Error mounting folder:', errorMessage);
+        const errorMessage = mountResult?.error || "Unknown error";
+        console.error("Error mounting folder:", errorMessage);
         // You could show a notification to the user here
       }
     } catch (error) {
-      console.error('Error mounting folder:', error);
+      console.error("Error mounting folder:", error);
     }
-    
+
     onClose();
   };
 
@@ -107,30 +139,56 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
     try {
       // Check if this folder is mounted before attempting to unmount
       if (!entry.isMounted) {
-        console.error('Cannot unmount a folder that is not mounted');
+        console.error("Cannot unmount a folder that is not mounted");
         return;
       }
       // Call the unmount folder API
       const unmountResult = await window.syncAPI.unmountFolder(entry.path);
-      
+
       if (unmountResult && unmountResult.success) {
         // Reload the file system to update the UI
         await loadVirtualFileSystem();
       } else {
-        const errorMessage = unmountResult?.error || 'Unknown error';
-        console.error('Error unmounting folder:', errorMessage);
+        const errorMessage = unmountResult?.error || "Unknown error";
+        console.error("Error unmounting folder:", errorMessage);
         // You could show a notification to the user here
       }
     } catch (error) {
-      console.error('Error unmounting folder:', error);
+      console.error("Error unmounting folder:", error);
     }
-    
+
     onClose();
+  };
+
+  // Trigger inline edit flow
+  const handleRenameItem = () => {
+    onStartRename(entry);
+    onClose();
+  };
+
+  const handleDeleteFolder = async () => {
+    if (window.confirm("Are you sure you want to delete this folder?")) {
+      try {
+        await deleteFolder(entry.id);
+      } catch (error) {
+        console.error("Error deleting folder:", error);
+      }
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    if (window.confirm("Are you sure you want to delete this note?")) {
+      try {
+        await deleteNote(entry.id);
+      } catch (error) {
+        console.error("Error deleting note:", error);
+      }
+    }
   };
 
   return (
     <ContextMenu x={x} y={y}>
-      {entry.type === 'folder' && (
+      {entry.type === "folder" ? (
         <>
           <ContextMenuItem
             icon={FilePlus}
@@ -155,11 +213,30 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
               className="text-red-500"
             />
           )}
+          <ContextMenuItem
+            icon={TrashIcon}
+            label="Delete"
+            onClick={handleDeleteFolder}
+            className="text-red-500"
+          />
         </>
-      )}
-      {/* Add more context menu items as needed */}
+      ) : entry.type === "note" ? (
+        <>
+          <ContextMenuItem
+            icon={PenIcon}
+            label="Rename Note"
+            onClick={handleRenameItem}
+          />
+          <ContextMenuItem
+            icon={TrashIcon}
+            label="Delete Note"
+            onClick={handleDeleteNote}
+            className="text-red-500"
+          />
+        </>
+      ) : null}
     </ContextMenu>
   );
 };
 
-export default FileExplorerContextMenu; 
+export default FileExplorerContextMenu;

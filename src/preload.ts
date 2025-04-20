@@ -15,7 +15,7 @@ import { DirectoryStructures } from "./renderer/shared/types";
   the renderer process. 
 
   |--Main Process--|--Preload Script--|--Renderer Process--|
-  After preload script runs:
+  After preload script runs
   |--Main Process--|   <--IPC-->   |--Renderer Process--|
 */
 
@@ -30,7 +30,6 @@ contextBridge.exposeInMainWorld("systemAPI", {
 // These need to be moved elsewhere or deprecated
 contextBridge.exposeInMainWorld("fileExplorer", {
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
-  renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
 });
 
 contextBridge.exposeInMainWorld("chatAPI", {
@@ -87,18 +86,17 @@ contextBridge.exposeInMainWorld("chatAPI", {
 });
 
 contextBridge.exposeInMainWorld("vfsAPI", {
-  getItems: () => ipcRenderer.invoke('file-explorer:get-entries'),
-  renameItem: (itemPath: string, newName: string) => ipcRenderer.invoke('file-explorer:rename-item', itemPath, newName),
+  getItems: () => ipcRenderer.invoke('vfs:get-items'),
 
-  createDirectory: (parentPath: string, folderName: string) => ipcRenderer.invoke('create-folder', parentPath, folderName),
-  deleteDirectory: (dirPath: string) => ipcRenderer.invoke("delete-directory", dirPath),
-  renameDirectory: (directoryPath: string, newName: string) => ipcRenderer.invoke("rename-directory", directoryPath, newName),
-  moveDirectory: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-directory", oldPath, newParentPath),
-  getDirectory: (directoryPath: string) => ipcRenderer.invoke("get-directory", directoryPath),
+  createFolder: (parentPath: string, folderName: string) => ipcRenderer.invoke('vfs:create-folder', parentPath, folderName),
+  deleteFolder: (folderId: string) => ipcRenderer.invoke("vfs:delete-folder", folderId),
+  renameFolder: (folderId: string, newName: string) => ipcRenderer.invoke("vfs:rename-folder", folderId, newName),
+  moveFolder: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("vfs:move-folder", oldPath, newParentPath),
+  getFolder: (directoryPath: string) => ipcRenderer.invoke("vfs:get-folder", directoryPath),
 
   createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
   deleteNote: (notePath: string) => ipcRenderer.invoke("delete-note", notePath),
-  renameNote: (notePath: string, newName: string) => ipcRenderer.invoke("rename-note", notePath, newName),
+  renameNote: (noteId: string, newName: string) => ipcRenderer.invoke("vfs:rename-note", noteId, newName),
   moveNote: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-note", oldPath, newParentPath),
   getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
   updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
@@ -126,7 +124,7 @@ contextBridge.exposeInMainWorld("adminAPI", {
 });
 
 contextBridge.exposeInMainWorld("credentialAPI", {
-  getKey: (account: string) => ipcRenderer.invoke("get-key", account),
-  setKey: (account: string, password: string) => ipcRenderer.invoke("set-key", account, password),
-  deleteKey: (account: string) => ipcRenderer.invoke("delete-key", account),
+  getKey: (account: string) => ipcRenderer.invoke("credentials:get", account),
+  setKey: (account: string, password: string) => ipcRenderer.invoke("credentials:set", account, password),
+  deleteKey: (account: string) => ipcRenderer.invoke("credentials:delete", account),
 });

@@ -1,1 +1,0 @@
-export { registerSystemIPCHandlers } from "./register";

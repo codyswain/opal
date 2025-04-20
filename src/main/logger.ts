@@ -3,7 +3,7 @@ import path from 'path';
 import { app } from 'electron';
 import os from 'os';
 import fs from 'fs/promises';
-import { APP_NAME } from './config/constants';
+import { APP_NAME } from '@/common/constants';
 
 /* 
   Logging destinations:
@@ -91,8 +91,8 @@ class Logger {
     log.info(message);
   }
 
-  public error(...message: string[]) {
-    log.error(message);
+  public error(message: string, error?: Error) {
+    log.error(message, error);
   }
 
   public warn(message: string) {

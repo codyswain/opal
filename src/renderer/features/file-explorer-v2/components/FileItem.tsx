@@ -20,6 +20,9 @@ export interface FileItemProps {
   isLastChild: boolean;
   onContextMenu: (e: React.MouseEvent, entry: FSEntry) => void;
   onDragStart?: (itemId: string, e: React.DragEvent) => void;
+  renamingItem: FSEntry | null;
+  onRenameSubmit: (item: FSEntry, newName: string) => void;
+  onRenameCancel: () => void;
 }
 
 /**
@@ -31,6 +34,9 @@ const FileItem: React.FC<FileItemProps> = ({
   isLastChild,
   onContextMenu,
   onDragStart,
+  renamingItem,
+  onRenameSubmit,
+  onRenameCancel,
 }) => {
   const { 
     ui, 
@@ -40,9 +46,11 @@ const FileItem: React.FC<FileItemProps> = ({
   const isSelected = ui.selectedId === entry.id;
   const isExpanded = ui.expandedFolders.has(entry.id);
   const isMounted = entry.isMounted;
+  const isRenaming = renamingItem?.id === entry.id;
 
-  // Format date for display in user's local timezone
-  // const formatDate = formatLocalDate;
+  // State for inline renaming input
+  const [inputValue, setInputValue] = useState(entry.name);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // State to track if a double click is in progress
   const [isDoubleClickInProgress, setIsDoubleClickInProgress] =
@@ -87,6 +95,15 @@ const FileItem: React.FC<FileItemProps> = ({
     };
   }, []);
 
+  // Focus input when renaming starts
+  useEffect(() => {
+    if (isRenaming) {
+      inputRef.current?.focus();
+      inputRef.current?.select(); // Select the text
+      setInputValue(entry.name); // Reset input value to current name when renaming starts
+    }
+  }, [isRenaming, entry.name]);
+
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     toggleFolder(entry.id);
@@ -119,6 +136,34 @@ const FileItem: React.FC<FileItemProps> = ({
       
       // Add this explicit logging to help debug
       console.log(`Starting drag of item: ${entry.name} (${entry.id}) - Type: ${entry.type}`);
+    }
+  };
+
+  // Handle input changes for renaming
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  // Handle key presses in the input (Enter to submit, Escape to cancel)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (inputValue.trim() && inputValue !== entry.name) {
+        onRenameSubmit(entry, inputValue.trim());
+      } else {
+        onRenameCancel(); // Cancel if name hasn't changed or is empty
+      }
+    } else if (e.key === 'Escape') {
+      onRenameCancel();
+    }
+  };
+
+  // Handle blur: submit if changed, otherwise cancel
+  const handleBlur = () => {
+    if (inputValue.trim() && inputValue !== entry.name) {
+      onRenameSubmit(entry, inputValue.trim());
+    } else {
+      onRenameCancel();
     }
   };
 
@@ -171,32 +216,48 @@ const FileItem: React.FC<FileItemProps> = ({
           isMounted={isMounted}
         />
 
-        {/* Entry name with timestamp tooltip */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className={`truncate z-10 relative text-${
-                explorerStyles.itemTextSize
-              } ml-${explorerStyles.iconMargin} ${
-                isMounted ? `${explorerStyles.mountedColorClass} font-medium` : ""
-              }`}
-            >
-              {entry.name}
-              {entry.type === "folder" && isMounted && (
-                <span className={`text-xs ${explorerStyles.mountedColorClass} ml-1`}>(mounted)</span>
-              )}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-xs">
-            <div>Name: {entry.name}</div>
-            <div>Path: {entry.path}</div>
-            <div>Type: {entry.type}</div>
-            <div>Created: {formatLocalDate(entry.metadata.createdAt)}</div>
-            <div>Updated: {formatLocalDate(entry.metadata.updatedAt)}</div>
-            {entry.type !== 'folder' && <div>Size: {entry.metadata.size} bytes</div>}
-            {isMounted && <div>Mounted: Yes ({entry.realPath})</div>}
-          </TooltipContent>
-        </Tooltip>
+        {/* Entry name or input field for renaming */}
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            className={`z-10 relative bg-transparent border border-primary focus:outline-none focus:ring-1 focus:ring-primary text-${
+              explorerStyles.itemTextSize
+            } ml-${explorerStyles.iconMargin} flex-grow mr-2 px-1 rounded-sm text-[hsl(var(--foreground)_/_0.8)]`}
+            style={{ minWidth: 0 }} // Allows input to shrink
+            onClick={(e) => e.stopPropagation()} // Prevent click from propagating to the item click handler
+          />
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={`truncate z-10 relative text-${
+                  explorerStyles.itemTextSize
+                } ml-${explorerStyles.iconMargin} ${
+                  isMounted ? `${explorerStyles.mountedColorClass} font-medium` : ""
+                }`}
+              >
+                {entry.name}
+                {entry.type === "folder" && isMounted && (
+                  <span className={`text-xs ${explorerStyles.mountedColorClass} ml-1`}>(mounted)</span>
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-xs">
+              <div>Name: {entry.name}</div>
+              <div>Path: {entry.path}</div>
+              <div>Type: {entry.type}</div>
+              <div>Created: {formatLocalDate(entry.metadata.createdAt)}</div>
+              <div>Updated: {formatLocalDate(entry.metadata.updatedAt)}</div>
+              {entry.type !== 'folder' && <div>Size: {entry.metadata.size} bytes</div>}
+              {isMounted && <div>Mounted: Yes ({entry.realPath})</div>}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   );
