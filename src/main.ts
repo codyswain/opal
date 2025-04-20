@@ -1,21 +1,24 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
 import {
-  DEFAULT_WINDOW_HEIGHT,
-  DEFAULT_WINDOW_WIDTH,
-} from "./renderer/config/setup";
+  DEFAULT_BROWSER_WINDOW_HEIGHT,
+  DEFAULT_BROWSER_WINDOW_WIDTH,
+} from "@/common/constants";
 import {
   closeDatabase,
   initializeDatabase,
   registerEmbeddingIPCHandlers,
   registerDatabaseIPCHandlers,
-  registerSystemIPCHandlers,
-  registerCredentialIPCHandlers,
   log,
-} from "@/main/";
-import { ensureAllTablesExist } from "./main/database/handlers";
-import { registerVFSIPCHandlers } from "./main/services/vfs/register";
-import DatabaseManager from "./main/database/db";
+} from "@/main/index";
+import { ensureAllTablesExist } from "@/main/database/handlers";
+import { SystemHandlers } from "@/main/services/system/SystemHandlers";
+import { CredentialHandlers } from "@/main/services/credentials/CredentialHandlers";
+import { VFSManager } from "@/main/services/vfs/VFSManager";
+import { VFSHandlers } from "@/main/services/vfs/VfsHandlers";
+import { CredentialManager } from "@/main/services/credentials/CredentialManager";
+import DatabaseManager from "@/main/database/db";
+import { ItemRepository } from "@/main/database/repositories/itemRepository";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -44,12 +47,12 @@ const CSP = [
 
 const createWindow = () => {
   log.info(
-    `Creating main window; windowWidth: ${DEFAULT_WINDOW_WIDTH}, windowHeight: ${DEFAULT_WINDOW_HEIGHT}`
+    `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`
   );
 
   mainWindow = new BrowserWindow({
-    width: DEFAULT_WINDOW_WIDTH,
-    height: DEFAULT_WINDOW_HEIGHT,
+    width: DEFAULT_BROWSER_WINDOW_WIDTH,
+    height: DEFAULT_BROWSER_WINDOW_HEIGHT,
     frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -158,22 +161,40 @@ process.on("uncaughtException", (error) => {
   dialog.showErrorBox("An error occurred", error.message);
 });
 
+// --- IPC Handlers ---
+const dbManager = DatabaseManager.getInstance();
+const dbItemRepository = new ItemRepository({ dbManager });
+const vfsManager = new VFSManager({ itemRepository: dbItemRepository });
+
+const systemHandlers = new SystemHandlers({
+  ipc: ipcMain,
+  dialog,
+  browserWindow: BrowserWindow,
+});
+
+const credentialHandlers = new CredentialHandlers({
+  ipc: ipcMain,
+  credentialManager: CredentialManager.getInstance(),
+});
+
+const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
+
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
   try {
     log.info("Initializing application...");
 
-    registerSystemIPCHandlers(ipcMain, dialog, BrowserWindow);
+    systemHandlers.registerAll();
     log.info("System IPC handlers registered");
 
-    registerVFSIPCHandlers(ipcMain, DatabaseManager.getInstance());
+    credentialHandlers.registerAll();
+    log.info("Credential IPC handlers registered");
+
+    vfsHandlers.registerAll();
     log.info("Virtual File System (VFS) IPC handlers registered");
 
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");
-
-    await registerCredentialIPCHandlers();
-    log.info("Credential IPC handlers registered");
 
     await registerEmbeddingIPCHandlers();
     log.info("Embedding IPC handlers registered");

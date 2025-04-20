@@ -3,7 +3,7 @@ import path from 'path';
 import { app } from 'electron';
 import os from 'os';
 import fs from 'fs/promises';
-import { APP_NAME } from './config/constants';
+import { APP_NAME } from '@/common/constants';
 
 /* 
   Logging destinations:

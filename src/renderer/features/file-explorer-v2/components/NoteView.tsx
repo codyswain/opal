@@ -30,7 +30,7 @@ const NoteView: React.FC<NoteViewProps> = ({
   const [isRenamingSaving, setIsRenamingSaving] = useState(false);
   const [wordCount, setWordCount] = useState({ words: 0, characters: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
-  const { renameItem } = useFileExplorerStore();
+  const { renameNote } = useFileExplorerStore();
 
   // Update title when selected node changes
   useEffect(() => {
@@ -72,7 +72,7 @@ const NoteView: React.FC<NoteViewProps> = ({
 
     setIsRenamingSaving(true);
     try {
-      const success = await renameItem(selectedNode.id, newTitle);
+      const success = await renameNote(selectedNode.id, newTitle);
       if (!success) {
         // Reset to original name if rename failed
         setNewTitle(selectedNode.name);

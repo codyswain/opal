@@ -12,6 +12,9 @@ export interface FolderContentsProps {
   level?: number;
   onContextMenu: (e: React.MouseEvent, entry: FSEntry) => void;
   onDragStart?: (itemId: string, e: React.DragEvent) => void;
+  renamingItem: FSEntry | null;
+  onRenameSubmit: (item: FSEntry, newName: string) => void;
+  onRenameCancel: () => void;
 }
 
 /**
@@ -21,7 +24,10 @@ const FolderContents: React.FC<FolderContentsProps> = ({
   parentId, 
   level = 0, 
   onContextMenu,
-  onDragStart 
+  onDragStart,
+  renamingItem,
+  onRenameSubmit,
+  onRenameCancel,
 }) => {
   const { entities, ui } = useFileExplorerStore();
   
@@ -47,6 +53,9 @@ const FolderContents: React.FC<FolderContentsProps> = ({
             isLastChild={index === childEntries.length - 1} 
             onContextMenu={onContextMenu}
             onDragStart={onDragStart}
+            renamingItem={renamingItem}
+            onRenameSubmit={onRenameSubmit}
+            onRenameCancel={onRenameCancel}
           />
           
           {/* Render children if this is an expanded folder */}
@@ -57,6 +66,9 @@ const FolderContents: React.FC<FolderContentsProps> = ({
              level={level + 1} 
              onContextMenu={onContextMenu}
              onDragStart={onDragStart}
+             renamingItem={renamingItem}
+             onRenameSubmit={onRenameSubmit}
+             onRenameCancel={onRenameCancel}
            />}
         </div>
       ))}

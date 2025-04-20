@@ -2,8 +2,8 @@ import BetterSqlite3 from 'better-sqlite3';
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import log from 'electron-log';
-import { APP_NAME } from '../config/constants';
+import log from '@/main/logger';
+import { APP_NAME } from '@/common/constants';
 
 class DatabaseManager {
   private static instance: DatabaseManager;

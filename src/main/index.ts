@@ -2,12 +2,9 @@
 export { initializeDatabase, closeDatabase } from "./database";
 
 // Re-export IPC handlers
-export { registerConfigIPCHandlers } from "./config/handlers";
 export { registerEmbeddingIPCHandlers } from "./embeddings/handlers";
 export { registerFileSystemIPCHandlers } from "./file-system/handlers";
 export { registerDatabaseIPCHandlers } from "./database/handlers";
-export { registerSystemIPCHandlers } from './services/system'
-export { registerCredentialIPCHandlers } from './credentials/handlers'
 
 // Export logger
 export { default as log } from "./logger";

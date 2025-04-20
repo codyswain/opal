@@ -63,4 +63,23 @@ export class QueryExecutionError extends DatabaseError {
   }
 }
 
+/** 
+ * Error class for representing a conflict in the database
+ * 
+ * This error extends the `DatabaseError` class and is used to indicate that a
+ * conflict occurred in the database, such as a duplicate entry or a violation
+ * of a unique constraint.
+ * 
+ * @extends DatabaseError 
+ */
+export class ConflictError extends DatabaseError {
+  public readonly entityName: string;
+  public readonly identifier: string | number;
+
+  constructor(entityName: string, identifier: string | number, cause?: Error) {
+    super(`${entityName} with identifier ${identifier} already exists`, cause);
+    this.entityName = entityName;
+    this.identifier = identifier;
+  }
+}
 

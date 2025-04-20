@@ -1,7 +1,7 @@
 import React from 'react';
 import { FSEntry } from '@/types';
-import { FilePlus, FolderPlus, HardDrive } from 'lucide-react';
-import { useFileExplorerStore } from '../store/fileExplorerStore';
+import { FilePlus, FolderPlus, HardDrive, PenIcon } from 'lucide-react';
+import { useFileExplorerStore } from '@/renderer/features/file-explorer-v2/store/fileExplorerStore';
 
 interface ContextMenuProps {
   x: number;
@@ -46,9 +46,10 @@ interface FileExplorerContextMenuProps {
     entry: FSEntry;
   } | null;
   onClose: () => void;
+  onStartRename: (entry: FSEntry) => void;
 }
 
-const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ contextMenu, onClose }) => {
+const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ contextMenu, onClose, onStartRename }) => {
   const { createNote, createFolder, loadVirtualFileSystem } = useFileExplorerStore();
   
   if (!contextMenu) return null;
@@ -128,6 +129,12 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
     onClose();
   };
 
+  // Trigger inline edit flow
+  const handleRenameItem = () => {
+    onStartRename(entry);
+    onClose();
+  };
+
   return (
     <ContextMenu x={x} y={y}>
       {entry.type === 'folder' && (
@@ -157,7 +164,11 @@ const FileExplorerContextMenu: React.FC<FileExplorerContextMenuProps> = ({ conte
           )}
         </>
       )}
-      {/* Add more context menu items as needed */}
+      <ContextMenuItem
+        icon={PenIcon}
+        label="Rename"
+        onClick={handleRenameItem}
+      />
     </ContextMenu>
   );
 };

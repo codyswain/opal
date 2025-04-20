@@ -27,7 +27,8 @@ export interface FSExplorerStore {
   getNote: (id: string) => Promise<boolean>;
   updateNoteContent: (id: string, content: string) => Promise<boolean>;
   createNote: (parentPath: string, noteName: string) => Promise<boolean>;
-  renameItem: (id: string, newName: string) => Promise<boolean>;
+  renameFolder: (folderId: string, newName: string) => Promise<boolean>;
+  renameNote: (noteId: string, newName: string) => Promise<boolean>;
   createFolder: (parentPath: string, folderName: string) => Promise<boolean>;
   
   toggleFolder: (folderId: string) => void;

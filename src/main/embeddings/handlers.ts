@@ -7,8 +7,8 @@ import OpenAIApi from "openai";
 import log from 'electron-log';
 import DatabaseManager from "../database/db";
 import { EmbeddingCreator, RAGChat, SimilaritySearcher } from "./embeddings";
-import { CredentialManager } from "../credentials/manager";
-import { CredentialAccount } from "../../types/credentials";
+import { CredentialManager } from "@/main/services/credentials/CredentialManager";
+import { CredentialAccount } from "@/types/credentials";
 
 let embeddingCreator: EmbeddingCreator;
 let similaritySearcher: SimilaritySearcher;
