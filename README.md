@@ -2,8 +2,7 @@
 
 Notes
 
-<img width="1512" alt="image" src="https://github.com/user-attachments/assets/fcab22f1-cd01-476a-be19-129e9a44231e">
-
+<img width="1512" alt="Screenshot 2025-05-15 at 8 32 04 AM" src="https://github.com/user-attachments/assets/74ebdf10-6ef4-46ba-aa44-e8e6034707fa" />
 
 
 ## Features
