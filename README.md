@@ -19,7 +19,8 @@ It's not there yet, but perhaps not far off. Feature wise, the following are sup
 
 Aspirationally though, notes is just step 1. What's next? Photos. One of the shortfalls in Obsidian is photo management, and here I think taking inspiration from Lightroom (Classic) and enabling "mounting" provides a beautiful solution.
 
-<img width="1512" alt="Screenshot 2025-05-15 at 8 32 04 AM" src="https://github.com/user-attachments/assets/f7976589-9d86-4177-b68a-35dad6a79830" />
+<img width="1512" alt="Screenshot 2025-05-15 at 8 50 32 AM" src="https://github.com/user-attachments/assets/becad0d8-8c3e-4560-8df5-dae9dddf64f1" />
+
 
 We're mounting a folder with images (which behind the scenes creates a "virtual clone", and providing a bridge between our virtual file system and the OS filesystem. This solution feels elegant because it extends to other file types. The dirty underbelly is the associated synchronization complexity that comes alongside. 
 
