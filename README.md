@@ -1,11 +1,14 @@
 # Opal
 
-Notes
+Opal is an app for organizing information. As a first order of business this means it's a notes app. But what's wrong with existing note apps? 
+
+Nothing! I was a certified power user of Obsidian. But I wanted more, and plugins seemed insufficient. Also I wanted to build my own product, take pride in it, and tweak everything to my specific tastes. 
+
+So first priority: a note-taker on-par with Obsidian or Evernote. 
 
 <img width="1512" alt="Screenshot 2025-05-15 at 8 32 04 AM" src="https://github.com/user-attachments/assets/74ebdf10-6ef4-46ba-aa44-e8e6034707fa" />
 
-
-## Features
+It's not there yet, but perhaps not far off. Feature wise, the following are supported. 
 
 - Create, edit, and delete notes
 - Markdown support with live preview
@@ -13,8 +16,19 @@ Notes
 - Auto-save functionality
 - Sidebar for quick note navigation
 - Related notes suggestion
-- Feed ?
-- Infinitely nested abstract data structure ?
+
+Aspirationally though, notes is just step 1. What's next? Photos. One of the shortfalls in Obsidian is photo management, and here I think taking inspiration from Lightroom (Classic) and enabling "mounting" provides a beautiful solution.
+
+<img width="1512" alt="Screenshot 2025-05-15 at 8 32 04 AM" src="https://github.com/user-attachments/assets/f7976589-9d86-4177-b68a-35dad6a79830" />
+
+We're mounting a folder with images (which behind the scenes creates a "virtual clone", and providing a bridge between our virtual file system and the OS filesystem. This solution feels elegant because it extends to other file types. The dirty underbelly is the associated synchronization complexity that comes alongside. 
+
+Now with a bridge between Virtual FS and OS FS, we need to a way to connect this information across your notes. Here, we take inspiration from Notion: nesting! 
+
+This is currently a WIP (but very close). With nesting we start to build out a rich graph data structure. And this provides fertile soil to plant LLMs. More to come. 
+
+
+# Getting Started
 
 ## Prerequisites
 
