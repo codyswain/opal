@@ -17,17 +17,18 @@ It's not there yet, but perhaps not far off. Feature wise, the following are sup
 - Sidebar for quick note navigation
 - Related notes suggestion
 
-Aspirationally though, notes is just step 1. What's next? Photos. One of the shortfalls in Obsidian is photo management, and here I think taking inspiration from Lightroom (Classic) and enabling "mounting" provides a beautiful solution.
+Aspirationally though, notes is just step 1. What's next? Photos. One of the shortfalls in Obsidian is photo management, and here I think taking inspiration from Lightroom (Classic) by supporting the "mounting" of directories from the OS Filesystem.
 
 <img width="1512" alt="Screenshot 2025-05-15 at 8 50 32 AM" src="https://github.com/user-attachments/assets/becad0d8-8c3e-4560-8df5-dae9dddf64f1" />
 
 
-We're mounting a folder with images (which behind the scenes creates a "virtual clone", and providing a bridge between our virtual file system and the OS filesystem. This solution feels elegant because it extends to other file types. The dirty underbelly is the associated synchronization complexity that comes alongside. 
+Behind the scenes this creates a "virtual clone" in our virtual filesystem. The elegance of this solution, is users can mount arbitrary files (PDFs, Videos, etc). The dirty underbelly is the associated synchronization complexity.
 
-Now with a bridge between Virtual FS and OS FS, we need to a way to connect this information across your notes. Here, we take inspiration from Notion: nesting! 
+Now we support arbitrary files, and we want to way to weave these throughout notes. Here, we take inspiration from Notion: nesting! 
 
-This is currently a WIP (but very close). With nesting we start to build out a rich graph data structure. And this provides fertile soil to plant LLMs. More to come. 
+This is WIP, but close. 
 
+With nesting, we find ourselves with a rich graph data structure as well - fertile soil to plant some agentic LLMs. 
 
 # Getting Started
 
