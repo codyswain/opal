@@ -14,6 +14,10 @@ export async function createTestDb() {
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
 
+  // Create tables referenced by deleteItem that aren't in schema.sql
+  db.exec("CREATE TABLE IF NOT EXISTS embeddings_backup (item_id TEXT, embedding TEXT)");
+  db.exec("CREATE TABLE IF NOT EXISTS mounted_folders (virtual_item_id TEXT, real_path TEXT)");
+
   // Apply migrations (adds is_mounted, real_path columns)
   const tableInfo = db.prepare("PRAGMA table_info(items)").all() as { name: string }[];
   if (!tableInfo.some(col => col.name === 'is_mounted')) {

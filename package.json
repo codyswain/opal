@@ -18,6 +18,10 @@
     "test": "npm rebuild --build-from-source better-sqlite3 && vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "test:unit": "vitest run src/tests/unit/",
+    "test:integration": "vitest run src/tests/integration/",
+    "test:e2e": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && npx playwright test --config e2e/playwright.config.ts",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky install"
   },
