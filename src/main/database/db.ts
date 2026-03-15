@@ -23,7 +23,8 @@ class DatabaseManager {
   public async initialize(dbPath?: string): Promise<BetterSqlite3.Database> {
     try {
       // If dbPath is not provided, use the default location
-      const finalDbPath = dbPath || path.join(app.getPath('userData'), `${APP_NAME}.db`);
+      const defaultDir = process.env.OPAL_TEST_DB_DIR || app.getPath('userData');
+      const finalDbPath = dbPath || path.join(defaultDir, `${APP_NAME}.db`);
 
       log.info(`Initializing database at: ${finalDbPath}`);
       log.info(`Database exists before connection: ${fs.existsSync(finalDbPath)}`);

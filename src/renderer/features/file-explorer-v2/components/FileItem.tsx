@@ -182,6 +182,7 @@ const FileItem: React.FC<FileItemProps> = ({
 
       {/* Item content with background that doesn't cover the lines */}
       <div
+        data-testid={`tree-item-${entry.id}`}
         className={`flex items-center py-${explorerStyles.itemPaddingY} px-${
           explorerStyles.itemPaddingX
         } ${explorerStyles.hoverBgColorClass} rounded cursor-pointer relative h-${

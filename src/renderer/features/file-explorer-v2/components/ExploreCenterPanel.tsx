@@ -89,7 +89,7 @@ function ExploreCenterPanel() {
   } else if (isImage(selectedNode)) {
     return <ImageView selectedNode={selectedNode} />;
   } else {
-    return <div className="flex justify-center items-center h-full">Select a file or folder to view</div>;
+    return <div data-testid="editor-panel" className="flex justify-center items-center h-full">Select a file or folder to view</div>;
   }
 }
 

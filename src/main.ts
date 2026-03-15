@@ -119,7 +119,7 @@ const createWindow = () => {
   loadPage();
 
   // Open dev tools if in development mode
-  if (isDevelopment) {
+  if (isDevelopment || forceDevTools) {
     mainWindow.webContents.openDevTools();
     console.log(
       "Opening DevTools - development mode:",

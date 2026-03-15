@@ -147,6 +147,7 @@ export default function ExplorerLeftPanel() {
         <div className="text-sm font-medium">Files</div>
         <div className="flex space-x-1">
           <button
+            data-testid="create-note-btn"
             className="p-1 hover:bg-accent/50 rounded"
             onClick={handleCreateNote}
             title="Create new note"
@@ -154,6 +155,7 @@ export default function ExplorerLeftPanel() {
             <FilePlus size={16} />
           </button>
           <button
+            data-testid="create-folder-btn"
             className="p-1 hover:bg-accent/50 rounded"
             onClick={handleCreateFolder}
             title="Create new folder"
@@ -164,7 +166,7 @@ export default function ExplorerLeftPanel() {
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-auto px-1.5 py-1">
+      <div data-testid="file-tree" className="flex-1 overflow-auto px-1.5 py-1">
         <LoadingState isLoading={loading.isLoading} error={loading.error} />
 
         {!loading.isLoading && !loading.error && (

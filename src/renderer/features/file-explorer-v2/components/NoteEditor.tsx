@@ -768,8 +768,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           noteId={''}
           entities={entities}
         >
-          <div className="h-full w-full">
-            <EditorContent 
+          <div data-testid="editor-content" className="h-full w-full">
+            <EditorContent
               className="h-full w-full" 
               editor={editor} 
             />

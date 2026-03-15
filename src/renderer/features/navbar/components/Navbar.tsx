@@ -130,7 +130,7 @@ const Navbar: React.FC<NavbarProps> = ({
   );
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-10 bg-background border-b border-border flex items-center justify-between px-3 z-20 drag-handle">
+    <nav data-testid="navbar" className="fixed top-0 left-0 right-0 h-10 bg-background border-b border-border flex items-center justify-between px-3 z-20 drag-handle">
       {renderWindowControls()}
       {renderNavItems()}
       {renderSidebarControls()}

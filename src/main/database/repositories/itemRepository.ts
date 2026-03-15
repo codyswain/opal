@@ -63,20 +63,8 @@ export class ItemRepository {
         )
         .all()) as ItemWithAIMetadata[];
 
-      if (items.length === 0) {
-        throw new NotFoundError("Items", "No items found");
-      }
-
       return items;
     } catch (error: unknown) {
-      if (error instanceof NotFoundError) {
-        logger.error(
-          "Failed to retrieve items, no items found",
-          error as Error
-        );
-        throw error;
-      }
-
       logger.error(
         "Failed to retrieve items, query execution error",
         error as Error
