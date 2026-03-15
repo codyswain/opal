@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(rm -rf node_modules)",
+      "Bash(electron-forge *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "command": "npx tsc --noEmit && npx eslint --ext .ts,.tsx src/ --quiet",
+        "blocking": true
+      }
+    ]
+  }
+}
