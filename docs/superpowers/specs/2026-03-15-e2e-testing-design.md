@@ -13,8 +13,10 @@ Opal has minimal test coverage (a few database and build tests). There's no way 
 - **Unit + Integration:** Vitest (existing runner, fast)
 - **E2E:** Playwright with first-class Electron support (launches real app)
 - **Database strategy:** Ephemeral temp directory per test suite, zero state leakage
-- **First test target:** Critical user path (launch → create folder → create note → edit → save → verify)
-- **App change:** Single env var (`OPAL_TEST_DB_DIR`) in `DatabaseManager`
+- **First test target:** Critical user path (launch -> create folder -> create note -> edit -> save -> verify)
+- **App change:** `OPAL_TEST_DB_DIR` env var in `DatabaseManager.initialize()` default path
+- **Selector strategy:** `data-testid` attributes on interactive elements for E2E stability
+- **New dependencies:** `@playwright/test` (devDependency)
 
 ## Architecture
 
@@ -68,15 +70,19 @@ e2e/
 
 ## App Change for Testability
 
-One modification to `src/main/database/db.ts`:
+One modification to `src/main/database/db.ts`. The existing `DatabaseManager.initialize()` already accepts an optional `dbPath` parameter. We modify the default path fallback to check for the test env var:
 
 ```typescript
-// DatabaseManager initialization
-const dbDir = process.env.OPAL_TEST_DB_DIR || app.getPath('userData');
-const dbPath = path.join(dbDir, 'opal.db');
+// In DatabaseManager.initialize()
+// Before:
+const finalDbPath = dbPath || path.join(app.getPath('userData'), `${APP_NAME}.db`);
+
+// After:
+const defaultDir = process.env.OPAL_TEST_DB_DIR || app.getPath('userData');
+const finalDbPath = dbPath || path.join(defaultDir, `${APP_NAME}.db`);
 ```
 
-This is the only change to production code. The env var is never set outside of test runs. Electron Forge does not forward arbitrary env vars to packaged apps, so this cannot be triggered in production.
+This preserves the existing `dbPath` parameter for callers that use it directly, while allowing E2E tests to override the default via environment variable. The env var is never set outside of test runs. Electron Forge does not forward arbitrary env vars to packaged apps, so this cannot be triggered in production.
 
 ## Ephemeral Database Factory
 
@@ -84,7 +90,7 @@ Shared helper used by all test layers:
 
 ```typescript
 // src/tests/helpers/testDb.ts
-import { mkdtemp, rm, cp } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import Database from 'better-sqlite3';
@@ -95,12 +101,19 @@ export async function createTestDb() {
   const dbPath = path.join(testDir, 'opal.db');
   const db = new Database(dbPath);
 
-  // Apply schema
-  const schemaPath = path.resolve(__dirname, '../../../src/main/database/schema.sql');
+  // Apply schema using db.exec() which handles multi-statement SQL
+  // (including triggers with semicolons in their bodies)
+  const schemaPath = path.resolve(__dirname, '../../main/database/schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
-  const statements = schema.split(';').filter(s => s.trim());
-  for (const stmt of statements) {
-    db.exec(stmt);
+  db.exec(schema);
+
+  // Apply migrations (adds is_mounted, real_path columns)
+  const tableInfo = db.prepare("PRAGMA table_info(items)").all() as { name: string }[];
+  if (!tableInfo.some(col => col.name === 'is_mounted')) {
+    db.exec("ALTER TABLE items ADD COLUMN is_mounted BOOLEAN DEFAULT 0");
+  }
+  if (!tableInfo.some(col => col.name === 'real_path')) {
+    db.exec("ALTER TABLE items ADD COLUMN real_path TEXT");
   }
 
   return { db, dbPath, testDir };
@@ -129,6 +142,24 @@ export function seedNote(db: Database.Database, name: string, parentPath: string
 }
 ```
 
+## Selector Strategy for E2E
+
+Tests use `data-testid` attributes for stable element selection. This avoids coupling tests to CSS classes or DOM structure which change frequently during UI work.
+
+**Attributes to add to production components:**
+
+| Component | Attribute | Element |
+|-----------|----------|---------|
+| Navbar | `data-testid="navbar"` | Nav container |
+| ExplorerLeftPanel | `data-testid="create-note-btn"` | FilePlus button |
+| ExplorerLeftPanel | `data-testid="create-folder-btn"` | FolderPlus button |
+| ExplorerLeftPanel | `data-testid="file-tree"` | Tree container |
+| File tree items | `data-testid="tree-item-{id}"` | Each tree node |
+| ExploreCenterPanel | `data-testid="editor-panel"` | Editor container |
+| TipTap editor | `data-testid="editor-content"` | Editor content area |
+
+Tests select elements via `page.getByTestId('create-folder-btn')` which is Playwright's recommended approach.
+
 ## Playwright Electron Fixture
 
 ```typescript
@@ -137,13 +168,24 @@ import { test as base, _electron as electron } from '@playwright/test';
 import { mkdtemp, rm } from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+
+const MAIN_JS_PATH = path.join(__dirname, '../../.vite/build/main.js');
 
 export const test = base.extend({
   electronApp: async ({}, use) => {
+    // Verify build exists
+    if (!fs.existsSync(MAIN_JS_PATH)) {
+      throw new Error(
+        `Built main.js not found at ${MAIN_JS_PATH}. Run the Vite builds first:\n` +
+        `  npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts`
+      );
+    }
+
     const testDbDir = await mkdtemp(path.join(os.tmpdir(), 'opal-test-'));
 
     const app = await electron.launch({
-      args: [path.join(__dirname, '../../.vite/build/main.js')],
+      args: [MAIN_JS_PATH],
       env: { ...process.env, OPAL_TEST_DB_DIR: testDbDir },
     });
 
@@ -169,22 +211,35 @@ export { expect } from '@playwright/test';
 // e2e/tests/critical-path.spec.ts
 import { test, expect } from '../fixtures/electronApp';
 
-test('create folder, create note, edit and save', async ({ page }) => {
-  // App launches with empty state
-  // Click folder+ button in left sidebar
-  // Assert folder appears in tree
-  // Click note+ button
-  // Assert note appears in tree
-  // Click note to open in editor
-  // Type content in TipTap editor
-  // Assert content persisted (navigate away and back, verify content)
+test('app launches and renders correctly', async ({ page }) => {
+  // Verify core UI elements are visible
+  await expect(page.getByTestId('navbar')).toBeVisible();
+  await expect(page.getByTestId('create-folder-btn')).toBeVisible();
+  await expect(page.getByTestId('create-note-btn')).toBeVisible();
 });
 
-test('app launches and renders correctly', async ({ page }) => {
-  // Navbar visible with traffic light buttons
-  // Left sidebar panel visible
-  // Right sidebar panel visible
-  // No console errors
+test('create folder, create note, edit and save', async ({ page }) => {
+  // Create a folder
+  await page.getByTestId('create-folder-btn').click();
+  await expect(page.getByTestId('file-tree').locator('[data-testid^="tree-item-"]')).toHaveCount(1);
+
+  // Create a note inside the folder
+  await page.getByTestId('create-note-btn').click();
+  const noteItem = page.getByTestId('file-tree').locator('[data-testid^="tree-item-"]').last();
+  await expect(noteItem).toBeVisible();
+
+  // Open the note in the editor
+  await noteItem.click();
+  await expect(page.getByTestId('editor-content')).toBeVisible();
+
+  // Type content
+  await page.getByTestId('editor-content').click();
+  await page.keyboard.type('Hello from E2E test');
+
+  // Verify content persists: click away to the folder, then back to the note
+  await page.getByTestId('file-tree').locator('[data-testid^="tree-item-"]').first().click();
+  await noteItem.click();
+  await expect(page.getByTestId('editor-content')).toContainText('Hello from E2E test');
 });
 ```
 
@@ -192,12 +247,14 @@ test('app launches and renders correctly', async ({ page }) => {
 
 ```json
 {
-  "test:unit": "vitest run --testPathPattern=unit",
-  "test:integration": "vitest run --testPathPattern=integration",
+  "test:unit": "vitest run src/tests/unit/",
+  "test:integration": "vitest run src/tests/integration/",
   "test:e2e": "npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts && npx playwright test --config e2e/playwright.config.ts",
-  "test:all": "npm run test && npm run test:e2e"
+  "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e"
 }
 ```
+
+Note: `test:all` runs unit and integration tests directly (avoiding the `npm test` script's slow `npm rebuild --build-from-source better-sqlite3` step). The existing `npm test` script is unchanged and continues to run all Vitest tests including existing database and build suites.
 
 ### AI Feedback Loop
 
@@ -207,8 +264,6 @@ test('app launches and renders correctly', async ({ page }) => {
 | `npm run test:integration` | After changing IPC handlers or VFS logic | ~5s |
 | `npm run test:e2e` | After any UI change or before claiming done | ~30-45s |
 | `npm run test:all` | Final verification before commit | ~45s |
-
-Existing `npm test` is unchanged — runs all Vitest tests including existing database and build tests.
 
 ## Out of Scope
 
