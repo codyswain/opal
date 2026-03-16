@@ -4,7 +4,8 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-const MAIN_JS_PATH = path.join(__dirname, '../../.vite/build/main.js');
+const PROJECT_ROOT = path.join(__dirname, '../..');
+const MAIN_JS_PATH = path.join(PROJECT_ROOT, '.vite/build/main.js');
 
 type ElectronFixtures = {
   electronApp: ElectronApplication;
@@ -24,7 +25,7 @@ export const test = base.extend<ElectronFixtures>({
     const testDbDir = await mkdtemp(path.join(os.tmpdir(), 'opal-test-'));
 
     const app = await electron.launch({
-      args: [MAIN_JS_PATH],
+      args: [PROJECT_ROOT],
       env: { ...process.env, OPAL_TEST_DB_DIR: testDbDir },
     });
 

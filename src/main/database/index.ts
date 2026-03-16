@@ -50,11 +50,10 @@ export async function initializeDatabase() {
 
   try {
     const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'opal.db');
-    
-    // Initialize the database
+
+    // Initialize the database (DatabaseManager.initialize() handles OPAL_TEST_DB_DIR env var)
     const dbManager = DatabaseManager.getInstance();
-    const db = await dbManager.initialize(dbPath);
+    const db = await dbManager.initialize();
     
     if (!db) {
       throw new Error('Failed to initialize database');
