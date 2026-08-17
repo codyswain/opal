@@ -82,6 +82,7 @@ describe('DiskHandlers', () => {
       'disk:list-roots',
       'disk:open-folder',
       'disk:read-directory',
+      'disk:read-text-file',
       'disk:remove-root',
       'disk:stat',
     ]);
@@ -165,6 +166,27 @@ describe('DiskHandlers', () => {
     expect(result.success).toBe(true);
     expect(result.data.name).toBe('a.jpg');
     expect(result.data.kind).toBe('image');
+  });
+
+  it('reads a text file inside a root', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:read-text-file', path.join(root, 'note.md')) as {
+      success: boolean; data: { text: string };
+    };
+    expect(result.success).toBe(true);
+    expect(result.data.text).toBe('# hi');
+  });
+
+  it('refuses a text file outside every root', async () => {
+    await registry.add(root);
+    const outside = path.join(tmp, 'outside.txt');
+    await writeFile(outside, 'nope');
+
+    const result = await stub.invoke('disk:read-text-file', outside) as {
+      success: boolean; error: string;
+    };
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not inside any folder/i);
   });
 
   it('removes a root', async () => {

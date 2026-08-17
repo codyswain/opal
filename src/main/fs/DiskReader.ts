@@ -1,4 +1,4 @@
-import { readdir, stat } from 'fs/promises';
+import { readdir, stat, open } from 'fs/promises';
 import path from 'path';
 import { classifyFile } from '@/common/fileKind';
 import { normalizePath } from '@/main/fs/paths';
@@ -13,6 +13,22 @@ export interface ReadDirectoryOptions {
   /** Include dotfiles. Default false. */
   includeHidden?: boolean;
 }
+
+export interface TextFileContents {
+  path: string;
+  text: string;
+  /** True when the file was longer than maxBytes and `text` is a prefix. */
+  truncated: boolean;
+  /** Full size on disk, regardless of truncation. */
+  size: number;
+}
+
+/**
+ * Previews must never load a multi-gigabyte log into the renderer, so reads are
+ * capped. 2 MB is far more text than any preview can usefully display and small
+ * enough to cross IPC without a stall.
+ */
+const DEFAULT_MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
 /**
  * Reads one directory level at a time. Never recurses.
@@ -83,6 +99,37 @@ export class DiskReader {
       size: isDirectory ? 0 : info.size,
       mtimeMs: info.mtimeMs,
     };
+  }
+
+  async readTextFile(
+    target: string,
+    options: { maxBytes?: number } = {}
+  ): Promise<TextFileContents> {
+    const resolved = await this.deps.registry.assertAllowed(target);
+
+    const info = await stat(resolved);
+    if (info.isDirectory()) {
+      throw new Error(`Cannot read as text because it is not a file: ${target}`);
+    }
+
+    const maxBytes = options.maxBytes ?? DEFAULT_MAX_TEXT_BYTES;
+    const truncated = info.size > maxBytes;
+
+    // Read only the prefix rather than the whole file, so an enormous file
+    // costs a fixed amount of memory instead of its full size.
+    const handle = await open(resolved, 'r');
+    try {
+      const buffer = Buffer.alloc(Math.min(info.size, maxBytes));
+      await handle.read(buffer, 0, buffer.length, 0);
+      return {
+        path: resolved,
+        text: buffer.toString('utf-8'),
+        truncated,
+        size: info.size,
+      };
+    } finally {
+      await handle.close();
+    }
   }
 }
 

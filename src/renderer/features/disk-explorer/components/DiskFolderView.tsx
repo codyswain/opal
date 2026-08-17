@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File } from 'lucide-react';
+import { formatBytes } from '@/common/formatBytes';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
@@ -10,16 +11,6 @@ const ICONS: Record<FileKind, React.ComponentType<{ className?: string }>> = {
   directory: Folder, image: ImageIcon, markdown: FileText, text: FileText,
   pdf: File, video: Film, audio: Music, other: File,
 };
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '—';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** exponent;
-  // Number() strips a trailing '.0' so 2048 reads as "2 KB", not "2.0 KB".
-  const rounded = exponent === 0 ? Math.round(value) : Number(value.toFixed(1));
-  return `${rounded} ${units[exponent]}`;
-}
 
 interface DiskFolderViewProps {
   dirPath: string;
@@ -174,7 +165,7 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       <Icon className="h-4 w-4 shrink-0 opacity-60" />
       <span className="flex-1 truncate">{entry.name}</span>
       <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-        {entry.isDirectory ? '—' : formatSize(entry.size)}
+        {entry.isDirectory ? '—' : formatBytes(entry.size)}
       </span>
     </button>
   );

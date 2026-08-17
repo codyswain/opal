@@ -1,6 +1,6 @@
 import type { IpcMain, OpenDialogReturnValue } from 'electron';
 import type { IPCResponse } from '@/types/ipc';
-import type { DiskEntry, DirectoryListing } from '@/types/disk';
+import type { DiskEntry, DirectoryListing, TextFileContents } from '@/types/disk';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { DiskReader } from '@/main/fs/DiskReader';
@@ -26,6 +26,7 @@ export class DiskHandlers {
     this.registerListRoots();
     this.registerRemoveRoot();
     this.registerReadDirectory();
+    this.registerReadTextFile();
     this.registerStat();
   }
 
@@ -95,6 +96,20 @@ export class DiskHandlers {
         try {
           const entry = await this.deps.reader.statEntry(target);
           return { success: true, data: entry };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to read file') };
+        }
+      }
+    );
+  }
+
+  private registerReadTextFile(): void {
+    this.deps.ipc.handle(
+      'disk:read-text-file',
+      async (_, target: string): Promise<IPCResponse<TextFileContents>> => {
+        try {
+          const contents = await this.deps.reader.readTextFile(target);
+          return { success: true, data: contents };
         } catch (error) {
           return { success: false, error: describeError(error, 'Failed to read file') };
         }
