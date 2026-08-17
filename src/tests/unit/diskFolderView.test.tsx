@@ -156,3 +156,33 @@ describe('DiskFolderView', () => {
     await waitFor(() => expect(window.diskAPI.readDirectory).toHaveBeenCalledWith(PHOTOS));
   });
 });
+
+describe('virtualization', () => {
+  it('renders a windowed subset of a large folder, not every item', async () => {
+    const many = Array.from({ length: 2000 }, (_, index) =>
+      entry({ path: `${PHOTOS}/img${index}.jpg`, name: `img${index}.jpg`, kind: 'image' })
+    );
+    useDiskStore.setState({ listings: { [PHOTOS]: many } });
+
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    await waitFor(() => expect(screen.getByTestId('disk-folder-gallery')).toBeInTheDocument());
+
+    // The window is bounded by the measured height, so only a fraction of the
+    // 2000 entries exist in the DOM. The exact count depends on tile size;
+    // the assertion that matters is "far fewer than all of them".
+    const tiles = screen.getAllByTestId(/^disk-folder-entry-/);
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles.length).toBeLessThan(200);
+  });
+
+  it('still reports the full item count in the header', async () => {
+    const many = Array.from({ length: 2000 }, (_, index) =>
+      entry({ path: `${PHOTOS}/img${index}.jpg`, name: `img${index}.jpg`, kind: 'image' })
+    );
+    useDiskStore.setState({ listings: { [PHOTOS]: many } });
+
+    render(<DiskFolderView dirPath={PHOTOS} />);
+    await waitFor(() => expect(screen.getByText('2000 items')).toBeInTheDocument());
+  });
+});

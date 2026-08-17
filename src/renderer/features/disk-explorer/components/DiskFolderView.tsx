@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File } from 'lucide-react';
+import { FixedSizeGrid, FixedSizeList } from 'react-window';
 import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
 import { sortEntries } from '@/common/sortEntries';
@@ -7,6 +8,7 @@ import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { toOpalThumbUrl } from '@/common/opalThumbUrl';
 import { useGridNavigation } from '../hooks/useGridNavigation';
+import { useElementSize } from '../hooks/useElementSize';
 
 type ViewMode = 'gallery' | 'list';
 
@@ -19,6 +21,10 @@ interface DiskFolderViewProps {
   dirPath: string;
 }
 
+const TILE_WIDTH = 172;
+const TILE_HEIGHT = 208;
+const ROW_HEIGHT = 28;
+
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
@@ -29,6 +35,9 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const setFilter = useDiskStore((state) => state.setFilter);
 
   const [mode, setMode] = useState<ViewMode | null>(null);
+  const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
+  const gridRef = useRef<FixedSizeGrid>(null);
+  const listRef = useRef<FixedSizeList>(null);
 
   useEffect(() => { void loadDirectory(dirPath); }, [dirPath, loadDirectory]);
   // A filter carried into a new folder makes it look empty for no visible
@@ -50,10 +59,24 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const hasActiveFilter = filter.trim().length > 0;
 
   const activeMode = mode ?? suggestedMode;
-  // Gallery tracks are `minmax(160px,1fr)` with 12px gaps; list mode is a
-  // single column. Task 12 replaces the constant with a measured value.
-  const columns = activeMode === 'gallery' ? 4 : 1;
+  const columns = activeMode === 'gallery'
+    ? Math.max(1, Math.floor(viewport.width / TILE_WIDTH))
+    : 1;
   const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
+
+  useEffect(() => {
+    const index = visibleEntries.findIndex((candidate) => candidate.path === selectedPath);
+    if (index === -1) return;
+
+    if (activeMode === 'gallery') {
+      gridRef.current?.scrollToItem({
+        rowIndex: Math.floor(index / columns),
+        columnIndex: index % columns,
+      });
+    } else {
+      listRef.current?.scrollToItem(index);
+    }
+  }, [selectedPath, visibleEntries, activeMode, columns]);
 
   if (!entries) {
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
@@ -86,33 +109,71 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         </div>
       ) : activeMode === 'gallery' ? (
         <div
+          ref={viewportRef}
           tabIndex={0}
           onKeyDown={onKeyDown}
           data-testid="disk-folder-gallery"
-          className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))] outline-none"
+          className="flex-1 min-h-0 outline-none"
         >
-          {visibleEntries.map((entry) => (
-            <GalleryTile
-              key={entry.path} entry={entry}
-              isSelected={selectedPath === entry.path}
-              onSelect={() => select(entry.path)}
-            />
-          ))}
+          <FixedSizeGrid
+            ref={gridRef}
+            columnCount={columns}
+            rowCount={Math.ceil(visibleEntries.length / columns)}
+            columnWidth={TILE_WIDTH}
+            rowHeight={TILE_HEIGHT}
+            width={viewport.width}
+            height={viewport.height}
+            itemKey={({ columnIndex, rowIndex }) => {
+              const item = visibleEntries[rowIndex * columns + columnIndex];
+              return item?.path ?? `empty-${rowIndex}-${columnIndex}`;
+            }}
+          >
+            {({ columnIndex, rowIndex, style }) => {
+              const item = visibleEntries[rowIndex * columns + columnIndex];
+              if (!item) return null;
+
+              return (
+                <div style={style} className="p-1.5">
+                  <GalleryTile
+                    entry={item}
+                    isSelected={selectedPath === item.path}
+                    onSelect={() => select(item.path)}
+                  />
+                </div>
+              );
+            }}
+          </FixedSizeGrid>
         </div>
       ) : (
         <div
+          ref={viewportRef}
           tabIndex={0}
           onKeyDown={onKeyDown}
           data-testid="disk-folder-list"
-          className="flex-1 overflow-auto outline-none"
+          className="flex-1 min-h-0 outline-none"
         >
-          {visibleEntries.map((entry) => (
-            <ListRow
-              key={entry.path} entry={entry}
-              isSelected={selectedPath === entry.path}
-              onSelect={() => select(entry.path)}
-            />
-          ))}
+          <FixedSizeList
+            ref={listRef}
+            itemCount={visibleEntries.length}
+            itemSize={ROW_HEIGHT}
+            width={viewport.width}
+            height={viewport.height}
+            itemKey={(index) => visibleEntries[index].path}
+          >
+            {({ index, style }) => {
+              const item = visibleEntries[index];
+
+              return (
+                <div style={style}>
+                  <ListRow
+                    entry={item}
+                    isSelected={selectedPath === item.path}
+                    onSelect={() => select(item.path)}
+                  />
+                </div>
+              );
+            }}
+          </FixedSizeList>
         </div>
       )}
     </div>
@@ -169,7 +230,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
       // refuses to shrink below its content's intrinsic width. A long filename
       // would push the tile past its track and overlap its neighbours.
-      className={`flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
+      className={`w-full h-full flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
     >
       <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
         {canThumbnail ? (
