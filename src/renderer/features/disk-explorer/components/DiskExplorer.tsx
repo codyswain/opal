@@ -7,6 +7,7 @@ import { DetailPane } from './detail/DetailPane';
 import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
+import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
 
@@ -109,6 +110,16 @@ export const DiskExplorer: React.FC = () => {
         return;
       }
 
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+        if (!selectedPath) return;
+        event.preventDefault();
+        useDiskStore.getState().beginDelete(selectedPath);
+        return;
+      }
+
       if (event.code !== 'Space') return;
 
       // Never hijack Space while the user is typing — the filter box in Task 9
@@ -173,6 +184,7 @@ export const DiskExplorer: React.FC = () => {
       </section>
       <QuickLook entry={selectedEntry} />
       <NameDialog />
+      <ConfirmDeleteDialog />
     </div>
   );
 };

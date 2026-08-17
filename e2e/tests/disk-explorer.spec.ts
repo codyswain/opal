@@ -34,7 +34,7 @@ test.beforeEach(async ({ userDataDir }) => {
 });
 
 test.describe('disk explorer', () => {
-  test('browses a real folder and streams images over opal-file://', async ({ page }) => {
+  test('browses a real folder and streams images over opal-thumb://', async ({ page }) => {
     const violations: string[] = [];
     page.on('console', (message) => {
       if (/Content Security Policy/i.test(message.text())) violations.push(message.text());
@@ -54,7 +54,7 @@ test.describe('disk explorer', () => {
     await expect(alpha).toBeVisible();
 
     // The src must be a streamed protocol URL, never a base64 data URL.
-    await expect(alpha).toHaveAttribute('src', /^opal-file:\/\//);
+    await expect(alpha).toHaveAttribute('src', /^opal-thumb:\/\//);
 
     // And the bytes must have actually decoded. A broken image still renders an
     // <img> element and still reports "visible", but naturalWidth stays 0 — this

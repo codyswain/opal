@@ -210,6 +210,7 @@ interface EntryProps {
 const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
   const Icon = ICONS[entry.kind];
   const [thumbFailed, setThumbFailed] = useState(false);
+  const { dragProps, isDropTarget } = useDropTarget(entry);
 
   useEffect(() => {
     setThumbFailed(false);
@@ -230,7 +231,10 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
       // refuses to shrink below its content's intrinsic width. A long filename
       // would push the tile past its track and overlap its neighbours.
-      className={`w-full h-full flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
+      className={`w-full h-full flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${
+        isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'
+      } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
+      {...dragProps}
     >
       <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
         {canThumbnail ? (
@@ -257,6 +261,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
 
 const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
   const Icon = ICONS[entry.kind];
+  const { dragProps, isDropTarget } = useDropTarget(entry);
 
   return (
     <button
@@ -264,7 +269,10 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       onClick={onSelect}
       aria-pressed={isSelected}
       data-testid={`disk-folder-entry-${entry.path}`}
-      className={`w-full flex items-center gap-2 px-4 py-1.5 text-sm text-left ${isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'}`}
+      className={`w-full flex items-center gap-2 px-4 py-1.5 text-sm text-left ${
+        isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+      } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
+      {...dragProps}
     >
       <Icon className="h-4 w-4 shrink-0 opacity-60" />
       <span className="flex-1 truncate">{entry.name}</span>
@@ -274,3 +282,48 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
     </button>
   );
 };
+
+function useDropTarget(entry: DiskEntry) {
+  const [isDropTarget, setIsDropTarget] = useState(false);
+
+  const isNoopDropTarget = useMemo(
+    () => (source: string) => {
+      if (!source || source === entry.path) return true;
+      const parent = source.slice(0, source.lastIndexOf('/'));
+      return parent === entry.path;
+    },
+    [entry.path]
+  );
+
+  const dragProps = {
+    draggable: true,
+    onDragStart: (event: React.DragEvent) => {
+      event.dataTransfer.setData('text/plain', entry.path);
+      event.dataTransfer.effectAllowed = 'move';
+    },
+    onDragOver: (event: React.DragEvent) => {
+      if (!entry.isDirectory) return;
+      const source = event.dataTransfer.getData('text/plain');
+      if (isNoopDropTarget(source)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      setIsDropTarget(true);
+    },
+    onDragLeave: () => setIsDropTarget(false),
+    onDrop: async (event: React.DragEvent) => {
+      event.preventDefault();
+      setIsDropTarget(false);
+      if (!entry.isDirectory) return;
+
+      const source = event.dataTransfer.getData('text/plain');
+      if (isNoopDropTarget(source)) return;
+
+      const result = await window.diskAPI.move(source, entry.path);
+      if (!result.success) {
+        useDiskStore.setState({ loading: { isLoading: false, error: result.error } });
+      }
+    },
+  };
+
+  return { dragProps, isDropTarget };
+}

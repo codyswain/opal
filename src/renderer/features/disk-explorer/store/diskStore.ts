@@ -18,6 +18,7 @@ export interface DiskState {
   selectedPath: string | null;
   isQuickLookOpen: boolean;
   pendingAction: PendingAction | null;
+  pendingDelete: string | null;
   sort: { field: SortField; direction: SortDirection };
   filter: string;
   loading: { isLoading: boolean; error: string | null };
@@ -37,6 +38,8 @@ export interface DiskActions {
   toggleQuickLook: () => void;
   beginNewFolder: (parentDir: string) => void;
   beginRename: (target: string) => void;
+  beginDelete: (target: string) => void;
+  cancelDelete: () => void;
   cancelAction: () => void;
   /** Selecting the active field flips direction; a new field starts ascending. */
   setSort: (field: SortField) => void;
@@ -53,6 +56,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   selectedPath: null,
   isQuickLookOpen: false,
   pendingAction: null,
+  pendingDelete: null,
   sort: { field: 'name', direction: 'asc' },
   filter: '',
   loading: { isLoading: false, error: null },
@@ -167,6 +171,8 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   toggleQuickLook: () => set((state) => ({ isQuickLookOpen: !state.isQuickLookOpen })),
   beginNewFolder: (parentDir) => set({ pendingAction: { kind: 'new-folder', target: parentDir } }),
   beginRename: (target) => set({ pendingAction: { kind: 'rename', target } }),
+  beginDelete: (target) => set({ pendingDelete: target }),
+  cancelDelete: () => set({ pendingDelete: null }),
   cancelAction: () => set({ pendingAction: null }),
   setSort: (field) =>
     set((state) => ({

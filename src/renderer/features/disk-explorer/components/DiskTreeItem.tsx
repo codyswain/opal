@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, Image as ImageIcon, Film, Music, File } from 'lucide-react';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
@@ -25,6 +25,7 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
   const children = useDiskStore((state) => state.listings[entry.path]);
   const toggleExpanded = useDiskStore((state) => state.toggleExpanded);
   const select = useDiskStore((state) => state.select);
+  const [isDropTarget, setIsDropTarget] = useState(false);
 
   const handleSelect = useCallback(() => select(entry.path), [select, entry.path]);
 
@@ -34,6 +35,24 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
       void toggleExpanded(entry.path);
     },
     [toggleExpanded, entry.path]
+  );
+
+  const moveInto = useCallback(async (source: string, destination: string) => {
+    const result = await window.diskAPI.move(source, destination);
+    if (!result.success) {
+      useDiskStore.setState({ loading: { isLoading: false, error: result.error } });
+    }
+    // On success the watcher refreshes both listings, so there is nothing to
+    // update here.
+  }, []);
+
+  const isNoopDropTarget = useCallback(
+    (source: string) => {
+      if (!source || source === entry.path) return true;
+      const parent = source.slice(0, source.lastIndexOf('/'));
+      return parent === entry.path;
+    },
+    [entry.path]
   );
 
   const Icon = entry.isDirectory && isExpanded ? FolderOpen : ICONS[entry.kind];
@@ -47,12 +66,38 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
         aria-expanded={entry.isDirectory ? isExpanded : undefined}
         data-testid={`disk-tree-item-${entry.path}`}
         onClick={handleSelect}
+        draggable
+        onDragStart={(event) => {
+          event.stopPropagation();
+          event.dataTransfer.setData('text/plain', entry.path);
+          event.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(event) => {
+          if (!entry.isDirectory) return;
+          const source = event.dataTransfer.getData('text/plain');
+          if (isNoopDropTarget(source)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          setIsDropTarget(true);
+        }}
+        onDragLeave={() => setIsDropTarget(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsDropTarget(false);
+          if (!entry.isDirectory) return;
+
+          const source = event.dataTransfer.getData('text/plain');
+          if (isNoopDropTarget(source)) return;
+          void moveInto(source, entry.path);
+        }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         className={[
           'flex items-center gap-1 py-[3px] pr-2 text-sm cursor-default select-none rounded-sm',
           isSelected
             ? 'bg-accent text-accent-foreground'
             : 'hover:bg-muted/60 text-foreground/90',
+          isDropTarget ? 'ring-1 ring-primary bg-primary/10' : '',
         ].join(' ')}
       >
         {entry.isDirectory ? (
