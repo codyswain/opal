@@ -19,6 +19,10 @@ export function installDiskApi(overrides: Partial<DiskAPI> = {}): DiskAPI {
       success: true as const,
       data: { path: dirPath, entries: [] },
     })),
+    readTextFile: vi.fn(async (target: string) => ({
+      success: true as const,
+      data: { path: target, text: '', truncated: false, size: 0 },
+    })),
     stat: vi.fn(),
     ...overrides,
   } as DiskAPI;

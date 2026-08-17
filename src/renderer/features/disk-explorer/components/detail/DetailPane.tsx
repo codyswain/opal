@@ -3,6 +3,8 @@ import { Folder } from 'lucide-react';
 import { formatBytes } from '@/common/formatBytes';
 import type { DiskEntry } from '@/types/disk';
 import { ImagePreview } from './ImagePreview';
+import { MarkdownPreview } from './MarkdownPreview';
+import { TextPreview } from './TextPreview';
 import { UnsupportedPreview } from './UnsupportedPreview';
 
 /**
@@ -25,6 +27,10 @@ function renderPreview(entry: DiskEntry): React.ReactNode {
   switch (entry.kind) {
     case 'image':
       return <ImagePreview entry={entry} />;
+    case 'markdown':
+      return <MarkdownPreview entry={entry} />;
+    case 'text':
+      return <TextPreview entry={entry} />;
     default:
       return <UnsupportedPreview entry={entry} />;
   }
