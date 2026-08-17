@@ -7,6 +7,8 @@ import {
   opalFileUrlToPath,
   contentTypeFor,
 } from '@/common/opalFileUrl';
+
+export { OPAL_FILE_SCHEME };
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import logger from '@/main/logger';

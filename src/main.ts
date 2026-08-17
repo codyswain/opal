@@ -19,6 +19,14 @@ import { VFSHandlers } from "@/main/services/vfs/VfsHandlers";
 import { CredentialManager } from "@/main/services/credentials/CredentialManager";
 import DatabaseManager from "@/main/database/db";
 import { ItemRepository } from "@/main/database/repositories/itemRepository";
+import { RootRegistry } from "@/main/fs/RootRegistry";
+import { DiskReader } from "@/main/fs/DiskReader";
+import { DiskHandlers } from "@/main/fs/DiskHandlers";
+import {
+  OPAL_FILE_SCHEME,
+  registerOpalFileScheme,
+  registerOpalFileProtocol,
+} from "@/main/protocol/opalFile";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -39,11 +47,15 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
+  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
   "font-src 'self' data:",
   "connect-src 'self' https: ws: http://localhost:11434", // Ollama
-  "media-src 'self' https:",
+  `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
 ].join("; "); // Join CSP directives
+
+// Must run at module load, before app.whenReady() — Electron requires
+// privileged schemes to be declared before the protocol layer initializes.
+registerOpalFileScheme();
 
 const createWindow = () => {
   log.info(
@@ -179,6 +191,30 @@ const credentialHandlers = new CredentialHandlers({
 
 const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
 
+// OPAL_TEST_USER_DATA_DIR lets the E2E suite point the roots file at a temp
+// directory, mirroring the existing OPAL_TEST_DB_DIR convention. Without it,
+// tests would write into the real app's user data and corrupt the user's
+// actual list of opened folders.
+const rootRegistry = new RootRegistry({
+  storePath: path.join(
+    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
+    "disk-roots.json"
+  ),
+});
+const diskReader = new DiskReader({ registry: rootRegistry });
+const diskHandlers = new DiskHandlers({
+  ipc: ipcMain,
+  registry: rootRegistry,
+  reader: diskReader,
+  showOpenDialog: async () => {
+    const window = BrowserWindow.getFocusedWindow();
+    const options = { properties: ["openDirectory" as const] };
+    return window
+      ? dialog.showOpenDialog(window, options)
+      : dialog.showOpenDialog(options);
+  },
+});
+
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
   try {
@@ -192,6 +228,11 @@ app.whenReady().then(async () => {
 
     vfsHandlers.registerAll();
     log.info("Virtual File System (VFS) IPC handlers registered");
+
+    await rootRegistry.load();
+    registerOpalFileProtocol({ registry: rootRegistry });
+    diskHandlers.registerAll();
+    log.info("Disk explorer IPC handlers and opal-file protocol registered");
 
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");

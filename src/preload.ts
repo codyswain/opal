@@ -128,3 +128,11 @@ contextBridge.exposeInMainWorld("credentialAPI", {
   setKey: (account: string, password: string) => ipcRenderer.invoke("credentials:set", account, password),
   deleteKey: (account: string) => ipcRenderer.invoke("credentials:delete", account),
 });
+
+contextBridge.exposeInMainWorld("diskAPI", {
+  openFolder: () => ipcRenderer.invoke("disk:open-folder"),
+  listRoots: () => ipcRenderer.invoke("disk:list-roots"),
+  removeRoot: (rootPath: string) => ipcRenderer.invoke("disk:remove-root", rootPath),
+  readDirectory: (dirPath: string) => ipcRenderer.invoke("disk:read-directory", dirPath),
+  stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
+});
