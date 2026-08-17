@@ -19,6 +19,10 @@ export interface DiskHandlerDependencies {
   /** Injected so the dialog can be stubbed in tests. */
   showOpenDialog: () => Promise<OpenDialogReturnValue>;
   shell: DiskShell;
+  watcher: {
+    watch: (rootPath: string) => Promise<void>;
+    unwatch: (rootPath: string) => Promise<void>;
+  };
 }
 
 export class DiskHandlers {
@@ -49,6 +53,7 @@ export class DiskHandlers {
             return { success: true, data: { root: null } };
           }
           const root = await this.deps.registry.add(result.filePaths[0]);
+          await this.deps.watcher.watch(root);
           return { success: true, data: { root } };
         } catch (error) {
           logger.error('Error opening folder:', error);
@@ -75,6 +80,7 @@ export class DiskHandlers {
       async (_, rootPath: string): Promise<IPCResponse> => {
         try {
           await this.deps.registry.remove(rootPath);
+          await this.deps.watcher.unwatch(rootPath);
           return { success: true };
         } catch (error) {
           logger.error('Error removing root:', error);

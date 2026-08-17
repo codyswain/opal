@@ -138,4 +138,10 @@ contextBridge.exposeInMainWorld("diskAPI", {
   reveal: (target: string) => ipcRenderer.invoke("disk:reveal", target),
   openExternal: (target: string) => ipcRenderer.invoke("disk:open-external", target),
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
+  onChanged: (callback: (payload: { directories: string[] }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { directories: string[] }) =>
+      callback(payload);
+    ipcRenderer.on("disk:changed", listener);
+    return () => ipcRenderer.removeListener("disk:changed", listener);
+  },
 });

@@ -78,6 +78,20 @@ describe('useDiskStore', () => {
     expect(readDirectory).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidates only cached directories and force-reloads them', async () => {
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: rootEntries,
+        [PHOTOS]: photoEntries,
+      },
+    });
+
+    await useDiskStore.getState().invalidate([ROOT, '/Vault/Missing']);
+
+    expect(readDirectory).toHaveBeenCalledTimes(1);
+    expect(readDirectory).toHaveBeenCalledWith(ROOT);
+  });
+
   it('records an error when a read fails, without throwing', async () => {
     readDirectory.mockResolvedValue({ success: false, error: 'Nope' });
     await useDiskStore.getState().loadDirectory(ROOT);

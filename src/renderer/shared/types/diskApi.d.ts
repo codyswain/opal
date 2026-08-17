@@ -9,6 +9,7 @@ export interface DiskAPI {
   reveal: (target: string) => Promise<DiskResult>;
   openExternal: (target: string) => Promise<DiskResult>;
   stat: (target: string) => Promise<DiskResult<DiskEntry>>;
+  onChanged: (callback: (payload: { directories: string[] }) => void) => () => void;
 }
 
 declare global {

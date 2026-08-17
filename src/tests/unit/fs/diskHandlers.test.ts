@@ -21,6 +21,15 @@ vi.mock('electron-log', () => ({
   },
 }));
 
+vi.mock('@/main/logger', () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import type { IpcMain } from 'electron';
 import { RootRegistry } from '@/main/fs/RootRegistry';
 import { DiskReader } from '@/main/fs/DiskReader';
@@ -52,6 +61,8 @@ let registry: RootRegistry;
 let showOpenDialog: ReturnType<typeof vi.fn>;
 let showItemInFolder: ReturnType<typeof vi.fn>;
 let openPath: ReturnType<typeof vi.fn>;
+let watchRoot: ReturnType<typeof vi.fn>;
+let unwatchRoot: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-handlers-'));
@@ -67,6 +78,8 @@ beforeEach(async () => {
   showOpenDialog = vi.fn();
   showItemInFolder = vi.fn();
   openPath = vi.fn(async () => '');
+  watchRoot = vi.fn(async () => undefined);
+  unwatchRoot = vi.fn(async () => undefined);
 
   new DiskHandlers({
     ipc: stub.ipc,
@@ -74,6 +87,7 @@ beforeEach(async () => {
     reader: new DiskReader({ registry }),
     showOpenDialog,
     shell: { showItemInFolder, openPath },
+    watcher: { watch: watchRoot, unwatch: unwatchRoot },
   }).registerAll();
 });
 
@@ -106,6 +120,7 @@ describe('DiskHandlers', () => {
     expect(result.success).toBe(true);
     expect(result.data.root).toContain('Vault');
     expect(registry.list()).toHaveLength(1);
+    expect(watchRoot).toHaveBeenCalledTimes(1);
   });
 
   it('reports a cancelled dialog as success with a null root', async () => {
@@ -252,5 +267,6 @@ describe('DiskHandlers', () => {
     const result = await stub.invoke('disk:remove-root', stored) as { success: boolean };
     expect(result.success).toBe(true);
     expect(registry.list()).toEqual([]);
+    expect(unwatchRoot).toHaveBeenCalledWith(stored);
   });
 });

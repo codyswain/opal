@@ -28,6 +28,7 @@ export const DiskExplorer: React.FC = () => {
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
+  const invalidate = useDiskStore((state) => state.invalidate);
   const openQuickLook = useDiskStore((state) => state.openQuickLook);
   const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
@@ -57,6 +58,12 @@ export const DiskExplorer: React.FC = () => {
     }
     return null;
   }, [selectedPath, listings]);
+
+  useEffect(() => {
+    return window.diskAPI.onChanged(({ directories }) => {
+      void invalidate(directories);
+    });
+  }, [invalidate]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

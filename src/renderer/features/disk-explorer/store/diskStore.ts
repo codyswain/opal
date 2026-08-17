@@ -21,6 +21,8 @@ export interface DiskActions {
   openFolder: () => Promise<void>;
   closeRoot: (rootPath: string) => Promise<void>;
   loadDirectory: (dirPath: string, options?: { force?: boolean }) => Promise<void>;
+  /** Drop cached listings for directories that changed on disk, and reload the visible ones. */
+  invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   select: (targetPath: string | null) => void;
   openQuickLook: () => void;
@@ -122,6 +124,16 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       listings: { ...state.listings, [dirPath]: response.data.entries },
       loading: { isLoading: false, error: null },
     }));
+  },
+
+  invalidate: async (directories) => {
+    const state = get();
+    const known = directories.filter((directory) => state.listings[directory]);
+    if (known.length === 0) return;
+
+    await Promise.all(
+      known.map((directory) => state.loadDirectory(directory, { force: true }))
+    );
   },
 
   toggleExpanded: async (dirPath) => {

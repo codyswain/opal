@@ -26,6 +26,7 @@ export function installDiskApi(overrides: Partial<DiskAPI> = {}): DiskAPI {
     reveal: vi.fn(async () => ({ success: true as const, data: undefined })),
     openExternal: vi.fn(async () => ({ success: true as const, data: undefined })),
     stat: vi.fn(),
+    onChanged: vi.fn(() => () => undefined),
     ...overrides,
   } as DiskAPI;
 

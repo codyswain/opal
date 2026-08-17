@@ -22,6 +22,7 @@ import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
+import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import {
   OPAL_FILE_SCHEME,
@@ -207,6 +208,11 @@ const rootRegistry = new RootRegistry({
   ),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
+const diskWatcher = new DiskWatcher({
+  onChanged: (directories) => {
+    mainWindow?.webContents.send("disk:changed", { directories });
+  },
+});
 const thumbnailService = new ThumbnailService({
   registry: rootRegistry,
   cacheDir: path.join(
@@ -231,6 +237,7 @@ const diskHandlers = new DiskHandlers({
     showItemInFolder: (fullPath) => shell.showItemInFolder(fullPath),
     openPath: (fullPath) => shell.openPath(fullPath),
   },
+  watcher: diskWatcher,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -248,6 +255,9 @@ app.whenReady().then(async () => {
     log.info("Virtual File System (VFS) IPC handlers registered");
 
     await rootRegistry.load();
+    for (const root of rootRegistry.list()) {
+      await diskWatcher.watch(root);
+    }
     registerOpalFileProtocol({ registry: rootRegistry });
     registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
@@ -279,6 +289,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", async () => {
   try {
+    void diskWatcher.closeAll();
     await closeDatabase();
   } catch (error) {
     log.error("Error during app shutdown:", error);

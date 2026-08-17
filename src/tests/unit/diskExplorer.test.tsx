@@ -8,20 +8,33 @@ import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 
 const ROOT = '/Vault';
 const PHOTOS = '/Vault/Photos';
+let onChanged: ReturnType<typeof vi.fn>;
+let changedListener: ((payload: { directories: string[] }) => void) | null;
+let readDirectory: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  changedListener = null;
+  onChanged = vi.fn((callback: (payload: { directories: string[] }) => void) => {
+    changedListener = callback;
+    return () => {
+      changedListener = null;
+    };
+  });
+  readDirectory = vi.fn(async (p: string) => ({
+    success: true as const,
+    data: {
+      path: p,
+      entries: p === PHOTOS
+        ? [entry({ path: `${PHOTOS}/a.jpg`, name: 'a.jpg', kind: 'image' })]
+        : [],
+    },
+  }));
+
   installDiskApi({
-    readDirectory: vi.fn(async (p: string) => ({
-      success: true as const,
-      data: {
-        path: p,
-        entries: p === PHOTOS
-          ? [entry({ path: `${PHOTOS}/a.jpg`, name: 'a.jpg', kind: 'image' })]
-          : [],
-      },
-    })),
+    readDirectory,
     openFolder: vi.fn(async () => ({ success: true as const, data: { root: ROOT } })),
     listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
+    onChanged,
   });
 
   useDiskStore.setState({
@@ -77,6 +90,17 @@ describe('DiskExplorer', () => {
   it('offers an open-folder action', () => {
     render(<DiskExplorer />);
     expect(screen.getByTestId('disk-explorer-open-folder')).toBeInTheDocument();
+  });
+
+  it('subscribes to disk changes and reloads affected cached directories', async () => {
+    render(<DiskExplorer />);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+
+    readDirectory.mockClear();
+    changedListener?.({ directories: [ROOT, '/Vault/Uncached'] });
+
+    await waitFor(() => expect(readDirectory).toHaveBeenCalledTimes(1));
+    expect(readDirectory).toHaveBeenCalledWith(ROOT);
   });
 
   it('only toggles quick look on Space for a previewable selected entry', async () => {
