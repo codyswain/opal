@@ -46,6 +46,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     if (!entries) return [];
     return sortEntries(filterEntries(entries, filter), sort.field, sort.direction);
   }, [entries, filter, sort.field, sort.direction]);
+  const hasActiveFilter = filter.trim().length > 0;
 
   const activeMode = mode ?? suggestedMode;
 
@@ -73,10 +74,10 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
 
       {visibleEntries.length === 0 ? (
         <div
-          data-testid={filter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
+          data-testid={hasActiveFilter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
           className="flex-1 grid place-items-center text-sm text-muted-foreground"
         >
-          {filter ? `No files matching “${filter}”` : 'This folder is empty'}
+          {hasActiveFilter ? `No files matching “${filter}”` : 'This folder is empty'}
         </div>
       ) : activeMode === 'gallery' ? (
         <div data-testid="disk-folder-gallery" className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">

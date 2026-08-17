@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -108,6 +108,20 @@ describe('DiskFolderView', () => {
 
     render(<DiskFolderView dirPath={empty} />);
     await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
+  });
+
+  it('treats a whitespace-only filter as no active filter in an empty folder', async () => {
+    const empty = '/Vault/Empty';
+    useDiskStore.setState({ listings: { [empty]: [] } });
+
+    render(<DiskFolderView dirPath={empty} />);
+
+    await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
+    act(() => {
+      useDiskStore.setState({ filter: '   ' });
+    });
+    await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('disk-folder-no-matches')).not.toBeInTheDocument();
   });
 
   it('requests the listing when it is not already cached', async () => {
