@@ -12,6 +12,7 @@ export interface DiskState {
   selectedPath: string | null;
   isQuickLookOpen: boolean;
   sort: { field: SortField; direction: SortDirection };
+  filter: string;
   loading: { isLoading: boolean; error: string | null };
 }
 
@@ -27,6 +28,7 @@ export interface DiskActions {
   toggleQuickLook: () => void;
   /** Selecting the active field flips direction; a new field starts ascending. */
   setSort: (field: SortField) => void;
+  setFilter: (value: string) => void;
   clearError: () => void;
 }
 
@@ -39,6 +41,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   selectedPath: null,
   isQuickLookOpen: false,
   sort: { field: 'name', direction: 'asc' },
+  filter: '',
   loading: { isLoading: false, error: null },
 
   loadRoots: async () => {
@@ -146,6 +149,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
           ? { field, direction: state.sort.direction === 'asc' ? 'desc' : 'asc' }
           : { field, direction: 'asc' },
     })),
+  setFilter: (value) => set({ filter: value }),
 
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));

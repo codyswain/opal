@@ -44,3 +44,36 @@ describe('Toolbar sorting', () => {
     expect(screen.getByTestId('sort-size')).toHaveAttribute('aria-pressed', 'false');
   });
 });
+
+describe('Toolbar filtering', () => {
+  it('updates the filter as the user types', async () => {
+    const user = userEvent.setup();
+    render(<Toolbar />);
+
+    await user.type(screen.getByTestId('filter-input'), 'img');
+    expect(useDiskStore.getState().filter).toBe('img');
+  });
+
+  it('clears the filter with the clear button', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({ filter: 'img' });
+    render(<Toolbar />);
+
+    await user.click(screen.getByTestId('filter-clear'));
+    expect(useDiskStore.getState().filter).toBe('');
+  });
+
+  it('clears the filter on Escape', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({ filter: 'img' });
+    render(<Toolbar />);
+
+    await user.type(screen.getByTestId('filter-input'), '{Escape}');
+    expect(useDiskStore.getState().filter).toBe('');
+  });
+
+  it('hides the clear button when the filter is empty', () => {
+    render(<Toolbar />);
+    expect(screen.queryByTestId('filter-clear')).not.toBeInTheDocument();
+  });
+});

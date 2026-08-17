@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File } from 'lucide-react';
+import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
 import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry, FileKind } from '@/types/disk';
@@ -23,10 +24,15 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const select = useDiskStore((state) => state.select);
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const sort = useDiskStore((state) => state.sort);
+  const filter = useDiskStore((state) => state.filter);
+  const setFilter = useDiskStore((state) => state.setFilter);
 
   const [mode, setMode] = useState<ViewMode | null>(null);
 
   useEffect(() => { void loadDirectory(dirPath); }, [dirPath, loadDirectory]);
+  // A filter carried into a new folder makes it look empty for no visible
+  // reason. Clear it whenever the folder changes.
+  useEffect(() => { setFilter(''); }, [dirPath, setFilter]);
 
   // A folder that is mostly pictures wants to be looked at, not listed. The
   // user's explicit choice always wins once they make one.
@@ -36,10 +42,10 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     return images > 0 && images >= entries.length / 2 ? 'gallery' : 'list';
   }, [entries]);
 
-  const visibleEntries = useMemo(
-    () => (entries ? sortEntries(entries, sort.field, sort.direction) : []),
-    [entries, sort.field, sort.direction]
-  );
+  const visibleEntries = useMemo(() => {
+    if (!entries) return [];
+    return sortEntries(filterEntries(entries, filter), sort.field, sort.direction);
+  }, [entries, filter, sort.field, sort.direction]);
 
   const activeMode = mode ?? suggestedMode;
 
@@ -66,8 +72,11 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
       </div>
 
       {visibleEntries.length === 0 ? (
-        <div data-testid="disk-folder-empty" className="flex-1 grid place-items-center text-sm text-muted-foreground">
-          This folder is empty
+        <div
+          data-testid={filter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
+          className="flex-1 grid place-items-center text-sm text-muted-foreground"
+        >
+          {filter ? `No files matching “${filter}”` : 'This folder is empty'}
         </div>
       ) : activeMode === 'gallery' ? (
         <div data-testid="disk-folder-gallery" className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">
