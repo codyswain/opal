@@ -10,7 +10,10 @@ const PHOTO = entry({ path: '/V/a.jpg', name: 'a.jpg', kind: 'image', size: 2048
 
 beforeEach(() => {
   installDiskApi();
-  useDiskStore.setState({ isQuickLookOpen: false });
+  useDiskStore.setState({
+    isQuickLookOpen: false,
+    sort: { field: 'name', direction: 'asc' },
+  });
 });
 
 describe('QuickLook', () => {

@@ -33,6 +33,7 @@ beforeEach(() => {
     },
     expanded: { [ROOT]: true },
     selectedPath: null,
+    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 });

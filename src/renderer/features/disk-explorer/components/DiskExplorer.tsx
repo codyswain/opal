@@ -7,6 +7,7 @@ import { DetailPane } from './detail/DetailPane';
 import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
+import { Toolbar } from './Toolbar';
 
 /** The detail pane always shows a directory: a selected file shows its parent. */
 function directoryForSelection(
@@ -100,8 +101,9 @@ export const DiskExplorer: React.FC = () => {
         {error && <ErrorBanner message={error} />}
         {activeDirectory ? (
           <>
-            <div className="shrink-0 border-b border-border/60">
+            <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
               <Breadcrumb dirPath={activeDirectory} />
+              <Toolbar />
             </div>
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div className="min-w-0 flex-1 overflow-hidden">

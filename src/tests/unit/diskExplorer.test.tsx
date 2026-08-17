@@ -32,6 +32,7 @@ beforeEach(() => {
     expanded: { [ROOT]: true },
     isQuickLookOpen: false,
     selectedPath: null,
+    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 });

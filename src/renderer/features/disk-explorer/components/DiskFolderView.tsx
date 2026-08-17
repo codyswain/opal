@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File } from 'lucide-react';
 import { formatBytes } from '@/common/formatBytes';
+import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
@@ -21,6 +22,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
   const select = useDiskStore((state) => state.select);
   const selectedPath = useDiskStore((state) => state.selectedPath);
+  const sort = useDiskStore((state) => state.sort);
 
   const [mode, setMode] = useState<ViewMode | null>(null);
 
@@ -34,6 +36,11 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     return images > 0 && images >= entries.length / 2 ? 'gallery' : 'list';
   }, [entries]);
 
+  const visibleEntries = useMemo(
+    () => (entries ? sortEntries(entries, sort.field, sort.direction) : []),
+    [entries, sort.field, sort.direction]
+  );
+
   const activeMode = mode ?? suggestedMode;
 
   if (!entries) {
@@ -44,7 +51,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 shrink-0">
         <span className="text-xs text-muted-foreground truncate">
-          {entries.length} {entries.length === 1 ? 'item' : 'items'}
+          {visibleEntries.length} {visibleEntries.length === 1 ? 'item' : 'items'}
         </span>
         <div className="flex items-center gap-1">
           <ModeButton
@@ -58,13 +65,13 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      {visibleEntries.length === 0 ? (
         <div data-testid="disk-folder-empty" className="flex-1 grid place-items-center text-sm text-muted-foreground">
           This folder is empty
         </div>
       ) : activeMode === 'gallery' ? (
         <div data-testid="disk-folder-gallery" className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">
-          {entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <GalleryTile
               key={entry.path} entry={entry}
               isSelected={selectedPath === entry.path}
@@ -74,7 +81,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         </div>
       ) : (
         <div data-testid="disk-folder-list" className="flex-1 overflow-auto">
-          {entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <ListRow
               key={entry.path} entry={entry}
               isSelected={selectedPath === entry.path}

@@ -15,6 +15,7 @@ beforeEach(() => {
     listings: {},
     expanded: {},
     selectedPath: null,
+    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 });

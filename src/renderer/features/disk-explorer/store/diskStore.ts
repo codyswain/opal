@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { SortDirection, SortField } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
 
 export interface DiskState {
@@ -10,6 +11,7 @@ export interface DiskState {
   expanded: Record<string, boolean>;
   selectedPath: string | null;
   isQuickLookOpen: boolean;
+  sort: { field: SortField; direction: SortDirection };
   loading: { isLoading: boolean; error: string | null };
 }
 
@@ -23,6 +25,8 @@ export interface DiskActions {
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
+  /** Selecting the active field flips direction; a new field starts ascending. */
+  setSort: (field: SortField) => void;
   clearError: () => void;
 }
 
@@ -34,6 +38,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   expanded: {},
   selectedPath: null,
   isQuickLookOpen: false,
+  sort: { field: 'name', direction: 'asc' },
   loading: { isLoading: false, error: null },
 
   loadRoots: async () => {
@@ -134,6 +139,13 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   openQuickLook: () => set({ isQuickLookOpen: true }),
   closeQuickLook: () => set({ isQuickLookOpen: false }),
   toggleQuickLook: () => set((state) => ({ isQuickLookOpen: !state.isQuickLookOpen })),
+  setSort: (field) =>
+    set((state) => ({
+      sort:
+        state.sort.field === field
+          ? { field, direction: state.sort.direction === 'asc' ? 'desc' : 'asc' }
+          : { field, direction: 'asc' },
+    })),
 
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));
