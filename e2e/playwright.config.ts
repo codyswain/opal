@@ -27,6 +27,5 @@ export default defineConfig({
     // UI test must leave behind something you can actually look at.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
   },
 });

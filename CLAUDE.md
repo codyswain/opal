@@ -87,11 +87,13 @@ font-dependent; its false failures destroy trust in the suite.
 
 Both commands rebuild the native module for the ABI they need, so they are safe
 to run in any order. Use `npm test` rather than a bare `npx vitest run`, which
-skips the rebuild and will fail confusingly after an E2E run.
+skips the rebuild and will fail confusingly after an E2E run. `npm run test:watch`
+and `npm run test:ui` also skip the rebuild, so they will fail confusingly after
+an E2E run unless you run `npm test` first.
 
 ### When a UI test fails
 
-Traces, screenshots, and video are captured on failure. Run
+Traces and screenshots are captured on failure. Run
 `npx playwright show-report` for a browsable DOM snapshot and timeline.
 
 ## Conventions
