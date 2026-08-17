@@ -62,7 +62,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
         <div className="flex items-start gap-3">
           <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0">
-            <h2 className="text-sm font-medium">Move "{name}" to Trash?</h2>
+            <h2 className="text-base font-medium">Move "{name}" to Trash?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               You can restore it from the Trash.
             </p>
@@ -80,7 +80,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
             type="button"
             onClick={cancelDelete}
             data-testid="confirm-delete-cancel"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             Cancel
           </button>

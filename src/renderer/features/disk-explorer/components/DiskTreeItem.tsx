@@ -98,9 +98,9 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
           if (isNoopDropTarget(source)) return;
           void moveInto(source, entry.path);
         }}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
         className={[
-          'flex items-center gap-1 py-[3px] pr-2 text-sm cursor-default select-none rounded-sm',
+          'flex cursor-default select-none items-center gap-1 rounded-sm py-1 pr-2 text-sm transition-colors duration-100',
           isSelected
             ? 'bg-accent text-accent-foreground'
             : 'hover:bg-muted/60 text-foreground/90',
@@ -113,7 +113,7 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
             onClick={handleToggle}
             aria-label={isExpanded ? `Collapse ${entry.name}` : `Expand ${entry.name}`}
             data-testid={`disk-tree-toggle-${entry.path}`}
-            className="p-0.5 rounded hover:bg-muted shrink-0"
+            className="shrink-0 rounded p-0.5 transition-colors duration-100 hover:bg-muted"
           >
             <Chevron className="h-3 w-3" />
           </button>

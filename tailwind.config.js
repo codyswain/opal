@@ -16,6 +16,9 @@ module.exports = {
       },
     },
     extend: {
+      fontSize: {
+        "2xs": ["11px", { lineHeight: "14px" }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

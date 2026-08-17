@@ -50,7 +50,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, testId, Ico
     aria-label={label}
     title={label}
     data-testid={testId}
-    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+    className="rounded-md p-1.5 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
   >
     <Icon className="h-4 w-4" />
   </button>

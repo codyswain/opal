@@ -86,7 +86,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 shrink-0">
-        <span className="text-xs text-muted-foreground truncate">
+        <span className="truncate text-2xs text-muted-foreground">
           {visibleEntries.length} {visibleEntries.length === 1 ? 'item' : 'items'}
         </span>
         <div className="flex items-center gap-1">
@@ -196,7 +196,7 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
     aria-pressed={active}
     data-testid={`disk-folder-view-${mode}`}
     onClick={() => onSelect(mode)}
-    className={`p-1.5 rounded-md ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+    className={`rounded-md p-1.5 transition-colors duration-100 ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted text-muted-foreground'}`}
   >
     <Icon className="h-4 w-4" />
   </button>
@@ -232,7 +232,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
       // refuses to shrink below its content's intrinsic width. A long filename
       // would push the tile past its track and overlap its neighbours.
-      className={`w-full h-full flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${
+      className={`flex h-full min-w-0 w-full flex-col gap-1.5 rounded-lg p-1.5 text-left transition-colors duration-100 ${
         isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'
       } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
       {...dragProps}
@@ -253,7 +253,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       </div>
       {/* Two lines then ellipsis, with a reserved height so tiles stay on a
           consistent baseline regardless of how long each name is. */}
-      <span className="text-xs leading-snug px-0.5 line-clamp-2 break-words min-h-[2rem]">
+      <span className="min-h-8 break-words px-0.5 text-xs leading-snug line-clamp-2">
         {entry.name}
       </span>
     </button>
@@ -270,14 +270,14 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       onClick={onSelect}
       aria-pressed={isSelected}
       data-testid={`disk-folder-entry-${entry.path}`}
-      className={`w-full flex items-center gap-2 px-4 py-1.5 text-sm text-left ${
+      className={`flex w-full items-center gap-2 px-4 py-1.5 text-left text-sm transition-colors duration-100 ${
         isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
       } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
       {...dragProps}
     >
       <Icon className="h-4 w-4 shrink-0 opacity-60" />
       <span className="flex-1 truncate">{entry.name}</span>
-      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+      <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
         {entry.isDirectory ? '—' : formatBytes(entry.size)}
       </span>
     </button>

@@ -74,9 +74,9 @@ export const NameDialog: React.FC = () => {
         role="dialog"
         aria-modal="true"
         data-testid="name-dialog"
-        className="relative w-[min(90vw,400px)] rounded-xl border border-border bg-card p-4 shadow-2xl flex flex-col gap-3"
+        className="relative flex w-[min(90vw,400px)] flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-2xl"
       >
-        <h2 data-testid="name-dialog-title" className="text-sm font-medium">
+        <h2 data-testid="name-dialog-title" className="text-base font-medium">
           {isRename ? 'Rename' : 'New Folder'}
         </h2>
 
@@ -117,7 +117,7 @@ export const NameDialog: React.FC = () => {
             type="button"
             onClick={cancelAction}
             data-testid="name-dialog-cancel"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             Cancel
           </button>

@@ -163,7 +163,7 @@ export const DiskExplorer: React.FC = () => {
             onClick={() => void openFolder()}
             aria-label="Open folder"
             data-testid="disk-explorer-open-folder"
-            className="p-1 rounded hover:bg-muted text-muted-foreground"
+            className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             <FolderPlus className="h-4 w-4" />
           </button>
@@ -210,14 +210,14 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
     <div
       role="alert"
       data-testid="disk-explorer-error"
-      className="flex items-center gap-2 px-4 py-2 text-sm bg-destructive/10 text-destructive border-b border-destructive/20 shrink-0"
+      className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive"
     >
       <span className="flex-1">{message}</span>
       <button
         type="button"
         aria-label="Dismiss error"
         onClick={clearError}
-        className="p-0.5 rounded hover:bg-destructive/20"
+        className="rounded p-0.5 transition-colors duration-100 hover:bg-destructive/20"
       >
         <X className="h-3.5 w-3.5" />
       </button>

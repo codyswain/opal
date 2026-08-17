@@ -38,7 +38,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
         aria-label="New folder"
         title="New folder"
         data-testid="toolbar-new-folder"
-        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
       >
         <FolderPlus className="h-4 w-4" />
       </button>
@@ -63,7 +63,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
             onClick={() => setFilter('')}
             aria-label="Clear filter"
             data-testid="filter-clear"
-            className="absolute right-1 top-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground -translate-y-1/2"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors duration-100 hover:text-foreground"
           >
             <X className="h-3 w-3" />
           </button>
@@ -81,7 +81,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
             onClick={() => setSort(field)}
             aria-pressed={isActive}
             data-testid={`sort-${field}`}
-            className={`flex items-center gap-0.5 rounded px-2 py-0.5 text-xs ${
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors duration-100 ${
               isActive
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:bg-muted'

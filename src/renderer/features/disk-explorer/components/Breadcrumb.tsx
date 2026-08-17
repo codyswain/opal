@@ -35,7 +35,7 @@ export const Breadcrumb: React.FC<{ dirPath: string }> = ({ dirPath }) => {
               onClick={() => select(segment.path)}
               aria-current={isLast ? 'page' : undefined}
               data-testid={`crumb-${segment.path}`}
-              className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${
+              className={`whitespace-nowrap rounded px-2 py-1 text-2xs transition-colors duration-100 ${
                 isLast ? 'font-medium text-foreground' : 'text-muted-foreground hover:bg-muted'
               }`}
             >
