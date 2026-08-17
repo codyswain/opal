@@ -131,8 +131,12 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       type="button"
       onClick={onSelect}
       aria-pressed={isSelected}
+      title={entry.name}
       data-testid={`disk-folder-entry-${entry.path}`}
-      className={`flex flex-col gap-1.5 text-left rounded-lg p-1.5 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
+      // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
+      // refuses to shrink below its content's intrinsic width. A long filename
+      // would push the tile past its track and overlap its neighbours.
+      className={`flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
     >
       <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
         {entry.kind === 'image' ? (
@@ -147,7 +151,11 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
           <Icon className="h-8 w-8 opacity-40" />
         )}
       </div>
-      <span className="text-xs truncate px-0.5">{entry.name}</span>
+      {/* Two lines then ellipsis, with a reserved height so tiles stay on a
+          consistent baseline regardless of how long each name is. */}
+      <span className="text-xs leading-snug px-0.5 line-clamp-2 break-words min-h-[2rem]">
+        {entry.name}
+      </span>
     </button>
   );
 };
