@@ -58,6 +58,42 @@ src/
 - `npm run package` — Package the app
 - `npm run make` — Build distributable
 
+## Testing
+
+**One rule: test at the cheapest tier that can actually fail.**
+
+| Tier | Scope | Runs |
+|---|---|---|
+| Unit (vitest) | Anything not requiring a live Electron process | pre-commit + CI |
+| Contract (vitest) | Cross-process agreements no single unit can verify | pre-commit + CI |
+| E2E (Playwright) | Only what is impossible to verify any other way | CI + on demand |
+
+Only five things genuinely require a real Electron process: the app boots,
+`opal-file://` streams and decodes, CSP allows the custom scheme, IPC crosses
+the process boundary, and the allowed-roots guard holds at the protocol layer.
+
+**E2E budget: ≤10 tests, ≤60s.** Exceeding it means something is being tested at
+the wrong tier. A component behaviour costs ~15ms as a unit test and ~4.5s
+through Playwright — roughly 300× for identical confidence.
+
+**Do not add visual regression tests.** Screenshot diffing is OS- and
+font-dependent; its false failures destroy trust in the suite.
+
+### Commands
+
+- `npm test` — unit + contract. Rebuilds better-sqlite3 for **Node**.
+- `npm run test:e2e` — Playwright. Rebuilds better-sqlite3 for **Electron**.
+- `npm run test:all` — both, in the correct order.
+
+Both commands rebuild the native module for the ABI they need, so they are safe
+to run in any order. Use `npm test` rather than a bare `npx vitest run`, which
+skips the rebuild and will fail confusingly after an E2E run.
+
+### When a UI test fails
+
+Traces, screenshots, and video are captured on failure. Run
+`npx playwright show-report` for a browsable DOM snapshot and timeline.
+
 ## Conventions
 
 - Commit after completing each discrete task
