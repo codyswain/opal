@@ -4,6 +4,8 @@ import { formatBytes } from '@/common/formatBytes';
 import type { DiskEntry } from '@/types/disk';
 import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
+import { MediaPreview } from './MediaPreview';
+import { PdfPreview } from './PdfPreview';
 import { TextPreview } from './TextPreview';
 import { UnsupportedPreview } from './UnsupportedPreview';
 
@@ -31,6 +33,11 @@ function renderPreview(entry: DiskEntry): React.ReactNode {
       return <MarkdownPreview entry={entry} />;
     case 'text':
       return <TextPreview entry={entry} />;
+    case 'video':
+    case 'audio':
+      return <MediaPreview entry={entry} />;
+    case 'pdf':
+      return <PdfPreview entry={entry} />;
     default:
       return <UnsupportedPreview entry={entry} />;
   }

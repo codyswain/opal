@@ -51,6 +51,8 @@ const CSP = [
   "font-src 'self' data:",
   `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
+  `object-src 'self' ${OPAL_FILE_SCHEME}:`,
+  `frame-src 'self' ${OPAL_FILE_SCHEME}:`,
 ].join("; "); // Join CSP directives
 
 // Must run at module load, before app.whenReady() — Electron requires
