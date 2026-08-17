@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import type { SortDirection, SortField } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
 
+export interface PendingAction {
+  /** The parent directory for new-folder; the item being renamed for rename. */
+  target: string;
+  kind: 'new-folder' | 'rename';
+}
+
 export interface DiskState {
   /** Absolute paths of folders the user has opened. */
   roots: string[];
@@ -11,6 +17,7 @@ export interface DiskState {
   expanded: Record<string, boolean>;
   selectedPath: string | null;
   isQuickLookOpen: boolean;
+  pendingAction: PendingAction | null;
   sort: { field: SortField; direction: SortDirection };
   filter: string;
   loading: { isLoading: boolean; error: string | null };
@@ -28,6 +35,9 @@ export interface DiskActions {
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
+  beginNewFolder: (parentDir: string) => void;
+  beginRename: (target: string) => void;
+  cancelAction: () => void;
   /** Selecting the active field flips direction; a new field starts ascending. */
   setSort: (field: SortField) => void;
   setFilter: (value: string) => void;
@@ -42,6 +52,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   expanded: {},
   selectedPath: null,
   isQuickLookOpen: false,
+  pendingAction: null,
   sort: { field: 'name', direction: 'asc' },
   filter: '',
   loading: { isLoading: false, error: null },
@@ -154,6 +165,9 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   openQuickLook: () => set({ isQuickLookOpen: true }),
   closeQuickLook: () => set({ isQuickLookOpen: false }),
   toggleQuickLook: () => set((state) => ({ isQuickLookOpen: !state.isQuickLookOpen })),
+  beginNewFolder: (parentDir) => set({ pendingAction: { kind: 'new-folder', target: parentDir } }),
+  beginRename: (target) => set({ pendingAction: { kind: 'rename', target } }),
+  cancelAction: () => set({ pendingAction: null }),
   setSort: (field) =>
     set((state) => ({
       sort:

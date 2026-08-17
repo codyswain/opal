@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowUp, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, FolderPlus, Search, X } from 'lucide-react';
 import type { SortField } from '@/common/sortEntries';
 import { useDiskStore } from '../store/diskStore';
 
@@ -10,7 +10,7 @@ const SORT_FIELDS: { field: SortField; label: string }[] = [
   { field: 'kind', label: 'Kind' },
 ];
 
-export const Toolbar: React.FC = () => {
+export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const sort = useDiskStore((state) => state.sort);
   const setSort = useDiskStore((state) => state.setSort);
   const filter = useDiskStore((state) => state.filter);
@@ -32,6 +32,16 @@ export const Toolbar: React.FC = () => {
 
   return (
     <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
+      <button
+        type="button"
+        onClick={() => useDiskStore.getState().beginNewFolder(dirPath)}
+        aria-label="New folder"
+        title="New folder"
+        data-testid="toolbar-new-folder"
+        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <FolderPlus className="h-4 w-4" />
+      </button>
       <div className="relative shrink-0">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
         <input

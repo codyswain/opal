@@ -7,6 +7,7 @@ import { DetailPane } from './detail/DetailPane';
 import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
+import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
 
 /** The detail pane always shows a directory: a selected file shows its parent. */
@@ -89,6 +90,17 @@ export const DiskExplorer: React.FC = () => {
         return;
       }
 
+      if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+        // Enter renames the selection - Finder's binding. Not while typing.
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+        if (!selectedPath) return;
+        event.preventDefault();
+        useDiskStore.getState().beginRename(selectedPath);
+        return;
+      }
+
       if (event.code !== 'Space') return;
 
       // Never hijack Space while the user is typing — the filter box in Task 9
@@ -134,7 +146,7 @@ export const DiskExplorer: React.FC = () => {
           <>
             <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
               <Breadcrumb dirPath={activeDirectory} />
-              <Toolbar />
+              <Toolbar dirPath={activeDirectory} />
             </div>
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div className="min-w-0 flex-1 overflow-hidden">
@@ -152,6 +164,7 @@ export const DiskExplorer: React.FC = () => {
         )}
       </section>
       <QuickLook entry={selectedEntry} />
+      <NameDialog />
     </div>
   );
 };

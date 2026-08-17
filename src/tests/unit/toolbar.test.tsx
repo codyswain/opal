@@ -11,14 +11,14 @@ beforeEach(() => {
   useDiskStore.setState({
     sort: { field: 'name', direction: 'asc' },
     filter: '',
-    viewMode: null,
+    pendingAction: null,
   });
 });
 
 describe('Toolbar sorting', () => {
   it('changes the sort field', async () => {
     const user = userEvent.setup();
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     await user.click(screen.getByTestId('sort-size'));
     expect(useDiskStore.getState().sort).toEqual({
@@ -29,7 +29,7 @@ describe('Toolbar sorting', () => {
 
   it('flips direction when the active field is chosen again', async () => {
     const user = userEvent.setup();
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     await user.click(screen.getByTestId('sort-name'));
     expect(useDiskStore.getState().sort.direction).toBe('desc');
@@ -39,16 +39,27 @@ describe('Toolbar sorting', () => {
   });
 
   it('marks the active sort field', () => {
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
     expect(screen.getByTestId('sort-name')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('sort-size')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('starts a new-folder action for the current directory', async () => {
+    const user = userEvent.setup();
+    render(<Toolbar dirPath="/V" />);
+
+    await user.click(screen.getByTestId('toolbar-new-folder'));
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'new-folder',
+      target: '/V',
+    });
   });
 });
 
 describe('Toolbar filtering', () => {
   it('updates the filter as the user types', async () => {
     const user = userEvent.setup();
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     await user.type(screen.getByTestId('filter-input'), 'img');
     expect(useDiskStore.getState().filter).toBe('img');
@@ -57,7 +68,7 @@ describe('Toolbar filtering', () => {
   it('clears the filter with the clear button', async () => {
     const user = userEvent.setup();
     useDiskStore.setState({ filter: 'img' });
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     await user.click(screen.getByTestId('filter-clear'));
     expect(useDiskStore.getState().filter).toBe('');
@@ -66,21 +77,21 @@ describe('Toolbar filtering', () => {
   it('clears the filter on Escape', async () => {
     const user = userEvent.setup();
     useDiskStore.setState({ filter: 'img' });
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     await user.type(screen.getByTestId('filter-input'), '{Escape}');
     expect(useDiskStore.getState().filter).toBe('');
   });
 
   it('hides the clear button when the filter is empty', () => {
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
     expect(screen.queryByTestId('filter-clear')).not.toBeInTheDocument();
   });
 
   it('focuses and selects the filter input on Cmd+F', async () => {
     const user = userEvent.setup();
     useDiskStore.setState({ filter: 'img' });
-    render(<Toolbar />);
+    render(<Toolbar dirPath="/V" />);
 
     const input = screen.getByTestId('filter-input') as HTMLInputElement;
     await user.click(screen.getByTestId('sort-size'));

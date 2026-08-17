@@ -22,7 +22,11 @@ let removeRoot: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   useDiskStore.setState({
-    roots: [], listings: {}, expanded: {}, selectedPath: null,
+    roots: [],
+    listings: {},
+    expanded: {},
+    selectedPath: null,
+    pendingAction: null,
     sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
@@ -116,6 +120,31 @@ describe('useDiskStore', () => {
   it('selects an entry', () => {
     useDiskStore.getState().select('/Vault/note.md');
     expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
+  });
+
+  it('starts a new-folder action for the current directory', () => {
+    useDiskStore.getState().beginNewFolder(ROOT);
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'new-folder',
+      target: ROOT,
+    });
+  });
+
+  it('starts a rename action for the selected item', () => {
+    useDiskStore.getState().beginRename('/Vault/note.md');
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'rename',
+      target: '/Vault/note.md',
+    });
+  });
+
+  it('cancels a pending action', () => {
+    useDiskStore.setState({
+      pendingAction: { kind: 'rename', target: '/Vault/note.md' },
+    });
+
+    useDiskStore.getState().cancelAction();
+    expect(useDiskStore.getState().pendingAction).toBeNull();
   });
 
   it('clears a recorded error', async () => {

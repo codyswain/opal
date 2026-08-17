@@ -45,6 +45,7 @@ beforeEach(() => {
     expanded: { [ROOT]: true },
     isQuickLookOpen: false,
     selectedPath: null,
+    pendingAction: null,
     sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
@@ -157,5 +158,23 @@ describe('DiskExplorer', () => {
 
     fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
     expect(useDiskStore.getState().selectedPath).toBe(ROOT);
+  });
+
+  it('starts rename on bare Enter for the selected item', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
+      },
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'rename',
+      target: '/Vault/note.md',
+    });
   });
 });
