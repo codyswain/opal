@@ -56,6 +56,7 @@ beforeEach(() => {
     expanded: { [ROOT]: true },
     isQuickLookOpen: false,
     selectedPath: null,
+    selectedPaths: [],
     pendingAction: null,
     pendingDelete: null,
     sort: { field: 'name', direction: 'asc' },
@@ -254,5 +255,53 @@ describe('DiskExplorer', () => {
     });
     fireEvent.keyDown(window, { key: 'Backspace' });
     expect(useDiskStore.getState().pendingDelete).toBeNull();
+  });
+
+  it('selects every visible entry on Cmd+A', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [
+          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
+          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
+        ],
+      },
+      selectedPath: `${ROOT}/alpha.md`,
+      selectedPaths: [`${ROOT}/alpha.md`],
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId(`disk-tree-item-${ROOT}/alpha.md`));
+    fireEvent.keyDown(window, { key: 'a', metaKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${ROOT}/beta.md`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([
+      `${ROOT}/alpha.md`,
+      `${ROOT}/beta.md`,
+    ]);
+  });
+
+  it('does not hijack Cmd+A while typing', () => {
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [
+          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
+          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
+        ],
+      },
+      selectedPath: `${ROOT}/alpha.md`,
+      selectedPaths: [`${ROOT}/alpha.md`],
+    });
+
+    render(<DiskExplorer />);
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+
+    fireEvent.keyDown(input, { key: 'a', metaKey: true });
+
+    expect(useDiskStore.getState().selectedPaths).toEqual([`${ROOT}/alpha.md`]);
+    input.remove();
   });
 });

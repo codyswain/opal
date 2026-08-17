@@ -16,6 +16,7 @@ export interface DiskState {
   /** Directory path -> whether it is expanded in the tree. */
   expanded: Record<string, boolean>;
   selectedPath: string | null;
+  selectedPaths: string[];
   isQuickLookOpen: boolean;
   pendingAction: PendingAction | null;
   pendingDelete: string | null;
@@ -34,6 +35,9 @@ export interface DiskActions {
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   select: (targetPath: string | null) => void;
+  toggleSelected: (targetPath: string) => void;
+  selectRange: (entries: DiskEntry[], targetPath: string) => void;
+  clearSelection: () => void;
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
@@ -56,6 +60,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   listings: {},
   expanded: {},
   selectedPath: null,
+  selectedPaths: [],
   isQuickLookOpen: false,
   pendingAction: null,
   pendingDelete: null,
@@ -121,6 +126,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       const expanded = Object.fromEntries(
         Object.entries(state.expanded).filter(([key]) => !isAtOrBelow(rootPath, key))
       );
+      const selectedPaths = state.selectedPaths.filter((path) => !isAtOrBelow(rootPath, path));
       const selectionSurvives =
         state.selectedPath !== null && !isAtOrBelow(rootPath, state.selectedPath);
 
@@ -128,7 +134,8 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
         roots: state.roots.filter((root) => root !== rootPath),
         listings,
         expanded,
-        selectedPath: selectionSurvives ? state.selectedPath : null,
+        selectedPath: selectionSurvives ? state.selectedPath : selectedPaths[selectedPaths.length - 1] ?? null,
+        selectedPaths,
       };
     });
   },
@@ -172,8 +179,44 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   select: (targetPath) =>
     set((state) => ({
       selectedPath: targetPath,
+      selectedPaths: targetPath === null ? [] : [targetPath],
       isQuickLookOpen: targetPath === null ? false : state.isQuickLookOpen,
     })),
+
+  toggleSelected: (targetPath) =>
+    set((state) => {
+      const isSelected = state.selectedPaths.includes(targetPath);
+      const next = isSelected
+        ? state.selectedPaths.filter((candidate) => candidate !== targetPath)
+        : [...state.selectedPaths, targetPath];
+
+      return {
+        selectedPaths: next,
+        // The anchor follows the most recent addition; removing the anchor
+        // leaves the last remaining item, or nothing.
+        selectedPath: isSelected ? next[next.length - 1] ?? null : targetPath,
+      };
+    }),
+
+  selectRange: (entries, targetPath) =>
+    set((state) => {
+      const anchor = state.selectedPath;
+      if (!anchor) return { selectedPath: targetPath, selectedPaths: [targetPath] };
+
+      const from = entries.findIndex((candidate) => candidate.path === anchor);
+      const to = entries.findIndex((candidate) => candidate.path === targetPath);
+      if (from === -1 || to === -1) {
+        return { selectedPath: targetPath, selectedPaths: [targetPath] };
+      }
+
+      const [start, end] = from <= to ? [from, to] : [to, from];
+      return {
+        selectedPath: targetPath,
+        selectedPaths: entries.slice(start, end + 1).map((candidate) => candidate.path),
+      };
+    }),
+
+  clearSelection: () => set({ selectedPath: null, selectedPaths: [], isQuickLookOpen: false }),
 
   openQuickLook: () => set({ isQuickLookOpen: true }),
   closeQuickLook: () => set({ isQuickLookOpen: false }),

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, FolderOpen, SearchX } from 'lucide-react';
 import { FixedSizeGrid, FixedSizeList } from 'react-window';
 import { filterEntries } from '@/common/filterEntries';
@@ -33,8 +33,8 @@ const TILE = {
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
-  const select = useDiskStore((state) => state.select);
   const selectedPath = useDiskStore((state) => state.selectedPath);
+  const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
@@ -78,6 +78,13 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     ? Math.max(1, Math.floor(viewport.width / tile.min))
     : 1;
   const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
+
+  const handleClick = useCallback((event: React.MouseEvent, target: DiskEntry) => {
+    const store = useDiskStore.getState();
+    if (event.shiftKey) store.selectRange(visibleEntries, target.path);
+    else if (event.metaKey || event.ctrlKey) store.toggleSelected(target.path);
+    else store.select(target.path);
+  }, [visibleEntries]);
 
   useEffect(() => {
     const index = visibleEntries.findIndex((candidate) => candidate.path === selectedPath);
@@ -173,8 +180,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
                 <div style={style} className="p-2">
                   <GalleryTile
                     entry={item}
-                    isSelected={selectedPath === item.path}
-                    onSelect={() => select(item.path)}
+                    isSelected={selectedPaths.includes(item.path)}
+                    onSelect={(event) => handleClick(event, item)}
                   />
                 </div>
               );
@@ -204,8 +211,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
                 <div style={style}>
                   <ListRow
                     entry={item}
-                    isSelected={selectedPath === item.path}
-                    onSelect={() => select(item.path)}
+                    isSelected={selectedPaths.includes(item.path)}
+                    onSelect={(event) => handleClick(event, item)}
                   />
                 </div>
               );
@@ -241,7 +248,7 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
 interface EntryProps {
   entry: DiskEntry;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {

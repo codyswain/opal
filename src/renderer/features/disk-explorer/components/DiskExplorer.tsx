@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { FolderPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { filterEntries } from '@/common/filterEntries';
+import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { QuickLook } from './QuickLook';
@@ -29,6 +31,8 @@ export const DiskExplorer: React.FC = () => {
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const selectedPath = useDiskStore((state) => state.selectedPath);
+  const sort = useDiskStore((state) => state.sort);
+  const filter = useDiskStore((state) => state.filter);
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
   const invalidate = useDiskStore((state) => state.invalidate);
@@ -50,6 +54,14 @@ export const DiskExplorer: React.FC = () => {
   }, [roots, listings]);
 
   const activeDirectory = directoryForSelection(selectedPath, isDirectory, roots);
+  const visibleEntries = useMemo(() => {
+    if (!activeDirectory) return [];
+    return sortEntries(
+      filterEntries(listings[activeDirectory] ?? [], filter),
+      sort.field,
+      sort.direction
+    );
+  }, [activeDirectory, filter, listings, sort.direction, sort.field]);
 
   // The selected entry object, found in whichever cached listing contains it.
   // The tree can only surface a path it has already listed, so no IPC is needed.
@@ -134,6 +146,28 @@ export const DiskExplorer: React.FC = () => {
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'BUTTON' ||
+          target?.isContentEditable ||
+          useDiskStore.getState().pendingAction !== null
+        ) {
+          return;
+        }
+        if (visibleEntries.length === 0) return;
+
+        event.preventDefault();
+        useDiskStore.setState({
+          selectedPath: visibleEntries[visibleEntries.length - 1]?.path ?? null,
+          selectedPaths: visibleEntries.map((entry) => entry.path),
+        });
+        return;
+      }
+
       if (event.code !== 'Space') return;
 
       // Never hijack Space while the user is typing — the filter box in Task 9
@@ -149,7 +183,7 @@ export const DiskExplorer: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDirectory, openQuickLook, roots, select, selectedEntry, toggleQuickLook]);
+  }, [activeDirectory, openQuickLook, roots, select, selectedEntry, toggleQuickLook, visibleEntries]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">

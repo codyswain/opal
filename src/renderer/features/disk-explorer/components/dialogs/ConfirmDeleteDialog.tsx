@@ -4,6 +4,7 @@ import { useDiskStore } from '../../store/diskStore';
 
 export const ConfirmDeleteDialog: React.FC = () => {
   const pendingDelete = useDiskStore((state) => state.pendingDelete);
+  const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const cancelDelete = useDiskStore((state) => state.cancelDelete);
 
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,8 @@ export const ConfirmDeleteDialog: React.FC = () => {
 
   if (!pendingDelete) return null;
 
+  const deletePaths = selectedPaths.length > 1 ? selectedPaths : [pendingDelete];
+  const isBulkDelete = deletePaths.length > 1;
   const name = pendingDelete.split('/').pop() ?? pendingDelete;
 
   const confirm = async () => {
@@ -35,14 +38,16 @@ export const ConfirmDeleteDialog: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
 
-    const result = await window.diskAPI.trash(pendingDelete);
-    if (!result.success) {
-      setError(result.error);
-      setIsSubmitting(false);
-      return;
+    for (const targetPath of deletePaths) {
+      const result = await window.diskAPI.trash(targetPath);
+      if (!result.success) {
+        setError(result.error);
+        setIsSubmitting(false);
+        return;
+      }
     }
 
-    useDiskStore.getState().select(null);
+    useDiskStore.getState().clearSelection();
     cancelDelete();
   };
 
@@ -62,7 +67,9 @@ export const ConfirmDeleteDialog: React.FC = () => {
         <div className="flex items-start gap-3">
           <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0">
-            <h2 className="text-base font-medium">Move "{name}" to Trash?</h2>
+            <h2 className="text-base font-medium">
+              {isBulkDelete ? `Move ${deletePaths.length} items to Trash?` : `Move "${name}" to Trash?`}
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               You can restore it from the Trash.
             </p>

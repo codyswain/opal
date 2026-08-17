@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -29,6 +29,7 @@ beforeEach(() => {
     listings: { [PHOTOS]: listing },
     expanded: {},
     selectedPath: null,
+    selectedPaths: [],
     sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
@@ -114,6 +115,41 @@ describe('DiskFolderView', () => {
     await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
 
     expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/a.jpg`);
+  });
+
+  it('adds to the selection on Cmd-click', async () => {
+    const user = userEvent.setup();
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const first = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
+
+    await user.click(first);
+    const second = await screen.findByTestId('disk-folder-entry-/Vault/Photos/b.png');
+    fireEvent.click(second, { metaKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/b.png`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([
+      `${PHOTOS}/a.jpg`,
+      `${PHOTOS}/b.png`,
+    ]);
+  });
+
+  it('selects a range on Shift-click', async () => {
+    const user = userEvent.setup();
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const first = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
+
+    await user.click(first);
+    const last = await screen.findByTestId('disk-folder-entry-/Vault/Photos/notes.md');
+    fireEvent.click(last, { shiftKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/notes.md`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([
+      `${PHOTOS}/a.jpg`,
+      `${PHOTOS}/b.png`,
+      `${PHOTOS}/notes.md`,
+    ]);
   });
 
   it('defaults a folder with no images to list mode', async () => {

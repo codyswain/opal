@@ -8,7 +8,12 @@ import { installDiskApi } from '@/tests/helpers/diskApi';
 
 beforeEach(() => {
   installDiskApi();
-  useDiskStore.setState({ pendingDelete: null, loading: { isLoading: false, error: null } });
+  useDiskStore.setState({
+    pendingDelete: null,
+    selectedPath: null,
+    selectedPaths: [],
+    loading: { isLoading: false, error: null },
+  });
 });
 
 describe('ConfirmDeleteDialog', () => {
@@ -71,5 +76,56 @@ describe('ConfirmDeleteDialog', () => {
       expect(screen.getByTestId('confirm-delete-error')).toHaveTextContent('opened folder')
     );
     expect(useDiskStore.getState().pendingDelete).not.toBeNull();
+  });
+
+  it('trashes a multi-selection in order and updates the title', async () => {
+    const user = userEvent.setup();
+    const trash = vi.fn(async () => ({ success: true as const, data: undefined }));
+    installDiskApi({ trash });
+    useDiskStore.setState({
+      pendingDelete: '/V/a.md',
+      selectedPath: '/V/b.md',
+      selectedPaths: ['/V/a.md', '/V/b.md', '/V/c.md'],
+    });
+    render(<ConfirmDeleteDialog />);
+
+    expect(screen.getByTestId('confirm-delete')).toHaveTextContent('Move 3 items to Trash?');
+
+    await user.click(screen.getByTestId('confirm-delete-confirm'));
+
+    await waitFor(() => expect(trash).toHaveBeenCalledTimes(3));
+    expect(trash.mock.calls).toEqual([
+      ['/V/a.md'],
+      ['/V/b.md'],
+      ['/V/c.md'],
+    ]);
+    expect(useDiskStore.getState().pendingDelete).toBeNull();
+    expect(useDiskStore.getState().selectedPath).toBeNull();
+    expect(useDiskStore.getState().selectedPaths).toEqual([]);
+  });
+
+  it('stops a multi-delete on the first failure', async () => {
+    const user = userEvent.setup();
+    const trash = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true as const, data: undefined })
+      .mockResolvedValueOnce({ success: false as const, error: 'Permission denied' });
+    installDiskApi({ trash });
+    useDiskStore.setState({
+      pendingDelete: '/V/a.md',
+      selectedPaths: ['/V/a.md', '/V/b.md', '/V/c.md'],
+    });
+    render(<ConfirmDeleteDialog />);
+
+    await user.click(screen.getByTestId('confirm-delete-confirm'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('confirm-delete-error')).toHaveTextContent('Permission denied')
+    );
+    expect(trash.mock.calls).toEqual([
+      ['/V/a.md'],
+      ['/V/b.md'],
+    ]);
+    expect(useDiskStore.getState().pendingDelete).toBe('/V/a.md');
   });
 });
