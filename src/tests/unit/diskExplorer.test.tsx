@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -30,6 +30,7 @@ beforeEach(() => {
       [ROOT]: [entry({ path: PHOTOS, name: 'Photos', kind: 'directory', isDirectory: true })],
     },
     expanded: { [ROOT]: true },
+    isQuickLookOpen: false,
     selectedPath: null,
     loading: { isLoading: false, error: null },
   });
@@ -75,5 +76,21 @@ describe('DiskExplorer', () => {
   it('offers an open-folder action', () => {
     render(<DiskExplorer />);
     expect(screen.getByTestId('disk-explorer-open-folder')).toBeInTheDocument();
+  });
+
+  it('only toggles quick look on Space when a selection exists', async () => {
+    const user = userEvent.setup();
+    render(<DiskExplorer />);
+
+    fireEvent.keyDown(window, { code: 'Space' });
+    expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
+    expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.keyDown(window, { code: 'Space' });
+
+    expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
+    expect(screen.getByTestId('quick-look')).toBeInTheDocument();
   });
 });
