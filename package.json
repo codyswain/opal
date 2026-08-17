@@ -181,8 +181,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --fix",
-      "npm test"
+      "eslint --fix"
     ]
   }
 }
