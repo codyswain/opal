@@ -51,11 +51,11 @@ describe('DiskFolderView', () => {
     await waitFor(() => expect(screen.getByTestId('disk-folder-gallery')).toBeInTheDocument());
   });
 
-  it('renders images through the opal-file protocol, never as data URLs', async () => {
+  it('renders images through the thumbnail protocol, never as data URLs', async () => {
     render(<DiskFolderView dirPath={PHOTOS} />);
 
     const image = await screen.findByAltText('a.jpg');
-    expect(image.getAttribute('src')).toMatch(/^opal-file:\/\//);
+    expect(image.getAttribute('src')).toMatch(/^opal-thumb:\/\//);
     expect(image.getAttribute('src')).not.toMatch(/^data:/);
   });
 

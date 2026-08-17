@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -22,10 +22,13 @@ import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
+import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import {
   OPAL_FILE_SCHEME,
+  OPAL_THUMB_SCHEME,
   registerOpalFileScheme,
   registerOpalFileProtocol,
+  registerOpalThumbProtocol,
 } from "@/main/protocol/opalFile";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -47,7 +50,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
+  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}: ${OPAL_THUMB_SCHEME}:`,
   "font-src 'self' data:",
   `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
@@ -204,6 +207,15 @@ const rootRegistry = new RootRegistry({
   ),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
+const thumbnailService = new ThumbnailService({
+  registry: rootRegistry,
+  cacheDir: path.join(
+    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
+    "thumbnails"
+  ),
+  createThumbnail: (sourcePath, maxSize) =>
+    nativeImage.createThumbnailFromPath(sourcePath, maxSize),
+});
 const diskHandlers = new DiskHandlers({
   ipc: ipcMain,
   registry: rootRegistry,
@@ -237,8 +249,9 @@ app.whenReady().then(async () => {
 
     await rootRegistry.load();
     registerOpalFileProtocol({ registry: rootRegistry });
+    registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
-    log.info("Disk explorer IPC handlers and opal-file protocol registered");
+    log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");

@@ -5,7 +5,7 @@ import { formatBytes } from '@/common/formatBytes';
 import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
-import { toOpalFileUrl } from '@/common/opalFileUrl';
+import { toOpalThumbUrl } from '@/common/opalThumbUrl';
 import { useGridNavigation } from '../hooks/useGridNavigation';
 
 type ViewMode = 'gallery' | 'list';
@@ -148,6 +148,12 @@ interface EntryProps {
 
 const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
   const Icon = ICONS[entry.kind];
+  const [thumbFailed, setThumbFailed] = useState(false);
+
+  // Anything the OS can render a preview for gets a thumbnail, not just images
+  // — on macOS that includes PDFs and video first-frames.
+  const canThumbnail =
+    !entry.isDirectory && ['image', 'pdf', 'video'].includes(entry.kind) && !thumbFailed;
 
   return (
     <button
@@ -162,12 +168,13 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
       className={`flex flex-col gap-1.5 text-left rounded-lg p-1.5 min-w-0 ${isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'}`}
     >
       <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
-        {entry.kind === 'image' ? (
+        {canThumbnail ? (
           <img
-            src={toOpalFileUrl(entry.path)}
+            src={toOpalThumbUrl(entry.path)}
             alt={entry.name}
             loading="lazy"
             decoding="async"
+            onError={() => setThumbFailed(true)}
             className="w-full h-full object-cover"
           />
         ) : (
