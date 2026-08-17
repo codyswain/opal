@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { FolderPlus, X } from 'lucide-react';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
@@ -25,6 +26,7 @@ export const DiskExplorer: React.FC = () => {
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
+  const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
   // A path is a directory if it is a root, or if any cached listing describes
   // it as one. That is enough without another IPC round-trip, because the tree
@@ -51,6 +53,24 @@ export const DiskExplorer: React.FC = () => {
     }
     return null;
   }, [selectedPath, listings]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return;
+
+      // Never hijack Space while the user is typing — the filter box in Task 9
+      // and the rename dialog in Task 15 both need it.
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+
+      event.preventDefault();
+      toggleQuickLook();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleQuickLook]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -91,6 +111,7 @@ export const DiskExplorer: React.FC = () => {
           </div>
         )}
       </section>
+      <QuickLook entry={selectedEntry} />
     </div>
   );
 };

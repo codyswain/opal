@@ -9,6 +9,7 @@ export interface DiskState {
   /** Directory path -> whether it is expanded in the tree. */
   expanded: Record<string, boolean>;
   selectedPath: string | null;
+  isQuickLookOpen: boolean;
   loading: { isLoading: boolean; error: string | null };
 }
 
@@ -19,6 +20,9 @@ export interface DiskActions {
   loadDirectory: (dirPath: string, options?: { force?: boolean }) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   select: (targetPath: string | null) => void;
+  openQuickLook: () => void;
+  closeQuickLook: () => void;
+  toggleQuickLook: () => void;
   clearError: () => void;
 }
 
@@ -29,6 +33,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   listings: {},
   expanded: {},
   selectedPath: null,
+  isQuickLookOpen: false,
   loading: { isLoading: false, error: null },
 
   loadRoots: async () => {
@@ -120,7 +125,15 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     if (willExpand) await get().loadDirectory(dirPath);
   },
 
-  select: (targetPath) => set({ selectedPath: targetPath }),
+  select: (targetPath) =>
+    set((state) => ({
+      selectedPath: targetPath,
+      isQuickLookOpen: targetPath === null ? false : state.isQuickLookOpen,
+    })),
+
+  openQuickLook: () => set({ isQuickLookOpen: true }),
+  closeQuickLook: () => set({ isQuickLookOpen: false }),
+  toggleQuickLook: () => set((state) => ({ isQuickLookOpen: !state.isQuickLookOpen })),
 
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));
