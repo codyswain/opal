@@ -1,8 +1,13 @@
 # Opal Vault Architecture — Design Spec
 
 **Date:** 2026-08-16
-**Status:** Draft for review
+**Status:** Superseded in part by Revision 2 (2026-08-17) — read that section first
 **Scope:** The storage-model rewrite that turns Opal into a metadata layer + UX over a real filesystem. Sub-project 1 (vault engine + migration) is specified in detail; sub-projects 2–5 are outlined for sequencing.
+
+> **⚠️ Read [Revision 2](#revision-2--2026-08-17) before implementing.** The technical
+> decisions in Part III still hold. The *product framing* and *build order* in Part I
+> changed after further design work: Opal browses the real filesystem rather than owning
+> a single vault, and the SQLite→markdown migration is demoted from first to fifth.
 
 ---
 
@@ -226,6 +231,107 @@ Open (deferred, non-blocking): folder-embed syntax details; property schema conv
 
 ---
 
+## Revision 2 — 2026-08-17
+
+Further design dialogue changed the product framing. Part III's technical decisions
+survive intact; Part I's positioning and the build order in "five sub-projects" do not.
+
+### What the product actually is
+
+The earlier framing — "a better Obsidian" — produced a design where Opal *owns* a vault
+and everything valuable lives inside it. The sharper framing:
+
+> **A fast, local Notion that is a view into your existing filesystem.**
+> Closer to a better Finder than to a notes app.
+
+Notion's real feature is the database view: a collection of things carrying properties,
+flippable between table / gallery / board / list, filterable and sortable. Notion's fatal
+flaw is that everything must be uploaded *into* Notion, and every interaction round-trips
+to a server. Opal's version: **the collection is a folder that already exists on your
+disk.** Files are the rows, frontmatter and sidecars are the properties, Opal supplies the
+views. Nothing is uploaded, nothing is locked in, and it is fast because it is local.
+
+Notes remain in scope, but as one modality among many rather than the center.
+
+### Browse everything, index what you mark
+
+Opal **browses** anywhere — navigate the real filesystem like Finder, with no crawl and no
+precondition. Opal **indexes** only what the user explicitly marks. Marked regions are
+where the expensive machinery lights up: full-text search, embeddings, chat, backlinks.
+
+This is not a compromise. Scoped retrieval is better RAG than total retrieval; indexing an
+entire disk mostly means retrieving irrelevant results with confidence. It also means the
+app is useful from the first second, before anything has been indexed at all.
+
+### The distinction that governs storage
+
+"Metadata layer" was doing two jobs with opposite requirements. They are now separated by
+name, and the separation is a hard rule:
+
+| | **Authored** | **Derived** |
+|---|---|---|
+| Examples | tags, annotations, links you drew, view config | embeddings, FTS, thumbnails, extracted text, backlinks |
+| Recomputable | **No — irreplaceable** | Yes, always |
+| Lives in | next to the file (frontmatter / `*.opal.yaml`) | `.opal/cache/`, gitignored |
+| On loss | data loss | rebuild it |
+
+Putting authored data in the index makes the index precious, which reinvents Notion.
+Putting derived data on disk litters the tree and bloats backups. The storage *locations*
+in Part III §3.3 and §3.5 are therefore fixed now, on day one, even though the *feature
+set* built on top is deliberately left to grow from use. Format is expensive to change
+later; features are not.
+
+### New architectural decisions
+
+- **Allowed roots.** Opal holds an explicit list of folders the user has opened. Every
+  filesystem IPC call and every asset request is validated against it. Without this, a
+  compromised renderer reads the entire disk. Roots persist across restarts as JSON in
+  `userData` (not `electron-store` — its v10 ESM-only packaging is a build risk in the
+  main-process bundle, and the need is a dozen lines of `fs`).
+- **Assets stream, never serialize.** A custom `opal-file://` protocol registered via
+  Electron's `protocol.handle` lets `<img src>` and `<video src>` read straight off disk.
+  This replaces the current `syncAPI.getImageData` path, which reads a file, base64-encodes
+  it (+33%), ships it across the process boundary as a string, and decodes it in the
+  renderer — unusable for a folder of photos, and directly opposed to the "fast" premise.
+  The scheme is registered as `standard`, `secure`, `stream`, `supportFetchAPI`,
+  `corsEnabled`, and added to the CSP `img-src`/`media-src` rather than bypassing CSP.
+- **Directory reads are lazy.** Children are read on expand. No recursive walk on open.
+- **Custom rendered blocks live in the file,** as fenced blocks with a language tag
+  (```` ```opal-album ````, YAML body). They parse trivially, hold arbitrary structure,
+  travel inside the document, and degrade to a legible code block in GitHub, Obsidian, and
+  any other renderer. This is how Mermaid and Dataview solve the same problem. Rejected:
+  storing block definitions in SQLite (separates definition from document, so the file dies
+  on any other machine) and HTML-comment carriers (degrade to invisible).
+- **Note files keep the `.md` extension.** A custom extension (`.mdo` was considered)
+  grants no syntax freedom that `.md` lacks — Obsidian ships wikilinks, embeds, callouts,
+  and block refs inside plain `.md` — while forfeiting GitHub rendering of the pushed
+  vault, default agent/RAG tooling that filters `*.md`, Quick Look, and the ability to open
+  the tree in another editor. A genuinely non-markdown data type would earn its own
+  extension later, the way Obsidian's `.canvas` does.
+- **Disk wins.** SQLite may cache anything, including parsed ASTs keyed by content hash,
+  but when cache and disk disagree the disk is authoritative and the cache is discarded.
+  Two caches is an optimization; two writable truths is a reconciler that must stay correct
+  forever. `git pull` rewrites mtimes to checkout time, so a reconciler's primary freshness
+  signal is unreliable exactly when snapshots are restored — the case that matters most.
+
+### Revised build order
+
+| # | Slice | Outcome | Status |
+|---|-------|---------|--------|
+| 1 | **Disk explorer** | Open a real folder; lazy tree; `opal-file://` streaming; gallery view. Read-only. | **Next** |
+| 2 | Metadata write layer | Sidecars + frontmatter, format per §3.3. Tag and annotate anything. | |
+| 3 | Persisted views | Per-folder view config (gallery/table/list, sort, columns) stored as authored metadata. | |
+| 4 | Markdown editing on disk | TipTap as a view over on-disk `.md`; round-trip harness per §3.10 gates this. | |
+| 5 | Migrate SQLite notes | The former sub-project 1, per §3.8. Demoted: existing notes work today. | |
+| 6 | Index, search, AI | Opt-in per marked root. FTS + content-hash embeddings per §3.5. | |
+| 7 | Git snapshots | The former sub-project 2, per §3.7. | |
+
+Slice 1 is read-only and additive: the existing virtual VFS keeps running untouched
+alongside it, so nothing regresses while the product thesis is tested. The retirements in
+§3.9 happen at slice 5, not before.
+
+---
+
 ## Appendix — Decision log
 
 | Decision | Choice | Alternatives considered |
@@ -239,3 +345,11 @@ Open (deferred, non-blocking): folder-embed syntax details; property schema conv
 | Git integration | System `git`/`git-lfs` CLI | isomorphic-git (no real LFS support); libgit2 bindings |
 | Snapshot cadence | Auto-commit debounced + background push | Manual push; full multi-device sync (deferred) |
 | AI positioning | Optional derived layer | AI-native core |
+| *Rev 2:* Product frame | Fast local Notion / better Finder over your real FS | Better Obsidian (notes-first) |
+| *Rev 2:* Filesystem scope | Browse anywhere, index only what's marked | Index a single owned vault; crawl everything |
+| *Rev 2:* Note extension | `.md` | `.mdo` (Opal-native) |
+| *Rev 2:* Custom blocks | Fenced ` ```opal-* ` blocks in the file | Definitions in SQLite; HTML-comment carriers |
+| *Rev 2:* Cache authority | Disk wins; cache is discardable | Bidirectional SQLite↔markdown reconciler |
+| *Rev 2:* Asset delivery | `opal-file://` streaming protocol | base64 data URLs over IPC (status quo — unusable at scale) |
+| *Rev 2:* Roots persistence | JSON in `userData` via `fs` | `electron-store` (ESM-only packaging risk) |
+| *Rev 2:* Build order | Disk explorer first, notes migration fifth | Notes migration first |
