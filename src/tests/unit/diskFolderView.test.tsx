@@ -65,6 +65,32 @@ describe('DiskFolderView', () => {
     expect(image).toHaveAttribute('loading', 'lazy');
   });
 
+  it('tries thumbnails again when the entry metadata changes', async () => {
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const image = await screen.findByAltText('a.jpg');
+    act(() => {
+      image.dispatchEvent(new Event('error'));
+    });
+
+    await waitFor(() => expect(screen.queryByAltText('a.jpg')).not.toBeInTheDocument());
+
+    act(() => {
+      useDiskStore.setState({
+        listings: {
+          [PHOTOS]: [
+            entry({ path: `${PHOTOS}/Raw`, name: 'Raw', kind: 'directory', isDirectory: true }),
+            entry({ path: `${PHOTOS}/a.jpg`, name: 'a.jpg', kind: 'image', size: 4096, mtimeMs: 2 }),
+            entry({ path: `${PHOTOS}/b.png`, name: 'b.png', kind: 'image', size: 4096 }),
+            entry({ path: `${PHOTOS}/notes.md`, name: 'notes.md', kind: 'markdown', size: 12 }),
+          ],
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByAltText('a.jpg')).toBeInTheDocument());
+  });
+
   it('shows every entry including folders and non-images', async () => {
     render(<DiskFolderView dirPath={PHOTOS} />);
     await waitFor(() => expect(screen.getByText('Raw')).toBeInTheDocument());

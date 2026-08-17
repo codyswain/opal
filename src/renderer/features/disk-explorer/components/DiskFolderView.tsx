@@ -150,6 +150,10 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
   const Icon = ICONS[entry.kind];
   const [thumbFailed, setThumbFailed] = useState(false);
 
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [entry.mtimeMs, entry.size]);
+
   // Anything the OS can render a preview for gets a thumbnail, not just images
   // — on macOS that includes PDFs and video first-frames.
   const canThumbnail =

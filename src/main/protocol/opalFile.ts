@@ -113,9 +113,9 @@ export function registerOpalThumbProtocol(deps: { thumbnails: ThumbnailService }
         status: 200,
         headers: {
           'Content-Type': 'image/png',
-          // The cache key already includes mtime and size, so a given URL's
-          // bytes never change and may be cached aggressively.
-          'Cache-Control': 'max-age=31536000, immutable',
+          // The URL stays path-based, so the browser must revalidate instead of
+          // assuming a thumbnail is immutable forever across source edits.
+          'Cache-Control': 'no-cache',
         },
       });
     } catch (error) {
