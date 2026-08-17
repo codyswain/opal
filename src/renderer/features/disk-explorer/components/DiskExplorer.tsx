@@ -1,0 +1,98 @@
+import React, { useMemo } from 'react';
+import { FolderPlus, X } from 'lucide-react';
+import { useDiskStore } from '../store/diskStore';
+import { DiskTree } from './DiskTree';
+import { DiskFolderView } from './DiskFolderView';
+
+/** The detail pane always shows a directory: a selected file shows its parent. */
+function directoryForSelection(
+  selectedPath: string | null,
+  isDirectory: (path: string) => boolean,
+  roots: string[]
+): string | null {
+  if (!selectedPath) return roots[0] ?? null;
+  if (isDirectory(selectedPath)) return selectedPath;
+
+  const parent = selectedPath.slice(0, selectedPath.lastIndexOf('/'));
+  return parent || roots[0] || null;
+}
+
+export const DiskExplorer: React.FC = () => {
+  const roots = useDiskStore((state) => state.roots);
+  const listings = useDiskStore((state) => state.listings);
+  const selectedPath = useDiskStore((state) => state.selectedPath);
+  const error = useDiskStore((state) => state.loading.error);
+  const openFolder = useDiskStore((state) => state.openFolder);
+
+  // A path is a directory if it is a root, or if any cached listing describes
+  // it as one. That is enough without another IPC round-trip, because the tree
+  // can only surface a path it has already listed.
+  const isDirectory = useMemo(() => {
+    const directories = new Set(roots);
+    for (const entries of Object.values(listings)) {
+      for (const entry of entries) {
+        if (entry.isDirectory) directories.add(entry.path);
+      }
+    }
+    return (candidate: string) => directories.has(candidate);
+  }, [roots, listings]);
+
+  const activeDirectory = directoryForSelection(selectedPath, isDirectory, roots);
+
+  return (
+    <div className="flex h-full w-full overflow-hidden">
+      <aside className="w-64 shrink-0 border-r border-border/60 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Files
+          </span>
+          <button
+            type="button"
+            onClick={() => void openFolder()}
+            aria-label="Open folder"
+            data-testid="disk-explorer-open-folder"
+            className="p-1 rounded hover:bg-muted text-muted-foreground"
+          >
+            <FolderPlus className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <DiskTree />
+        </div>
+      </aside>
+
+      <section className="flex-1 flex flex-col overflow-hidden">
+        {error && <ErrorBanner message={error} />}
+        {activeDirectory ? (
+          <DiskFolderView dirPath={activeDirectory} />
+        ) : (
+          <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
+            Open a folder to get started
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
+  const clearError = useDiskStore((state) => state.clearError);
+
+  return (
+    <div
+      role="alert"
+      data-testid="disk-explorer-error"
+      className="flex items-center gap-2 px-4 py-2 text-sm bg-destructive/10 text-destructive border-b border-destructive/20 shrink-0"
+    >
+      <span className="flex-1">{message}</span>
+      <button
+        type="button"
+        aria-label="Dismiss error"
+        onClick={clearError}
+        className="p-0.5 rounded hover:bg-destructive/20"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+};

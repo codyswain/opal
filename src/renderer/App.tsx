@@ -17,6 +17,7 @@ import { useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
+import { DiskExplorer, useDiskStore } from "@/renderer/features/disk-explorer";
 import { useSettingsStore } from "./store/settingsStore";
 
 const App: React.FC = () => {
@@ -71,6 +72,13 @@ const App: React.FC = () => {
         type: "paneToggle",
         keywords: ["pane", "toggle"],
         perform: toggleBottomPane,
+      },
+      {
+        id: "files.openFolder",
+        name: "Open Folder on Disk",
+        type: "navigation",
+        keywords: ["files", "folder", "open", "disk"],
+        perform: () => { void useDiskStore.getState().openFolder(); },
       },
     ];
 
@@ -128,6 +136,7 @@ const App: React.FC = () => {
                           />
                         }
                       />
+                      <Route path="/files" element={<DiskExplorer />} />
                     </Routes>
                   </main>
                 </div>
