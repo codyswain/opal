@@ -128,6 +128,32 @@ describe('FileWriter.rename', () => {
     expect(renamed.endsWith('Note.md')).toBe(true);
     expect(await readFile(renamed, 'utf-8')).toBe('# hello');
   });
+
+  it('treats a disappearing source as a collision when destination exists', async () => {
+    const source = path.join(root, 'note.md');
+    const destination = path.join(root, 'existing.md');
+    await writeFile(destination, 'existing');
+
+    const disappearingRegistry = {
+      assertAllowed: vi.fn(async (target: string) => {
+        const resolved = await registry.assertAllowed(target);
+        if (target === source) {
+          await rm(resolved, { force: true });
+        }
+        return resolved;
+      }),
+      list: () => registry.list(),
+    } as unknown as RootRegistry;
+
+    const raceWriter = new FileWriter({
+      registry: disappearingRegistry,
+      trashItem,
+      renameEntry: vi.fn(async () => undefined),
+    });
+
+    await expect(raceWriter.rename(source, 'existing.md')).rejects.toThrow(DestinationExistsError);
+    expect(await readFile(destination, 'utf-8')).toBe('existing');
+  });
 });
 
 describe('FileWriter.move', () => {

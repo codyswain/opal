@@ -152,17 +152,25 @@ async function assertMutableTarget(registry: RootRegistry, target: string): Prom
 }
 
 async function assertAbsent(target: string, source?: string): Promise<void> {
+  let targetInfo: Stats;
+
   try {
-    const targetInfo = await stat(target);
-    if (source) {
-      const sourceInfo = await stat(source);
-      if (isSameEntry(sourceInfo, targetInfo)) return;
-    }
+    targetInfo = await stat(target);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return;
     }
     throw error;
+  }
+
+  if (source) {
+    try {
+      const sourceInfo = await stat(source);
+      if (isSameEntry(sourceInfo, targetInfo)) return;
+    } catch {
+      // If the destination exists but the source cannot be stated anymore, the
+      // safe answer is still "destination occupied", never "destination free".
+    }
   }
 
   throw new DestinationExistsError(target);
