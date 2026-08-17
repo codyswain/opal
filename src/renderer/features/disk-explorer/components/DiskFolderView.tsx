@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File } from 'lucide-react';
+import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, FolderOpen, SearchX } from 'lucide-react';
 import { FixedSizeGrid, FixedSizeList } from 'react-window';
 import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
@@ -10,6 +10,8 @@ import { toOpalThumbUrl } from '@/common/opalThumbUrl';
 import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
 import { useGridNavigation } from '../hooks/useGridNavigation';
 import { useElementSize } from '../hooks/useElementSize';
+import { EmptyState } from './EmptyState';
+import { GallerySkeleton } from './Skeleton';
 
 type ViewMode = 'gallery' | 'list';
 
@@ -22,9 +24,11 @@ interface DiskFolderViewProps {
   dirPath: string;
 }
 
-const TILE_WIDTH = 172;
-const TILE_HEIGHT = 208;
 const ROW_HEIGHT = 40;
+const TILE = {
+  comfortable: { width: 172, height: 208, min: 160 },
+  compact: { width: 116, height: 144, min: 104 },
+} as const;
 
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const entries = useDiskStore((state) => state.listings[dirPath]);
@@ -34,16 +38,25 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
+  const density = useDiskStore((state) => state.density);
 
   const [mode, setMode] = useState<ViewMode | null>(null);
   const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
   const gridRef = useRef<FixedSizeGrid>(null);
   const listRef = useRef<FixedSizeList>(null);
+  const hasMountedRef = useRef(false);
 
   useEffect(() => { void loadDirectory(dirPath); }, [dirPath, loadDirectory]);
   // A filter carried into a new folder makes it look empty for no visible
   // reason. Clear it whenever the folder changes.
-  useEffect(() => { setFilter(''); }, [dirPath, setFilter]);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+
+    setFilter('');
+  }, [dirPath, setFilter]);
 
   // A folder that is mostly pictures wants to be looked at, not listed. The
   // user's explicit choice always wins once they make one.
@@ -58,10 +71,11 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     return sortEntries(filterEntries(entries, filter), sort.field, sort.direction);
   }, [entries, filter, sort.field, sort.direction]);
   const hasActiveFilter = filter.trim().length > 0;
+  const tile = TILE[density];
 
   const activeMode = mode ?? suggestedMode;
   const columns = activeMode === 'gallery'
-    ? Math.max(1, Math.floor(viewport.width / TILE_WIDTH))
+    ? Math.max(1, Math.floor(viewport.width / tile.min))
     : 1;
   const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
 
@@ -80,7 +94,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   }, [selectedPath, visibleEntries, activeMode, columns]);
 
   if (!entries) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+    return <GallerySkeleton />;
   }
 
   return (
@@ -104,9 +118,31 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
       {visibleEntries.length === 0 ? (
         <div
           data-testid={hasActiveFilter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
-          className="flex-1 grid place-items-center text-sm text-muted-foreground"
+          className="flex min-h-0 flex-1"
         >
-          {hasActiveFilter ? `No files matching “${filter}”` : 'This folder is empty'}
+          {hasActiveFilter ? (
+            <EmptyState
+              Icon={SearchX}
+              title={`No files matching “${filter}”`}
+              description="Try a different filter or clear it to see everything in this folder."
+              action={(
+                <button
+                  type="button"
+                  onClick={() => setFilter('')}
+                  data-testid="disk-folder-clear-filter"
+                  className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-colors duration-100 hover:opacity-90"
+                >
+                  Clear filter
+                </button>
+              )}
+            />
+          ) : (
+            <EmptyState
+              Icon={FolderOpen}
+              title="This folder is empty"
+              description="Add files here or open a different folder to keep browsing."
+            />
+          )}
         </div>
       ) : activeMode === 'gallery' ? (
         <div
@@ -120,8 +156,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
             ref={gridRef}
             columnCount={columns}
             rowCount={Math.ceil(visibleEntries.length / columns)}
-            columnWidth={TILE_WIDTH}
-            rowHeight={TILE_HEIGHT}
+            columnWidth={tile.width}
+            rowHeight={tile.height}
             width={viewport.width}
             height={viewport.height}
             itemKey={({ columnIndex, rowIndex }) => {

@@ -21,6 +21,7 @@ export interface DiskState {
   pendingDelete: string | null;
   sort: { field: SortField; direction: SortDirection };
   filter: string;
+  density: 'compact' | 'comfortable';
   loading: { isLoading: boolean; error: string | null };
 }
 
@@ -44,6 +45,7 @@ export interface DiskActions {
   /** Selecting the active field flips direction; a new field starts ascending. */
   setSort: (field: SortField) => void;
   setFilter: (value: string) => void;
+  setDensity: (value: DiskState['density']) => void;
   clearError: () => void;
 }
 
@@ -59,6 +61,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   pendingDelete: null,
   sort: { field: 'name', direction: 'asc' },
   filter: '',
+  density: 'comfortable',
   loading: { isLoading: false, error: null },
 
   loadRoots: async () => {
@@ -67,6 +70,12 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       set({ loading: { isLoading: false, error: response.error } });
       return;
     }
+
+    if (samePaths(get().roots, response.data)) {
+      set({ loading: { isLoading: false, error: null } });
+      return;
+    }
+
     set({ roots: response.data, loading: { isLoading: false, error: null } });
   },
 
@@ -182,10 +191,16 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
           : { field, direction: 'asc' },
     })),
   setFilter: (value) => set({ filter: value }),
+  setDensity: (value) => set({ density: value }),
 
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));
 
 function isAtOrBelow(root: string, target: string): boolean {
   return target === root || target.startsWith(`${root}/`);
+}
+
+function samePaths(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }

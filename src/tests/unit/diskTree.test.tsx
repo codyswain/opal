@@ -81,6 +81,9 @@ describe('DiskTree', () => {
   });
 
   it('prompts to open a folder when no roots exist', () => {
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: [] })),
+    });
     useDiskStore.setState({ roots: [], listings: {}, expanded: {} });
     render(<DiskTree />);
     expect(screen.getByTestId('disk-tree-empty')).toBeInTheDocument();

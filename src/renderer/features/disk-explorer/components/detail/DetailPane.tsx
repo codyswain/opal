@@ -9,6 +9,7 @@ import { PdfPreview } from './PdfPreview';
 import { TextPreview } from './TextPreview';
 import { UnsupportedPreview } from './UnsupportedPreview';
 import { EntryActions } from '../EntryActions';
+import { EmptyState } from '../EmptyState';
 
 /**
  * Dispatches on file kind. Later tasks in Phase A add cases here; the default
@@ -49,9 +50,13 @@ export const DetailPane: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => 
     return (
       <div
         data-testid="detail-empty"
-        className="grid h-full place-items-center text-sm text-muted-foreground"
+        className="flex h-full"
       >
-        Select a file to preview it
+        <EmptyState
+          Icon={Folder}
+          title="Select a file"
+          description="Choose a file in the current folder to preview it here."
+        />
       </div>
     );
   }

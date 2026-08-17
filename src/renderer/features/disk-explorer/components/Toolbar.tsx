@@ -15,6 +15,8 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const setSort = useDiskStore((state) => state.setSort);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
+  const density = useDiskStore((state) => state.density);
+  const setDensity = useDiskStore((state) => state.setDensity);
   const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +71,20 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
           </button>
         )}
       </div>
+      <button
+        type="button"
+        onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}
+        aria-label="Toggle density"
+        aria-pressed={density === 'compact'}
+        data-testid="toolbar-density"
+        className={`rounded-md px-2 py-1 text-xs transition-colors duration-100 ${
+          density === 'compact'
+            ? 'bg-accent text-accent-foreground'
+            : 'text-muted-foreground hover:bg-muted'
+        }`}
+      >
+        {density === 'comfortable' ? 'Comfortable' : 'Compact'}
+      </button>
       <span className="mr-1 shrink-0 text-xs text-muted-foreground">Sort</span>
       {SORT_FIELDS.map(({ field, label }) => {
         const isActive = sort.field === field;
