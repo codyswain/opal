@@ -8,6 +8,7 @@ import { MediaPreview } from './MediaPreview';
 import { PdfPreview } from './PdfPreview';
 import { TextPreview } from './TextPreview';
 import { UnsupportedPreview } from './UnsupportedPreview';
+import { EntryActions } from '../EntryActions';
 
 /**
  * Dispatches on file kind. Later tasks in Phase A add cases here; the default
@@ -57,13 +58,16 @@ export const DetailPane: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="min-w-0 shrink-0 border-b border-border/60 px-4 py-2">
-        <h2 data-testid="detail-title" className="truncate text-sm font-medium" title={entry.name}>
-          {entry.name}
-        </h2>
-        <p data-testid="detail-subtitle" className="text-xs text-muted-foreground">
-          {entry.isDirectory ? 'Folder' : formatBytes(entry.size)}
-        </p>
+      <header className="flex shrink-0 items-start justify-between gap-2 border-b border-border/60 px-4 py-2">
+        <div className="min-w-0">
+          <h2 data-testid="detail-title" className="truncate text-sm font-medium" title={entry.name}>
+            {entry.name}
+          </h2>
+          <p data-testid="detail-subtitle" className="text-xs text-muted-foreground">
+            {entry.isDirectory ? 'Folder' : formatBytes(entry.size)}
+          </p>
+        </div>
+        <EntryActions entry={entry} />
       </header>
 
       {renderPreview(entry)}

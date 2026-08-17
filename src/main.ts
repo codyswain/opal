@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -214,6 +214,10 @@ const diskHandlers = new DiskHandlers({
     return window
       ? dialog.showOpenDialog(window, options)
       : dialog.showOpenDialog(options);
+  },
+  shell: {
+    showItemInFolder: (fullPath) => shell.showItemInFolder(fullPath),
+    openPath: (fullPath) => shell.openPath(fullPath),
   },
 });
 

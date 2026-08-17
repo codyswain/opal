@@ -6,6 +6,8 @@ export interface DiskAPI {
   removeRoot: (rootPath: string) => Promise<DiskResult>;
   readDirectory: (dirPath: string) => Promise<DiskResult<DirectoryListing>>;
   readTextFile: (target: string) => Promise<DiskResult<TextFileContents>>;
+  reveal: (target: string) => Promise<DiskResult>;
+  openExternal: (target: string) => Promise<DiskResult>;
   stat: (target: string) => Promise<DiskResult<DiskEntry>>;
 }
 

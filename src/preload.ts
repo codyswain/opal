@@ -135,5 +135,7 @@ contextBridge.exposeInMainWorld("diskAPI", {
   removeRoot: (rootPath: string) => ipcRenderer.invoke("disk:remove-root", rootPath),
   readDirectory: (dirPath: string) => ipcRenderer.invoke("disk:read-directory", dirPath),
   readTextFile: (target: string) => ipcRenderer.invoke("disk:read-text-file", target),
+  reveal: (target: string) => ipcRenderer.invoke("disk:reveal", target),
+  openExternal: (target: string) => ipcRenderer.invoke("disk:open-external", target),
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
 });

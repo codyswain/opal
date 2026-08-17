@@ -6,12 +6,19 @@ import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { DiskReader } from '@/main/fs/DiskReader';
 import logger from '@/main/logger';
 
+export interface DiskShell {
+  showItemInFolder: (fullPath: string) => void;
+  /** Electron returns '' on success, or an error string on failure. */
+  openPath: (fullPath: string) => Promise<string>;
+}
+
 export interface DiskHandlerDependencies {
   ipc: IpcMain;
   registry: RootRegistry;
   reader: DiskReader;
   /** Injected so the dialog can be stubbed in tests. */
   showOpenDialog: () => Promise<OpenDialogReturnValue>;
+  shell: DiskShell;
 }
 
 export class DiskHandlers {
@@ -27,6 +34,8 @@ export class DiskHandlers {
     this.registerRemoveRoot();
     this.registerReadDirectory();
     this.registerReadTextFile();
+    this.registerReveal();
+    this.registerOpenExternal();
     this.registerStat();
   }
 
@@ -112,6 +121,38 @@ export class DiskHandlers {
           return { success: true, data: contents };
         } catch (error) {
           return { success: false, error: describeError(error, 'Failed to read file') };
+        }
+      }
+    );
+  }
+
+  private registerReveal(): void {
+    this.deps.ipc.handle(
+      'disk:reveal',
+      async (_, target: string): Promise<IPCResponse> => {
+        try {
+          const resolved = await this.deps.registry.assertAllowed(target);
+          this.deps.shell.showItemInFolder(resolved);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to reveal file') };
+        }
+      }
+    );
+  }
+
+  private registerOpenExternal(): void {
+    this.deps.ipc.handle(
+      'disk:open-external',
+      async (_, target: string): Promise<IPCResponse> => {
+        try {
+          const resolved = await this.deps.registry.assertAllowed(target);
+          // openPath resolves to '' on success and to a message on failure.
+          const failure = await this.deps.shell.openPath(resolved);
+          if (failure) return { success: false, error: failure };
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to open file') };
         }
       }
     );

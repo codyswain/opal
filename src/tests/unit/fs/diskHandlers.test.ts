@@ -50,6 +50,8 @@ let root: string;
 let stub: ReturnType<typeof createIpcStub>;
 let registry: RootRegistry;
 let showOpenDialog: ReturnType<typeof vi.fn>;
+let showItemInFolder: ReturnType<typeof vi.fn>;
+let openPath: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-handlers-'));
@@ -63,12 +65,15 @@ beforeEach(async () => {
 
   stub = createIpcStub();
   showOpenDialog = vi.fn();
+  showItemInFolder = vi.fn();
+  openPath = vi.fn(async () => '');
 
   new DiskHandlers({
     ipc: stub.ipc,
     registry,
     reader: new DiskReader({ registry }),
     showOpenDialog,
+    shell: { showItemInFolder, openPath },
   }).registerAll();
 });
 
@@ -80,10 +85,12 @@ describe('DiskHandlers', () => {
   it('registers every channel', () => {
     expect(stub.channels().sort()).toEqual([
       'disk:list-roots',
+      'disk:open-external',
       'disk:open-folder',
       'disk:read-directory',
       'disk:read-text-file',
       'disk:remove-root',
+      'disk:reveal',
       'disk:stat',
     ]);
   });
@@ -187,6 +194,57 @@ describe('DiskHandlers', () => {
     };
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/not inside any folder/i);
+  });
+
+  it('reveals a file inside a root', async () => {
+    await registry.add(root);
+    const target = path.join(root, 'note.md');
+
+    const result = await stub.invoke('disk:reveal', target) as { success: boolean };
+    expect(result.success).toBe(true);
+    expect(showItemInFolder).toHaveBeenCalledTimes(1);
+    expect(showItemInFolder.mock.calls[0][0]).toContain('note.md');
+  });
+
+  it('refuses to reveal a file outside every root', async () => {
+    await registry.add(root);
+    const outside = path.join(tmp, 'outside.txt');
+    await writeFile(outside, 'nope');
+
+    const result = await stub.invoke('disk:reveal', outside) as { success: boolean };
+    expect(result.success).toBe(false);
+    expect(showItemInFolder).not.toHaveBeenCalled();
+  });
+
+  it('opens a file externally', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:open-external', path.join(root, 'note.md')) as {
+      success: boolean;
+    };
+    expect(result.success).toBe(true);
+    expect(openPath).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to open a file outside every root', async () => {
+    await registry.add(root);
+    const outside = path.join(tmp, 'outside.txt');
+    await writeFile(outside, 'nope');
+
+    const result = await stub.invoke('disk:open-external', outside) as { success: boolean };
+    expect(result.success).toBe(false);
+    expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('reports an OS failure to open', async () => {
+    await registry.add(root);
+    openPath.mockResolvedValue('No application is associated');
+
+    const result = await stub.invoke('disk:open-external', path.join(root, 'note.md')) as {
+      success: boolean;
+      error: string;
+    };
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no application/i);
   });
 
   it('removes a root', async () => {
