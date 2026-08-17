@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, Image as ImageIcon, Film, Music, File } from 'lucide-react';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
 
 const ICONS: Record<FileKind, React.ComponentType<{ className?: string }>> = {
   directory: Folder,
@@ -69,12 +70,17 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
         draggable
         onDragStart={(event) => {
           event.stopPropagation();
+          setActiveDragSourcePath(entry.path);
           event.dataTransfer.setData('text/plain', entry.path);
           event.dataTransfer.effectAllowed = 'move';
         }}
+        onDragEnd={() => {
+          setIsDropTarget(false);
+          clearActiveDragSourcePath();
+        }}
         onDragOver={(event) => {
           if (!entry.isDirectory) return;
-          const source = event.dataTransfer.getData('text/plain');
+          const source = getActiveDragSourcePath() ?? '';
           if (isNoopDropTarget(source)) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
@@ -88,6 +94,7 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
           if (!entry.isDirectory) return;
 
           const source = event.dataTransfer.getData('text/plain');
+          clearActiveDragSourcePath();
           if (isNoopDropTarget(source)) return;
           void moveInto(source, entry.path);
         }}

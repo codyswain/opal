@@ -113,7 +113,15 @@ export const DiskExplorer: React.FC = () => {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         const target = event.target as HTMLElement | null;
         const tag = target?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'BUTTON' ||
+          target?.isContentEditable ||
+          useDiskStore.getState().pendingAction !== null
+        ) {
+          return;
+        }
         if (!selectedPath) return;
         event.preventDefault();
         useDiskStore.getState().beginDelete(selectedPath);

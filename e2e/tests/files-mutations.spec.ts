@@ -53,8 +53,10 @@ test('creates, renames, and moves real files on disk', async ({ page }) => {
 
 test('refuses every mutation outside an opened root', async ({ page }) => {
   const forbidden = path.join(path.dirname(vaultRoot), 'Forbidden');
+  const forbiddenFile = path.join(forbidden, 'secret.txt');
+  const openedFile = path.join(vaultRoot, 'readme.md');
   await mkdir(forbidden, { recursive: true });
-  await writeFile(path.join(forbidden, 'secret.txt'), 'do not touch');
+  await writeFile(forbiddenFile, 'do not touch');
 
   await page.evaluate(() => {
     window.location.hash = '#/files';
@@ -67,9 +69,21 @@ test('refuses every mutation outside an opened root', async ({ page }) => {
     trash: await window.diskAPI.trash(`${dir}/secret.txt`),
   }), forbidden);
 
+  const moveResults = await page.evaluate(async ({ openedRoot, openedFile, forbiddenDir, forbiddenFile }) => ({
+    fromForbiddenIntoOpenedRoot: await window.diskAPI.move(forbiddenFile, openedRoot),
+    fromOpenedRootIntoForbidden: await window.diskAPI.move(openedFile, forbiddenDir),
+  }), {
+    openedRoot: vaultRoot,
+    openedFile,
+    forbiddenDir: forbidden,
+    forbiddenFile,
+  });
+
   expect(results.create.success).toBe(false);
   expect(results.rename.success).toBe(false);
   expect(results.trash.success).toBe(false);
-  expect(await exists(path.join(forbidden, 'secret.txt'))).toBe(true);
+  expect(moveResults.fromForbiddenIntoOpenedRoot.success).toBe(false);
+  expect(moveResults.fromOpenedRootIntoForbidden.success).toBe(false);
+  expect(await exists(forbiddenFile)).toBe(true);
   expect(await exists(path.join(forbidden, 'nope'))).toBe(false);
 });

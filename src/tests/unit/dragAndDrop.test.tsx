@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { DiskTree } from '@/renderer/features/disk-explorer/components/DiskTree';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -57,6 +57,22 @@ describe('drag and drop', () => {
     });
 
     await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(NOTE, ARCHIVE));
+  });
+
+  it('accepts dragover on a folder after dragstart', () => {
+    render(<DiskTree />);
+
+    fireEvent.dragStart(screen.getByTestId(`disk-tree-item-${NOTE}`), {
+      dataTransfer: dataTransfer(),
+    });
+
+    const over = createEvent.dragOver(screen.getByTestId(`disk-tree-item-${ARCHIVE}`), {
+      dataTransfer: dataTransfer(),
+      cancelable: true,
+    });
+    fireEvent(screen.getByTestId(`disk-tree-item-${ARCHIVE}`), over);
+
+    expect(over.defaultPrevented).toBe(true);
   });
 
   it('does not move when dropped on a file', async () => {

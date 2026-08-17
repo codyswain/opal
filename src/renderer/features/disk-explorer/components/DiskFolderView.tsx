@@ -7,6 +7,7 @@ import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { toOpalThumbUrl } from '@/common/opalThumbUrl';
+import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
 import { useGridNavigation } from '../hooks/useGridNavigation';
 import { useElementSize } from '../hooks/useElementSize';
 
@@ -298,12 +299,17 @@ function useDropTarget(entry: DiskEntry) {
   const dragProps = {
     draggable: true,
     onDragStart: (event: React.DragEvent) => {
+      setActiveDragSourcePath(entry.path);
       event.dataTransfer.setData('text/plain', entry.path);
       event.dataTransfer.effectAllowed = 'move';
     },
+    onDragEnd: () => {
+      setIsDropTarget(false);
+      clearActiveDragSourcePath();
+    },
     onDragOver: (event: React.DragEvent) => {
       if (!entry.isDirectory) return;
-      const source = event.dataTransfer.getData('text/plain');
+      const source = getActiveDragSourcePath() ?? '';
       if (isNoopDropTarget(source)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
@@ -316,6 +322,7 @@ function useDropTarget(entry: DiskEntry) {
       if (!entry.isDirectory) return;
 
       const source = event.dataTransfer.getData('text/plain');
+      clearActiveDragSourcePath();
       if (isNoopDropTarget(source)) return;
 
       const result = await window.diskAPI.move(source, entry.path);

@@ -46,6 +46,7 @@ beforeEach(() => {
     isQuickLookOpen: false,
     selectedPath: null,
     pendingAction: null,
+    pendingDelete: null,
     sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
@@ -199,5 +200,44 @@ describe('DiskExplorer', () => {
       kind: 'new-folder',
       target: ROOT,
     });
+  });
+
+  it('starts delete confirmation on Delete for the selected item', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
+      },
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    expect(useDiskStore.getState().pendingDelete).toBe('/Vault/note.md');
+  });
+
+  it('does not start delete when Delete targets a button or a pending action exists', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
+      },
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
+
+    const newFolderButton = screen.getByTestId('toolbar-new-folder');
+    newFolderButton.focus();
+    fireEvent.keyDown(newFolderButton, { key: 'Delete' });
+    expect(useDiskStore.getState().pendingDelete).toBeNull();
+
+    useDiskStore.setState({
+      pendingAction: { kind: 'rename', target: '/Vault/note.md' },
+      pendingDelete: null,
+    });
+    fireEvent.keyDown(window, { key: 'Backspace' });
+    expect(useDiskStore.getState().pendingDelete).toBeNull();
   });
 });
