@@ -22,7 +22,7 @@ export const Breadcrumb: React.FC<{ dirPath: string }> = ({ dirPath }) => {
     <nav
       aria-label="Breadcrumb"
       data-testid="breadcrumb"
-      className="flex min-w-0 items-center gap-0.5 overflow-x-auto px-3 py-1.5"
+      className="flex min-w-0 items-center gap-1 overflow-x-auto px-3 py-2"
     >
       {segments.map((segment, index) => {
         const isLast = index === segments.length - 1;

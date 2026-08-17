@@ -25,7 +25,7 @@ export const TextPreview: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
       {truncated && (
         <p
           data-testid="text-preview-truncated"
-          className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/40 border-b border-border/60 shrink-0"
+          className="shrink-0 border-b border-border/60 bg-muted/40 px-4 py-2 text-2xs text-muted-foreground"
         >
           Showing the first part of this file only.
         </p>

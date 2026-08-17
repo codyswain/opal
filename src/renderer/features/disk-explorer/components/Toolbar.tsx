@@ -31,14 +31,14 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   }, []);
 
   return (
-    <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
+    <div className="flex min-w-0 items-center gap-1 px-3 py-2">
       <button
         type="button"
         onClick={() => useDiskStore.getState().beginNewFolder(dirPath)}
         aria-label="New folder"
         title="New folder"
         data-testid="toolbar-new-folder"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+        className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
       >
         <FolderPlus className="h-4 w-4" />
       </button>
@@ -63,7 +63,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
             onClick={() => setFilter('')}
             aria-label="Clear filter"
             data-testid="filter-clear"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors duration-100 hover:text-foreground"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors duration-100 hover:text-foreground"
           >
             <X className="h-3 w-3" />
           </button>

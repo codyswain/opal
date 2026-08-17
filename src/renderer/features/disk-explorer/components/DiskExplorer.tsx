@@ -217,7 +217,7 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
         type="button"
         aria-label="Dismiss error"
         onClick={clearError}
-        className="rounded p-0.5 transition-colors duration-100 hover:bg-destructive/20"
+        className="rounded p-1 transition-colors duration-100 hover:bg-destructive/20"
       >
         <X className="h-3.5 w-3.5" />
       </button>

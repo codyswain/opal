@@ -97,7 +97,7 @@ export const NameDialog: React.FC = () => {
           }}
           aria-label={isRename ? 'New name' : 'Folder name'}
           data-testid="name-dialog-input"
-          className="rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-sm focus:border-ring focus:outline-none"
+          className="rounded-md border border-border bg-muted/50 px-2 py-2 text-sm focus:border-ring focus:outline-none"
         />
 
         {name.length > 0 && !isValidName(name) && (
@@ -117,7 +117,7 @@ export const NameDialog: React.FC = () => {
             type="button"
             onClick={cancelAction}
             data-testid="name-dialog-cancel"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
+            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             Cancel
           </button>
@@ -126,7 +126,7 @@ export const NameDialog: React.FC = () => {
             onClick={() => void submit()}
             disabled={!isValidName(name) || isSubmitting}
             data-testid="name-dialog-submit"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-40"
+            className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
           >
             {isRename ? 'Rename' : 'Create'}
           </button>

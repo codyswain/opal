@@ -45,7 +45,7 @@ export const QuickLook: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => {
           onClick={close}
           aria-label="Close preview"
           data-testid="quick-look-close"
-          className="absolute right-2 top-2 z-10 rounded-md p-1.5 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+          className="absolute right-2 top-2 z-10 rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>

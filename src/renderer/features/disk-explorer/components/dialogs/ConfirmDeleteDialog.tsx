@@ -80,7 +80,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
             type="button"
             onClick={cancelDelete}
             data-testid="confirm-delete-cancel"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
+            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             Cancel
           </button>
@@ -89,7 +89,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
             onClick={() => void confirm()}
             disabled={isSubmitting}
             data-testid="confirm-delete-confirm"
-            className="rounded-md bg-destructive px-3 py-1.5 text-sm text-destructive-foreground disabled:opacity-40"
+            className="rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-40"
           >
             Move to Trash
           </button>

@@ -113,7 +113,7 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
             onClick={handleToggle}
             aria-label={isExpanded ? `Collapse ${entry.name}` : `Expand ${entry.name}`}
             data-testid={`disk-tree-toggle-${entry.path}`}
-            className="shrink-0 rounded p-0.5 transition-colors duration-100 hover:bg-muted"
+            className="shrink-0 rounded p-1 transition-colors duration-100 hover:bg-muted"
           >
             <Chevron className="h-3 w-3" />
           </button>
