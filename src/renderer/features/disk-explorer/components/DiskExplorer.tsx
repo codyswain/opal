@@ -4,6 +4,7 @@ import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
+import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
 
@@ -98,14 +99,19 @@ export const DiskExplorer: React.FC = () => {
       <section className="flex-1 flex min-w-0 flex-col overflow-hidden">
         {error && <ErrorBanner message={error} />}
         {activeDirectory ? (
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <DiskFolderView dirPath={activeDirectory} />
+          <>
+            <div className="shrink-0 border-b border-border/60">
+              <Breadcrumb dirPath={activeDirectory} />
             </div>
-            <aside className="w-80 shrink-0 overflow-hidden border-l border-border/60">
-              <DetailPane entry={selectedEntry} />
-            </aside>
-          </div>
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <DiskFolderView dirPath={activeDirectory} />
+              </div>
+              <aside className="w-80 shrink-0 overflow-hidden border-l border-border/60">
+                <DetailPane entry={selectedEntry} />
+              </aside>
+            </div>
+          </>
         ) : (
           <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
             Open a folder to get started
