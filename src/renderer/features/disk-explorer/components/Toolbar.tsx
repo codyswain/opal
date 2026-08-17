@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ArrowDown, ArrowUp, Search, X } from 'lucide-react';
 import type { SortField } from '@/common/sortEntries';
 import { useDiskStore } from '../store/diskStore';
@@ -15,12 +15,27 @@ export const Toolbar: React.FC = () => {
   const setSort = useDiskStore((state) => state.setSort);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
+  const filterRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'f') {
+        event.preventDefault();
+        filterRef.current?.focus();
+        filterRef.current?.select();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
       <div className="relative shrink-0">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
         <input
+          ref={filterRef}
           type="text"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}

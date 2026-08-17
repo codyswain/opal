@@ -6,6 +6,7 @@ import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry, FileKind } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
+import { useGridNavigation } from '../hooks/useGridNavigation';
 
 type ViewMode = 'gallery' | 'list';
 
@@ -49,6 +50,10 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const hasActiveFilter = filter.trim().length > 0;
 
   const activeMode = mode ?? suggestedMode;
+  // Gallery tracks are `minmax(160px,1fr)` with 12px gaps; list mode is a
+  // single column. Task 12 replaces the constant with a measured value.
+  const columns = activeMode === 'gallery' ? 4 : 1;
+  const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
 
   if (!entries) {
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
@@ -80,7 +85,12 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
           {hasActiveFilter ? `No files matching “${filter}”` : 'This folder is empty'}
         </div>
       ) : activeMode === 'gallery' ? (
-        <div data-testid="disk-folder-gallery" className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">
+        <div
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          data-testid="disk-folder-gallery"
+          className="flex-1 overflow-auto p-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(160px,1fr))] outline-none"
+        >
           {visibleEntries.map((entry) => (
             <GalleryTile
               key={entry.path} entry={entry}
@@ -90,7 +100,12 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
           ))}
         </div>
       ) : (
-        <div data-testid="disk-folder-list" className="flex-1 overflow-auto">
+        <div
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          data-testid="disk-folder-list"
+          className="flex-1 overflow-auto outline-none"
+        >
           {visibleEntries.map((entry) => (
             <ListRow
               key={entry.path} entry={entry}

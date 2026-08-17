@@ -99,4 +99,39 @@ describe('DiskExplorer', () => {
     expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
     expect(screen.getByTestId('quick-look')).toBeInTheDocument();
   });
+
+  it('opens the selected file in Quick Look on Cmd+Down', async () => {
+    const user = userEvent.setup();
+    render(<DiskExplorer />);
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
+
+    expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
+    expect(screen.getByTestId('quick-look')).toBeInTheDocument();
+  });
+
+  it('expands the selected folder on Cmd+Down', async () => {
+    const user = userEvent.setup();
+    render(<DiskExplorer />);
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
+
+    await waitFor(() => expect(useDiskStore.getState().expanded[PHOTOS]).toBe(true));
+  });
+
+  it('selects the parent folder on Cmd+Up and stops at a root', async () => {
+    const user = userEvent.setup();
+    render(<DiskExplorer />);
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
+    expect(useDiskStore.getState().selectedPath).toBe(ROOT);
+
+    fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
+    expect(useDiskStore.getState().selectedPath).toBe(ROOT);
+  });
 });

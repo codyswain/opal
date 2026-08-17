@@ -28,6 +28,8 @@ export const DiskExplorer: React.FC = () => {
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
+  const openQuickLook = useDiskStore((state) => state.openQuickLook);
+  const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
   // A path is a directory if it is a root, or if any cached listing describes
@@ -58,6 +60,28 @@ export const DiskExplorer: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (!selectedEntry) return;
+        if (selectedEntry.isDirectory) {
+          select(selectedEntry.path);
+          void useDiskStore.getState().toggleExpanded(selectedEntry.path);
+        } else {
+          openQuickLook();
+        }
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!activeDirectory) return;
+        // Never navigate above a root - the guard would reject it anyway.
+        if (roots.includes(activeDirectory)) return;
+        const parent = activeDirectory.slice(0, activeDirectory.lastIndexOf('/'));
+        if (parent) select(parent);
+        return;
+      }
+
       if (event.code !== 'Space') return;
 
       // Never hijack Space while the user is typing — the filter box in Task 9
@@ -73,7 +97,7 @@ export const DiskExplorer: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedEntry, toggleQuickLook]);
+  }, [activeDirectory, openQuickLook, roots, select, selectedEntry, toggleQuickLook]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">

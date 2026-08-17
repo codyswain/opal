@@ -76,4 +76,19 @@ describe('Toolbar filtering', () => {
     render(<Toolbar />);
     expect(screen.queryByTestId('filter-clear')).not.toBeInTheDocument();
   });
+
+  it('focuses and selects the filter input on Cmd+F', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({ filter: 'img' });
+    render(<Toolbar />);
+
+    const input = screen.getByTestId('filter-input') as HTMLInputElement;
+    await user.click(screen.getByTestId('sort-size'));
+    expect(input).not.toHaveFocus();
+
+    await user.keyboard('{Meta>}f{/Meta}');
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
 });
