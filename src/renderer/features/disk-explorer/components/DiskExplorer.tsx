@@ -94,7 +94,15 @@ export const DiskExplorer: React.FC = () => {
         // Enter renames the selection - Finder's binding. Not while typing.
         const target = event.target as HTMLElement | null;
         const tag = target?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'BUTTON' ||
+          target?.isContentEditable ||
+          useDiskStore.getState().pendingAction !== null
+        ) {
+          return;
+        }
         if (!selectedPath) return;
         event.preventDefault();
         useDiskStore.getState().beginRename(selectedPath);

@@ -177,4 +177,27 @@ describe('DiskExplorer', () => {
       target: '/Vault/note.md',
     });
   });
+
+  it('does not start rename when Enter activates the new-folder button', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
+      },
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
+
+    const newFolderButton = screen.getByTestId('toolbar-new-folder');
+    newFolderButton.focus();
+    expect(newFolderButton).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'new-folder',
+      target: ROOT,
+    });
+  });
 });
