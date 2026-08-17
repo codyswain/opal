@@ -78,10 +78,15 @@ describe('DiskExplorer', () => {
     expect(screen.getByTestId('disk-explorer-open-folder')).toBeInTheDocument();
   });
 
-  it('only toggles quick look on Space when a selection exists', async () => {
+  it('only toggles quick look on Space for a previewable selected entry', async () => {
     const user = userEvent.setup();
     render(<DiskExplorer />);
 
+    fireEvent.keyDown(window, { code: 'Space' });
+    expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
+    expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault'));
     fireEvent.keyDown(window, { code: 'Space' });
     expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
     expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();

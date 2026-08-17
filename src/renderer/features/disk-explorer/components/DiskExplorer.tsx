@@ -63,7 +63,7 @@ export const DiskExplorer: React.FC = () => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-      if (!selectedPath) return;
+      if (!selectedEntry) return;
 
       event.preventDefault();
       toggleQuickLook();
@@ -71,7 +71,7 @@ export const DiskExplorer: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedPath, toggleQuickLook]);
+  }, [selectedEntry, toggleQuickLook]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
