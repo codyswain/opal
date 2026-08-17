@@ -23,7 +23,7 @@ interface DiskFolderViewProps {
 
 const TILE_WIDTH = 172;
 const TILE_HEIGHT = 208;
-const ROW_HEIGHT = 28;
+const ROW_HEIGHT = 36;
 
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const entries = useDiskStore((state) => state.listings[dirPath]);
