@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { FolderPlus, X } from 'lucide-react';
+import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { DetailPane } from './detail/DetailPane';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
 
@@ -39,6 +41,17 @@ export const DiskExplorer: React.FC = () => {
 
   const activeDirectory = directoryForSelection(selectedPath, isDirectory, roots);
 
+  // The selected entry object, found in whichever cached listing contains it.
+  // The tree can only surface a path it has already listed, so no IPC is needed.
+  const selectedEntry = useMemo<DiskEntry | null>(() => {
+    if (!selectedPath) return null;
+    for (const entries of Object.values(listings)) {
+      const match = entries.find((candidate) => candidate.path === selectedPath);
+      if (match) return match;
+    }
+    return null;
+  }, [selectedPath, listings]);
+
   return (
     <div className="flex h-full w-full overflow-hidden">
       <aside className="w-64 shrink-0 border-r border-border/60 flex flex-col overflow-hidden">
@@ -61,10 +74,17 @@ export const DiskExplorer: React.FC = () => {
         </div>
       </aside>
 
-      <section className="flex-1 flex flex-col overflow-hidden">
+      <section className="flex-1 flex min-w-0 flex-col overflow-hidden">
         {error && <ErrorBanner message={error} />}
         {activeDirectory ? (
-          <DiskFolderView dirPath={activeDirectory} />
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <DiskFolderView dirPath={activeDirectory} />
+            </div>
+            <aside className="w-80 shrink-0 overflow-hidden border-l border-border/60">
+              <DetailPane entry={selectedEntry} />
+            </aside>
+          </div>
         ) : (
           <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
             Open a folder to get started
