@@ -23,6 +23,7 @@ import { RootRegistry } from "@/main/fs/RootRegistry";
 import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
 import { DiskWatcher } from "@/main/fs/DiskWatcher";
+import { FileWriter } from "@/main/fs/FileWriter";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import {
   OPAL_FILE_SCHEME,
@@ -213,6 +214,10 @@ const diskWatcher = new DiskWatcher({
     mainWindow?.webContents.send("disk:changed", { directories });
   },
 });
+const fileWriter = new FileWriter({
+  registry: rootRegistry,
+  trashItem: (fullPath) => shell.trashItem(fullPath),
+});
 const thumbnailService = new ThumbnailService({
   registry: rootRegistry,
   cacheDir: path.join(
@@ -238,6 +243,7 @@ const diskHandlers = new DiskHandlers({
     openPath: (fullPath) => shell.openPath(fullPath),
   },
   watcher: diskWatcher,
+  writer: fileWriter,
 });
 
 // --- Primary Initialization and Cleanup ---

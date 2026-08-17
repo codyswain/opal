@@ -34,6 +34,7 @@ import type { IpcMain } from 'electron';
 import { RootRegistry } from '@/main/fs/RootRegistry';
 import { DiskReader } from '@/main/fs/DiskReader';
 import { DiskHandlers } from '@/main/fs/DiskHandlers';
+import { FileWriter } from '@/main/fs/FileWriter';
 
 type Handler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -63,6 +64,7 @@ let showItemInFolder: ReturnType<typeof vi.fn>;
 let openPath: ReturnType<typeof vi.fn>;
 let watchRoot: ReturnType<typeof vi.fn>;
 let unwatchRoot: ReturnType<typeof vi.fn>;
+let writer: FileWriter;
 
 beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-handlers-'));
@@ -80,6 +82,7 @@ beforeEach(async () => {
   openPath = vi.fn(async () => '');
   watchRoot = vi.fn(async () => undefined);
   unwatchRoot = vi.fn(async () => undefined);
+  writer = new FileWriter({ registry, trashItem: vi.fn(async () => undefined) });
 
   new DiskHandlers({
     ipc: stub.ipc,
@@ -88,6 +91,7 @@ beforeEach(async () => {
     showOpenDialog,
     shell: { showItemInFolder, openPath },
     watcher: { watch: watchRoot, unwatch: unwatchRoot },
+    writer,
   }).registerAll();
 });
 
@@ -98,14 +102,18 @@ afterEach(async () => {
 describe('DiskHandlers', () => {
   it('registers every channel', () => {
     expect(stub.channels().sort()).toEqual([
+      'disk:create-directory',
       'disk:list-roots',
+      'disk:move',
       'disk:open-external',
       'disk:open-folder',
       'disk:read-directory',
       'disk:read-text-file',
       'disk:remove-root',
+      'disk:rename',
       'disk:reveal',
       'disk:stat',
+      'disk:trash',
     ]);
   });
 
@@ -158,6 +166,50 @@ describe('DiskHandlers', () => {
     expect(result.data.entries[0].kind).toBe('image');
   });
 
+  it('creates a directory', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:create-directory', root, 'New') as {
+      success: boolean;
+      data: { path: string };
+    };
+
+    expect(result.success).toBe(true);
+    expect(result.data.path.endsWith('New')).toBe(true);
+  });
+
+  it('surfaces an invalid name as a readable error', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:create-directory', root, '../evil') as {
+      success: boolean;
+      error: string;
+    };
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not a valid file name/i);
+  });
+
+  it('surfaces a collision as a readable error', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:rename', path.join(root, 'note.md'), 'Photos') as {
+      success: boolean;
+      error: string;
+    };
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/already exists/i);
+  });
+
+  it('renames a file', async () => {
+    await registry.add(root);
+    const result = await stub.invoke('disk:rename', path.join(root, 'note.md'), 'renamed.md') as {
+      success: boolean;
+      data: { path: string };
+    };
+
+    expect(result.success).toBe(true);
+    expect(result.data.path.endsWith('renamed.md')).toBe(true);
+  });
+
   it('fails cleanly for a directory outside every root', async () => {
     await registry.add(root);
     const outside = path.join(tmp, 'Outside');
@@ -178,6 +230,22 @@ describe('DiskHandlers', () => {
     };
     expect(result.success).toBe(false);
     expect(typeof result.error).toBe('string');
+  });
+
+  it('refuses to mutate outside every root', async () => {
+    await registry.add(root);
+    const outside = path.join(tmp, 'outside.txt');
+    await writeFile(outside, 'x');
+
+    for (const [channel, ...args] of [
+      ['disk:rename', outside, 'x.txt'],
+      ['disk:move', outside, root],
+      ['disk:trash', outside],
+      ['disk:create-directory', path.dirname(outside), 'x'],
+    ] as const) {
+      const result = await stub.invoke(channel, ...args) as { success: boolean };
+      expect(result.success, `${channel} must reject a path outside every root`).toBe(false);
+    }
   });
 
   it('stats a single file', async () => {

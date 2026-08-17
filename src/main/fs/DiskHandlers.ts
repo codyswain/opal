@@ -4,6 +4,8 @@ import type { DiskEntry, DirectoryListing, TextFileContents } from '@/types/disk
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { DiskReader } from '@/main/fs/DiskReader';
+import type { FileWriter } from '@/main/fs/FileWriter';
+import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
 import logger from '@/main/logger';
 
 export interface DiskShell {
@@ -23,6 +25,7 @@ export interface DiskHandlerDependencies {
     watch: (rootPath: string) => Promise<void>;
     unwatch: (rootPath: string) => Promise<void>;
   };
+  writer: FileWriter;
 }
 
 export class DiskHandlers {
@@ -37,7 +40,11 @@ export class DiskHandlers {
     this.registerListRoots();
     this.registerRemoveRoot();
     this.registerReadDirectory();
+    this.registerCreateDirectory();
     this.registerReadTextFile();
+    this.registerRename();
+    this.registerMove();
+    this.registerTrash();
     this.registerReveal();
     this.registerOpenExternal();
     this.registerStat();
@@ -104,6 +111,20 @@ export class DiskHandlers {
     );
   }
 
+  private registerCreateDirectory(): void {
+    this.deps.ipc.handle(
+      'disk:create-directory',
+      async (_, parentDir: string, name: string): Promise<IPCResponse<{ path: string }>> => {
+        try {
+          const created = await this.deps.writer.createDirectory(parentDir, name);
+          return { success: true, data: { path: created } };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to create folder') };
+        }
+      }
+    );
+  }
+
   private registerStat(): void {
     this.deps.ipc.handle(
       'disk:stat',
@@ -127,6 +148,48 @@ export class DiskHandlers {
           return { success: true, data: contents };
         } catch (error) {
           return { success: false, error: describeError(error, 'Failed to read file') };
+        }
+      }
+    );
+  }
+
+  private registerRename(): void {
+    this.deps.ipc.handle(
+      'disk:rename',
+      async (_, target: string, nextName: string): Promise<IPCResponse<{ path: string }>> => {
+        try {
+          const renamed = await this.deps.writer.rename(target, nextName);
+          return { success: true, data: { path: renamed } };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to rename') };
+        }
+      }
+    );
+  }
+
+  private registerMove(): void {
+    this.deps.ipc.handle(
+      'disk:move',
+      async (_, target: string, destinationDir: string): Promise<IPCResponse<{ path: string }>> => {
+        try {
+          const moved = await this.deps.writer.move(target, destinationDir);
+          return { success: true, data: { path: moved } };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to move') };
+        }
+      }
+    );
+  }
+
+  private registerTrash(): void {
+    this.deps.ipc.handle(
+      'disk:trash',
+      async (_, target: string): Promise<IPCResponse> => {
+        try {
+          await this.deps.writer.moveToTrash(target);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to move to Trash') };
         }
       }
     );
@@ -172,7 +235,9 @@ export class DiskHandlers {
  */
 function describeError(error: unknown, fallback: string): string {
   if (error instanceof PathNotAllowedError) return error.message;
-  if (error instanceof Error && /not a directory/i.test(error.message)) {
+  if (error instanceof DestinationExistsError) return error.message;
+  if (error instanceof InvalidNameError) return error.message;
+  if (error instanceof Error && /not a directory|into itself|opened folder/i.test(error.message)) {
     return error.message;
   }
   logger.error(fallback, error instanceof Error ? error : undefined);
