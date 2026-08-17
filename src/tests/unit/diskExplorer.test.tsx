@@ -6,6 +6,16 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { DiskExplorer } from '@/renderer/features/disk-explorer/components/DiskExplorer';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 
+const { toastError } = vi.hoisted(() => ({
+  toastError: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: toastError,
+  },
+}));
+
 const ROOT = '/Vault';
 const PHOTOS = '/Vault/Photos';
 let onChanged: ReturnType<typeof vi.fn>;
@@ -14,6 +24,7 @@ let readDirectory: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   changedListener = null;
+  toastError.mockClear();
   onChanged = vi.fn((callback: (payload: { directories: string[] }) => void) => {
     changedListener = callback;
     return () => {
@@ -83,10 +94,14 @@ describe('DiskExplorer', () => {
     );
   });
 
-  it('surfaces a store error', async () => {
+  it('shows a toast and keeps the error banner for a store error', async () => {
     useDiskStore.setState({ loading: { isLoading: false, error: 'Permission denied' } });
     render(<DiskExplorer />);
-    expect(await screen.findByTestId('disk-explorer-error')).toHaveTextContent('Permission denied');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('disk-explorer-error')).toHaveTextContent('Permission denied')
+    );
+    expect(toastError).toHaveBeenCalledWith('Permission denied');
   });
 
   it('offers an open-folder action', () => {

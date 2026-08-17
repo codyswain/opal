@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { FolderPlus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { QuickLook } from './QuickLook';
@@ -66,6 +67,11 @@ export const DiskExplorer: React.FC = () => {
       void invalidate(directories);
     });
   }, [invalidate]);
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error);
+  }, [error]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
