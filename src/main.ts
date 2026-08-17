@@ -49,7 +49,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
   "font-src 'self' data:",
-  "connect-src 'self' https: ws: http://localhost:11434", // Ollama
+  `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
 ].join("; "); // Join CSP directives
 

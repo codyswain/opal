@@ -40,13 +40,15 @@ export interface OpalFileProtocolDependencies {
 }
 
 /** Must run after app.whenReady(). */
+const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' };
+
 export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): void {
   protocol.handle(OPAL_FILE_SCHEME, async (request) => {
     let requestedPath: string;
     try {
       requestedPath = opalFileUrlToPath(request.url);
     } catch {
-      return new Response('Bad asset URL', { status: 400 });
+      return new Response('Bad asset URL', { status: 400, headers: CORS_HEADERS });
     }
 
     let resolved: string;
@@ -56,16 +58,16 @@ export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): vo
       resolved = await deps.registry.assertAllowed(requestedPath);
     } catch (error) {
       if (error instanceof PathNotAllowedError) {
-        return new Response('Forbidden', { status: 403 });
+        return new Response('Forbidden', { status: 403, headers: CORS_HEADERS });
       }
       logger.error('opal-file: failed to authorize request', error);
-      return new Response('Internal error', { status: 500 });
+      return new Response('Internal error', { status: 500, headers: CORS_HEADERS });
     }
 
     try {
       const info = await stat(resolved);
       if (info.isDirectory()) {
-        return new Response('Not a file', { status: 400 });
+        return new Response('Not a file', { status: 400, headers: CORS_HEADERS });
       }
 
       const body = Readable.toWeb(createReadStream(resolved)) as ReadableStream;
@@ -78,11 +80,12 @@ export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): vo
           // Bytes are addressed by path, and the path's contents can change,
           // so revalidate rather than cache indefinitely.
           'Cache-Control': 'no-cache',
+          ...CORS_HEADERS,
         },
       });
     } catch (error) {
       logger.error(`opal-file: failed to read ${resolved}`, error);
-      return new Response('Not found', { status: 404 });
+      return new Response('Not found', { status: 404, headers: CORS_HEADERS });
     }
   });
 }

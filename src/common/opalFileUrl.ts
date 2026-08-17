@@ -28,9 +28,11 @@ export function opalFileUrlToPath(url: string): string {
     throw new Error(`Unexpected scheme on asset URL: ${parsed.protocol}`);
   }
   // A registered "standard" scheme parses the first segment as the host, so
-  // the absolute path is host + pathname recombined.
+  // the absolute path is host + pathname recombined. Restore the leading
+  // slash when host captured the first path segment (opal-file://private/...).
   const raw = `${parsed.host}${parsed.pathname}`;
-  return decodeURIComponent(raw);
+  const decoded = decodeURIComponent(raw);
+  return decoded.startsWith('/') ? decoded : `/${decoded}`;
 }
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {

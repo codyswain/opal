@@ -42,6 +42,12 @@ describe('opal-file URL round-trip', () => {
     expect(() => opalFileUrlToPath('file:///Users/cody/a.jpg')).toThrow(/scheme/i);
     expect(() => opalFileUrlToPath('https://example.com/a.jpg')).toThrow(/scheme/i);
   });
+
+  it('restores the leading slash when the first segment was parsed as the host', () => {
+    // Electron's standard-scheme parser turns opal-file:///private/var/x
+    // into host=private, pathname=/var/x. Dropping the slash would 403 the asset.
+    expect(opalFileUrlToPath('opal-file://private/var/x.jpg')).toBe('/private/var/x.jpg');
+  });
 });
 
 describe('contentTypeFor', () => {
