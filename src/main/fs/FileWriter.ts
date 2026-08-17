@@ -1,4 +1,16 @@
-import { mkdir, rename as renameEntry, stat, copyFile, unlink, readdir, rmdir } from 'fs/promises';
+import {
+  mkdir,
+  rename as renameOnDisk,
+  stat,
+  lstat,
+  copyFile,
+  unlink,
+  readdir,
+  rmdir,
+  readlink,
+  symlink,
+} from 'fs/promises';
+import type { Stats } from 'fs';
 import path from 'path';
 import { isInsideRoot, normalizePath } from '@/main/fs/paths';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
@@ -21,6 +33,8 @@ export interface FileWriterDependencies {
   registry: RootRegistry;
   /** shell.trashItem — injected so tests never touch the real Trash. */
   trashItem: (fullPath: string) => Promise<void>;
+  /** Injected in tests to force EXDEV behavior. */
+  renameEntry?: (source: string, destination: string) => Promise<void>;
 }
 
 /**
@@ -51,18 +65,18 @@ export class FileWriter {
 
   async rename(target: string, nextName: string): Promise<string> {
     assertValidName(nextName);
-    const source = await this.deps.registry.assertAllowed(target);
+    const source = await assertMutableTarget(this.deps.registry, target);
 
     const destination = normalizePath(path.join(path.dirname(source), nextName));
     if (destination === source) return source;
 
-    await assertAbsent(destination);
-    await renameEntry(source, destination);
+    await assertAbsent(destination, source);
+    await this.renameEntry(source, destination);
     return destination;
   }
 
   async move(target: string, destinationDir: string): Promise<string> {
-    const source = await this.deps.registry.assertAllowed(target);
+    const source = await assertMutableTarget(this.deps.registry, target);
     const parent = await this.deps.registry.assertAllowed(destinationDir);
 
     const parentInfo = await stat(parent);
@@ -83,7 +97,7 @@ export class FileWriter {
     await assertAbsent(destination);
 
     try {
-      await renameEntry(source, destination);
+      await this.renameEntry(source, destination);
     } catch (error) {
       // EXDEV: source and destination are on different filesystems, where
       // rename cannot work. Copy fully first, and only then remove the source,
@@ -97,15 +111,13 @@ export class FileWriter {
   }
 
   async moveToTrash(target: string): Promise<void> {
-    const resolved = await this.deps.registry.assertAllowed(target);
-
-    // Trashing an opened root would leave Opal pointing at a folder that no
-    // longer exists, and is almost never what the user meant.
-    if (this.deps.registry.list().includes(resolved)) {
-      throw new Error('Cannot delete an opened folder. Close it first.');
-    }
-
+    const resolved = await assertMutableTarget(this.deps.registry, target);
     await this.deps.trashItem(resolved);
+  }
+
+  private async renameEntry(source: string, destination: string): Promise<void> {
+    const renameEntry = this.deps.renameEntry ?? renameOnDisk;
+    await renameEntry(source, destination);
   }
 }
 
@@ -127,9 +139,25 @@ function assertValidName(name: string): void {
   }
 }
 
-async function assertAbsent(target: string): Promise<void> {
+async function assertMutableTarget(registry: RootRegistry, target: string): Promise<string> {
+  const resolved = await registry.assertAllowed(target);
+
+  // Mutating an opened root would leave the registry pointing at a path that
+  // no longer exists or that now refers to a different on-disk location.
+  if (registry.list().includes(resolved)) {
+    throw new Error('Cannot modify an opened folder. Close it first.');
+  }
+
+  return resolved;
+}
+
+async function assertAbsent(target: string, source?: string): Promise<void> {
   try {
-    await stat(target);
+    const targetInfo = await stat(target);
+    if (source) {
+      const sourceInfo = await stat(source);
+      if (isSameEntry(sourceInfo, targetInfo)) return;
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return;
@@ -141,7 +169,12 @@ async function assertAbsent(target: string): Promise<void> {
 }
 
 async function copyRecursive(source: string, destination: string): Promise<void> {
-  const info = await stat(source);
+  const info = await lstat(source);
+  if (info.isSymbolicLink()) {
+    await symlink(await readlink(source), destination);
+    return;
+  }
+
   if (!info.isDirectory()) {
     await copyFile(source, destination);
     return;
@@ -154,8 +187,8 @@ async function copyRecursive(source: string, destination: string): Promise<void>
 }
 
 async function removeRecursive(target: string): Promise<void> {
-  const info = await stat(target);
-  if (!info.isDirectory()) {
+  const info = await lstat(target);
+  if (!info.isDirectory() || info.isSymbolicLink()) {
     await unlink(target);
     return;
   }
@@ -165,4 +198,8 @@ async function removeRecursive(target: string): Promise<void> {
   }
 
   await rmdir(target);
+}
+
+function isSameEntry(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
 }

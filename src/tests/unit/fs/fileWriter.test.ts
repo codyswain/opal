@@ -1,5 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir, stat } from 'fs/promises';
+import {
+  mkdtemp,
+  rm,
+  mkdir,
+  writeFile,
+  readFile,
+  readdir,
+  stat,
+  lstat,
+  readlink,
+  symlink,
+} from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { RootRegistry, PathNotAllowedError } from '@/main/fs/RootRegistry';
@@ -31,6 +42,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(tmp, { recursive: true, force: true });
 });
 
@@ -105,6 +117,17 @@ describe('FileWriter.rename', () => {
     const result = await writer.rename(target, 'note.md');
     expect(await exists(result)).toBe(true);
   });
+
+  it('refuses to rename an opened root', async () => {
+    await expect(writer.rename(root, 'Renamed Vault')).rejects.toThrow(/opened folder/i);
+    expect(await exists(root)).toBe(true);
+  });
+
+  it('allows a case-only rename on case-insensitive filesystems', async () => {
+    const renamed = await writer.rename(path.join(root, 'note.md'), 'Note.md');
+    expect(renamed.endsWith('Note.md')).toBe(true);
+    expect(await readFile(renamed, 'utf-8')).toBe('# hello');
+  });
 });
 
 describe('FileWriter.move', () => {
@@ -166,6 +189,35 @@ describe('FileWriter.move', () => {
     await expect(writer.move(path.join(root, 'Photos', 'a.jpg'), path.join(root, 'note.md'))).rejects.toThrow(
       /not a directory/i
     );
+  });
+
+  it('refuses to move an opened root', async () => {
+    const otherRoot = path.join(tmp, 'OtherVault');
+    await mkdir(otherRoot);
+    await registry.add(otherRoot);
+
+    await expect(writer.move(root, otherRoot)).rejects.toThrow(/opened folder/i);
+    expect(await exists(root)).toBe(true);
+  });
+
+  it('preserves outside targets when EXDEV fallback sees symlinks', async () => {
+    const outsideDir = path.join(tmp, 'Outside');
+    const outsideFile = path.join(outsideDir, 'keep.txt');
+    await mkdir(outsideDir);
+    await writeFile(outsideFile, 'keep me');
+    await symlink(outsideDir, path.join(root, 'Photos', 'outside-link'));
+    const renameEntry = vi.fn().mockRejectedValueOnce(
+      Object.assign(new Error('Cross-device link'), { code: 'EXDEV' })
+    );
+    const exdevWriter = new FileWriter({ registry, trashItem, renameEntry });
+
+    const moved = await exdevWriter.move(path.join(root, 'Photos'), path.join(root, 'Archive'));
+    const copiedLink = path.join(moved, 'outside-link');
+
+    expect(await exists(outsideFile)).toBe(true);
+    expect((await lstat(copiedLink)).isSymbolicLink()).toBe(true);
+    expect(await readlink(copiedLink)).toBe(outsideDir);
+    expect(await exists(path.join(root, 'Photos'))).toBe(false);
   });
 });
 
