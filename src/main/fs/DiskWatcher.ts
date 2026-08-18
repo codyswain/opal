@@ -45,7 +45,10 @@ export class DiskWatcher {
       });
     }
 
-    watcher.on('error', (error) => logger.error(`Watcher error on ${rootPath}:`, error));
+    watcher.on('error', (error) => {
+      const details = error instanceof Error ? error.message : String(error);
+      logger.error(`Watcher error on ${rootPath}: ${details}`, error instanceof Error ? error : undefined);
+    });
 
     await new Promise<void>((resolve, reject) => {
       const onReady = () => {

@@ -6,6 +6,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { DiskFolderView } from '@/renderer/features/disk-explorer/components/DiskFolderView';
 import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
+import type { DirectoryListing, DiskResult } from '@/types/disk';
 
 const DIR = '/V/Photos';
 
@@ -29,7 +30,7 @@ beforeEach(() => {
 describe('loading and empty states', () => {
   it('shows skeleton tiles while the listing loads, not a Loading label', async () => {
     installDiskApi({
-      readDirectory: vi.fn(() => new Promise(() => undefined)),
+      readDirectory: vi.fn(() => new Promise<DiskResult<DirectoryListing>>(() => undefined)),
     });
 
     render(<DiskFolderView dirPath={DIR} />);
