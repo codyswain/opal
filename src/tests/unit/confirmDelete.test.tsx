@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ConfirmDeleteDialog } from '@/renderer/features/disk-explorer/components/dialogs/ConfirmDeleteDialog';
@@ -102,6 +102,36 @@ describe('ConfirmDeleteDialog', () => {
     expect(useDiskStore.getState().pendingDelete).toBeNull();
     expect(useDiskStore.getState().selectedPath).toBeNull();
     expect(useDiskStore.getState().selectedPaths).toEqual([]);
+  });
+
+  it('uses the selection snapshot captured when the dialog opened', async () => {
+    const user = userEvent.setup();
+    const trash = vi.fn(async () => ({ success: true as const, data: undefined }));
+    installDiskApi({ trash });
+    useDiskStore.setState({
+      pendingDelete: '/V/a.md',
+      selectedPath: '/V/c.md',
+      selectedPaths: ['/V/a.md', '/V/b.md', '/V/c.md'],
+    });
+    render(<ConfirmDeleteDialog />);
+
+    act(() => {
+      useDiskStore.setState({
+        selectedPath: '/V/z.md',
+        selectedPaths: ['/V/z.md'],
+      });
+    });
+
+    expect(screen.getByTestId('confirm-delete')).toHaveTextContent('Move 3 items to Trash?');
+
+    await user.click(screen.getByTestId('confirm-delete-confirm'));
+
+    await waitFor(() => expect(trash).toHaveBeenCalledTimes(3));
+    expect(trash.mock.calls).toEqual([
+      ['/V/a.md'],
+      ['/V/b.md'],
+      ['/V/c.md'],
+    ]);
   });
 
   it('stops a multi-delete on the first failure', async () => {

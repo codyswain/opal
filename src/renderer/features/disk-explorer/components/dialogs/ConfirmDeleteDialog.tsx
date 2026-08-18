@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useDiskStore } from '../../store/diskStore';
 
@@ -9,6 +9,19 @@ export const ConfirmDeleteDialog: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const deleteSnapshotRef = useRef<{ pendingDelete: string | null; paths: string[] }>({
+    pendingDelete: null,
+    paths: [],
+  });
+
+  if (!pendingDelete) {
+    deleteSnapshotRef.current = { pendingDelete: null, paths: [] };
+  } else if (deleteSnapshotRef.current.pendingDelete !== pendingDelete) {
+    deleteSnapshotRef.current = {
+      pendingDelete,
+      paths: selectedPaths.length > 1 ? [...selectedPaths] : [pendingDelete],
+    };
+  }
 
   useEffect(() => {
     if (!pendingDelete) return;
@@ -28,7 +41,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
 
   if (!pendingDelete) return null;
 
-  const deletePaths = selectedPaths.length > 1 ? selectedPaths : [pendingDelete];
+  const deletePaths = deleteSnapshotRef.current.paths;
   const isBulkDelete = deletePaths.length > 1;
   const name = pendingDelete.split('/').pop() ?? pendingDelete;
 

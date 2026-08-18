@@ -304,4 +304,26 @@ describe('DiskExplorer', () => {
     expect(useDiskStore.getState().selectedPaths).toEqual([`${ROOT}/alpha.md`]);
     input.remove();
   });
+
+  it('ignores Cmd+A while delete confirmation is open', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [
+          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
+          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
+        ],
+      },
+      pendingDelete: `${ROOT}/alpha.md`,
+      selectedPath: `${ROOT}/alpha.md`,
+      selectedPaths: [`${ROOT}/alpha.md`],
+    });
+
+    render(<DiskExplorer />);
+    await user.click(screen.getByTestId(`disk-tree-item-${ROOT}/alpha.md`));
+    fireEvent.keyDown(window, { key: 'a', metaKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${ROOT}/alpha.md`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([`${ROOT}/alpha.md`]);
+  });
 });

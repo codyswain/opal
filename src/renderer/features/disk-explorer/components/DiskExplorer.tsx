@@ -87,7 +87,11 @@ export const DiskExplorer: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const state = useDiskStore.getState();
+      const selectionLocked = state.pendingDelete !== null;
+
       if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowDown') {
+        if (selectionLocked) return;
         event.preventDefault();
         if (!selectedEntry) return;
         if (selectedEntry.isDirectory) {
@@ -100,6 +104,7 @@ export const DiskExplorer: React.FC = () => {
       }
 
       if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowUp') {
+        if (selectionLocked) return;
         event.preventDefault();
         if (!activeDirectory) return;
         // Never navigate above a root - the guard would reject it anyway.
@@ -147,6 +152,7 @@ export const DiskExplorer: React.FC = () => {
       }
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        if (selectionLocked) return;
         const target = event.target as HTMLElement | null;
         const tag = target?.tagName;
         if (
