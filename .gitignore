@@ -109,3 +109,6 @@ test-results/
 
 # Git worktrees
 .worktrees/
+
+# Superpowers tool state
+.superpowers/
