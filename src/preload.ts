@@ -134,5 +134,21 @@ contextBridge.exposeInMainWorld("diskAPI", {
   listRoots: () => ipcRenderer.invoke("disk:list-roots"),
   removeRoot: (rootPath: string) => ipcRenderer.invoke("disk:remove-root", rootPath),
   readDirectory: (dirPath: string) => ipcRenderer.invoke("disk:read-directory", dirPath),
+  createDirectory: (parentDir: string, name: string) =>
+    ipcRenderer.invoke("disk:create-directory", parentDir, name),
+  readTextFile: (target: string) => ipcRenderer.invoke("disk:read-text-file", target),
+  rename: (target: string, nextName: string) =>
+    ipcRenderer.invoke("disk:rename", target, nextName),
+  move: (target: string, destinationDir: string) =>
+    ipcRenderer.invoke("disk:move", target, destinationDir),
+  trash: (target: string) => ipcRenderer.invoke("disk:trash", target),
+  reveal: (target: string) => ipcRenderer.invoke("disk:reveal", target),
+  openExternal: (target: string) => ipcRenderer.invoke("disk:open-external", target),
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
+  onChanged: (callback: (payload: { directories: string[] }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { directories: string[] }) =>
+      callback(payload);
+    ipcRenderer.on("disk:changed", listener);
+    return () => ipcRenderer.removeListener("disk:changed", listener);
+  },
 });

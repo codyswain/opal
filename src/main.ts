@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -22,10 +22,15 @@ import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
+import { DiskWatcher } from "@/main/fs/DiskWatcher";
+import { FileWriter } from "@/main/fs/FileWriter";
+import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import {
   OPAL_FILE_SCHEME,
+  OPAL_THUMB_SCHEME,
   registerOpalFileScheme,
   registerOpalFileProtocol,
+  registerOpalThumbProtocol,
 } from "@/main/protocol/opalFile";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -47,10 +52,12 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
+  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}: ${OPAL_THUMB_SCHEME}:`,
   "font-src 'self' data:",
   `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
+  `object-src 'self' ${OPAL_FILE_SCHEME}:`,
+  `frame-src 'self' ${OPAL_FILE_SCHEME}:`,
 ].join("; "); // Join CSP directives
 
 // Must run at module load, before app.whenReady() — Electron requires
@@ -151,6 +158,10 @@ const createWindow = () => {
       log.error(`Failed to load page: ${errorCode} - ${errorDescription}`);
     }
   );
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 };
 
 // --- App Lifecycle Events
@@ -202,6 +213,25 @@ const rootRegistry = new RootRegistry({
   ),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
+const diskWatcher = new DiskWatcher({
+  onChanged: (directories) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("disk:changed", { directories });
+  },
+});
+const fileWriter = new FileWriter({
+  registry: rootRegistry,
+  trashItem: (fullPath) => shell.trashItem(fullPath),
+});
+const thumbnailService = new ThumbnailService({
+  registry: rootRegistry,
+  cacheDir: path.join(
+    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
+    "thumbnails"
+  ),
+  createThumbnail: (sourcePath, maxSize) =>
+    nativeImage.createThumbnailFromPath(sourcePath, maxSize),
+});
 const diskHandlers = new DiskHandlers({
   ipc: ipcMain,
   registry: rootRegistry,
@@ -213,6 +243,12 @@ const diskHandlers = new DiskHandlers({
       ? dialog.showOpenDialog(window, options)
       : dialog.showOpenDialog(options);
   },
+  shell: {
+    showItemInFolder: (fullPath) => shell.showItemInFolder(fullPath),
+    openPath: (fullPath) => shell.openPath(fullPath),
+  },
+  watcher: diskWatcher,
+  writer: fileWriter,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -230,9 +266,20 @@ app.whenReady().then(async () => {
     log.info("Virtual File System (VFS) IPC handlers registered");
 
     await rootRegistry.load();
+    for (const root of rootRegistry.list()) {
+      try {
+        await diskWatcher.watch(root);
+      } catch (error) {
+        log.error(
+          `Failed to start disk watcher for ${root}; continuing without live updates for that root`,
+          error instanceof Error ? error : undefined
+        );
+      }
+    }
     registerOpalFileProtocol({ registry: rootRegistry });
+    registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
-    log.info("Disk explorer IPC handlers and opal-file protocol registered");
+    log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();
     log.info("Database IPC handlers registered");
@@ -260,6 +307,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", async () => {
   try {
+    void diskWatcher.closeAll();
     await closeDatabase();
   } catch (error) {
     log.error("Error during app shutdown:", error);

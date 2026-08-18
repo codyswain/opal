@@ -116,3 +116,34 @@ describe('DiskReader.statEntry', () => {
     await expect(reader.statEntry(outside)).rejects.toThrow(PathNotAllowedError);
   });
 });
+
+describe('DiskReader.readTextFile', () => {
+  it('reads a file inside a root', async () => {
+    const result = await reader.readTextFile(path.join(root, 'note.md'));
+    expect(result.text).toBe('# hello');
+    expect(result.truncated).toBe(false);
+    expect(result.size).toBe('# hello'.length);
+  });
+
+  it('refuses a file outside every root', async () => {
+    const outside = path.join(tmp, 'outside.txt');
+    await writeFile(outside, 'nope');
+    await expect(reader.readTextFile(outside)).rejects.toThrow(PathNotAllowedError);
+  });
+
+  it('truncates a file larger than maxBytes and reports it', async () => {
+    const big = path.join(root, 'big.txt');
+    await writeFile(big, 'x'.repeat(5000));
+
+    const result = await reader.readTextFile(big, { maxBytes: 1000 });
+    expect(result.text).toHaveLength(1000);
+    expect(result.truncated).toBe(true);
+    expect(result.size).toBe(5000);
+  });
+
+  it('rejects a directory', async () => {
+    await expect(reader.readTextFile(path.join(root, 'Photos'))).rejects.toThrow(
+      /not a file/i
+    );
+  });
+});

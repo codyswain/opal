@@ -7,8 +7,13 @@ import {
   opalFileUrlToPath,
   contentTypeFor,
 } from '@/common/opalFileUrl';
+import {
+  OPAL_THUMB_SCHEME,
+  opalThumbUrlToPath,
+} from '@/common/opalThumbUrl';
+import type { ThumbnailService } from '@/main/fs/ThumbnailService';
 
-export { OPAL_FILE_SCHEME };
+export { OPAL_FILE_SCHEME, OPAL_THUMB_SCHEME };
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import logger from '@/main/logger';
@@ -21,17 +26,17 @@ import logger from '@/main/logger';
  * the policy stays a real policy.
  */
 export function registerOpalFileScheme(): void {
+  const privileges = {
+    standard: true,
+    secure: true,
+    stream: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+  };
+
   protocol.registerSchemesAsPrivileged([
-    {
-      scheme: OPAL_FILE_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        stream: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-      },
-    },
+    { scheme: OPAL_FILE_SCHEME, privileges },
+    { scheme: OPAL_THUMB_SCHEME, privileges },
   ]);
 }
 
@@ -86,6 +91,40 @@ export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): vo
     } catch (error) {
       logger.error(`opal-file: failed to read ${resolved}`, error);
       return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+    }
+  });
+}
+
+export function registerOpalThumbProtocol(deps: { thumbnails: ThumbnailService }): void {
+  protocol.handle(OPAL_THUMB_SCHEME, async (request) => {
+    let requestedPath: string;
+    try {
+      requestedPath = opalThumbUrlToPath(request.url);
+    } catch {
+      return new Response('Bad thumbnail URL', { status: 400 });
+    }
+
+    try {
+      // getThumbnailPath performs the root check itself, so there is no
+      // separate guard to keep in sync here.
+      const cachePath = await deps.thumbnails.getThumbnailPath(requestedPath);
+      const body = Readable.toWeb(createReadStream(cachePath)) as ReadableStream;
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          // The URL stays path-based, so the browser must revalidate instead of
+          // assuming a thumbnail is immutable forever across source edits.
+          'Cache-Control': 'no-cache',
+        },
+      });
+    } catch (error) {
+      if (error instanceof PathNotAllowedError) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      // A missing thumbnail is normal for unsupported formats; the renderer
+      // falls back to a kind icon on error.
+      return new Response('No thumbnail', { status: 404 });
     }
   });
 }

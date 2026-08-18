@@ -19,7 +19,18 @@ export function installDiskApi(overrides: Partial<DiskAPI> = {}): DiskAPI {
       success: true as const,
       data: { path: dirPath, entries: [] },
     })),
+    createDirectory: vi.fn(async () => ({ success: true as const, data: { path: '/V/New' } })),
+    readTextFile: vi.fn(async (target: string) => ({
+      success: true as const,
+      data: { path: target, text: '', truncated: false, size: 0 },
+    })),
+    rename: vi.fn(async () => ({ success: true as const, data: { path: '/V/renamed' } })),
+    move: vi.fn(async () => ({ success: true as const, data: { path: '/V/moved' } })),
+    trash: vi.fn(async () => ({ success: true as const, data: undefined })),
+    reveal: vi.fn(async () => ({ success: true as const, data: undefined })),
+    openExternal: vi.fn(async () => ({ success: true as const, data: undefined })),
     stat: vi.fn(),
+    onChanged: vi.fn(() => () => undefined),
     ...overrides,
   } as DiskAPI;
 

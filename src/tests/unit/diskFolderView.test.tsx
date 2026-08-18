@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -29,6 +29,8 @@ beforeEach(() => {
     listings: { [PHOTOS]: listing },
     expanded: {},
     selectedPath: null,
+    selectedPaths: [],
+    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 });
@@ -50,11 +52,11 @@ describe('DiskFolderView', () => {
     await waitFor(() => expect(screen.getByTestId('disk-folder-gallery')).toBeInTheDocument());
   });
 
-  it('renders images through the opal-file protocol, never as data URLs', async () => {
+  it('renders images through the thumbnail protocol, never as data URLs', async () => {
     render(<DiskFolderView dirPath={PHOTOS} />);
 
     const image = await screen.findByAltText('a.jpg');
-    expect(image.getAttribute('src')).toMatch(/^opal-file:\/\//);
+    expect(image.getAttribute('src')).toMatch(/^opal-thumb:\/\//);
     expect(image.getAttribute('src')).not.toMatch(/^data:/);
   });
 
@@ -62,6 +64,32 @@ describe('DiskFolderView', () => {
     render(<DiskFolderView dirPath={PHOTOS} />);
     const image = await screen.findByAltText('a.jpg');
     expect(image).toHaveAttribute('loading', 'lazy');
+  });
+
+  it('tries thumbnails again when the entry metadata changes', async () => {
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const image = await screen.findByAltText('a.jpg');
+    act(() => {
+      image.dispatchEvent(new Event('error'));
+    });
+
+    await waitFor(() => expect(screen.queryByAltText('a.jpg')).not.toBeInTheDocument());
+
+    act(() => {
+      useDiskStore.setState({
+        listings: {
+          [PHOTOS]: [
+            entry({ path: `${PHOTOS}/Raw`, name: 'Raw', kind: 'directory', isDirectory: true }),
+            entry({ path: `${PHOTOS}/a.jpg`, name: 'a.jpg', kind: 'image', size: 4096, mtimeMs: 2 }),
+            entry({ path: `${PHOTOS}/b.png`, name: 'b.png', kind: 'image', size: 4096 }),
+            entry({ path: `${PHOTOS}/notes.md`, name: 'notes.md', kind: 'markdown', size: 12 }),
+          ],
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByAltText('a.jpg')).toBeInTheDocument());
   });
 
   it('shows every entry including folders and non-images', async () => {
@@ -89,6 +117,41 @@ describe('DiskFolderView', () => {
     expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/a.jpg`);
   });
 
+  it('adds to the selection on Cmd-click', async () => {
+    const user = userEvent.setup();
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const first = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
+
+    await user.click(first);
+    const second = await screen.findByTestId('disk-folder-entry-/Vault/Photos/b.png');
+    fireEvent.click(second, { metaKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/b.png`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([
+      `${PHOTOS}/a.jpg`,
+      `${PHOTOS}/b.png`,
+    ]);
+  });
+
+  it('selects a range on Shift-click', async () => {
+    const user = userEvent.setup();
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    const first = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
+
+    await user.click(first);
+    const last = await screen.findByTestId('disk-folder-entry-/Vault/Photos/notes.md');
+    fireEvent.click(last, { shiftKey: true });
+
+    expect(useDiskStore.getState().selectedPath).toBe(`${PHOTOS}/notes.md`);
+    expect(useDiskStore.getState().selectedPaths).toEqual([
+      `${PHOTOS}/a.jpg`,
+      `${PHOTOS}/b.png`,
+      `${PHOTOS}/notes.md`,
+    ]);
+  });
+
   it('defaults a folder with no images to list mode', async () => {
     const docs = '/Vault/Docs';
     useDiskStore.setState({
@@ -109,9 +172,53 @@ describe('DiskFolderView', () => {
     await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
   });
 
+  it('treats a whitespace-only filter as no active filter in an empty folder', async () => {
+    const empty = '/Vault/Empty';
+    useDiskStore.setState({ listings: { [empty]: [] } });
+
+    render(<DiskFolderView dirPath={empty} />);
+
+    await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
+    act(() => {
+      useDiskStore.setState({ filter: '   ' });
+    });
+    await waitFor(() => expect(screen.getByTestId('disk-folder-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('disk-folder-no-matches')).not.toBeInTheDocument();
+  });
+
   it('requests the listing when it is not already cached', async () => {
     useDiskStore.setState({ listings: {} });
     render(<DiskFolderView dirPath={PHOTOS} />);
     await waitFor(() => expect(window.diskAPI.readDirectory).toHaveBeenCalledWith(PHOTOS));
+  });
+});
+
+describe('virtualization', () => {
+  it('renders a windowed subset of a large folder, not every item', async () => {
+    const many = Array.from({ length: 2000 }, (_, index) =>
+      entry({ path: `${PHOTOS}/img${index}.jpg`, name: `img${index}.jpg`, kind: 'image' })
+    );
+    useDiskStore.setState({ listings: { [PHOTOS]: many } });
+
+    render(<DiskFolderView dirPath={PHOTOS} />);
+
+    await waitFor(() => expect(screen.getByTestId('disk-folder-gallery')).toBeInTheDocument());
+
+    // The window is bounded by the measured height, so only a fraction of the
+    // 2000 entries exist in the DOM. The exact count depends on tile size;
+    // the assertion that matters is "far fewer than all of them".
+    const tiles = screen.getAllByTestId(/^disk-folder-entry-/);
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles.length).toBeLessThan(200);
+  });
+
+  it('still reports the full item count in the header', async () => {
+    const many = Array.from({ length: 2000 }, (_, index) =>
+      entry({ path: `${PHOTOS}/img${index}.jpg`, name: `img${index}.jpg`, kind: 'image' })
+    );
+    useDiskStore.setState({ listings: { [PHOTOS]: many } });
+
+    render(<DiskFolderView dirPath={PHOTOS} />);
+    await waitFor(() => expect(screen.getByText('2000 items')).toBeInTheDocument());
   });
 });

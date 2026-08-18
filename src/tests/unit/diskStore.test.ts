@@ -22,7 +22,12 @@ let removeRoot: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   useDiskStore.setState({
-    roots: [], listings: {}, expanded: {}, selectedPath: null,
+    roots: [],
+    listings: {},
+    expanded: {},
+    selectedPath: null,
+    pendingAction: null,
+    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 
@@ -77,6 +82,20 @@ describe('useDiskStore', () => {
     expect(readDirectory).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidates only cached directories and force-reloads them', async () => {
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: rootEntries,
+        [PHOTOS]: photoEntries,
+      },
+    });
+
+    await useDiskStore.getState().invalidate([ROOT, '/Vault/Missing']);
+
+    expect(readDirectory).toHaveBeenCalledTimes(1);
+    expect(readDirectory).toHaveBeenCalledWith(ROOT);
+  });
+
   it('records an error when a read fails, without throwing', async () => {
     readDirectory.mockResolvedValue({ success: false, error: 'Nope' });
     await useDiskStore.getState().loadDirectory(ROOT);
@@ -101,6 +120,31 @@ describe('useDiskStore', () => {
   it('selects an entry', () => {
     useDiskStore.getState().select('/Vault/note.md');
     expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
+  });
+
+  it('starts a new-folder action for the current directory', () => {
+    useDiskStore.getState().beginNewFolder(ROOT);
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'new-folder',
+      target: ROOT,
+    });
+  });
+
+  it('starts a rename action for the selected item', () => {
+    useDiskStore.getState().beginRename('/Vault/note.md');
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'rename',
+      target: '/Vault/note.md',
+    });
+  });
+
+  it('cancels a pending action', () => {
+    useDiskStore.setState({
+      pendingAction: { kind: 'rename', target: '/Vault/note.md' },
+    });
+
+    useDiskStore.getState().cancelAction();
+    expect(useDiskStore.getState().pendingAction).toBeNull();
   });
 
   it('clears a recorded error', async () => {

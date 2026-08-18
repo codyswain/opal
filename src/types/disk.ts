@@ -1,6 +1,7 @@
 import type { FileKind } from '@/common/fileKind';
 
 export type { FileKind };
+export type { TextFileContents } from '@/main/fs/DiskReader';
 
 /** A single file or directory on disk, as seen by the renderer. */
 export interface DiskEntry {
