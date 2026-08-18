@@ -1,8 +1,39 @@
 # Native Shell Polish — Design
 
-**Status:** approved 2026-08-17
+**Status:** approved 2026-08-17; revised same day (see Revision 1)
 **Supersedes:** nothing
-**Runs before:** `docs/superpowers/plans/2026-08-17-files-buildout.md`
+**Follows:** `docs/superpowers/plans/2026-08-17-files-buildout.md`, merged to `dev` in `c15770f`
+
+## Revision 1 — what changed and why
+
+Two facts surfaced after the first draft was approved, and both change the plan.
+
+**The files build-out was already complete.** Branch `feat/files-buildout`
+carried 34 commits implementing Tasks 1–21 in full, 348 tests green, and merged
+into `dev` without conflict. It had been branched before the plan document was
+committed, so every checkbox in the plan read unticked and the work looked
+undone. Consequences:
+
+- The original sequencing argument is void. It ordered shell phases 1–3 ahead of
+  the files work so the pane system would not be written against a
+  `DiskExplorer.tsx` that four files-plan tasks were about to rewrite. That
+  rewrite has happened. All shell work now targets the merged code.
+- Tabs no longer need to come last. `DetailPane` exists, so the dependency that
+  forced them to the end is satisfied. Tabs become the final phase by priority,
+  not by blocking.
+- The E2E budget is tighter than assumed. The merged suite holds **9** tests
+  against a ceiling of 10. This design may add exactly **one**, and no more.
+
+**`electron-store` is unusable here.** Version 10.0.1 is ESM-only: `"type":
+"module"`, and its `exports` map offers only `types` and `default` — no `require`
+condition. The main process builds to CommonJS (`vite.main.config.ts`,
+`formats: ['cjs']`) resolving with `exportConditions: ['node', 'require',
+'default']` and `mainFields: ['main', 'module', ...]`, and the package has no
+`main` field at all. Bundling it is a gamble that buys nothing, because
+`RootRegistry` already implements this exact pattern: a versioned JSON file under
+`userData`, tolerant of corruption, honouring `OPAL_TEST_USER_DATA_DIR` so E2E
+runs stay isolated. Window state follows that pattern instead. `electron-store`
+stays unused and should be dropped from `package.json` in a later cleanup.
 
 ## Problem
 
@@ -21,7 +52,15 @@ before a user clicks anything:
    roles are absent.
 
 Separately, `/files` has no way to open more than one file, and its sidebar is a
-fixed `w-64` div that cannot be resized.
+fixed `w-64` div that cannot be resized (`DiskExplorer.tsx:199`).
+
+A fourth issue is pre-existing and out of scope but must be known by anyone
+executing this work: `npx tsc --noEmit` reports **14 errors**, all in
+`file-explorer-v2` (`FolderView.tsx`, `NoteView.tsx`, `styles/common/components.ts`)
+from untyped `styled-components` theme access. They predate this work and are not
+to be fixed here. They matter because a `Stop` hook in `.claude/settings.json`
+runs `tsc --noEmit && eslint`, so that hook fails for reasons unrelated to any
+change made under this design.
 
 ## Scope
 
@@ -35,28 +74,26 @@ and nothing else; it is retired in a later vault slice and must not be polished.
 
 ## Relationship to the files build-out
 
-`2026-08-17-files-buildout.md` is written and unexecuted. It builds `/files`
-into a real file manager across five phases. This design covers only what that
-plan does not, and the two interleave:
+`2026-08-17-files-buildout.md` built `/files` into a real file manager across
+five phases. This design covers only what that plan did not.
+
+The files build-out is **already merged** (`c15770f`). All four phases of this
+design run against that merged code, in order:
 
 | Order | Work |
 |---|---|
-| 1 | This design, phases 1–3 (chrome, panes, menus/shortcuts/budgets) |
-| 2 | Files build-out, phases A–E, unchanged |
-| 3 | This design, phase 4 (tabs) |
+| 1 | Prefs and window state foundation, then window chrome and startup |
+| 2 | The pane system |
+| 3 | Menus, shortcuts, and performance budgets |
+| 4 | Tabs |
 
-Phase 4 is last because a tab needs something to render, and the kind-dispatching
-`DetailPane` is Task 2 of the files plan. Building tabs earlier would mean
-writing a preview host twice and revising a task that is already well specified.
-
-Phases 1–3 land before the files plan because that plan touches
-`DiskExplorer.tsx`'s layout in Tasks 2, 7, 12, and 20. Establishing the pane
-system first means that layout is written once against its final shape.
+Tabs are last by priority rather than by dependency — `DetailPane` already
+exists, so they could be built at any point after the pane system.
 
 ## Section 0 — The persistence split
 
-**UI preferences stay in `localStorage`. Window state moves to `electron-store`
-in the main process.**
+**UI preferences stay in `localStorage`. Window state moves to a versioned JSON
+file in the main process, following the `RootRegistry` pattern.**
 
 This split is forced by the no-flash budget. Pane sizes, collapse state, open
 tabs, and the active theme must be readable *before React's first paint*.
@@ -64,6 +101,8 @@ tabs, and the active theme must be readable *before React's first paint*.
 `index.html`; an IPC round-trip to main is neither, and would reintroduce
 precisely the flash this work removes. Window bounds, conversely, must be known
 before `BrowserWindow` is constructed, which is before any renderer exists.
+
+See Revision 1 for why this is a JSON file rather than `electron-store`.
 
 The existing `useLocalStorage` hook stays but gains a typed, versioned wrapper
 under `src/renderer/shared/prefs/`. Every stored value carries a schema version;
@@ -86,9 +125,9 @@ rather than a magic margin.
 
 Launch sequence:
 
-1. `WindowStateStore` (electron-store) supplies saved bounds, validated against
-   the current display list — a window saved on a since-disconnected monitor
-   must not open offscreen.
+1. `WindowStateStore` (versioned JSON under `userData`, mirroring
+   `RootRegistry`) supplies saved bounds, validated against the current display
+   list — a window saved on a since-disconnected monitor must not open offscreen.
 2. `BrowserWindow` is constructed with `show: false` and a `backgroundColor`
    matching the saved theme.
 3. An inline script in `index.html` reads the theme from `localStorage` and sets
@@ -108,8 +147,9 @@ bug rather than papering over it.
 `/explorer` has its existing `PanelGroup` swapped for the wrapper. Its internal
 UI is untouched.
 
-`/files` has its fixed `w-64` sidebar replaced by a real pane, and gains a third
-pane reserved for the detail view the files plan fills in.
+`/files` has its fixed `w-64` sidebar (`DiskExplorer.tsx:199`) and its fixed
+`w-80` detail aside (`DiskExplorer.tsx:232`) replaced by real panes, giving a
+three-pane group: tree, folder view, detail.
 
 Handles get a 4px visual width with a ~10px grab area, a `col-resize` cursor,
 double-click to reset to default, and arrow-key resize when focused.
@@ -169,8 +209,10 @@ Per the policy in `CLAUDE.md`, at the cheapest tier that can fail:
 | Window restores saved bounds and shows without flash | **E2E** |
 
 Exactly one E2E test is added, because window bounds and first-paint behaviour
-cannot be verified below a real Electron process. The suite goes from 5 to 6,
-inside the ≤10 budget.
+cannot be verified below a real Electron process. The merged suite holds 9
+tests; this takes it to 10, which is the ceiling. **No task in this design may
+add a second E2E test.** Anything else that seems to need one is being tested at
+the wrong tier.
 
 ## Risks
 
@@ -179,6 +221,14 @@ inside the ≤10 budget.
   Mitigated by verifying in the running app, not by a test.
 - **Deleting the window-control IPC** touches `preload.ts`. The existing IPC
   contract test guards this.
-- **The pane wrapper touches `/explorer`.** Its five existing tests must stay
-  green; if the wrapper cannot satisfy them, `/explorer` keeps its current
-  `PanelGroup` and only `/files` adopts the wrapper.
+- **The pane wrapper touches `/explorer`.** Its existing tests must stay green;
+  if the wrapper cannot satisfy them, `/explorer` keeps its current `PanelGroup`
+  and only `/files` adopts the wrapper.
+- **The pane wrapper touches heavily-tested `/files` code.** The merged suite has
+  348 unit tests, many asserting on `DiskExplorer`'s structure. Replacing its
+  `aside`/`section` elements with panes will break some; they are to be updated,
+  never deleted.
+- **`react-window` sizing.** The merged gallery and list are virtualized and size
+  themselves from their container. Panes change that container's width at
+  runtime, so the virtualized views must be confirmed to re-measure on resize
+  rather than only on mount.
