@@ -80,7 +80,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
   pin: (path) =>
     set((state) => {
       if (state.previewPath !== path) return {};
-      const next = { previewPath: null };
+      const next: Pick<TabsState, 'previewPath'> = { previewPath: null };
       persist({ ...state, ...next });
       return next;
     }),
@@ -105,7 +105,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     }),
 
   closeAll: () => {
-    const next = { openPaths: [], activePath: null, previewPath: null };
+    const next: TabsState = { openPaths: [], activePath: null, previewPath: null };
     persist(next);
     set(next);
   },

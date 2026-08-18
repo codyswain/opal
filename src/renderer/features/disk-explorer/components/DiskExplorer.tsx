@@ -13,6 +13,8 @@ import { DiskFolderView } from './DiskFolderView';
 import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
+import { TabStrip } from './TabStrip';
+import { useTabsStore } from '../store/tabsStore';
 import { PaneGroup, Pane, PaneHandle, usePaneLayout, sizesFor } from '@/renderer/shared/components/panes';
 
 /** The detail pane always shows a directory: a selected file shows its parent. */
@@ -54,6 +56,10 @@ export const DiskExplorer: React.FC = () => {
 
   const { sizes, onLayout } = usePaneLayout('files', [20, 55, 25]);
 
+  const activeTabPath = useTabsStore((state) => state.activePath);
+  const openPreviewTab = useTabsStore((state) => state.openPreview);
+  const hydrateTabs = useTabsStore((state) => state.hydrate);
+
   // A path is a directory if it is a root, or if any cached listing describes
   // it as one. That is enough without another IPC round-trip, because the tree
   // can only surface a path it has already listed.
@@ -87,6 +93,62 @@ export const DiskExplorer: React.FC = () => {
     }
     return null;
   }, [selectedPath, listings]);
+
+  // The tab being viewed, which is not always the grid selection: clicking a
+  // different tab changes what is displayed without moving the grid cursor.
+  const tabEntry = useMemo<DiskEntry | null>(() => {
+    if (!activeTabPath) return selectedEntry;
+    for (const entries of Object.values(listings)) {
+      const match = entries.find((candidate) => candidate.path === activeTabPath);
+      if (match) return match;
+    }
+    return selectedEntry;
+  }, [activeTabPath, listings, selectedEntry]);
+
+  useEffect(() => {
+    hydrateTabs();
+  }, [hydrateTabs]);
+
+  useEffect(() => {
+    if (!selectedEntry || selectedEntry.isDirectory) return;
+    openPreviewTab(selectedEntry.path);
+  }, [openPreviewTab, selectedEntry]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return;
+
+      const tabs = useTabsStore.getState();
+
+      if (event.key === 'w') {
+        if (!tabs.activePath) return;
+        event.preventDefault();
+        tabs.close(tabs.activePath);
+        return;
+      }
+
+      if (event.shiftKey && event.key === '[') {
+        event.preventDefault();
+        tabs.activatePrevious();
+        return;
+      }
+
+      if (event.shiftKey && event.key === ']') {
+        event.preventDefault();
+        tabs.activateNext();
+        return;
+      }
+
+      // Cmd+1..9 jump to a tab by position, as in every browser.
+      if (event.key >= '1' && event.key <= '9') {
+        event.preventDefault();
+        tabs.activateIndex(Number(event.key) - 1);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     return window.diskAPI.onChanged(({ directories }) => {
@@ -259,9 +321,12 @@ export const DiskExplorer: React.FC = () => {
           minSize={15}
           maxSize={50}
           collapsible
-          className="overflow-hidden border-l border-border/60"
+          className="flex flex-col overflow-hidden border-l border-border/60"
         >
-          <DetailPane entry={selectedEntry} />
+          <TabStrip />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DetailPane entry={tabEntry} />
+          </div>
         </Pane>
       </PaneGroup>
 

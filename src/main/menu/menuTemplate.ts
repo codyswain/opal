@@ -42,7 +42,7 @@ export function buildMenuTemplate(
     return [{ label: command.label, accelerator: command.accelerator, commandId: command.id }];
   };
 
-  return [
+  const menus: MenuTemplateEntry[] = [
     {
       label: options.appName,
       submenu: [
@@ -60,9 +60,9 @@ export function buildMenuTemplate(
     {
       label: 'File',
       submenu: [
+        // No 'close' role: Cmd+W closes the active tab, handled in the
+        // renderer. A role here would close the whole window instead.
         ...item(COMMAND_IDS.openFolder),
-        { type: 'separator' },
-        { role: 'close', label: 'Close Window' },
       ],
     },
     {
@@ -106,4 +106,8 @@ export function buildMenuTemplate(
       ],
     },
   ];
+
+  // A menu whose every item was omitted would render as an empty, unclickable
+  // title — and Electron stalls building one on macOS. Drop those instead.
+  return menus.filter((menu) => menu.submenu.length > 0);
 }
