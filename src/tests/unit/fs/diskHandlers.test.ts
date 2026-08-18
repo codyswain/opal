@@ -131,6 +131,21 @@ describe('DiskHandlers', () => {
     expect(watchRoot).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the opened root even if starting its watcher fails', async () => {
+    showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [root] });
+    watchRoot.mockRejectedValue(new Error('watch failed'));
+
+    const result = await stub.invoke('disk:open-folder') as {
+      success: boolean;
+      data: { root: string | null };
+    };
+
+    expect(result.success).toBe(true);
+    expect(result.data.root).toContain('Vault');
+    expect(registry.list()).toHaveLength(1);
+    expect(watchRoot).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a cancelled dialog as success with a null root', async () => {
     showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
 

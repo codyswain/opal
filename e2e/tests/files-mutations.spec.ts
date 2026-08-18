@@ -57,6 +57,7 @@ test('refuses every mutation outside an opened root', async ({ page }) => {
   const openedFile = path.join(vaultRoot, 'readme.md');
   await mkdir(forbidden, { recursive: true });
   await writeFile(forbiddenFile, 'do not touch');
+  await writeFile(openedFile, '# still here');
 
   await page.evaluate(() => {
     window.location.hash = '#/files';
@@ -84,6 +85,7 @@ test('refuses every mutation outside an opened root', async ({ page }) => {
   expect(results.trash.success).toBe(false);
   expect(moveResults.fromForbiddenIntoOpenedRoot.success).toBe(false);
   expect(moveResults.fromOpenedRootIntoForbidden.success).toBe(false);
+  expect(await exists(openedFile)).toBe(true);
   expect(await exists(forbiddenFile)).toBe(true);
   expect(await exists(path.join(forbidden, 'nope'))).toBe(false);
 });

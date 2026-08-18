@@ -60,7 +60,14 @@ export class DiskHandlers {
             return { success: true, data: { root: null } };
           }
           const root = await this.deps.registry.add(result.filePaths[0]);
-          await this.deps.watcher.watch(root);
+          try {
+            await this.deps.watcher.watch(root);
+          } catch (error) {
+            logger.error(
+              `Failed to start watcher for opened root ${root}; continuing without live updates`,
+              error instanceof Error ? error : undefined
+            );
+          }
           return { success: true, data: { root } };
         } catch (error) {
           logger.error('Error opening folder:', error);

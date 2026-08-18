@@ -40,6 +40,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
         aria-label="New folder"
         title="New folder"
         data-testid="toolbar-new-folder"
+        data-disk-shortcuts-ignore="true"
         className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
       >
         <FolderPlus className="h-4 w-4" />
@@ -65,6 +66,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
             onClick={() => setFilter('')}
             aria-label="Clear filter"
             data-testid="filter-clear"
+            data-disk-shortcuts-ignore="true"
             className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors duration-100 hover:text-foreground"
           >
             <X className="h-3 w-3" />
@@ -77,6 +79,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
         aria-label="Toggle density"
         aria-pressed={density === 'compact'}
         data-testid="toolbar-density"
+        data-disk-shortcuts-ignore="true"
         className={`rounded-md px-2 py-1 text-xs transition-colors duration-100 ${
           density === 'compact'
             ? 'bg-accent text-accent-foreground'
@@ -97,6 +100,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
             onClick={() => setSort(field)}
             aria-pressed={isActive}
             data-testid={`sort-${field}`}
+            data-disk-shortcuts-ignore="true"
             className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors duration-100 ${
               isActive
                 ? 'bg-accent text-accent-foreground'

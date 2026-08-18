@@ -1,4 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+const { renameSpy } = vi.hoisted(() => ({
+  renameSpy: vi.fn(),
+}));
+
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  renameSpy.mockImplementation(actual.rename);
+  return {
+    ...actual,
+    rename: renameSpy,
+  };
+});
+
 import { mkdtemp, rm, mkdir, writeFile, readdir } from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -28,6 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  renameSpy.mockClear();
   await rm(tmp, { recursive: true, force: true });
 });
 
@@ -85,5 +99,16 @@ describe('ThumbnailService', () => {
   it('writes nothing outside its cache directory', async () => {
     await service.getThumbnailPath(path.join(root, 'a.jpg'));
     expect(await readdir(root)).toEqual(['a.jpg']);
+  });
+
+  it('writes thumbnails via a temp file before renaming into place', async () => {
+    const result = await service.getThumbnailPath(path.join(root, 'a.jpg'));
+
+    expect(renameSpy).toHaveBeenCalledTimes(1);
+    const [tempPath, finalPath] = renameSpy.mock.calls[0];
+    expect(tempPath).not.toBe(finalPath);
+    expect(path.dirname(tempPath)).toBe(cacheDir);
+    expect(finalPath).toBe(result);
+    expect(tempPath).toMatch(/\.tmp$/);
   });
 });

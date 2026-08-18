@@ -27,6 +27,17 @@ function directoryForSelection(
   return parent || roots[0] || null;
 }
 
+function shouldIgnoreShortcutTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
+    return true;
+  }
+
+  return typeof target.closest === 'function'
+    && target.closest('[role="dialog"], [data-disk-shortcuts-ignore="true"]') !== null;
+}
+
 export const DiskExplorer: React.FC = () => {
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
@@ -117,12 +128,8 @@ export const DiskExplorer: React.FC = () => {
       if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
         // Enter renames the selection - Finder's binding. Not while typing.
         const target = event.target as HTMLElement | null;
-        const tag = target?.tagName;
         if (
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'BUTTON' ||
-          target?.isContentEditable ||
+          shouldIgnoreShortcutTarget(target) ||
           useDiskStore.getState().pendingAction !== null
         ) {
           return;
@@ -135,12 +142,8 @@ export const DiskExplorer: React.FC = () => {
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
         const target = event.target as HTMLElement | null;
-        const tag = target?.tagName;
         if (
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'BUTTON' ||
-          target?.isContentEditable ||
+          shouldIgnoreShortcutTarget(target) ||
           useDiskStore.getState().pendingAction !== null
         ) {
           return;
@@ -203,6 +206,7 @@ export const DiskExplorer: React.FC = () => {
             onClick={() => void openFolder()}
             aria-label="Open folder"
             data-testid="disk-explorer-open-folder"
+            data-disk-shortcuts-ignore="true"
             className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
           >
             <FolderPlus className="h-4 w-4" />

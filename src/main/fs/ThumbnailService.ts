@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { access, mkdir, stat, writeFile } from 'fs/promises';
+import * as fs from 'fs/promises';
 import path from 'path';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 
@@ -35,7 +35,7 @@ export class ThumbnailService {
 
   async getThumbnailPath(sourcePath: string): Promise<string> {
     const resolved = await this.deps.registry.assertAllowed(sourcePath);
-    const info = await stat(resolved);
+    const info = await fs.stat(resolved);
 
     // mtime and size are part of the key, so an edited file lands on a new
     // cache entry automatically — no invalidation pass to write or to forget.
@@ -49,7 +49,7 @@ export class ThumbnailService {
 
     const cachePath = path.join(this.deps.cacheDir, `${key}.png`);
     try {
-      await access(cachePath);
+      await fs.access(cachePath);
       return cachePath;
     } catch {
       // Not cached yet — fall through and generate.
@@ -61,8 +61,15 @@ export class ThumbnailService {
         throw new Error('OS produced an empty thumbnail');
       }
 
-      await mkdir(this.deps.cacheDir, { recursive: true });
-      await writeFile(cachePath, image.toPNG());
+      await fs.mkdir(this.deps.cacheDir, { recursive: true });
+      const tempPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await fs.writeFile(tempPath, image.toPNG());
+        await fs.rename(tempPath, cachePath);
+      } catch (error) {
+        await fs.rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
       return cachePath;
     } catch (error) {
       this.failed.add(key);

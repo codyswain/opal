@@ -195,6 +195,48 @@ describe('DiskExplorer', () => {
     });
   });
 
+  it('keeps Enter and Delete working after clicking a gallery tile', async () => {
+    const user = userEvent.setup();
+    render(<DiskExplorer />);
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    const tile = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
+    await user.click(tile);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'rename',
+      target: '/Vault/Photos/a.jpg',
+    });
+
+    useDiskStore.setState({ pendingAction: null });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(useDiskStore.getState().pendingDelete).toBe('/Vault/Photos/a.jpg');
+  });
+
+  it('keeps Enter and Delete working after clicking a list row', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
+      },
+    });
+
+    render(<DiskExplorer />);
+    const row = screen.getByTestId('disk-folder-entry-/Vault/note.md');
+    await user.click(row);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(useDiskStore.getState().pendingAction).toEqual({
+      kind: 'rename',
+      target: '/Vault/note.md',
+    });
+
+    useDiskStore.setState({ pendingAction: null });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(useDiskStore.getState().pendingDelete).toBe('/Vault/note.md');
+  });
+
   it('does not start rename when Enter activates the new-folder button', async () => {
     const user = userEvent.setup();
     useDiskStore.setState({

@@ -75,7 +75,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
 
   const activeMode = mode ?? suggestedMode;
   const columns = activeMode === 'gallery'
-    ? Math.max(1, Math.floor(viewport.width / tile.min))
+    ? Math.max(1, Math.floor(viewport.width / tile.width))
     : 1;
   const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
 
@@ -137,6 +137,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
                   type="button"
                   onClick={() => setFilter('')}
                   data-testid="disk-folder-clear-filter"
+                  data-disk-shortcuts-ignore="true"
                   className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-colors duration-100 hover:opacity-90"
                 >
                   Clear filter
@@ -238,6 +239,7 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
     aria-label={label}
     aria-pressed={active}
     data-testid={`disk-folder-view-${mode}`}
+    data-disk-shortcuts-ignore="true"
     onClick={() => onSelect(mode)}
     className={`rounded-md p-2 transition-colors duration-100 ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted text-muted-foreground'}`}
   >

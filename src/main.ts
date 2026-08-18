@@ -158,6 +158,10 @@ const createWindow = () => {
       log.error(`Failed to load page: ${errorCode} - ${errorDescription}`);
     }
   );
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 };
 
 // --- App Lifecycle Events
@@ -211,7 +215,8 @@ const rootRegistry = new RootRegistry({
 const diskReader = new DiskReader({ registry: rootRegistry });
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
-    mainWindow?.webContents.send("disk:changed", { directories });
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("disk:changed", { directories });
   },
 });
 const fileWriter = new FileWriter({
@@ -262,7 +267,14 @@ app.whenReady().then(async () => {
 
     await rootRegistry.load();
     for (const root of rootRegistry.list()) {
-      await diskWatcher.watch(root);
+      try {
+        await diskWatcher.watch(root);
+      } catch (error) {
+        log.error(
+          `Failed to start disk watcher for ${root}; continuing without live updates for that root`,
+          error instanceof Error ? error : undefined
+        );
+      }
     }
     registerOpalFileProtocol({ registry: rootRegistry });
     registerOpalThumbProtocol({ thumbnails: thumbnailService });
