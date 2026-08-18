@@ -12,7 +12,7 @@ import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Navbar, navbarItems } from "@/renderer/features/navbar";
 import { Settings } from "@/renderer/features/settings";
-import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
+import { usePref } from "@/renderer/shared/prefs/usePref";
 import { useCommands } from "@/renderer/features/commands";
 import { Command } from "@/renderer/features/commands/services/commandRegistry";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
@@ -24,15 +24,15 @@ const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
   const loadSettings = useSettingsStore((state) => state.loadSettings);
 
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useLocalStorage(
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = usePref(
     "isLeftSidebarOpen",
     true
   );
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useLocalStorage(
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = usePref(
     "isRightSidebarOpen",
     true
   );
-  const [isBottomPaneOpen, setIsBottomPaneOpen] = useLocalStorage(
+  const [isBottomPaneOpen, setIsBottomPaneOpen] = usePref(
     "isBottomPaneOpen",
     true
   );
