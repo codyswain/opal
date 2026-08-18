@@ -14,7 +14,8 @@ import { Navbar, navbarItems } from "@/renderer/features/navbar";
 import { Settings } from "@/renderer/features/settings";
 import { usePref } from "@/renderer/shared/prefs/usePref";
 import { useCommands } from "@/renderer/features/commands";
-import { Command } from "@/renderer/features/commands/services/commandRegistry";
+import { Command, commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
+import { COMMAND_IDS } from "@/common/commandIds";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
 import { DiskExplorer, useDiskStore } from "@/renderer/features/disk-explorer";
@@ -53,36 +54,57 @@ const App: React.FC = () => {
   useEffect(() => {
     const commands: Command[] = [
       {
-        id: "pane.toggleLeft",
+        id: COMMAND_IDS.toggleLeftPane,
         name: "Toggle Left Pane",
         type: "paneToggle",
+        shortcut: ["CmdOrCtrl+B"],
         keywords: ["pane", "toggle"],
         perform: toggleLeftSidebar,
       },
       {
-        id: "pane.toggleRight",
+        id: COMMAND_IDS.toggleRightPane,
         name: "Toggle Right Pane",
         type: "paneToggle",
+        shortcut: ["CmdOrCtrl+Alt+B"],
         keywords: ["pane", "toggle"],
         perform: toggleRightSidebar,
       },
       {
-        id: "pane.toggleBottom",
+        id: COMMAND_IDS.toggleBottomPane,
         name: "Toggle Bottom Pane",
         type: "paneToggle",
+        shortcut: ["CmdOrCtrl+J"],
         keywords: ["pane", "toggle"],
         perform: toggleBottomPane,
       },
       {
-        id: "files.openFolder",
+        id: COMMAND_IDS.openFolder,
         name: "Open Folder on Disk",
         type: "navigation",
+        shortcut: ["CmdOrCtrl+O"],
         keywords: ["files", "folder", "open", "disk"],
         perform: () => { void useDiskStore.getState().openFolder(); },
+      },
+      {
+        id: COMMAND_IDS.openSettings,
+        name: "Settings…",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+,"],
+        keywords: ["settings", "preferences"],
+        perform: () => { window.location.hash = "#/settings"; },
       },
     ];
 
     commands.forEach(registerCommand);
+
+    // Tell main what exists, so the menu and the palette can never disagree.
+    window.systemAPI.reportCommands(
+      commands.map((command) => ({
+        id: command.id,
+        label: command.name,
+        accelerator: command.shortcut?.[0],
+      }))
+    );
 
     return () => {
       commands.forEach((command) => unregisterCommand(command));
@@ -94,6 +116,16 @@ const App: React.FC = () => {
     toggleRightSidebar,
     toggleBottomPane,
   ]);
+
+  useEffect(() => {
+    return window.systemAPI.onMenuCommand((commandId) => {
+      try {
+        commandRegistry.executeCommand(commandId);
+      } catch (error) {
+        console.warn(`Menu dispatched an unknown command: ${commandId}`, error);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     loadSettings(); // load settings on app mount

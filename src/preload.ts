@@ -23,6 +23,13 @@ contextBridge.exposeInMainWorld("systemAPI", {
   reportTheme: (theme: "light" | "dark") => ipcRenderer.send("system:report-theme", theme),
   openFolderDialog: () => ipcRenderer.invoke(`system:open-folder-dialog`),
   createDirectoryOnDisk: (dirPath: string) => ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
+  reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) =>
+    ipcRenderer.send("menu:commands", commands),
+  onMenuCommand: (handler: (commandId: string) => void) => {
+    const listener = (_event: IpcRendererEvent, commandId: string) => handler(commandId);
+    ipcRenderer.on("menu:invoke", listener);
+    return () => ipcRenderer.removeListener("menu:invoke", listener);
+  },
 });
 
 // These need to be moved elsewhere or deprecated

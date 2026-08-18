@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, screen } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, screen, Menu } from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -21,6 +21,7 @@ import DatabaseManager from "@/main/database/db";
 import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
+import { AppMenu } from "@/main/menu/AppMenu";
 import {
   resolveBounds,
   MIN_WINDOW_WIDTH,
@@ -69,6 +70,11 @@ const CSP = [
 // Must run at module load, before app.whenReady() — Electron requires
 // privileged schemes to be declared before the protocol layer initializes.
 registerOpalFileScheme();
+
+// In development the app runs inside Electron's own bundle, so getName() would
+// report "Electron" and title the macOS app menu with it. productName is what
+// the packaged app uses; set it here so both builds read "Opal".
+app.setName("Opal");
 
 const createWindow = () => {
   log.info(
@@ -276,6 +282,24 @@ const windowStateStore = new WindowStateStore({
     process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
     "window-state.json"
   ),
+});
+
+const appMenu = new AppMenu({
+  menu: Menu,
+  appName: app.getName(),
+  send: (commandId) => {
+    BrowserWindow.getFocusedWindow()?.webContents.send("menu:invoke", commandId);
+  },
+});
+
+// Install an empty menu immediately so the app never shows Electron's stock
+// developer menu, even for the moment before the renderer reports its commands.
+appMenu.install([]);
+
+// Registered at module scope: doing it inside createWindow would add a
+// duplicate listener each time the window is reopened from the dock.
+ipcMain.on("menu:commands", (_event, commands) => {
+  appMenu.install(Array.isArray(commands) ? commands : []);
 });
 
 const rootRegistry = new RootRegistry({

@@ -130,6 +130,8 @@ declare global {
       reportTheme: (theme: 'light' | 'dark') => void;
       openFolderDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       createDirectoryOnDisk: (dirPath: string) => Promise<{ success: boolean, error?: string }>;
+      reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) => void;
+      onMenuCommand: (handler: (commandId: string) => void) => () => void;
     };
   
     chatAPI: {
