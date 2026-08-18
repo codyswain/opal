@@ -1,22 +1,18 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import {
   Panel,
   PanelGroup,
-  PanelResizeHandle,
   ImperativePanelHandle,
 } from "react-resizable-panels";
+import {
+  usePaneLayout,
+  sizesFor,
+  PaneHandle,
+} from "@/renderer/shared/components/panes";
 
 import RightSidebar from "@/renderer/features/file-explorer-v2/components/right-sidebar/RightSidebar";
 import ExplorerLeftPanel from "./ExplorerLeftPanel";
 import ExploreCenterPanel from "./ExploreCenterPanel";
-
-const ResizeHandle: React.FC<{
-  className?: string;
-}> = ({ className }) => (
-  <PanelResizeHandle
-    className={`group relative w-px flex items-center justify-center bg-border data-[resize-handle-state=hover]:bg-[hsl(var(--primary)_/_0.7)] transition-colors duration-300 ${className}`}
-  ></PanelResizeHandle>
-);
 
 const Explorer: React.FC<{
   isLeftSidebarOpen: boolean;
@@ -29,8 +25,7 @@ const Explorer: React.FC<{
   setIsLeftSidebarOpen,
   setIsRightSidebarOpen,
 }) => {
-  const [leftSidebarSize, setLeftSidebarSize] = useState(18);
-  const [rightSidebarSize, setRightSidebarSize] = useState(25);
+  const { sizes, onLayout } = usePaneLayout("explorer", [18, 57, 25]);
 
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
@@ -66,41 +61,28 @@ const Explorer: React.FC<{
     }
   }, [isRightSidebarOpen]);
 
-  const handleResize = (panelName: string) => (size: number) => {
-    switch (panelName) {
-      case "leftSidebar":
-        setLeftSidebarSize(size);
-        break;
-      case "rightSidebar":
-        setRightSidebarSize(size);
-        break;
-    }
-  };
-
   return (
-    <PanelGroup direction="horizontal" className="h-screen w-screen">
+    <PanelGroup direction="horizontal" className="h-screen w-screen" onLayout={onLayout}>
       <Panel
         ref={leftPanelRef}
-        defaultSize={leftSidebarSize}
+        defaultSize={sizesFor(sizes, 0, 18)}
         minSize={10}
         maxSize={40}
-        onResize={handleResize("leftSidebar")}
         collapsible={true}
         onCollapse={() => handlePanelCollapse("leftSidebar")}
       >
         <ExplorerLeftPanel />
       </Panel>
-      <ResizeHandle />
+      <PaneHandle />
       <Panel>
         <ExploreCenterPanel />
       </Panel>
-      <ResizeHandle />
+      <PaneHandle />
       <Panel
         ref={rightPanelRef}
-        defaultSize={rightSidebarSize}
+        defaultSize={sizesFor(sizes, 2, 25)}
         minSize={15}
         maxSize={45}
-        onResize={handleResize("rightSidebar")}
         collapsible={true}
         onCollapse={() => handlePanelCollapse("rightSidebar")}
       >

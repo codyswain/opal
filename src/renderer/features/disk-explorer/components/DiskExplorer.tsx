@@ -13,6 +13,7 @@ import { DiskFolderView } from './DiskFolderView';
 import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
+import { PaneGroup, Pane, PaneHandle, usePaneLayout, sizesFor } from '@/renderer/shared/components/panes';
 
 /** The detail pane always shows a directory: a selected file shows its parent. */
 function directoryForSelection(
@@ -50,6 +51,8 @@ export const DiskExplorer: React.FC = () => {
   const openQuickLook = useDiskStore((state) => state.openQuickLook);
   const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
+
+  const { sizes, onLayout } = usePaneLayout('files', [20, 55, 25]);
 
   // A path is a directory if it is a root, or if any cached listing describes
   // it as one. That is enough without another IPC round-trip, because the tree
@@ -196,50 +199,72 @@ export const DiskExplorer: React.FC = () => {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <aside className="w-64 shrink-0 border-r border-border/60 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Files
-          </span>
-          <button
-            type="button"
-            onClick={() => void openFolder()}
-            aria-label="Open folder"
-            data-testid="disk-explorer-open-folder"
-            data-disk-shortcuts-ignore="true"
-            className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
-          >
-            <FolderPlus className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-auto">
-          <DiskTree />
-        </div>
-      </aside>
+      <PaneGroup layoutKey="files" onLayout={onLayout} className="flex-1">
+        <Pane
+          defaultSize={sizesFor(sizes, 0, 20)}
+          minSize={12}
+          maxSize={40}
+          collapsible
+          className="flex flex-col overflow-hidden border-r border-border/60"
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Files
+            </span>
+            <button
+              type="button"
+              onClick={() => void openFolder()}
+              aria-label="Open folder"
+              data-testid="disk-explorer-open-folder"
+              data-disk-shortcuts-ignore="true"
+              className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
+            >
+              <FolderPlus className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <DiskTree />
+          </div>
+        </Pane>
 
-      <section className="flex-1 flex min-w-0 flex-col overflow-hidden">
-        {error && <ErrorBanner message={error} />}
-        {activeDirectory ? (
-          <>
-            <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
-              <Breadcrumb dirPath={activeDirectory} />
-              <Toolbar dirPath={activeDirectory} />
-            </div>
-            <div className="flex min-h-0 flex-1 overflow-hidden">
-              <div className="min-w-0 flex-1 overflow-hidden">
+        <PaneHandle />
+
+        <Pane
+          defaultSize={sizesFor(sizes, 1, 55)}
+          minSize={30}
+          className="flex min-w-0 flex-col overflow-hidden"
+        >
+          {error && <ErrorBanner message={error} />}
+          {activeDirectory ? (
+            <>
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
+                <Breadcrumb dirPath={activeDirectory} />
+                <Toolbar dirPath={activeDirectory} />
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
                 <DiskFolderView dirPath={activeDirectory} />
               </div>
-              <aside className="w-80 shrink-0 overflow-hidden border-l border-border/60">
-                <DetailPane entry={selectedEntry} />
-              </aside>
+            </>
+          ) : (
+            <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
+              Open a folder to get started
             </div>
-          </>
-        ) : (
-          <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
-            Open a folder to get started
-          </div>
-        )}
-      </section>
+          )}
+        </Pane>
+
+        <PaneHandle />
+
+        <Pane
+          defaultSize={sizesFor(sizes, 2, 25)}
+          minSize={15}
+          maxSize={50}
+          collapsible
+          className="overflow-hidden border-l border-border/60"
+        >
+          <DetailPane entry={selectedEntry} />
+        </Pane>
+      </PaneGroup>
+
       <QuickLook entry={selectedEntry} />
       <NameDialog />
       <ConfirmDeleteDialog />
