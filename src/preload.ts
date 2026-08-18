@@ -20,9 +20,7 @@ import { DirectoryStructures } from "./renderer/shared/types";
 */
 
 contextBridge.exposeInMainWorld("systemAPI", {
-  minimize: () => ipcRenderer.send("system:minimize-window"),
-  maximize: () => ipcRenderer.send("system:maximize-window"),
-  close: () => ipcRenderer.send("system:close-window"),
+  reportTheme: (theme: "light" | "dark") => ipcRenderer.send("system:report-theme", theme),
   openFolderDialog: () => ipcRenderer.invoke(`system:open-folder-dialog`),
   createDirectoryOnDisk: (dirPath: string) => ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
 });

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, screen } from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -20,6 +20,12 @@ import { CredentialManager } from "@/main/services/credentials/CredentialManager
 import DatabaseManager from "@/main/database/db";
 import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
+import { WindowStateStore } from "@/main/window/WindowStateStore";
+import {
+  resolveBounds,
+  MIN_WINDOW_WIDTH,
+  MIN_WINDOW_HEIGHT,
+} from "@/main/window/windowBounds";
 import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
 import { DiskWatcher } from "@/main/fs/DiskWatcher";
@@ -69,16 +75,72 @@ const createWindow = () => {
     `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`
   );
 
-  mainWindow = new BrowserWindow({
+  const displays = screen.getAllDisplays().map((display) => display.workArea);
+  const saved = resolveBounds(windowStateStore.get(), displays, {
     width: DEFAULT_BROWSER_WINDOW_WIDTH,
     height: DEFAULT_BROWSER_WINDOW_HEIGHT,
-    frame: false,
+  });
+
+  // Painting the window's own background before the renderer loads is what
+  // removes the white flash. It must match the theme the inline script in
+  // index.html is about to apply, so both read the same localStorage key.
+  const isDark = windowStateStore.getThemeHint() === "dark";
+
+  mainWindow = new BrowserWindow({
+    width: saved?.width ?? DEFAULT_BROWSER_WINDOW_WIDTH,
+    height: saved?.height ?? DEFAULT_BROWSER_WINDOW_HEIGHT,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    show: false,
+    backgroundColor: isDark ? "#191A1C" : "#FFFFFF",
+    titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
     },
+  });
+
+  if (saved?.isMaximized) mainWindow.maximize();
+
+  // Reveal only once the first frame is ready. Without this the user sees an
+  // empty window for the duration of the renderer's startup.
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+  });
+
+  // Debounced because macOS emits resize and move continuously during a drag;
+  // writing the file on every event would mean hundreds of writes per gesture.
+  let saveTimer: NodeJS.Timeout | null = null;
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      // getNormalBounds returns the pre-maximize rectangle, so un-maximizing
+      // after a restart restores a useful size rather than a full-screen one.
+      const { x, y, width, height } = mainWindow.getNormalBounds();
+      void windowStateStore.save({
+        x, y, width, height,
+        isMaximized: mainWindow.isMaximized(),
+      });
+    }, 400);
+  };
+
+  mainWindow.on("resize", scheduleSave);
+  mainWindow.on("move", scheduleSave);
+  mainWindow.on("maximize", scheduleSave);
+  mainWindow.on("unmaximize", scheduleSave);
+
+  mainWindow.on("close", () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { x, y, width, height } = mainWindow.getNormalBounds();
+    void windowStateStore.save({
+      x, y, width, height,
+      isMaximized: mainWindow.isMaximized(),
+    });
   });
 
   mainWindow.webContents.session.webRequest.onHeadersReceived(
@@ -193,6 +255,9 @@ const systemHandlers = new SystemHandlers({
   ipc: ipcMain,
   dialog,
   browserWindow: BrowserWindow,
+  onThemeChanged: (theme) => {
+    void windowStateStore.saveTheme(theme);
+  },
 });
 
 const credentialHandlers = new CredentialHandlers({
@@ -206,6 +271,13 @@ const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
 // directory, mirroring the existing OPAL_TEST_DB_DIR convention. Without it,
 // tests would write into the real app's user data and corrupt the user's
 // actual list of opened folders.
+const windowStateStore = new WindowStateStore({
+  storePath: path.join(
+    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
+    "window-state.json"
+  ),
+});
+
 const rootRegistry = new RootRegistry({
   storePath: path.join(
     process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
@@ -293,6 +365,9 @@ app.whenReady().then(async () => {
     // Ensure all database tables exist with correct schema
     await ensureAllTablesExist();
     log.info("Database tables verified");
+
+    await windowStateStore.load();
+    log.info("Window state loaded");
 
     createWindow();
     log.info("Application initialization completed");

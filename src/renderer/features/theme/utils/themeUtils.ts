@@ -5,18 +5,15 @@ export function applyTheme(theme: Theme) {
   root.classList.remove('light', 'dark')
   root.classList.add(theme)
   localStorage.setItem(THEME_STORAGE_KEY, theme)
+  // Tell main, so the next launch can paint the right background before the
+  // renderer exists.
+  window.systemAPI?.reportTheme?.(theme)
 }
 
 export function getInitialTheme(): Theme {
   if (typeof window !== 'undefined') {
-    let theme = localStorage.getItem(THEME_STORAGE_KEY) as Theme;
-    console.log('theme after local storage retrieval: ', theme)
-    if (!theme) {
-      console.log('failed to retrieve theme')
-      theme = DEFAULT_THEME
-    }
-    console.log('retrieved theme: ', theme)
-    return theme
+    const theme = localStorage.getItem(THEME_STORAGE_KEY) as Theme
+    return theme || DEFAULT_THEME
   }
   return DEFAULT_THEME
 }

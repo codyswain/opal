@@ -6,6 +6,7 @@ interface SystemHandlerDependencies {
   ipc: IpcMain;
   dialog: Dialog;
   browserWindow: typeof BrowserWindow;
+  onThemeChanged: (theme: 'light' | 'dark') => void;
 }
 
 export class SystemHandlers {
@@ -18,9 +19,7 @@ export class SystemHandlers {
   registerAll(): void {
     this.registerCreateDirectoryOnDisk();
     this.registerOpenFolderDialog();
-    this.registerMinimizeWindow();
-    this.registerMaximizeWindow();
-    this.registerCloseWindow();
+    this.registerReportTheme();
   }
 
   private registerCreateDirectoryOnDisk(): void {
@@ -53,26 +52,9 @@ export class SystemHandlers {
     });
   }
 
-  private registerMinimizeWindow(): void {
-    this.deps.ipc.on("system:minimize-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      window?.minimize();
-    });
-  }
-
-  private registerMaximizeWindow(): void {
-    this.deps.ipc.on("system:maximize-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      if (window) {
-        window.isMaximized() ? window.unmaximize() : window.maximize();
-      }
-    });
-  }
-
-  private registerCloseWindow(): void {
-    this.deps.ipc.on("system:close-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      window?.close();
+  private registerReportTheme(): void {
+    this.deps.ipc.on('system:report-theme', (_event, theme: 'light' | 'dark') => {
+      this.deps.onThemeChanged(theme === 'dark' ? 'dark' : 'light');
     });
   }
 }

@@ -104,3 +104,34 @@ describe('WindowStateStore', () => {
     await expect(store.save(BOUNDS)).resolves.toBeUndefined();
   });
 });
+
+describe('theme hint', () => {
+  it('defaults to light', async () => {
+    const store = new WindowStateStore({ storePath });
+    await store.load();
+    expect(store.getThemeHint()).toBe('light');
+  });
+
+  it('round-trips a saved theme alongside bounds', async () => {
+    const store = new WindowStateStore({ storePath });
+    await store.load();
+    await store.save(BOUNDS);
+    await store.saveTheme('dark');
+
+    const reloaded = new WindowStateStore({ storePath });
+    await reloaded.load();
+    expect(reloaded.getThemeHint()).toBe('dark');
+    expect(reloaded.get()).toEqual(BOUNDS);
+  });
+
+  it('keeps bounds when only the theme changes', async () => {
+    const store = new WindowStateStore({ storePath });
+    await store.load();
+    await store.save(BOUNDS);
+    await store.saveTheme('dark');
+
+    const reloaded = new WindowStateStore({ storePath });
+    await reloaded.load();
+    expect(reloaded.get()?.width).toBe(BOUNDS.width);
+  });
+});

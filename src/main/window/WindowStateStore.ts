@@ -12,6 +12,8 @@ export interface WindowStateStoreDependencies {
 interface WindowStateFile {
   version: number;
   bounds: SavedBounds;
+  /** Mirror of the renderer's theme, used only to pick a pre-paint background. */
+  theme?: 'light' | 'dark';
 }
 
 function isSavedBounds(candidate: unknown): candidate is SavedBounds {
@@ -37,6 +39,7 @@ function isSavedBounds(candidate: unknown): candidate is SavedBounds {
 export class WindowStateStore {
   private deps: WindowStateStoreDependencies;
   private bounds: SavedBounds | null = null;
+  private theme: 'light' | 'dark' = 'light';
 
   constructor(deps: WindowStateStoreDependencies) {
     this.deps = deps;
@@ -52,9 +55,11 @@ export class WindowStateStore {
         return;
       }
       this.bounds = isSavedBounds(parsed.bounds) ? parsed.bounds : null;
+      this.theme = parsed.theme === 'dark' ? 'dark' : 'light';
     } catch {
       // Missing or corrupt: open at the default size rather than fail to boot.
       this.bounds = null;
+      this.theme = 'light';
     }
   }
 
@@ -62,9 +67,27 @@ export class WindowStateStore {
     return this.bounds;
   }
 
+  getThemeHint(): 'light' | 'dark' {
+    return this.theme;
+  }
+
+  async saveTheme(theme: 'light' | 'dark'): Promise<void> {
+    this.theme = theme;
+    await this.persist();
+  }
+
   async save(bounds: SavedBounds): Promise<void> {
     this.bounds = bounds;
-    const payload: WindowStateFile = { version: STORE_VERSION, bounds };
+    await this.persist();
+  }
+
+  private async persist(): Promise<void> {
+    if (!this.bounds) return;
+    const payload: WindowStateFile = {
+      version: STORE_VERSION,
+      bounds: this.bounds,
+      theme: this.theme,
+    };
 
     try {
       await mkdir(path.dirname(this.deps.storePath), { recursive: true });

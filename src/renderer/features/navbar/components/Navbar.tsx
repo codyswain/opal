@@ -34,29 +34,10 @@ const Navbar: React.FC<NavbarProps> = ({
   const location = useLocation();
   const { canGoBack, canGoForward, goBack, goForward } = useFileExplorerStore();
 
-  const handleWindowAction = (action: "minimize" | "maximize" | "close") => {
-    window.systemAPI[action]();
-  };
-
   const renderWindowControls = () => (
-    <div className="flex items-center space-x-2 no-drag ml-2">
-      {/* Apple-style buttons */}
-      <button
-        className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
-        onClick={() => handleWindowAction("close")}
-        title="Close"
-      />
-      <button
-        className="w-2.5 h-2.5 rounded-full bg-yellow-500 hover:bg-yellow-600 transition-colors"
-        onClick={() => handleWindowAction("minimize")}
-        title="Minimize"
-      />
-      <button
-        className="w-2.5 h-2.5 rounded-full bg-green-500 hover:bg-green-600 transition-colors"
-        onClick={() => handleWindowAction("maximize")}
-        title="Maximize"
-      />
-      <div className="w-4"></div>
+    // pl-[78px] clears the macOS traffic lights, which the OS now draws itself
+    // via titleBarStyle: 'hiddenInset'.
+    <div className="flex items-center space-x-2 no-drag pl-[78px]">
       <div className="space-x-1.5">
         <Button
           variant="ghost"

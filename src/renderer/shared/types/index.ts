@@ -127,9 +127,7 @@ export interface Conversation {
 declare global {
   interface Window {
     systemAPI: {
-      minimize: () => void;
-      maximize: () => void;
-      close: () => void;
+      reportTheme: (theme: 'light' | 'dark') => void;
       openFolderDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       createDirectoryOnDisk: (dirPath: string) => Promise<{ success: boolean, error?: string }>;
     };

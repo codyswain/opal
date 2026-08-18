@@ -5,6 +5,23 @@
     <title>
       Opal
     </title>
+    <script>
+      // Runs before any bundle parses, so the first painted frame already has
+      // the right theme. Without this the window paints light, then React
+      // mounts and swaps to dark — a visible flash on every launch.
+      // Mirrors THEME_STORAGE_KEY and DEFAULT_THEME in
+      // src/renderer/features/theme/config/themeConfig.ts. Keep them in sync.
+      (function () {
+        try {
+          var theme = window.localStorage.getItem('theme') || 'light';
+          document.documentElement.classList.add(
+            theme === 'dark' ? 'dark' : 'light'
+          );
+        } catch (error) {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
