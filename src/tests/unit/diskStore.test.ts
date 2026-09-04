@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import type { DiskEntry } from '@/types/disk';
 
 const ROOT = '/Vault';
 const PHOTOS = '/Vault/Photos';
+const OTHER_ROOT = '/Other';
 
 const rootEntries: DiskEntry[] = [
   entry({ path: PHOTOS, name: 'Photos', kind: 'directory', isDirectory: true }),
@@ -25,10 +27,24 @@ beforeEach(() => {
     roots: [],
     listings: {},
     expanded: {},
+    currentDirectory: null,
+    focusedPath: null,
     selectedPath: null,
+    selectedPaths: [],
+    quickPreviewPath: null,
+    isQuickLookOpen: false,
     pendingAction: null,
+    pendingDelete: null,
     sort: { field: 'name', direction: 'asc' },
+    filter: '',
+    density: 'comfortable',
     loading: { isLoading: false, error: null },
+  });
+  useTabsStore.setState({
+    openPaths: [],
+    openedPath: null,
+    activePath: null,
+    previewPath: null,
   });
 
   readDirectory = vi.fn(async (p: string) => ({
@@ -51,17 +67,59 @@ describe('useDiskStore', () => {
     expect(useDiskStore.getState().roots).toEqual([ROOT]);
   });
 
+  it('drops hydrated tabs outside the roots returned at launch', async () => {
+    useTabsStore.setState({
+      openPaths: ['/Removed/stale.md', '/Vault/note.md'],
+      openedPath: '/Removed/stale.md',
+      activePath: '/Removed/stale.md',
+      previewPath: null,
+    });
+
+    await useDiskStore.getState().loadRoots();
+
+    expect(useTabsStore.getState()).toMatchObject({
+      openPaths: ['/Vault/note.md'],
+      openedPath: '/Vault/note.md',
+      activePath: '/Vault/note.md',
+    });
+  });
+
   it('opens a folder, adds it as a root, and loads its listing', async () => {
     await useDiskStore.getState().openFolder();
     const state = useDiskStore.getState();
     expect(state.roots).toContain(ROOT);
     expect(state.listings[ROOT]).toHaveLength(2);
+    expect(state.currentDirectory).toBe(ROOT);
   });
 
   it('does not add a duplicate root when the same folder is opened twice', async () => {
     await useDiskStore.getState().openFolder();
     await useDiskStore.getState().openFolder();
     expect(useDiskStore.getState().roots).toEqual([ROOT]);
+  });
+
+  it('updates tab hydration authority when a root is added', async () => {
+    await useDiskStore.getState().loadRoots();
+    openFolder.mockResolvedValue({
+      success: true,
+      data: { root: OTHER_ROOT },
+    });
+    readDirectory.mockResolvedValue({
+      success: true,
+      data: { path: OTHER_ROOT, entries: [] },
+    });
+    await useDiskStore.getState().openFolder();
+
+    useTabsStore.getState().openFile('/Other/note.md');
+    useTabsStore.setState({
+      openPaths: [],
+      openedPath: null,
+      activePath: null,
+      previewPath: null,
+    });
+    useTabsStore.getState().hydrate();
+
+    expect(useTabsStore.getState().openPaths).toEqual(['/Other/note.md']);
   });
 
   it('leaves state untouched when the dialog is cancelled', async () => {
@@ -120,6 +178,49 @@ describe('useDiskStore', () => {
   it('selects an entry', () => {
     useDiskStore.getState().select('/Vault/note.md');
     expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
+    expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
+  });
+
+  it('keeps browse directory independent from collection selection', () => {
+    useDiskStore.setState({ currentDirectory: ROOT });
+    useDiskStore.getState().select(PHOTOS);
+
+    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
+    expect(useDiskStore.getState().focusedPath).toBe(PHOTOS);
+  });
+
+  it('navigates explicitly and clears collection focus', () => {
+    useDiskStore.getState().select('/Vault/note.md');
+    useDiskStore.getState().navigateToDirectory(PHOTOS);
+
+    expect(useDiskStore.getState()).toMatchObject({
+      currentDirectory: PHOTOS,
+      focusedPath: null,
+      selectedPath: null,
+      selectedPaths: [],
+    });
+  });
+
+  it('tracks Quick Preview by path and follows focused selection', () => {
+    useDiskStore.getState().select('/Vault/note.md');
+    useDiskStore.getState().openQuickLook();
+    expect(useDiskStore.getState().quickPreviewPath).toBe('/Vault/note.md');
+
+    useDiskStore.getState().select('/Vault/other.md');
+    expect(useDiskStore.getState().quickPreviewPath).toBe('/Vault/other.md');
+
+    useDiskStore.getState().closeQuickLook();
+    expect(useDiskStore.getState().quickPreviewPath).toBeNull();
+  });
+
+  it('selects all visible entries through a canonical action', () => {
+    useDiskStore.getState().selectAll(rootEntries);
+
+    expect(useDiskStore.getState().selectedPaths).toEqual(
+      rootEntries.map((candidate) => candidate.path)
+    );
+    expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
+    expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
   });
 
   it('starts a new-folder action for the current directory', () => {
@@ -165,5 +266,21 @@ describe('useDiskStore', () => {
     expect(state.roots).toEqual([]);
     expect(state.listings[ROOT]).toBeUndefined();
     expect(state.selectedPath).toBeNull();
+  });
+
+  it('updates tab hydration authority when a root is closed', async () => {
+    await useDiskStore.getState().openFolder();
+    await useDiskStore.getState().closeRoot(ROOT);
+
+    useTabsStore.getState().openFile('/Vault/stale.md');
+    useTabsStore.setState({
+      openPaths: [],
+      openedPath: null,
+      activePath: null,
+      previewPath: null,
+    });
+    useTabsStore.getState().hydrate();
+
+    expect(useTabsStore.getState().openPaths).toEqual([]);
   });
 });

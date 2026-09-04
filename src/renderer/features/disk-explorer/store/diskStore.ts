@@ -1,6 +1,17 @@
 import { create } from 'zustand';
+import {
+  isFsPathAtOrBelow,
+  normalizeFsPath,
+} from '@/common/fsPaths';
 import type { SortDirection, SortField } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
+import {
+  pathMutationCoordinator,
+} from '../navigation/pathMutationCoordinator';
+import {
+  remapDiskState,
+  removePathsFromDiskState,
+} from './diskPathState';
 
 export interface PendingAction {
   /** The parent directory for new-folder; the item being renamed for rename. */
@@ -15,8 +26,16 @@ export interface DiskState {
   listings: Record<string, DiskEntry[]>;
   /** Directory path -> whether it is expanded in the tree. */
   expanded: Record<string, boolean>;
+  /** Canonical directory whose immediate children occupy the browse surface. */
+  currentDirectory: string | null;
+  /** Canonical selection anchor and keyboard cursor. */
+  focusedPath: string | null;
+  /** @deprecated Task 7: compatibility mirror of focusedPath. */
   selectedPath: string | null;
   selectedPaths: string[];
+  /** Canonical target for the independent app-rendered Quick Preview. */
+  quickPreviewPath: string | null;
+  /** @deprecated Task 7: compatibility mirror for the current QuickLook UI. */
   isQuickLookOpen: boolean;
   pendingAction: PendingAction | null;
   pendingDelete: string | null;
@@ -34,10 +53,13 @@ export interface DiskActions {
   /** Drop cached listings for directories that changed on disk, and reload the visible ones. */
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
+  navigateToDirectory: (dirPath: string) => void;
   select: (targetPath: string | null) => void;
   toggleSelected: (targetPath: string) => void;
   selectRange: (entries: DiskEntry[], targetPath: string) => void;
+  selectAll: (entries: readonly DiskEntry[]) => void;
   clearSelection: () => void;
+  setQuickPreviewPath: (targetPath: string | null) => void;
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
@@ -59,8 +81,11 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   roots: [],
   listings: {},
   expanded: {},
+  currentDirectory: null,
+  focusedPath: null,
   selectedPath: null,
   selectedPaths: [],
+  quickPreviewPath: null,
   isQuickLookOpen: false,
   pendingAction: null,
   pendingDelete: null,
@@ -76,12 +101,32 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       return;
     }
 
-    if (samePaths(get().roots, response.data)) {
-      set({ loading: { isLoading: false, error: null } });
-      return;
+    const previousRoots = get().roots;
+    for (const root of previousRoots) {
+      if (!response.data.includes(root)) {
+        pathMutationCoordinator.applyRootRemoval(root);
+      }
     }
+    pathMutationCoordinator.reconcileAllowedRoots(response.data);
 
-    set({ roots: response.data, loading: { isLoading: false, error: null } });
+    set((state) => {
+      const previousDirectory = state.currentDirectory;
+      const currentDirectory =
+        previousDirectory &&
+        response.data.some((root) =>
+          isFsPathAtOrBelow(root, previousDirectory)
+        )
+          ? previousDirectory
+          : response.data[0] ?? null;
+
+      return {
+        roots: samePaths(state.roots, response.data)
+          ? state.roots
+          : response.data,
+        currentDirectory,
+        loading: { isLoading: false, error: null },
+      };
+    });
   },
 
   openFolder: async () => {
@@ -103,8 +148,10 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     set((state) => ({
       roots: state.roots.includes(root) ? state.roots : [...state.roots, root],
       expanded: { ...state.expanded, [root]: true },
+      currentDirectory: root,
       loading: { isLoading: false, error: null },
     }));
+    pathMutationCoordinator.reconcileAllowedRoots(get().roots);
 
     await get().loadDirectory(root, { force: true });
     get().select(root);
@@ -117,27 +164,9 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       return;
     }
 
-    set((state) => {
-      // Drop every cached listing beneath the closed root, so a later reopen
-      // reads fresh rather than showing a stale tree.
-      const listings = Object.fromEntries(
-        Object.entries(state.listings).filter(([key]) => !isAtOrBelow(rootPath, key))
-      );
-      const expanded = Object.fromEntries(
-        Object.entries(state.expanded).filter(([key]) => !isAtOrBelow(rootPath, key))
-      );
-      const selectedPaths = state.selectedPaths.filter((path) => !isAtOrBelow(rootPath, path));
-      const selectionSurvives =
-        state.selectedPath !== null && !isAtOrBelow(rootPath, state.selectedPath);
-
-      return {
-        roots: state.roots.filter((root) => root !== rootPath),
-        listings,
-        expanded,
-        selectedPath: selectionSurvives ? state.selectedPath : selectedPaths[selectedPaths.length - 1] ?? null,
-        selectedPaths,
-      };
-    });
+    pathMutationCoordinator.applyRootRemoval(rootPath);
+    pathMutationCoordinator.reconcileAllowedRoots(get().roots);
+    set({ loading: { isLoading: false, error: null } });
   },
 
   loadDirectory: async (dirPath, options = {}) => {
@@ -176,12 +205,29 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     if (willExpand) await get().loadDirectory(dirPath);
   },
 
+  navigateToDirectory: (dirPath) =>
+    set({
+      currentDirectory: normalizeFsPath(dirPath),
+      focusedPath: null,
+      selectedPath: null,
+      selectedPaths: [],
+      quickPreviewPath: null,
+      isQuickLookOpen: false,
+    }),
+
   select: (targetPath) =>
-    set((state) => ({
-      selectedPath: targetPath,
-      selectedPaths: targetPath === null ? [] : [targetPath],
-      isQuickLookOpen: targetPath === null ? false : state.isQuickLookOpen,
-    })),
+    set((state) => {
+      const quickPreviewIsOpen =
+        state.isQuickLookOpen || state.quickPreviewPath !== null;
+      return {
+        focusedPath: targetPath,
+        selectedPath: targetPath,
+        selectedPaths: targetPath === null ? [] : [targetPath],
+        quickPreviewPath:
+          targetPath !== null && quickPreviewIsOpen ? targetPath : null,
+        isQuickLookOpen: targetPath !== null && quickPreviewIsOpen,
+      };
+    }),
 
   toggleSelected: (targetPath) =>
     set((state) => {
@@ -189,38 +235,112 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       const next = isSelected
         ? state.selectedPaths.filter((candidate) => candidate !== targetPath)
         : [...state.selectedPaths, targetPath];
+      const focusedPath = isSelected
+        ? next[next.length - 1] ?? null
+        : targetPath;
+      const quickPreviewIsOpen =
+        state.isQuickLookOpen || state.quickPreviewPath !== null;
 
       return {
         selectedPaths: next,
         // The anchor follows the most recent addition; removing the anchor
         // leaves the last remaining item, or nothing.
-        selectedPath: isSelected ? next[next.length - 1] ?? null : targetPath,
+        focusedPath,
+        selectedPath: focusedPath,
+        quickPreviewPath:
+          quickPreviewIsOpen && focusedPath ? focusedPath : null,
+        isQuickLookOpen: quickPreviewIsOpen && focusedPath !== null,
       };
     }),
 
   selectRange: (entries, targetPath) =>
     set((state) => {
-      const anchor = state.selectedPath;
-      if (!anchor) return { selectedPath: targetPath, selectedPaths: [targetPath] };
+      const anchor = state.focusedPath ?? state.selectedPath;
+      const quickPreviewIsOpen =
+        state.isQuickLookOpen || state.quickPreviewPath !== null;
+      if (!anchor) {
+        return {
+          focusedPath: targetPath,
+          selectedPath: targetPath,
+          selectedPaths: [targetPath],
+          quickPreviewPath: quickPreviewIsOpen ? targetPath : null,
+          isQuickLookOpen: quickPreviewIsOpen,
+        };
+      }
 
       const from = entries.findIndex((candidate) => candidate.path === anchor);
       const to = entries.findIndex((candidate) => candidate.path === targetPath);
       if (from === -1 || to === -1) {
-        return { selectedPath: targetPath, selectedPaths: [targetPath] };
+        return {
+          focusedPath: targetPath,
+          selectedPath: targetPath,
+          selectedPaths: [targetPath],
+          quickPreviewPath: quickPreviewIsOpen ? targetPath : null,
+          isQuickLookOpen: quickPreviewIsOpen,
+        };
       }
 
       const [start, end] = from <= to ? [from, to] : [to, from];
       return {
+        focusedPath: targetPath,
         selectedPath: targetPath,
         selectedPaths: entries.slice(start, end + 1).map((candidate) => candidate.path),
+        quickPreviewPath: quickPreviewIsOpen ? targetPath : null,
+        isQuickLookOpen: quickPreviewIsOpen,
       };
     }),
 
-  clearSelection: () => set({ selectedPath: null, selectedPaths: [], isQuickLookOpen: false }),
+  selectAll: (entries) =>
+    set((state) => {
+      const selectedPaths = entries.map((entry) => entry.path);
+      const focusedPath = selectedPaths[selectedPaths.length - 1] ?? null;
+      return {
+        focusedPath,
+        selectedPath: focusedPath,
+        selectedPaths,
+        quickPreviewPath:
+          state.isQuickLookOpen || state.quickPreviewPath !== null
+            ? focusedPath
+            : null,
+        isQuickLookOpen:
+          focusedPath !== null &&
+          (state.isQuickLookOpen || state.quickPreviewPath !== null),
+      };
+    }),
 
-  openQuickLook: () => set({ isQuickLookOpen: true }),
-  closeQuickLook: () => set({ isQuickLookOpen: false }),
-  toggleQuickLook: () => set((state) => ({ isQuickLookOpen: !state.isQuickLookOpen })),
+  clearSelection: () =>
+    set({
+      focusedPath: null,
+      selectedPath: null,
+      selectedPaths: [],
+      quickPreviewPath: null,
+      isQuickLookOpen: false,
+    }),
+
+  setQuickPreviewPath: (targetPath) =>
+    set({
+      quickPreviewPath: targetPath ? normalizeFsPath(targetPath) : null,
+      isQuickLookOpen: targetPath !== null,
+    }),
+  openQuickLook: () =>
+    set((state) => ({
+      quickPreviewPath: state.focusedPath ?? state.selectedPath,
+      // Kept true without a target for the temporary boolean-only adapter.
+      isQuickLookOpen: true,
+    })),
+  closeQuickLook: () =>
+    set({ quickPreviewPath: null, isQuickLookOpen: false }),
+  toggleQuickLook: () =>
+    set((state) => {
+      const isOpen =
+        state.isQuickLookOpen || state.quickPreviewPath !== null;
+      return isOpen
+        ? { quickPreviewPath: null, isQuickLookOpen: false }
+        : {
+            quickPreviewPath: state.focusedPath ?? state.selectedPath,
+            isQuickLookOpen: true,
+          };
+    }),
   beginNewFolder: (parentDir) => set({ pendingAction: { kind: 'new-folder', target: parentDir } }),
   beginRename: (target) => set({ pendingAction: { kind: 'rename', target } }),
   beginDelete: (target) => set({ pendingDelete: target }),
@@ -239,11 +359,27 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));
 
-function isAtOrBelow(root: string, target: string): boolean {
-  return target === root || target.startsWith(`${root}/`);
-}
-
 function samePaths(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
 }
+
+pathMutationCoordinator.register({
+  id: 'disk-store',
+  prepareAppMutation: (mutation) => {
+    const previous = useDiskStore.getState();
+    const next = remapDiskState(previous, mutation);
+    return {
+      commit: () => useDiskStore.setState(next),
+      rollback: () => useDiskStore.setState(previous),
+    };
+  },
+  preparePathRemoval: (paths, reason) => {
+    const previous = useDiskStore.getState();
+    const next = removePathsFromDiskState(previous, paths, reason);
+    return {
+      commit: () => useDiskStore.setState(next),
+      rollback: () => useDiskStore.setState(previous),
+    };
+  },
+});

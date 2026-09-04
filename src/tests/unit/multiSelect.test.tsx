@@ -9,7 +9,13 @@ const ENTRIES: DiskEntry[] = ['a', 'b', 'c', 'd', 'e'].map((n) =>
 
 beforeEach(() => {
   installDiskApi();
-  useDiskStore.setState({ selectedPath: null, selectedPaths: [] });
+  useDiskStore.setState({
+    focusedPath: null,
+    selectedPath: null,
+    selectedPaths: [],
+    quickPreviewPath: null,
+    isQuickLookOpen: false,
+  });
 });
 
 describe('multi-select', () => {
@@ -18,6 +24,7 @@ describe('multi-select', () => {
     useDiskStore.getState().select('/V/b');
 
     expect(useDiskStore.getState().selectedPath).toBe('/V/b');
+    expect(useDiskStore.getState().focusedPath).toBe('/V/b');
     expect(useDiskStore.getState().selectedPaths).toEqual(['/V/b']);
   });
 
@@ -58,6 +65,7 @@ describe('multi-select', () => {
     useDiskStore.getState().clearSelection();
 
     expect(useDiskStore.getState().selectedPath).toBeNull();
+    expect(useDiskStore.getState().focusedPath).toBeNull();
     expect(useDiskStore.getState().selectedPaths).toEqual([]);
   });
 

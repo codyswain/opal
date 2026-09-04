@@ -12,7 +12,12 @@ const B = '/V/beta.png';
 beforeEach(() => {
   window.localStorage.clear();
   installDiskApi();
-  useTabsStore.setState({ openPaths: [], activePath: null, previewPath: null });
+  useTabsStore.setState({
+    openPaths: [],
+    openedPath: null,
+    activePath: null,
+    previewPath: null,
+  });
 });
 
 describe('TabStrip', () => {

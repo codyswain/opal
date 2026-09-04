@@ -235,10 +235,7 @@ export const DiskExplorer: React.FC = () => {
         if (visibleEntries.length === 0) return;
 
         event.preventDefault();
-        useDiskStore.setState({
-          selectedPath: visibleEntries[visibleEntries.length - 1]?.path ?? null,
-          selectedPaths: visibleEntries.map((entry) => entry.path),
-        });
+        useDiskStore.getState().selectAll(visibleEntries);
         return;
       }
 

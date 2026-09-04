@@ -324,13 +324,20 @@ remain tiny and split any file approaching 500 lines.
 **Files**
 
 - Modify: `src/renderer/features/disk-explorer/store/diskStore.ts`
+- Create: `src/renderer/features/disk-explorer/store/diskPathState.ts`
 - Modify: `src/renderer/features/disk-explorer/store/tabsStore.ts`
+- Modify: `src/renderer/features/disk-explorer/components/DiskExplorer.tsx`
+- Create: `src/common/fsPaths.ts`
 - Create: `src/renderer/features/disk-explorer/navigation/filesLocation.ts`
+- Create: `src/renderer/features/disk-explorer/navigation/filesLocationSnapshots.ts`
 - Create: `src/renderer/features/disk-explorer/navigation/pathMutationCoordinator.ts`
 - Test: `src/tests/unit/diskStore.test.ts`
 - Test: `src/tests/unit/filesLocation.test.ts`
+- Test: `src/tests/unit/fsPaths.test.ts`
 - Test: `src/tests/unit/pathMutationCoordinator.test.ts`
 - Modify: `src/tests/unit/tabsStore.test.ts`
+- Modify compatibility coverage: `src/tests/unit/multiSelect.test.tsx`,
+  `src/tests/unit/quickLook.test.tsx`, `src/tests/unit/tabStrip.test.tsx`
 
 **State migration**
 
@@ -342,30 +349,30 @@ remain tiny and split any file approaching 500 lines.
 
 **Steps**
 
-- [ ] Define the pointer/keyboard interaction matrix from the design spec as
+- [x] Define the pointer/keyboard interaction matrix from the design spec as
       pure store transitions before changing the shell.
-- [ ] Add explicit open-tab actions and a migration adapter for the current
+- [x] Add explicit open-tab actions and a migration adapter for the current
       `previewPath`/`openPreview` callers. Do not remove those callers until
       Task 7 updates the components in the same green commit.
-- [ ] Define normalized browse/focus router locations carrying only
+- [x] Define normalized browse/focus router locations carrying only
       route-affecting directory/open-file state.
-- [ ] Define a non-routing snapshot keyed by router location for selection and
+- [x] Define a non-routing snapshot keyed by router location for selection and
       scroll restoration.
-- [ ] Fix mutation semantics: directory navigation and Focus open push;
+- [x] Fix mutation semantics: directory navigation and Focus open push;
       invalid-route fallback and app-initiated current-path remap replace;
       selection/filter/sort/resize/scroll never mutate history.
-- [ ] Define one old→new subtree remap operation for app-initiated rename/move
+- [x] Define one old→new subtree remap operation for app-initiated rename/move
       and one conservative stale-state cleanup for ambiguous external events.
-- [ ] Choose and document ARIA patterns: directory sidebar as tree;
+- [x] Choose and document ARIA patterns: directory sidebar as tree;
       multi-select details/gallery as one-focus-owner grid/listbox with
       `aria-multiselectable`.
-- [ ] Define focus fallback after filtering, deletion, navigation, and stale
+- [x] Define focus fallback after filtering, deletion, navigation, and stale
       watcher updates.
-- [ ] Keep compatibility selectors/actions only where required to let current
+- [x] Keep compatibility selectors/actions only where required to let current
       components compile until Task 7; mark each for removal there.
-- [ ] Test all state transitions, subtree remapping, router-location
+- [x] Test all state transitions, subtree remapping, router-location
       normalization, and corrupt/stale input.
-- [ ] Commit: `refactor(files): define navigation selection and opening state`
+- [x] Commit: `refactor(files): define navigation selection and opening state`
 
 **Acceptance**
 

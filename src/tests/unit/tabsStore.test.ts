@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import {
+  selectOpenedPath,
+  useTabsStore,
+} from '@/renderer/features/disk-explorer/store/tabsStore';
 
 const A = '/V/a.md';
 const B = '/V/b.png';
@@ -7,10 +10,53 @@ const C = '/V/c.pdf';
 
 beforeEach(() => {
   window.localStorage.clear();
-  useTabsStore.setState({ openPaths: [], activePath: null, previewPath: null });
+  useTabsStore.setState({
+    openPaths: [],
+    openedPath: null,
+    activePath: null,
+    previewPath: null,
+  });
 });
 
 const state = () => useTabsStore.getState();
+
+describe('explicitly opened files', () => {
+  it('opens a real file without creating preview state', () => {
+    state().openFile(A);
+
+    expect(state().openPaths).toEqual([A]);
+    expect(state().openedPath).toBe(A);
+    expect(state().activePath).toBe(A);
+    expect(state().previewPath).toBeNull();
+    expect(selectOpenedPath(state())).toBe(A);
+  });
+
+  it('does not expose a temporary preview as opened content', () => {
+    state().openPreview(A);
+
+    expect(state().openedPath).toBeNull();
+    expect(selectOpenedPath(state())).toBeNull();
+  });
+
+  it('keeps explicitly opened content independent from preview selection', () => {
+    state().openFile(A);
+    state().openPreview(B);
+
+    expect(state().activePath).toBe(B);
+    expect(state().openedPath).toBe(A);
+    expect(selectOpenedPath(state())).toBe(A);
+  });
+
+  it('does not let the preview adapter replace Focus with an existing tab', () => {
+    state().openFile(A);
+    state().openFile(B);
+    state().openPreview(A);
+
+    expect(state().activePath).toBe(A);
+    expect(state().openedPath).toBe(B);
+    expect(selectOpenedPath(state())).toBe(B);
+  });
+});
 
 describe('preview tabs', () => {
   it('opens a preview tab and activates it', () => {

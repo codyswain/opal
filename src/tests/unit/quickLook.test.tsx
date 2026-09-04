@@ -11,6 +11,9 @@ const PHOTO = entry({ path: '/V/a.jpg', name: 'a.jpg', kind: 'image', size: 2048
 beforeEach(() => {
   installDiskApi();
   useDiskStore.setState({
+    focusedPath: null,
+    selectedPath: null,
+    quickPreviewPath: null,
     isQuickLookOpen: false,
     sort: { field: 'name', direction: 'asc' },
   });
