@@ -1,5 +1,12 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import {
+  isResolvedTheme,
+  isThemePreference,
+  type ResolvedTheme,
+  type ThemePreference,
+  type ThemeReport,
+} from '@/common/theme';
 import type { SavedBounds } from './windowBounds';
 
 const STORE_VERSION = 1;
@@ -13,7 +20,8 @@ interface WindowStateFile {
   version: number;
   bounds: SavedBounds;
   /** Mirror of the renderer's theme, used only to pick a pre-paint background. */
-  theme?: 'light' | 'dark';
+  theme?: ResolvedTheme;
+  themePreference?: ThemePreference;
 }
 
 function isSavedBounds(candidate: unknown): candidate is SavedBounds {
@@ -39,7 +47,8 @@ function isSavedBounds(candidate: unknown): candidate is SavedBounds {
 export class WindowStateStore {
   private deps: WindowStateStoreDependencies;
   private bounds: SavedBounds | null = null;
-  private theme: 'light' | 'dark' = 'light';
+  private theme: ResolvedTheme | null = null;
+  private themePreference: ThemePreference | null = null;
 
   constructor(deps: WindowStateStoreDependencies) {
     this.deps = deps;
@@ -52,14 +61,20 @@ export class WindowStateStore {
 
       if (parsed?.version !== STORE_VERSION) {
         this.bounds = null;
+        this.theme = null;
+        this.themePreference = null;
         return;
       }
       this.bounds = isSavedBounds(parsed.bounds) ? parsed.bounds : null;
-      this.theme = parsed.theme === 'dark' ? 'dark' : 'light';
+      this.theme = isResolvedTheme(parsed.theme) ? parsed.theme : null;
+      this.themePreference = isThemePreference(parsed.themePreference)
+        ? parsed.themePreference
+        : null;
     } catch {
       // Missing or corrupt: open at the default size rather than fail to boot.
       this.bounds = null;
-      this.theme = 'light';
+      this.theme = null;
+      this.themePreference = null;
     }
   }
 
@@ -67,12 +82,19 @@ export class WindowStateStore {
     return this.bounds;
   }
 
-  getThemeHint(): 'light' | 'dark' {
-    return this.theme;
+  getThemeHint(fallback: ResolvedTheme = 'light'): ResolvedTheme {
+    if (this.themePreference === 'system') return fallback;
+    if (isResolvedTheme(this.themePreference)) return this.themePreference;
+    return this.theme ?? fallback;
   }
 
-  async saveTheme(theme: 'light' | 'dark'): Promise<void> {
-    this.theme = theme;
+  getThemePreference(): ThemePreference | null {
+    return this.themePreference;
+  }
+
+  async saveTheme(report: ThemeReport): Promise<void> {
+    this.theme = report.resolved;
+    this.themePreference = report.preference;
     await this.persist();
   }
 
@@ -86,7 +108,10 @@ export class WindowStateStore {
     const payload: WindowStateFile = {
       version: STORE_VERSION,
       bounds: this.bounds,
-      theme: this.theme,
+      ...(this.theme ? { theme: this.theme } : {}),
+      ...(this.themePreference
+        ? { themePreference: this.themePreference }
+        : {}),
     };
 
     try {

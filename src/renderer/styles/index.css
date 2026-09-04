@@ -6,62 +6,146 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* White */
-    --foreground: 222 47% 11%; /* Near-black */
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 222 47% 11%; /* Near-black */
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 222 47% 11%; /* Near-black */
-    --primary: 212 92% 45%; /* Blue */
-    --primary-foreground: 0 0% 100%; /* White */
-    --secondary: 210 14% 97%; /* Light Gray */
-    --secondary-foreground: 222 47% 11%; /* Near-black */
-    --muted: 210 14% 97%; /* Light Gray */
-    --muted-foreground: 213 8% 43%; /* Gray  */
-    --accent: 215 28% 93%; /* Light Gray */
-    --accent-foreground: 222 47% 11%; /* Near-black */
-    --destructive: 0 72% 51%; /* Standard Red */
-    --destructive-foreground: 0 0% 100%; /* White */
-    --border: 212 13% 84%; /* Border Gray */
-    --input: 212 13% 84%; /* Border Gray */
-    --ring: 212 92% 45%; /* Blue for focus */
+    color-scheme: light;
+
+    /* Typography */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --text-metadata-size: 0.6875rem;
+    --text-metadata-line: 0.875rem;
+    --text-control-size: 0.75rem;
+    --text-control-line: 1rem;
+    --text-ui-size: 0.8125rem;
+    --text-ui-line: 1.125rem;
+    --text-heading-size: 0.9375rem;
+    --text-heading-line: 1.25rem;
+
+    /* Desktop geometry */
+    --control-height-compact: 1.75rem;
+    --control-height: 2rem;
+    --row-height-compact: 1.75rem;
+    --row-height: 2rem;
+    --header-height: 2.5rem;
+    --sidebar-width: 13.75rem;
+    --inspector-width: 21rem;
+    --reading-width: 45rem;
+
+    /* Shape, elevation, and motion */
     --radius: 0.5rem;
-    /* Optional: Adjust gradient if used extensively in light mode */
-    /* --gradient-start: 212 92% 43%; */
-    /* --gradient-end: 212 92% 47%; */
+    --radius-row: 0.25rem;
+    --radius-control: 0.375rem;
+    --radius-overlay: 0.625rem;
+    --radius-dialog: 0.75rem;
+    --shadow-overlay: 0 12px 32px hsl(225 20% 20% / 0.12),
+      0 2px 8px hsl(225 20% 20% / 0.08);
+    --shadow-dialog: 0 24px 64px hsl(225 24% 16% / 0.18),
+      0 4px 16px hsl(225 24% 16% / 0.1);
+    --duration-hover: 90ms;
+    --duration-overlay: 120ms;
+    --duration-disclosure: 150ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+    /* Semantic light palette */
+    --canvas: 240 14% 99%;
+    --sidebar: 220 18% 97%;
+    --surface: 0 0% 100%;
+    --surface-raised: 0 0% 100%;
+    --surface-hover: 220 14% 95%;
+    --surface-active: 220 13% 92%;
+    --surface-selected: 235 38% 94%;
+    --border-subtle: 220 13% 91%;
+    --border-default: 220 10% 78%;
+    --border-strong: 220 9% 56%;
+    --text-primary: 225 24% 12%;
+    --text-secondary: 220 9% 34%;
+    --text-tertiary: 220 7% 44%;
+    --icon: 220 8% 40%;
+    --focus: 235 62% 54%;
+    --success: 145 62% 32%;
+    --warning: 37 92% 38%;
+    --danger: 0 72% 48%;
+    --info: 212 82% 46%;
+
+    /* Compatibility aliases for existing shadcn-style components. */
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+    --card: var(--surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--surface-raised);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--focus);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--surface-hover);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--surface-hover);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-active);
+    --accent-foreground: var(--text-primary);
+    --destructive: var(--danger);
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--border-default);
+    --input: var(--border-strong);
+    --ring: var(--focus);
+    --gradient-start: 235 62% 50%;
+    --gradient-end: 245 58% 57%;
   }
 
   .dark {
-    --background: 220 6% 10%;
-    --foreground: 210 6% 93%;
-    --card: 220 6% 13%;
-    --card-foreground: 210 6% 93%;
-    --popover: 220 6% 13%;
-    --popover-foreground: 210 6% 93%;
-    --primary: 220 70% 40%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 6% 16%;
-    --secondary-foreground: 210 6% 93%;
-    --muted: 220 6% 20%;
-    --muted-foreground: 217 8% 64%;
-    --accent: 220 6% 20%;
-    --accent-foreground: 210 6% 93%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 6% 18%;
-    --input: 220 6% 18%;
-    --ring: 142 76% 45%;
-    --gradient-start: 142 76% 42%;
-    --gradient-end: 142 76% 48%;
+    color-scheme: dark;
+    --canvas: 240 5% 9%;
+    --sidebar: 235 6% 11%;
+    --surface: 235 6% 13%;
+    --surface-raised: 235 6% 15%;
+    --surface-hover: 235 6% 18%;
+    --surface-active: 235 7% 21%;
+    --surface-selected: 235 24% 22%;
+    --border-subtle: 235 5% 17%;
+    --border-default: 235 5% 25%;
+    --border-strong: 235 5% 44%;
+    --text-primary: 220 12% 94%;
+    --text-secondary: 220 7% 72%;
+    --text-tertiary: 220 6% 62%;
+    --icon: 220 7% 70%;
+    --focus: 235 72% 70%;
+    --success: 145 58% 54%;
+    --warning: 39 92% 58%;
+    --danger: 0 78% 64%;
+    --info: 212 88% 67%;
+    /* Filled actions stay darker than focus/status colors for white text. */
+    --primary: 235 58% 48%;
+    --destructive: 0 68% 43%;
+    --shadow-overlay: 0 16px 40px hsl(240 20% 2% / 0.42),
+      0 2px 10px hsl(240 20% 2% / 0.32);
+    --shadow-dialog: 0 28px 72px hsl(240 24% 2% / 0.5),
+      0 6px 18px hsl(240 24% 2% / 0.38);
+    --gradient-start: 235 62% 56%;
+    --gradient-end: 245 58% 63%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-size: var(--text-ui-size);
+    line-height: var(--text-ui-line);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 }
 
@@ -106,4 +190,15 @@
 
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

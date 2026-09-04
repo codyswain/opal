@@ -112,23 +112,44 @@ describe('theme hint', () => {
     expect(store.getThemeHint()).toBe('light');
   });
 
+  it('uses a supplied system fallback when no resolved hint has been saved', async () => {
+    const store = new WindowStateStore({ storePath });
+    await store.load();
+    expect(store.getThemeHint('dark')).toBe('dark');
+  });
+
   it('round-trips a saved theme alongside bounds', async () => {
     const store = new WindowStateStore({ storePath });
     await store.load();
     await store.save(BOUNDS);
-    await store.saveTheme('dark');
+    await store.saveTheme({ preference: 'dark', resolved: 'dark' });
 
     const reloaded = new WindowStateStore({ storePath });
     await reloaded.load();
     expect(reloaded.getThemeHint()).toBe('dark');
+    expect(reloaded.getThemeHint('light')).toBe('dark');
+    expect(reloaded.getThemePreference()).toBe('dark');
     expect(reloaded.get()).toEqual(BOUNDS);
+  });
+
+  it('re-resolves a saved system preference against the current OS fallback', async () => {
+    const store = new WindowStateStore({ storePath });
+    await store.load();
+    await store.save(BOUNDS);
+    await store.saveTheme({ preference: 'system', resolved: 'dark' });
+
+    const reloaded = new WindowStateStore({ storePath });
+    await reloaded.load();
+    expect(reloaded.getThemePreference()).toBe('system');
+    expect(reloaded.getThemeHint('light')).toBe('light');
+    expect(reloaded.getThemeHint('dark')).toBe('dark');
   });
 
   it('keeps bounds when only the theme changes', async () => {
     const store = new WindowStateStore({ storePath });
     await store.load();
     await store.save(BOUNDS);
-    await store.saveTheme('dark');
+    await store.saveTheme({ preference: 'dark', resolved: 'dark' });
 
     const reloaded = new WindowStateStore({ storePath });
     await reloaded.load();

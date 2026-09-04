@@ -73,12 +73,16 @@ describe('readPref', () => {
 });
 
 describe('writePref', () => {
-  it('does not throw when storage rejects the write', () => {
+  it('reports failure without throwing when storage rejects the write', () => {
     // Safari private mode and a full quota both throw from setItem. Losing a
     // pane size must never take down the app.
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');
     });
-    expect(() => writePref('pane.left', 33)).not.toThrow();
+    expect(writePref('pane.left', 33)).toBe(false);
+  });
+
+  it('reports a successful write', () => {
+    expect(writePref('pane.left', 33)).toBe(true);
   });
 });

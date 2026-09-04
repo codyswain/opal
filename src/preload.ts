@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+import type { ThemeReport } from "./common/theme";
 import { DirectoryStructures } from "./renderer/shared/types";
 
 /* 
@@ -20,7 +21,8 @@ import { DirectoryStructures } from "./renderer/shared/types";
 */
 
 contextBridge.exposeInMainWorld("systemAPI", {
-  reportTheme: (theme: "light" | "dark") => ipcRenderer.send("system:report-theme", theme),
+  reportTheme: (report: ThemeReport) =>
+    ipcRenderer.send("system:report-theme", report),
   openFolderDialog: () => ipcRenderer.invoke(`system:open-folder-dialog`),
   createDirectoryOnDisk: (dirPath: string) => ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
   reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) =>

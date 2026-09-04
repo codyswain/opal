@@ -53,13 +53,15 @@ export function readPref<T>(key: string, fallback: T): T {
   }
 }
 
-export function writePref<T>(key: string, value: T): void {
-  if (typeof window === 'undefined') return;
+export function writePref<T>(key: string, value: T): boolean {
+  if (typeof window === 'undefined') return false;
 
   const envelope: Envelope<T> = { version: PREFS_VERSION, value };
   try {
     window.localStorage.setItem(NAMESPACE + key, JSON.stringify(envelope));
+    return true;
   } catch {
     // Quota exceeded, or storage disabled. A lost preference is cosmetic.
+    return false;
   }
 }

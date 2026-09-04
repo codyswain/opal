@@ -1,12 +1,13 @@
 import logger from "@/main/logger";
-import { IpcMain, Dialog, BrowserWindow } from "electron";
+import { isThemeReport, type ThemeReport } from "@/common/theme";
+import type { IpcMain, Dialog, BrowserWindow } from "electron";
 import * as fs from "fs-extra";
 
 interface SystemHandlerDependencies {
   ipc: IpcMain;
   dialog: Dialog;
   browserWindow: typeof BrowserWindow;
-  onThemeChanged: (theme: 'light' | 'dark') => void;
+  onThemeChanged: (report: ThemeReport) => void;
 }
 
 export class SystemHandlers {
@@ -53,8 +54,9 @@ export class SystemHandlers {
   }
 
   private registerReportTheme(): void {
-    this.deps.ipc.on('system:report-theme', (_event, theme: 'light' | 'dark') => {
-      this.deps.onThemeChanged(theme === 'dark' ? 'dark' : 'light');
+    this.deps.ipc.on('system:report-theme', (_event, report: unknown) => {
+      if (!isThemeReport(report)) return;
+      this.deps.onThemeChanged(report);
     });
   }
 }

@@ -192,22 +192,22 @@ remain tiny and split any file approaching 500 lines.
 
 **Steps**
 
-- [ ] Record current branch and commit.
-- [ ] Fetch `origin` and record ahead/behind state without merging unrelated
+- [x] Record current branch and commit.
+- [x] Fetch `origin` and record ahead/behind state without merging unrelated
       work.
-- [ ] Run `npx tsc --noEmit`, count errors, and record the known legacy files.
-- [ ] Run `npm test` and record files/tests/time.
-- [ ] Run `npm run test:e2e` and record tests/time.
-- [ ] Confirm the E2E suite still contains no more than ten tests.
-- [ ] Launch real Electron and inspect:
+- [x] Run `npx tsc --noEmit`, count errors, and record the known legacy files.
+- [x] Run `npm test` and record files/tests/time.
+- [x] Run `npm run test:e2e` and record tests/time.
+- [x] Confirm the E2E suite still contains no more than ten tests.
+- [x] Launch real Electron and inspect:
   - `/files`, no selection
   - `/files`, markdown selected
   - `/files`, image gallery
   - `/explorer`, empty
   - Settings
-- [ ] Record manual screenshots locally for before/after review. Do not turn
+- [x] Record manual screenshots locally for before/after review. Do not turn
       them into automated assertions or commit user data.
-- [ ] Commit: `docs: record linear-inspired UX baseline`
+- [x] Commit: `docs: record linear-inspired UX baseline`
 
 **Acceptance**
 
@@ -227,34 +227,39 @@ remain tiny and split any file approaching 500 lines.
 - Modify: `src/renderer/features/theme/utils/themeUtils.ts`
 - Modify: `src/renderer/features/theme/context/ThemeContext.tsx`
 - Modify: `src/renderer/shared/prefs/prefs.ts`
+- Create: `src/common/theme.ts`
+- Modify: `src/renderer/shared/types/index.ts`
+- Modify: `src/preload.ts`
+- Modify: `src/main/services/system/SystemHandlers.ts`
 - Modify: `index.html`
 - Modify as needed: `src/main/window/WindowStateStore.ts`
 - Modify as needed: `src/main.ts`
-- Test: `src/tests/unit/theme.test.ts`
+- Test: `src/tests/unit/theme.test.tsx`
 - Test: `src/tests/unit/prefs.test.ts`
+- Test: `src/tests/unit/systemHandlers.test.ts`
 - Test: `src/tests/unit/window/windowStateStore.test.ts`
 
 **Steps**
 
-- [ ] Add semantic CSS variables for canvas, sidebar, surfaces, three border
+- [x] Add semantic CSS variables for canvas, sidebar, surfaces, three border
       strengths, three text strengths, icon, hover, active, selected, and focus.
-- [ ] Keep compatibility aliases for existing shadcn-style token names during
+- [x] Keep compatibility aliases for existing shadcn-style token names during
       migration.
-- [ ] Define dark and light palettes independently.
-- [ ] Add `system` to the user's theme preference while reporting the resolved
+- [x] Define dark and light palettes independently.
+- [x] Add `system` to the user's theme preference while reporting the resolved
       light/dark theme hint to main for no-flash launch.
-- [ ] Move the bare `theme` localStorage value into the versioned `opal.theme`
+- [x] Move the bare `theme` localStorage value into the versioned `opal.theme`
       preference envelope. Keep the pre-paint script backward-compatible for
       one migration cycle and teach it to resolve the envelope before React
       starts.
-- [ ] Add typography, control-height, row-height, sidebar-width,
+- [x] Add typography, control-height, row-height, sidebar-width,
       inspector-width, elevation, and motion variables.
-- [ ] Add reduced-motion behavior.
-- [ ] Update `docs/design-tokens.md` with the flat-surface/elevated-overlay rule.
-- [ ] Test preference resolution and corrupt/unknown values.
-- [ ] Launch Electron and verify the pre-paint background still matches the
+- [x] Add reduced-motion behavior.
+- [x] Update `docs/design-tokens.md` with the flat-surface/elevated-overlay rule.
+- [x] Test preference resolution and corrupt/unknown values.
+- [x] Launch Electron and verify the pre-paint background still matches the
       resolved theme.
-- [ ] Commit: `feat(ui): establish semantic shell tokens`
+- [x] Commit: `feat(ui): establish semantic shell tokens`
 
 **Acceptance**
 

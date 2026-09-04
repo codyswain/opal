@@ -1,4 +1,14 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, screen, Menu } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  nativeImage,
+  nativeTheme,
+  screen,
+  Menu,
+} from "electron";
 import path from "path";
 import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
@@ -52,6 +62,10 @@ if (process.platform === "win32") {
 const isDevelopment = process.env.NODE_ENV === "development";
 // Always consider it development mode when VITE_DEV_SERVER_URL is defined
 const forceDevTools = typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined";
+const WINDOW_BACKGROUND = {
+  light: "#FCFCFD",
+  dark: "#161617",
+} as const;
 let mainWindow: BrowserWindow | null = null;
 
 // CSP Configuration
@@ -88,9 +102,10 @@ const createWindow = () => {
   });
 
   // Painting the window's own background before the renderer loads is what
-  // removes the white flash. It must match the theme the inline script in
-  // index.html is about to apply, so both read the same localStorage key.
-  const isDark = windowStateStore.getThemeHint() === "dark";
+  // removes the white flash. A saved resolved hint wins; first launch follows
+  // the OS, matching the inline pre-paint resolver's `system` default.
+  const systemTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+  const resolvedTheme = windowStateStore.getThemeHint(systemTheme);
 
   mainWindow = new BrowserWindow({
     width: saved?.width ?? DEFAULT_BROWSER_WINDOW_WIDTH,
@@ -99,7 +114,7 @@ const createWindow = () => {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
-    backgroundColor: isDark ? "#191A1C" : "#FFFFFF",
+    backgroundColor: WINDOW_BACKGROUND[resolvedTheme],
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -261,8 +276,11 @@ const systemHandlers = new SystemHandlers({
   ipc: ipcMain,
   dialog,
   browserWindow: BrowserWindow,
-  onThemeChanged: (theme) => {
-    void windowStateStore.saveTheme(theme);
+  onThemeChanged: (report) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(WINDOW_BACKGROUND[report.resolved]);
+    }
+    void windowStateStore.saveTheme(report);
   },
 });
 

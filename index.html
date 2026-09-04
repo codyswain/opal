@@ -9,17 +9,50 @@
       // Runs before any bundle parses, so the first painted frame already has
       // the right theme. Without this the window paints light, then React
       // mounts and swaps to dark — a visible flash on every launch.
-      // Mirrors THEME_STORAGE_KEY and DEFAULT_THEME in
+      // Mirrors the preference schema and defaults in
       // src/renderer/features/theme/config/themeConfig.ts. Keep them in sync.
       (function () {
+        var resolvedTheme = 'light';
         try {
-          var theme = window.localStorage.getItem('theme') || 'light';
-          document.documentElement.classList.add(
-            theme === 'dark' ? 'dark' : 'light'
-          );
+          var theme = null;
+          var stored = window.localStorage.getItem('opal.theme');
+          if (stored) {
+            try {
+              var envelope = JSON.parse(stored);
+              var value = envelope && envelope.version === 1
+                ? envelope.value
+                : null;
+              if (value === 'system' || value === 'light' || value === 'dark') {
+                theme = value;
+              }
+            } catch (error) {
+              // Ignore a corrupt cosmetic preference and try the legacy key.
+            }
+          }
+
+          // One-cycle fallback for users upgrading from the old bare key.
+          if (!theme) {
+            var legacy = window.localStorage.getItem('theme');
+            if (legacy === 'light' || legacy === 'dark') theme = legacy;
+          }
+
+          theme = theme || 'system';
+          resolvedTheme = theme === 'system' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : theme === 'dark'
+                ? 'dark'
+                : 'light';
         } catch (error) {
-          document.documentElement.classList.add('light');
+          resolvedTheme =
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
         }
+        document.documentElement.classList.add(resolvedTheme);
+        document.documentElement.style.colorScheme = resolvedTheme;
       })();
     </script>
   </head>

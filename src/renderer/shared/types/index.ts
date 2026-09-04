@@ -1,6 +1,7 @@
 // src/shared/types/index.ts
 
 import type { default as OpenAI } from "openai";
+import type { ThemeReport } from '@/common/theme';
 import { FSEntry } from '@/types';
 import { CredentialAccount } from "@/types/credentials";
 import { IPCResponse } from "@/types/ipc";
@@ -127,7 +128,7 @@ export interface Conversation {
 declare global {
   interface Window {
     systemAPI: {
-      reportTheme: (theme: 'light' | 'dark') => void;
+      reportTheme: (report: ThemeReport) => void;
       openFolderDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       createDirectoryOnDisk: (dirPath: string) => Promise<{ success: boolean, error?: string }>;
       reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) => void;

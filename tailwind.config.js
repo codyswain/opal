@@ -16,15 +16,55 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
+      },
       fontSize: {
         "2xs": ["11px", { lineHeight: "14px" }],
+        metadata: [
+          "var(--text-metadata-size)",
+          { lineHeight: "var(--text-metadata-line)" },
+        ],
+        control: [
+          "var(--text-control-size)",
+          { lineHeight: "var(--text-control-line)" },
+        ],
+        ui: ["var(--text-ui-size)", { lineHeight: "var(--text-ui-line)" }],
+        "ui-heading": [
+          "var(--text-heading-size)",
+          { lineHeight: "var(--text-heading-line)" },
+        ],
       },
       colors: {
-        border: "hsl(var(--border))",
+        canvas: "hsl(var(--canvas))",
+        sidebar: "hsl(var(--sidebar))",
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          raised: "hsl(var(--surface-raised))",
+          hover: "hsl(var(--surface-hover))",
+          active: "hsl(var(--surface-active))",
+          selected: "hsl(var(--surface-selected))",
+        },
+        border: {
+          DEFAULT: "hsl(var(--border))",
+          subtle: "hsl(var(--border-subtle))",
+          strong: "hsl(var(--border-strong))",
+        },
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        foreground: {
+          DEFAULT: "hsl(var(--foreground))",
+          secondary: "hsl(var(--text-secondary))",
+          tertiary: "hsl(var(--text-tertiary))",
+        },
+        icon: "hsl(var(--icon))",
+        focus: "hsl(var(--focus))",
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        danger: "hsl(var(--danger))",
+        info: "hsl(var(--info))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -58,6 +98,36 @@ module.exports = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        row: "var(--radius-row)",
+        control: "var(--radius-control)",
+        overlay: "var(--radius-overlay)",
+        dialog: "var(--radius-dialog)",
+      },
+      height: {
+        "control-compact": "var(--control-height-compact)",
+        control: "var(--control-height)",
+        "row-compact": "var(--row-height-compact)",
+        row: "var(--row-height)",
+        header: "var(--header-height)",
+      },
+      width: {
+        sidebar: "var(--sidebar-width)",
+        inspector: "var(--inspector-width)",
+      },
+      maxWidth: {
+        reading: "var(--reading-width)",
+      },
+      boxShadow: {
+        overlay: "var(--shadow-overlay)",
+        dialog: "var(--shadow-dialog)",
+      },
+      transitionDuration: {
+        hover: "var(--duration-hover)",
+        overlay: "var(--duration-overlay)",
+        disclosure: "var(--duration-disclosure)",
+      },
+      transitionTimingFunction: {
+        standard: "var(--ease-standard)",
       },
       keyframes: {
         "accordion-down": {
