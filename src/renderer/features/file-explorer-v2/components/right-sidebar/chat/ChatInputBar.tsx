@@ -37,6 +37,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
           size="icon"
           disabled={!input.trim() || isLoading}
           className="h-8 w-8"
+          aria-label="Send message"
         >
           <Send className="h-3 w-3" />
         </Button>

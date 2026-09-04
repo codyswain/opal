@@ -120,6 +120,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('bold'))}
         variant="ghost"
         size="icon"
+        aria-label="Bold"
         title="Bold"
       >
         <Bold className="h-3.5 w-3.5" />
@@ -129,6 +130,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('italic'))}
         variant="ghost"
         size="icon"
+        aria-label="Italic"
         title="Italic"
       >
         <Italic className="h-3.5 w-3.5" />
@@ -138,6 +140,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('underline'))}
         variant="ghost"
         size="icon"
+        aria-label="Underline"
         title="Underline"
       >
         <Underline className="h-3.5 w-3.5" />
@@ -147,6 +150,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('strike'))}
         variant="ghost"
         size="icon"
+        aria-label="Strikethrough"
         title="Strikethrough"
       >
         <Strikethrough className="h-3.5 w-3.5" />
@@ -156,6 +160,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('code'))}
         variant="ghost"
         size="icon"
+        aria-label="Code"
         title="Code"
       >
         <Code className="h-3.5 w-3.5" />
@@ -165,6 +170,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('highlight'))}
         variant="ghost"
         size="icon"
+        aria-label="Highlight"
         title="Highlight"
       >
         <Highlighter className="h-3.5 w-3.5" />
@@ -177,6 +183,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('bulletList'))}
         variant="ghost"
         size="icon"
+        aria-label="Bullet list"
         title="Bullet List"
       >
         <List className="h-3.5 w-3.5" />
@@ -186,6 +193,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('orderedList'))}
         variant="ghost"
         size="icon"
+        aria-label="Ordered list"
         title="Ordered List"
       >
         <ListOrdered className="h-3.5 w-3.5" />
@@ -195,6 +203,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('taskList'))}
         variant="ghost"
         size="icon"
+        aria-label="Task list"
         title="Task List"
       >
         <ListChecks className="h-3.5 w-3.5" />
@@ -208,6 +217,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('blockquote'))}
         variant="ghost"
         size="icon"
+        aria-label="Blockquote"
         title="Blockquote"
       >
         <Quote className="h-3.5 w-3.5" />
@@ -220,6 +230,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
             className={buttonClass(editor.isActive('codeBlock'))}
             variant="ghost"
             size="icon"
+            aria-label="Code block"
             title="Code Block"
           >
             <Code2 className="h-3.5 w-3.5" />
@@ -246,6 +257,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
             className={buttonClass(editor.isActive('callout'))}
             variant="ghost"
             size="icon"
+            aria-label="Callout"
             title="Callout"
           >
             <PanelLeft className="h-3.5 w-3.5" />
@@ -275,6 +287,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('heading', { level: 1 }))}
         variant="ghost"
         size="icon"
+        aria-label="Heading 1"
         title="Heading 1"
       >
         <Heading1 className="h-3.5 w-3.5" />
@@ -284,6 +297,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('heading', { level: 2 }))}
         variant="ghost"
         size="icon"
+        aria-label="Heading 2"
         title="Heading 2"
       >
         <Heading2 className="h-3.5 w-3.5" />
@@ -293,6 +307,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('heading', { level: 3 }))}
         variant="ghost"
         size="icon"
+        aria-label="Heading 3"
         title="Heading 3"
       >
         <Heading3 className="h-3.5 w-3.5" />
@@ -306,6 +321,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive({ textAlign: 'left' }))}
         variant="ghost"
         size="icon"
+        aria-label="Align left"
         title="Align Left"
       >
         <AlignLeft className="h-3.5 w-3.5" />
@@ -315,6 +331,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive({ textAlign: 'center' }))}
         variant="ghost"
         size="icon"
+        aria-label="Align center"
         title="Align Center"
       >
         <AlignCenter className="h-3.5 w-3.5" />
@@ -324,6 +341,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive({ textAlign: 'right' }))}
         variant="ghost"
         size="icon"
+        aria-label="Align right"
         title="Align Right"
       >
         <AlignRight className="h-3.5 w-3.5" />
@@ -333,6 +351,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive({ textAlign: 'justify' }))}
         variant="ghost"
         size="icon"
+        aria-label="Justify"
         title="Justify"
       >
         <AlignJustify className="h-3.5 w-3.5" />
@@ -346,6 +365,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         className={buttonClass(editor.isActive('link'))}
         variant="ghost"
         size="icon"
+        aria-label="Link"
         title="Link"
       >
         <LinkIcon className="h-3.5 w-3.5" />
@@ -354,6 +374,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         onClick={insertImage}
         variant="ghost"
         size="icon"
+        aria-label="Image"
         title="Image"
       >
         <ImageIcon className="h-3.5 w-3.5" />
@@ -362,6 +383,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
         onClick={insertTable}
         variant="ghost"
         size="icon"
+        aria-label="Table"
         title="Table"
       >
         <TableIcon className="h-3.5 w-3.5" />

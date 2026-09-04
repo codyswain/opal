@@ -77,6 +77,7 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
             variant="ghost" 
             size="icon" 
             className="h-7 w-7"
+            aria-label="Refresh conversations"
             title="Refresh conversations"
           >
             <RefreshCw className="h-4 w-4" />
@@ -86,6 +87,7 @@ export const ConversationsList: React.FC<ConversationsListProps> = ({
             size="icon" 
             onClick={startNewConversation}
             className="h-7 w-7"
+            aria-label="Start new conversation"
             title="New chat"
           >
             <Plus className="h-4 w-4" />

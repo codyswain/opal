@@ -289,25 +289,25 @@ remain tiny and split any file approaching 500 lines.
 
 **Steps**
 
-- [ ] Implement `IconButton` at compact and default sizes with
+- [x] Implement `IconButton` at compact and default sizes with
       `focus-visible`, disabled, active, and destructive states.
-- [ ] Make `cn` merge-aware with the installed `clsx`/`tailwind-merge` stack so
+- [x] Make `cn` merge-aware with the installed `clsx`/`tailwind-merge` stack so
       primitive variants and caller overrides resolve deterministically.
-- [ ] Correct the shadcn metadata to point at the real renderer stylesheet,
+- [x] Correct the shadcn metadata to point at the real renderer stylesheet,
       component directory, and utility alias before using it to add primitives.
-- [ ] Make every icon-only use require an accessible label; compose a Radix
+- [x] Make every icon-only use require an accessible label; compose a Radix
       tooltip with optional shortcut display.
-- [ ] Migrate the existing dropdown implementation into tokenized `Menu`
+- [x] Migrate the existing dropdown implementation into tokenized `Menu`
       primitives.
-- [ ] Add a real `Popover` for rich controls and a focus-managed `Dialog`.
-- [ ] Add `SegmentedControl`, `Switch`, `Chip`, `Kbd`, and `Badge`.
-- [ ] Move `EmptyState` and skeleton patterns into shared primitives without
+- [x] Add a real `Popover` for rich controls and a focus-managed `Dialog`.
+- [x] Add `SegmentedControl`, `Switch`, `Chip`, `Kbd`, and `Badge`.
+- [x] Move `EmptyState` and skeleton patterns into shared primitives without
       making copy generic or verbose.
-- [ ] Reserve radius/shadow for menus, popovers, dialogs, and Quick Preview.
-- [ ] Test keyboard activation, Escape dismissal, focus restore, disabled
+- [x] Reserve radius/shadow for menus, popovers, dialogs, and Quick Preview.
+- [x] Test keyboard activation, Escape dismissal, focus restore, disabled
       behavior, radio/selection semantics, and accessible names.
-- [ ] Do not assert Tailwind class strings.
-- [ ] Commit: `feat(ui): add compact accessible primitives`
+- [x] Do not assert Tailwind class strings.
+- [x] Commit: `feat(ui): add compact accessible primitives`
 
 **Acceptance**
 

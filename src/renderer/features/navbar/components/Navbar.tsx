@@ -44,6 +44,7 @@ const Navbar: React.FC<NavbarProps> = ({
           size="icon"
           className="h-7 w-7"
           onClick={goBack}
+          aria-label="Go back"
           title="Go back"
           disabled={!canGoBack()}
         >
@@ -54,6 +55,7 @@ const Navbar: React.FC<NavbarProps> = ({
           size="icon"
           className="h-7 w-7"
           onClick={goForward}
+          aria-label="Go forward"
           title="Go forward"
           disabled={!canGoForward()}
         >
@@ -83,6 +85,9 @@ const Navbar: React.FC<NavbarProps> = ({
         size="icon"
         className="h-7 w-7"
         onClick={toggleLeftSidebar}
+        aria-label={
+          isLeftSidebarOpen ? 'Hide navigation sidebar' : 'Show navigation sidebar'
+        }
       >
         {isLeftSidebarOpen ? (
           <PanelLeftClose className="h-3.5 w-3.5" />
@@ -95,6 +100,9 @@ const Navbar: React.FC<NavbarProps> = ({
         size="icon"
         className="h-7 w-7"
         onClick={toggleRightSidebar}
+        aria-label={
+          isRightSidebarOpen ? 'Hide inspector sidebar' : 'Show inspector sidebar'
+        }
       >
         {isRightSidebarOpen ? (
           <PanelRightClose className="h-3.5 w-3.5" />
@@ -103,7 +111,12 @@ const Navbar: React.FC<NavbarProps> = ({
         )}
       </Button>
       <Link to="/settings">
-        <Button variant="ghost" size="icon" className="h-7 w-7">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          aria-label="Open settings"
+        >
           <Settings className="h-3.5 w-3.5" />
         </Button>
       </Link>

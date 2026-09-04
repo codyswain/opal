@@ -111,6 +111,8 @@ module.exports = {
         header: "var(--header-height)",
       },
       width: {
+        "control-compact": "var(--control-height-compact)",
+        control: "var(--control-height)",
         sidebar: "var(--sidebar-width)",
         inspector: "var(--inspector-width)",
       },

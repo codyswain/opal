@@ -43,6 +43,7 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
             variant="ghost"
             size="icon"
             className="h-4 w-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label={`Close ${tab.title}`}
             onClick={(e) => {
               e.stopPropagation();
               onTabClose(tab.id);
