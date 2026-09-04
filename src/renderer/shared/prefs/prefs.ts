@@ -30,6 +30,15 @@ function isEnvelope(candidate: unknown): candidate is Envelope<unknown> {
   );
 }
 
+export function hasPref(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(NAMESPACE + key) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function readPref<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
 

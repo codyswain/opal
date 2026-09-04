@@ -392,7 +392,7 @@ remain tiny and split any file approaching 500 lines.
 - Create: `src/renderer/features/shell/store/shellStore.ts`
 - Create: `src/renderer/features/shell/context/ShellContext.tsx`
 - Create: `src/renderer/features/shell/index.ts`
-- Test: `src/tests/unit/shellStore.test.ts`
+- Test: `src/tests/unit/shellStore.test.tsx`
 
 **State**
 
@@ -403,14 +403,14 @@ remain tiny and split any file approaching 500 lines.
 
 **Steps**
 
-- [ ] Persist only cosmetic shell preferences; validate every restored shape.
-- [ ] Provide a route API for header title/breadcrumb/actions and inspector
+- [x] Persist only cosmetic shell preferences; validate every restored shape.
+- [x] Provide a route API for header title/breadcrumb/actions and inspector
       content.
-- [ ] Define the contract that top-level Back/Forward uses React Router and that
+- [x] Define the contract that top-level Back/Forward uses React Router and that
       `/files` browse/focus transitions use the location model from Task 3.
-- [ ] Test route descriptor lifecycle, restored preferences, and corrupt
+- [x] Test route descriptor lifecycle, restored preferences, and corrupt
       fallback.
-- [ ] Commit: `feat(shell): add unified shell state`
+- [x] Commit: `feat(shell): add unified shell state`
 
 **Acceptance**
 

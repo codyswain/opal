@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { readPref, writePref, PREFS_VERSION } from '@/renderer/shared/prefs/prefs';
+import {
+  hasPref,
+  readPref,
+  writePref,
+  PREFS_VERSION,
+} from '@/renderer/shared/prefs/prefs';
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -48,6 +53,7 @@ describe('readPref', () => {
     window.localStorage.setItem('opal.pane.left', 'not json{{{');
     expect(() => readPref('pane.left', 20)).not.toThrow();
     expect(readPref('pane.left', 20)).toBe(20);
+    expect(hasPref('pane.left')).toBe(true);
   });
 
   it('returns the fallback for a value stored without an envelope', () => {
@@ -60,6 +66,12 @@ describe('readPref', () => {
     writePref('pane.left', 33);
     expect(window.localStorage.getItem('opal.pane.left')).not.toBeNull();
     expect(window.localStorage.getItem('pane.left')).toBeNull();
+  });
+
+  it('distinguishes an absent preference from a present envelope', () => {
+    expect(hasPref('pane.left')).toBe(false);
+    writePref('pane.left', 33);
+    expect(hasPref('pane.left')).toBe(true);
   });
 
   it('preserves a stored false, 0, and empty string rather than treating them as absent', () => {
