@@ -66,7 +66,11 @@ const SHELL_ROUTES: ShellRouteObject[] = [
 
 beforeEach(() => {
   window.localStorage.clear();
-  useShellStore.setState({ ...DEFAULT_SHELL_PREFERENCES });
+  useShellStore.setState({
+    ...DEFAULT_SHELL_PREFERENCES,
+    narrowLayout: false,
+    narrowSidebarOpen: false,
+  });
 });
 
 describe('shell preferences', () => {
@@ -148,6 +152,23 @@ describe('shell preferences', () => {
       inspectorWidth: SHELL_LIMITS.inspector.max,
       inspectorActiveTab: 'properties',
     });
+  });
+
+  it('routes the shared sidebar command to the narrow overlay without changing the desktop preference', () => {
+    const shell = useShellStore.getState();
+    shell.setNarrowLayout(true);
+    useShellStore.getState().toggleSidebar();
+
+    expect(useShellStore.getState()).toMatchObject({
+      sidebarOpen: true,
+      narrowSidebarOpen: true,
+    });
+    expect(
+      readPref(SHELL_PREFERENCE_KEY, DEFAULT_SHELL_PREFERENCES).sidebarOpen
+    ).toBe(true);
+
+    useShellStore.getState().closeNarrowSidebar();
+    expect(useShellStore.getState().narrowSidebarOpen).toBe(false);
   });
 
   it('sanitizes unknown input without retaining non-cosmetic fields', () => {

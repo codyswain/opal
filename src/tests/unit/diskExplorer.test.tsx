@@ -54,7 +54,10 @@ beforeEach(() => {
       [ROOT]: [entry({ path: PHOTOS, name: 'Photos', kind: 'directory', isDirectory: true })],
     },
     expanded: { [ROOT]: true },
+    currentDirectory: ROOT,
+    focusedPath: null,
     isQuickLookOpen: false,
+    quickPreviewPath: null,
     selectedPath: null,
     selectedPaths: [],
     pendingAction: null,
@@ -225,6 +228,7 @@ describe('DiskExplorer', () => {
     render(<DiskExplorer />);
     const row = screen.getByTestId('disk-folder-entry-/Vault/note.md');
     await user.click(row);
+    expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
 
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(useDiskStore.getState().pendingAction).toEqual({

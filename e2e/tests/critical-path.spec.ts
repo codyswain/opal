@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures/electronApp';
 
 test('app launches and renders correctly', async ({ page }) => {
   // Wait for the app to fully render (DB init, VFS load, React mount)
-  await expect(page.getByTestId('navbar')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId('create-folder-btn')).toBeVisible();
   await expect(page.getByTestId('create-note-btn')).toBeVisible();
   await expect(page.getByTestId('file-tree')).toBeVisible();

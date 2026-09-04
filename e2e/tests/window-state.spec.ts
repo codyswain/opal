@@ -7,7 +7,7 @@ test.describe('window state', () => {
     // The fixture creates userDataDir before launch, so this file is written
     // too late for THIS launch to read — but it proves the round-trip shape and
     // that the window is visible, which is the part no unit test can check.
-    await page.waitForSelector('[data-testid="navbar"]');
+    await page.waitForSelector('[data-testid="app-shell"]');
 
     const isVisible = await electronApp.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];

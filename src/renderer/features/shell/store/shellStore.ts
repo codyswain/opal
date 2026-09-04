@@ -31,6 +31,8 @@ export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
 export interface ShellActions {
   setSidebarOpen(open: boolean): void;
   toggleSidebar(): void;
+  setNarrowLayout(narrow: boolean): void;
+  closeNarrowSidebar(): void;
   setSidebarWidth(width: number): void;
   setInspectorOpen(open: boolean): void;
   toggleInspector(): void;
@@ -40,7 +42,12 @@ export interface ShellActions {
   reset(): void;
 }
 
-export type ShellStore = ShellPreferences & ShellActions;
+export interface ShellRuntimeState {
+  narrowLayout: boolean;
+  narrowSidebarOpen: boolean;
+}
+
+export type ShellStore = ShellPreferences & ShellRuntimeState & ShellActions;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -128,6 +135,8 @@ function preferencesFrom(state: ShellStore): ShellPreferences {
 
 export const useShellStore = create<ShellStore>((set) => ({
   ...readShellPreferences(),
+  narrowLayout: false,
+  narrowSidebarOpen: false,
 
   setSidebarOpen: (sidebarOpen) =>
     set((state) => {
@@ -137,6 +146,9 @@ export const useShellStore = create<ShellStore>((set) => ({
     }),
   toggleSidebar: () =>
     set((state) => {
+      if (state.narrowLayout) {
+        return { narrowSidebarOpen: !state.narrowSidebarOpen };
+      }
       const next = {
         ...preferencesFrom(state),
         sidebarOpen: !state.sidebarOpen,
@@ -144,6 +156,13 @@ export const useShellStore = create<ShellStore>((set) => ({
       persist(next);
       return next;
     }),
+  setNarrowLayout: (narrowLayout) =>
+    set((state) =>
+      state.narrowLayout === narrowLayout
+        ? state
+        : { narrowLayout, narrowSidebarOpen: false }
+    ),
+  closeNarrowSidebar: () => set({ narrowSidebarOpen: false }),
   setSidebarWidth: (width) =>
     set((state) => {
       const next = {
@@ -202,6 +221,6 @@ export const useShellStore = create<ShellStore>((set) => ({
   reset: () => {
     const next = { ...DEFAULT_SHELL_PREFERENCES };
     persist(next);
-    set(next);
+    set({ ...next, narrowLayout: false, narrowSidebarOpen: false });
   },
 }));

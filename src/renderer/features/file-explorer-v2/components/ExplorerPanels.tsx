@@ -62,7 +62,7 @@ const Explorer: React.FC<{
   }, [isRightSidebarOpen]);
 
   return (
-    <PanelGroup direction="horizontal" className="h-screen w-screen" onLayout={onLayout}>
+    <PanelGroup direction="horizontal" className="h-full w-full" onLayout={onLayout}>
       <Panel
         ref={leftPanelRef}
         defaultSize={sizesFor(sizes, 0, 18)}

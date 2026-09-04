@@ -23,6 +23,8 @@ beforeEach(() => {
     roots: ['/V'],
     listings: { '/V': [entry({ path: '/V/a.md', name: 'a.md', kind: 'markdown' })] },
     expanded: { '/V': true },
+    currentDirectory: '/V',
+    focusedPath: null,
     selectedPath: null,
     selectedPaths: [],
   });
@@ -57,5 +59,20 @@ describe('DiskExplorer panes', () => {
     await waitFor(() =>
       expect(screen.getByTestId('disk-explorer-open-folder')).toBeInTheDocument()
     );
+  });
+
+  it('defers navigation to AppShell without duplicating the directory tree', async () => {
+    useDiskStore.setState({ currentDirectory: '/V' });
+    render(<DiskExplorer showNavigationPane={false} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pane-group-files-shell')).toBeInTheDocument()
+    );
+    expect(screen.queryByRole('tree')).toBeNull();
+    expect(screen.queryByTestId('disk-explorer-open-folder')).toBeNull();
+    expect(
+      screen.getByTestId('disk-folder-entry-/V/a.md')
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('detail-empty')).toBeNull();
   });
 });

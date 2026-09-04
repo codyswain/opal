@@ -1,16 +1,14 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   HashRouter as Router,
-  Route,
-  Routes,
   Navigate,
+  useRoutes,
 } from "react-router-dom";
 import "@/renderer/styles/index.css";
 
 import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
-import { Navbar, navbarItems } from "@/renderer/features/navbar";
 import { Settings } from "@/renderer/features/settings";
 import { usePref } from "@/renderer/shared/prefs/usePref";
 import { useCommands } from "@/renderer/features/commands";
@@ -18,33 +16,92 @@ import { Command, commandRegistry } from "@/renderer/features/commands/services/
 import { COMMAND_IDS } from "@/common/commandIds";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { Explorer } from "@/renderer/features/file-explorer-v2";
-import { DiskExplorer, useDiskStore } from "@/renderer/features/disk-explorer";
+import { FilesRoute, useDiskStore } from "@/renderer/features/disk-explorer";
+import {
+  AppShell,
+  ShellProvider,
+  useShellStore,
+  type ShellRouteDescriptor,
+  type ShellRouteObject,
+} from "@/renderer/features/shell";
 import { useSettingsStore } from "./store/settingsStore";
+
+const NOTES_ROUTE: ShellRouteDescriptor = {
+  id: "notes",
+  header: { title: "Notes" },
+};
+
+const FILES_ROUTE: ShellRouteDescriptor = {
+  id: "files",
+  header: { title: "Files" },
+};
+
+const SETTINGS_ROUTE: ShellRouteDescriptor = {
+  id: "settings",
+  header: { title: "Settings" },
+};
+
+const FALLBACK_ROUTE: ShellRouteDescriptor = {
+  id: "opal",
+  header: { title: "Opal" },
+};
+
+const NotesRoute: React.FC = () => {
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+
+  return (
+    <Explorer
+      isLeftSidebarOpen={isLeftSidebarOpen}
+      isRightSidebarOpen={isRightSidebarOpen}
+      setIsLeftSidebarOpen={setIsLeftSidebarOpen}
+      setIsRightSidebarOpen={setIsRightSidebarOpen}
+    />
+  );
+};
+
+const APP_ROUTES: ShellRouteObject[] = [
+  {
+    path: "/",
+    element: <Navigate to="/explorer" replace />,
+    handle: { shell: NOTES_ROUTE },
+  },
+  {
+    path: "/explorer",
+    element: <NotesRoute />,
+    handle: { shell: NOTES_ROUTE },
+  },
+  {
+    path: "/files",
+    element: <FilesRoute />,
+    handle: { shell: FILES_ROUTE },
+  },
+  {
+    path: "/settings",
+    element: (
+      <div className="h-full overflow-auto">
+        <Settings />
+      </div>
+    ),
+    handle: { shell: SETTINGS_ROUTE },
+  },
+  {
+    path: "*",
+    element: <Navigate to="/explorer" replace />,
+    handle: { shell: NOTES_ROUTE },
+  },
+];
+
+const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 
 const App: React.FC = () => {
   const { registerCommand, unregisterCommand } = useCommands();
   const loadSettings = useSettingsStore((state) => state.loadSettings);
-
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = usePref(
-    "isLeftSidebarOpen",
-    true
-  );
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = usePref(
-    "isRightSidebarOpen",
-    true
-  );
+  const toggleLeftSidebar = useShellStore((state) => state.toggleSidebar);
+  const toggleRightSidebar = useShellStore((state) => state.toggleInspector);
   const [isBottomPaneOpen, setIsBottomPaneOpen] = usePref(
     "isBottomPaneOpen",
     true
-  );
-
-  const toggleLeftSidebar = useCallback(
-    () => setIsLeftSidebarOpen(!isLeftSidebarOpen),
-    [isLeftSidebarOpen]
-  );
-  const toggleRightSidebar = useCallback(
-    () => setIsRightSidebarOpen(!isRightSidebarOpen),
-    [isRightSidebarOpen]
   );
   const toggleBottomPane = useCallback(
     () => setIsBottomPaneOpen(!isBottomPaneOpen),
@@ -136,44 +193,17 @@ const App: React.FC = () => {
       <KBarActionsProvider>
         <KBar />
         <ThemeProvider>
-          
-            <TooltipProvider>
-              <div className="flex flex-col h-screen w-screen overflow-hidden">
-                <Toaster />
-                <div className="flex flex-col flex-grow overflow-hidden">
-                  <Navbar
-                    toggleLeftSidebar={toggleLeftSidebar}
-                    toggleRightSidebar={toggleRightSidebar}
-                    isLeftSidebarOpen={isLeftSidebarOpen}
-                    isRightSidebarOpen={isRightSidebarOpen}
-                    items={navbarItems}
-                  />
-                  <main className="flex-grow overflow-hidden mt-10">
-                    <Routes>
-                      <Route
-                        path="/"
-                        element={<Navigate to="/explorer" replace />}
-                      />
-
-                      <Route path="/settings" element={<Settings />} />
-
-                      <Route
-                        path="/explorer"
-                        element={
-                          <Explorer
-                            isLeftSidebarOpen={isLeftSidebarOpen}
-                            isRightSidebarOpen={isRightSidebarOpen}
-                            setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                            setIsRightSidebarOpen={setIsRightSidebarOpen}
-                          />
-                        }
-                      />
-                      <Route path="/files" element={<DiskExplorer />} />
-                    </Routes>
-                  </main>
-                </div>
-              </div>
-            </TooltipProvider>
+          <TooltipProvider>
+            <Toaster />
+            <ShellProvider
+              routes={APP_ROUTES}
+              fallbackRoute={FALLBACK_ROUTE}
+            >
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </ShellProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </KBarActionsProvider>
     </Router>

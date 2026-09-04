@@ -433,43 +433,49 @@ remain tiny and split any file approaching 500 lines.
 - Create: `src/renderer/features/shell/components/DirectoryTree.tsx`
 - Create: `src/renderer/features/shell/utils/flattenDirectoryTree.ts`
 - Modify: `src/renderer/App.tsx`
-- Modify: `src/renderer/features/disk-explorer/components/DiskTree.tsx`
-- Modify: `src/renderer/features/disk-explorer/components/DiskTreeItem.tsx`
+- Create: `src/renderer/features/disk-explorer/components/FilesRoute.tsx`
+- Modify: `src/renderer/features/disk-explorer/components/DiskExplorer.tsx`
+- Modify: `src/renderer/features/disk-explorer/index.ts`
+- Modify: `src/renderer/features/file-explorer-v2/components/ExplorerPanels.tsx`
+- Modify: `src/renderer/styles/index.css`
+- Modify: `e2e/tests/critical-path.spec.ts`
+- Modify: `e2e/tests/window-state.spec.ts`
 - Test: `src/tests/unit/appShell.test.tsx`
 - Test: `src/tests/unit/workspaceSidebar.test.tsx`
 - Test: `src/tests/unit/flattenDirectoryTree.test.ts`
+- Test: `src/tests/unit/filesRoute.test.tsx`
 
 **Steps**
 
-- [ ] Replace fixed `Navbar` + `mt-10` with real full-height shell layout.
-- [ ] Preserve the native drag region and a no-drag region for every control.
-- [ ] Align workspace sidebar header and route context header on one 40 px row.
-- [ ] Add universal back/forward, sidebar toggle, context title/breadcrumb slot,
+- [x] Replace fixed `Navbar` + `mt-10` with real full-height shell layout.
+- [x] Preserve the native drag region and a no-drag region for every control.
+- [x] Align workspace sidebar header and route context header on one 40 px row.
+- [x] Add universal back/forward, sidebar toggle, context title/breadcrumb slot,
       and trailing action slot.
-- [ ] Use React Router for route activation and Back/Forward.
-- [ ] Render real destinations only: Notes, Files, open roots/tree, and
+- [x] Use React Router for route activation and Back/Forward.
+- [x] Render real destinations only: Notes, Files, open roots/tree, and
       Settings.
-- [ ] If Recent/Favorites stores are not implemented yet, omit those rows until
+- [x] If Recent/Favorites stores are not implemented yet, omit those rows until
       Task 13 rather than shipping inert placeholders.
-- [ ] Keep workspace Search absent until a real index/search feature exists.
-- [ ] Reuse lazy tree loading and root security behavior, but show directories
+- [x] Keep workspace Search absent until a real index/search feature exists.
+- [x] Reuse lazy tree loading and root security behavior, but show directories
       only in sidebar navigation.
-- [ ] Flatten and virtualize large visible directory trees; preserve tree ARIA
+- [x] Flatten and virtualize large visible directory trees; preserve tree ARIA
       levels and expansion state.
-- [ ] Keep flattening 5,000 visible directories within one 16 ms frame and
+- [x] Keep flattening 5,000 visible directories within one 16 ms frame and
       render only the viewport.
-- [ ] Implement shell thresholds now: wide ≥1200 px, medium 800–1199 px, narrow
+- [x] Implement shell thresholds now: wide ≥1200 px, medium 800–1199 px, narrow
       <800 px. At narrow width the sidebar is off-canvas/collapsed and header
       actions overflow without colliding with traffic lights.
-- [ ] Preserve current/last-used route behavior; do not switch the first-run
+- [x] Preserve current/last-used route behavior; do not switch the first-run
       default yet.
-- [ ] Remove the centered Explorer/Files route switch.
-- [ ] Keep `/explorer` reachable as `Notes`.
-- [ ] Ensure sidebar collapse is controlled by the same command/preference that
+- [x] Remove the centered Explorer/Files route switch.
+- [x] Keep `/explorer` reachable as `Notes`.
+- [x] Ensure sidebar collapse is controlled by the same command/preference that
       the native View menu uses.
-- [ ] Test route activation, tree expansion, collapse behavior, and accessible
+- [x] Test route activation, tree expansion, collapse behavior, and accessible
       names.
-- [ ] Commit: `feat(shell): replace navbar with workspace shell`
+- [x] Commit: `feat(shell): replace navbar with workspace shell`
 
 **Acceptance**
 
@@ -552,7 +558,7 @@ remain tiny and split any file approaching 500 lines.
 
 - Modify: `src/renderer/features/disk-explorer/store/diskStore.ts`
 - Modify: `src/renderer/features/disk-explorer/store/tabsStore.ts`
-- Create: `src/renderer/features/disk-explorer/components/FilesRoute.tsx`
+- Modify: `src/renderer/features/disk-explorer/components/FilesRoute.tsx`
 - Modify: `src/renderer/features/disk-explorer/components/DiskExplorer.tsx`
 - Modify: `src/renderer/features/disk-explorer/components/DiskTreeItem.tsx`
 - Modify: `src/renderer/features/disk-explorer/components/DiskFolderView.tsx`

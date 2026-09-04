@@ -41,9 +41,16 @@ function shouldIgnoreShortcutTarget(target: HTMLElement | null): boolean {
     && target.closest('[role="dialog"], [data-disk-shortcuts-ignore="true"]') !== null;
 }
 
-export const DiskExplorer: React.FC = () => {
+interface DiskExplorerProps {
+  showNavigationPane?: boolean;
+}
+
+export const DiskExplorer: React.FC<DiskExplorerProps> = ({
+  showNavigationPane = true,
+}) => {
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
+  const currentDirectory = useDiskStore((state) => state.currentDirectory);
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
@@ -54,7 +61,11 @@ export const DiskExplorer: React.FC = () => {
   const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
-  const { sizes, onLayout } = usePaneLayout('files', [20, 55, 25]);
+  const layoutKey = showNavigationPane ? 'files' : 'files-shell';
+  const { sizes, onLayout } = usePaneLayout(
+    layoutKey,
+    showNavigationPane ? [20, 55, 25] : [72, 28]
+  );
 
   const activeTabPath = useTabsStore((state) => state.activePath);
   const openPreviewTab = useTabsStore((state) => state.openPreview);
@@ -73,7 +84,12 @@ export const DiskExplorer: React.FC = () => {
     return (candidate: string) => directories.has(candidate);
   }, [roots, listings]);
 
-  const activeDirectory = directoryForSelection(selectedPath, isDirectory, roots);
+  const activeDirectory =
+    (selectedPath
+      ? directoryForSelection(selectedPath, isDirectory, roots)
+      : currentDirectory) ??
+    roots[0] ??
+    null;
   const visibleEntries = useMemo(() => {
     if (!activeDirectory) return [];
     return sortEntries(
@@ -104,6 +120,7 @@ export const DiskExplorer: React.FC = () => {
     }
     return selectedEntry;
   }, [activeTabPath, listings, selectedEntry]);
+  const showDetailPane = showNavigationPane || tabEntry !== null;
 
   useEffect(() => {
     hydrateTabs();
@@ -199,9 +216,10 @@ export const DiskExplorer: React.FC = () => {
         ) {
           return;
         }
-        if (!selectedPath) return;
+        const targetPath = state.focusedPath ?? state.selectedPath;
+        if (!targetPath) return;
         event.preventDefault();
-        useDiskStore.getState().beginRename(selectedPath);
+        state.beginRename(targetPath);
         return;
       }
 
@@ -213,9 +231,10 @@ export const DiskExplorer: React.FC = () => {
         ) {
           return;
         }
-        if (!selectedPath) return;
+        const targetPath = state.focusedPath ?? state.selectedPath;
+        if (!targetPath) return;
         event.preventDefault();
-        useDiskStore.getState().beginDelete(selectedPath);
+        state.beginDelete(targetPath);
         return;
       }
 
@@ -258,38 +277,46 @@ export const DiskExplorer: React.FC = () => {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <PaneGroup layoutKey="files" onLayout={onLayout} className="flex-1">
-        <Pane
-          defaultSize={sizesFor(sizes, 0, 20)}
-          minSize={12}
-          maxSize={40}
-          collapsible
-          className="flex flex-col overflow-hidden border-r border-border/60"
-        >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Files
-            </span>
-            <button
-              type="button"
-              onClick={() => void openFolder()}
-              aria-label="Open folder"
-              data-testid="disk-explorer-open-folder"
-              data-disk-shortcuts-ignore="true"
-              className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
+      <PaneGroup layoutKey={layoutKey} onLayout={onLayout} className="flex-1">
+        {showNavigationPane ? (
+          <>
+            <Pane
+              defaultSize={sizesFor(sizes, 0, 20)}
+              minSize={12}
+              maxSize={40}
+              collapsible
+              className="flex flex-col overflow-hidden border-r border-border/60"
             >
-              <FolderPlus className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-auto">
-            <DiskTree />
-          </div>
-        </Pane>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Files
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void openFolder()}
+                  aria-label="Open folder"
+                  data-testid="disk-explorer-open-folder"
+                  data-disk-shortcuts-ignore="true"
+                  className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto">
+                <DiskTree />
+              </div>
+            </Pane>
 
-        <PaneHandle />
+            <PaneHandle />
+          </>
+        ) : null}
 
         <Pane
-          defaultSize={sizesFor(sizes, 1, 55)}
+          defaultSize={sizesFor(
+            sizes,
+            showNavigationPane ? 1 : 0,
+            showNavigationPane ? 55 : showDetailPane ? 72 : 100
+          )}
           minSize={30}
           className="flex min-w-0 flex-col overflow-hidden"
         >
@@ -311,20 +338,28 @@ export const DiskExplorer: React.FC = () => {
           )}
         </Pane>
 
-        <PaneHandle />
+        {showDetailPane ? (
+          <>
+            <PaneHandle />
 
-        <Pane
-          defaultSize={sizesFor(sizes, 2, 25)}
-          minSize={15}
-          maxSize={50}
-          collapsible
-          className="flex flex-col overflow-hidden border-l border-border/60"
-        >
-          <TabStrip />
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <DetailPane entry={tabEntry} />
-          </div>
-        </Pane>
+            <Pane
+              defaultSize={sizesFor(
+                sizes,
+                showNavigationPane ? 2 : 1,
+                showNavigationPane ? 25 : 28
+              )}
+              minSize={15}
+              maxSize={50}
+              collapsible
+              className="flex flex-col overflow-hidden border-l border-border/60"
+            >
+              <TabStrip />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <DetailPane entry={tabEntry} />
+              </div>
+            </Pane>
+          </>
+        ) : null}
       </PaneGroup>
 
       <QuickLook entry={selectedEntry} />

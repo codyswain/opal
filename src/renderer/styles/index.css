@@ -164,8 +164,13 @@
   -webkit-app-region: drag;
 }
 
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
 .drag-handle button,
-.drag-handle a {
+.drag-handle a,
+.drag-handle input {
   -webkit-app-region: no-drag;
 }
 
