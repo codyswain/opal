@@ -338,7 +338,7 @@ export function removePathsFromTabsState(
     ? state.openPaths.indexOf(state.openedPath)
     : -1;
   const openedPath =
-    state.openedPath && !isRemoved(state.openedPath)
+    state.openedPath === null ? null : !isRemoved(state.openedPath)
       ? state.openedPath
       : nearestRealPath(
           openPaths,

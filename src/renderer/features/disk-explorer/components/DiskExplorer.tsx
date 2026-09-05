@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
 import { FolderPlus, X } from 'lucide-react';
@@ -33,6 +33,9 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   showNavigationPane = true,
 }) => {
   const navigation = useFilesNavigation();
+  const previewPaneId = useId();
+  const isPreviewPaneOpen = useDiskStore((state) => state.isPreviewPaneOpen);
+  const togglePreviewPane = useDiskStore((state) => state.togglePreviewPane);
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
@@ -115,8 +118,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       cancelled = true;
     };
   }, [openedPath, listings]);
-  const showDetailPane =
-    !openedPath && (showNavigationPane || selectedEntry !== null);
+  const showDetailPane = !openedPath && isPreviewPaneOpen;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -374,6 +376,16 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
                 <Breadcrumb dirPath={activeDirectory} />
                 <Toolbar dirPath={activeDirectory} />
+                <button
+                  type="button"
+                  aria-pressed={isPreviewPaneOpen}
+                  aria-controls={previewPaneId}
+                  data-disk-shortcuts-ignore="true"
+                  onClick={togglePreviewPane}
+                  className="mr-3 shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  Preview
+                </button>
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 <DiskFolderView
@@ -404,8 +416,26 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               collapsible
               className="flex flex-col overflow-hidden border-l border-border/60"
             >
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <DetailPane entry={selectedEntry} />
+              <div
+                id={previewPaneId}
+                role="region"
+                aria-label="Selected item preview"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2">
+                  <span className="text-xs text-muted-foreground">Preview</span>
+                  <button
+                    type="button"
+                    aria-label="Close preview pane"
+                    onClick={togglePreviewPane}
+                    className="rounded p-1 hover:bg-muted"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <DetailPane entry={selectedEntry} />
+                </div>
               </div>
             </Pane>
           </>

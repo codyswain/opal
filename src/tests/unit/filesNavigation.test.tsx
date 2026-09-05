@@ -81,6 +81,7 @@ beforeEach(() => {
     pendingDelete: null,
     quickPreviewPath: null,
     isQuickLookOpen: false,
+    isPreviewPaneOpen: false,
     loading: { isLoading: false, error: null },
   });
   useTabsStore.setState({
@@ -102,9 +103,10 @@ it('selects folders without navigating and supports multiple folder selection', 
   ]);
   expect(useTabsStore.getState().openPaths).toEqual([]);
 });
-it('peeks at a file without a tab or route change', async () => {
+it('shows the selected file in an explicitly opened preview without a tab or route change', async () => {
   await setup();
   fireEvent.click(item(NOTE));
+  fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   expect(screen.getByTestId('detail-title')).toHaveTextContent('brief.md');
   expect(useTabsStore.getState().openPaths).toEqual([]);
   expect(screen.getByTestId('location')).toHaveTextContent('mode=browse');
@@ -460,5 +462,64 @@ it.each([
     await user.dblClick(item(path));
     if (path === FOLDER) await screen.findByTestId('disk-folder-empty');
     else await screen.findByTestId('files-focus');
+  }
+);
+it('keeps Browse active when an unrelated cached sibling disappears after returning from a file', async () => {
+  await setup();
+  fireEvent.doubleClick(item(NOTE));
+  await screen.findByTestId('files-focus');
+  fireEvent.click(screen.getByRole('button', { name: 'Return to folder' }));
+  await screen.findByTestId('disk-folder-list');
+  window.diskAPI.readDirectory = vi.fn(async (path) => ({
+    success: true as const,
+    data: { path, entries: items.filter((entry) => entry.path !== FOLDER) },
+  }));
+  await act(async () => {
+    await useDiskStore.getState().invalidate([ROOT]);
+  });
+  expect(useTabsStore.getState().openedPath).toBeNull();
+  expect(useTabsStore.getState().openPaths).toEqual([NOTE]);
+  expect(screen.getByTestId('disk-folder-list')).toBeVisible();
+  expect(screen.queryByTestId('files-focus')).toBeNull();
+  expect(screen.getByTestId('location')).toHaveTextContent('mode=browse');
+});
+it.each(['list', 'gallery'])(
+  'selection keeps %s pane allocation unchanged until Preview is explicitly toggled',
+  async (mode) => {
+    await setup();
+    fireEvent.click(screen.getByTestId('disk-folder-view-' + mode));
+    const handlesBeforeSelection = screen.queryAllByRole('separator').length;
+    fireEvent.click(item(NOTE));
+    expect(screen.queryAllByRole('separator')).toHaveLength(
+      handlesBeforeSelection
+    );
+    expect(screen.queryByTestId('detail-title')).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Preview' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('region', { name: 'Selected item preview' })
+    ).toBeVisible();
+    const handlesWithPreview = screen.queryAllByRole('separator').length;
+    expect(handlesWithPreview).toBe(handlesBeforeSelection + 1);
+    act(() => useDiskStore.getState().clearSelection());
+    expect(screen.queryAllByRole('separator')).toHaveLength(handlesWithPreview);
+    expect(screen.getByTestId('detail-empty')).toBeVisible();
+    fireEvent.doubleClick(item(FOLDER));
+    await screen.findByTestId('disk-folder-empty');
+    expect(
+      screen.getByRole('button', { name: 'Preview' })
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('region', { name: 'Selected item preview' })
+    ).toBeVisible();
+    expect(screen.queryAllByRole('separator')).toHaveLength(handlesWithPreview);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview' })
+    );
+    expect(
+      screen.queryByRole('region', { name: 'Selected item preview' })
+    ).toBeNull();
   }
 );

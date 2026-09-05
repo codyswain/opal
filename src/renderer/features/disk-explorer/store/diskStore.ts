@@ -37,6 +37,8 @@ export interface DiskState {
   quickPreviewPath: string | null;
   /** @deprecated Task 7: compatibility mirror for the current QuickLook UI. */
   isQuickLookOpen: boolean;
+  /** Explicit browse-pane visibility; selection and navigation never toggle it. */
+  isPreviewPaneOpen: boolean;
   pendingAction: PendingAction | null;
   pendingDelete: string | null;
   sort: { field: SortField; direction: SortDirection };
@@ -63,6 +65,7 @@ export interface DiskActions {
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
+  togglePreviewPane: () => void;
   beginNewFolder: (parentDir: string) => void;
   beginRename: (target: string) => void;
   beginDelete: (target: string) => void;
@@ -87,12 +90,15 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   selectedPaths: [],
   quickPreviewPath: null,
   isQuickLookOpen: false,
+  isPreviewPaneOpen: false,
   pendingAction: null,
   pendingDelete: null,
   sort: { field: 'name', direction: 'asc' },
   filter: '',
   density: 'comfortable',
   loading: { isLoading: false, error: null },
+
+  togglePreviewPane: () => set(state => ({isPreviewPaneOpen: !state.isPreviewPaneOpen})),
 
   loadRoots: async () => {
     const response = await window.diskAPI.listRoots();

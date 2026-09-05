@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { DiskExplorer } from '@/renderer/features/disk-explorer/components/DiskExplorer';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -27,6 +27,7 @@ beforeEach(() => {
     focusedPath: null,
     selectedPath: null,
     selectedPaths: [],
+    isPreviewPaneOpen: false,
   });
 });
 
@@ -45,12 +46,14 @@ describe('DiskExplorer panes', () => {
     );
   });
 
-  it('still renders the tree, folder view, and detail pane', async () => {
+  it('renders the tree and collection, then opens the detail pane explicitly', async () => {
     render(<DiskExplorer />);
     // disk-tree-item-* comes from DiskTreeItem; detail-empty from DetailPane.
     await waitFor(() =>
       expect(screen.getByTestId('disk-tree-item-/V/a.md')).toBeInTheDocument()
     );
+    expect(screen.queryByTestId('detail-empty')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Preview'}));
     expect(screen.getByTestId('detail-empty')).toBeInTheDocument();
   });
 
