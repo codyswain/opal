@@ -1,7 +1,7 @@
 import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, FolderOpen, SearchX } from 'lucide-react';
-import { FixedSizeGrid, FixedSizeList } from 'react-window';
+import { FixedSizeGrid, FixedSizeList, type GridChildComponentProps, type ListChildComponentProps } from 'react-window';
 import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
 import { sortEntries } from '@/common/sortEntries';
@@ -104,6 +104,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const saveScroll = (offset: number) => filesLocationSnapshots.patch({mode: 'browse', directory: dirPath}, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
   const activate = (entry: DiskEntry) => entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path);
 
+  const itemData: CollectionItemData = { entries: visibleEntries, selectedPaths, columns, select: handleClick, activate };
+
   if (!entries) {
     return <GallerySkeleton />;
   }
@@ -166,6 +168,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         >
           <FixedSizeGrid
             ref={gridRef}
+            itemData={itemData}
             initialScrollTop={snapshot?.scroll?.view === 'gallery' ? snapshot.scroll.offset : 0}
             onScroll={({scrollTop}) => saveScroll(scrollTop)}
             columnCount={columns}
@@ -179,21 +182,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
               return item?.path ?? `empty-${rowIndex}-${columnIndex}`;
             }}
           >
-            {({ columnIndex, rowIndex, style }) => {
-              const item = visibleEntries[rowIndex * columns + columnIndex];
-              if (!item) return null;
-
-              return (
-                <div style={style} className="p-2">
-                  <GalleryTile
-                    entry={item}
-                    isSelected={selectedPaths.includes(item.path)}
-                    onSelect={(event) => handleClick(event, item)}
-                    onOpen={() => activate(item)}
-                  />
-                </div>
-              );
-            }}
+            {VirtualGalleryItem}
           </FixedSizeGrid>
         </div>
       ) : (
@@ -206,6 +195,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         >
           <FixedSizeList
             ref={listRef}
+            itemData={itemData}
             initialScrollOffset={snapshot?.scroll?.view === 'details' ? snapshot.scroll.offset : 0}
             onScroll={({scrollOffset}) => saveScroll(scrollOffset)}
             itemCount={visibleEntries.length}
@@ -214,26 +204,45 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
             height={viewport.height}
             itemKey={(index) => visibleEntries[index].path}
           >
-            {({ index, style }) => {
-              const item = visibleEntries[index];
-
-              return (
-                <div style={style}>
-                  <ListRow
-                    entry={item}
-                    isSelected={selectedPaths.includes(item.path)}
-                    onSelect={(event) => handleClick(event, item)}
-                    onOpen={() => activate(item)}
-                  />
-                </div>
-              );
-            }}
+            {VirtualListItem}
           </FixedSizeList>
         </div>
       )}
     </div>
   );
 };
+
+interface CollectionItemData {
+  entries: DiskEntry[];
+  selectedPaths: string[];
+  columns: number;
+  select: (event: React.MouseEvent<HTMLButtonElement>, entry: DiskEntry) => void;
+  activate: (entry: DiskEntry) => void;
+}
+
+// react-window renders its child as a component type. These definitions must
+// stay stable across selection updates so the browser retains the same pointer
+// target between clicks, along with keyboard focus and in-progress drag state.
+function VirtualGalleryItem({ columnIndex, rowIndex, style, data }: GridChildComponentProps<CollectionItemData>) {
+  const entry = data.entries[rowIndex * data.columns + columnIndex];
+  if (!entry) return null;
+  return (
+    <div style={style} className="p-2">
+      <GalleryTile entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
+        onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+    </div>
+  );
+}
+
+function VirtualListItem({ index, style, data }: ListChildComponentProps<CollectionItemData>) {
+  const entry = data.entries[index];
+  return (
+    <div style={style}>
+      <ListRow entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
+        onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+    </div>
+  );
+}
 
 interface ModeButtonProps {
   mode: ViewMode;

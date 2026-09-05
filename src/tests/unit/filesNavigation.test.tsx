@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import {
   act,
@@ -431,3 +432,33 @@ it('activates tabs in another allowed root using that file’s folder', async ()
     )
   );
 });
+
+it.each(['list', 'gallery'])(
+  'keeps the %s row DOM mounted when selection changes',
+  async (mode) => {
+    const user = userEvent.setup();
+    await setup();
+    await user.click(screen.getByTestId('disk-folder-view-' + mode));
+    const row = item(FOLDER);
+    await user.click(row);
+    expect(item(FOLDER)).toBe(row);
+    expect(row).toHaveFocus();
+  }
+);
+it.each([
+  ['list', FOLDER],
+  ['gallery', FOLDER],
+  ['list', NOTE],
+  ['gallery', NOTE],
+])(
+  'opens a selected item through a real double-click sequence in %s: %s',
+  async (mode, path) => {
+    const user = userEvent.setup();
+    await setup();
+    await user.click(screen.getByTestId('disk-folder-view-' + mode));
+    await user.click(item(path));
+    await user.dblClick(item(path));
+    if (path === FOLDER) await screen.findByTestId('disk-folder-empty');
+    else await screen.findByTestId('files-focus');
+  }
+);
