@@ -62,7 +62,8 @@ preview tabs, while FilesRoute only applies URL state in one direction.
 
 | Action | Result |
 | --- | --- |
-| Single click a file or folder in collection | Select; stay in current directory; do not open a tab |
+| Single click a file or folder in collection | Select; stay in current directory; do not open a tab or change pane allocation |
+| Toggle Preview | Explicitly show/hide the selected-item preview pane; initially closed |
 | Cmd/Ctrl click or Shift click | Existing multi-selection behavior, including folders |
 | Double click folder | Navigate into it and add a history entry |
 | Double click file / Cmd+Down | Explicitly open the file in a real tab and focused main surface |
@@ -73,8 +74,11 @@ preview tabs, while FilesRoute only applies URL state in one direction.
 | Select another item / scroll | No push or replace in route history |
 
 The focused main surface reuses existing per-modality DetailPane renderers.
-Provide an explicit return-to-folder action. Browse shows the collection and a
-contextual selected-item preview, never an unrelated formerly active tab.
+Provide an explicit return-to-folder action. Browse shows the collection and an
+optional selected-item preview, never an unrelated formerly active tab. Preview
+visibility is explicitly toggled and starts closed. Selection and navigation do
+not open or close it; an open preview with no selection shows the existing empty
+state. This keeps gallery geometry stable through pointer click sequences.
 Opened tabs remain real files and can be activated or closed through history-
 aware actions. A missing opened file shows a truthful unavailable state rather
 than falling back to the selected item's contents.
@@ -118,4 +122,3 @@ finish all 19 tasks before demonstrating the information-workspace product.
 This slice takes navigation continuity and a minimal focused surface from Tasks
 7/11/12. It does not claim completion of their full ARIA, typeahead-tree,
 responsive inspector, display options, command registry, or visual polish scope.
-
