@@ -1,3 +1,4 @@
+import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, FolderOpen, SearchX } from 'lucide-react';
 import { FixedSizeGrid, FixedSizeList } from 'react-window';
@@ -10,6 +11,8 @@ import { toOpalThumbUrl } from '@/common/opalThumbUrl';
 import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
 import { useGridNavigation } from '../hooks/useGridNavigation';
 import { useElementSize } from '../hooks/useElementSize';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
+import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
 import { EmptyState } from './EmptyState';
 import { GallerySkeleton } from './Skeleton';
 
@@ -31,6 +34,8 @@ const TILE = {
 } as const;
 
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
+  const navigation = useFilesNavigation();
+  const [snapshot] = useState(() => filesLocationSnapshots.read({mode: 'browse', directory: dirPath}));
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
   const selectedPath = useDiskStore((state) => state.selectedPath);
@@ -40,7 +45,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const setFilter = useDiskStore((state) => state.setFilter);
   const density = useDiskStore((state) => state.density);
 
-  const [mode, setMode] = useState<ViewMode | null>(null);
+  const [mode, setMode] = useState<ViewMode | null>(snapshot?.scroll ? snapshot.scroll.view === 'details' ? 'list' : 'gallery' : null);
   const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
   const gridRef = useRef<FixedSizeGrid>(null);
   const listRef = useRef<FixedSizeList>(null);
@@ -86,19 +91,18 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     else store.select(target.path);
   }, [visibleEntries]);
 
+  const lastSelection = useRef(selectedPath);
   useEffect(() => {
-    const index = visibleEntries.findIndex((candidate) => candidate.path === selectedPath);
+    // Restoration and mounting must not move a viewport to the saved selection.
+    if (lastSelection.current === selectedPath) return;
+    lastSelection.current = selectedPath;
+    const index = visibleEntries.findIndex(candidate => candidate.path === selectedPath);
     if (index === -1) return;
-
-    if (activeMode === 'gallery') {
-      gridRef.current?.scrollToItem({
-        rowIndex: Math.floor(index / columns),
-        columnIndex: index % columns,
-      });
-    } else {
-      listRef.current?.scrollToItem(index);
-    }
+    if (activeMode === 'gallery') gridRef.current?.scrollToItem({rowIndex: Math.floor(index / columns), columnIndex: index % columns});
+    else listRef.current?.scrollToItem(index);
   }, [selectedPath, visibleEntries, activeMode, columns]);
+  const saveScroll = (offset: number) => filesLocationSnapshots.patch({mode: 'browse', directory: dirPath}, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
+  const activate = (entry: DiskEntry) => entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path);
 
   if (!entries) {
     return <GallerySkeleton />;
@@ -162,6 +166,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         >
           <FixedSizeGrid
             ref={gridRef}
+            initialScrollTop={snapshot?.scroll?.view === 'gallery' ? snapshot.scroll.offset : 0}
+            onScroll={({scrollTop}) => saveScroll(scrollTop)}
             columnCount={columns}
             rowCount={Math.ceil(visibleEntries.length / columns)}
             columnWidth={tile.width}
@@ -183,6 +189,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
                     entry={item}
                     isSelected={selectedPaths.includes(item.path)}
                     onSelect={(event) => handleClick(event, item)}
+                    onOpen={() => activate(item)}
                   />
                 </div>
               );
@@ -199,6 +206,8 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
         >
           <FixedSizeList
             ref={listRef}
+            initialScrollOffset={snapshot?.scroll?.view === 'details' ? snapshot.scroll.offset : 0}
+            onScroll={({scrollOffset}) => saveScroll(scrollOffset)}
             itemCount={visibleEntries.length}
             itemSize={ROW_HEIGHT}
             width={viewport.width}
@@ -214,6 +223,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
                     entry={item}
                     isSelected={selectedPaths.includes(item.path)}
                     onSelect={(event) => handleClick(event, item)}
+                    onOpen={() => activate(item)}
                   />
                 </div>
               );
@@ -250,10 +260,11 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
 interface EntryProps {
   entry: DiskEntry;
   isSelected: boolean;
+  onOpen: () => void;
   onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
-const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
+const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect, onOpen }) => {
   const Icon = ICONS[entry.kind];
   const [thumbFailed, setThumbFailed] = useState(false);
   const { dragProps, isDropTarget } = useDropTarget(entry);
@@ -271,6 +282,8 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
     <button
       type="button"
       onClick={onSelect}
+      onDoubleClick={onOpen}
+      data-disk-collection-item="true"
       aria-pressed={isSelected}
       title={entry.name}
       data-testid={`disk-folder-entry-${entry.path}`}
@@ -305,7 +318,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
   );
 };
 
-const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
+const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect, onOpen }) => {
   const Icon = ICONS[entry.kind];
   const { dragProps, isDropTarget } = useDropTarget(entry);
 
@@ -313,6 +326,8 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
     <button
       type="button"
       onClick={onSelect}
+      onDoubleClick={onOpen}
+      data-disk-collection-item="true"
       aria-pressed={isSelected}
       data-testid={`disk-folder-entry-${entry.path}`}
       className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors duration-100 ${
@@ -373,6 +388,8 @@ function useDropTarget(entry: DiskEntry) {
       const result = await window.diskAPI.move(source, entry.path);
       if (!result.success) {
         useDiskStore.setState({ loading: { isLoading: false, error: result.error } });
+      } else {
+        pathMutationCoordinator.applyAppMutation({kind: 'move', oldPath: source, newPath: result.data.path});
       }
     },
   };

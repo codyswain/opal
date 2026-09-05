@@ -71,7 +71,7 @@ describe('QuickLook', () => {
     render(<QuickLook entry={PHOTO} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAttribute('aria-modal', 'false');
     expect(dialog).toHaveAttribute('aria-label', 'a.jpg');
   });
 });

@@ -180,6 +180,10 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       return;
     }
 
+    const nextPaths = new Set(response.data.entries.map(entry => entry.path));
+    const removed = (get().listings[dirPath] ?? []).filter(entry => !nextPaths.has(entry.path)).map(entry => entry.path);
+    if (removed.length) pathMutationCoordinator.applyExternalRemoval(removed);
+
     set((state) => ({
       listings: { ...state.listings, [dirPath]: response.data.entries },
       loading: { isLoading: false, error: null },

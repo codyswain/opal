@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
+import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
 import { FolderPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
@@ -15,31 +17,13 @@ import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
 import { TabStrip } from './TabStrip';
 import { useTabsStore } from '../store/tabsStore';
-import { PaneGroup, Pane, PaneHandle, usePaneLayout, sizesFor } from '@/renderer/shared/components/panes';
-
-/** The detail pane always shows a directory: a selected file shows its parent. */
-function directoryForSelection(
-  selectedPath: string | null,
-  isDirectory: (path: string) => boolean,
-  roots: string[]
-): string | null {
-  if (!selectedPath) return roots[0] ?? null;
-  if (isDirectory(selectedPath)) return selectedPath;
-
-  const parent = selectedPath.slice(0, selectedPath.lastIndexOf('/'));
-  return parent || roots[0] || null;
-}
-
-function shouldIgnoreShortcutTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
-    return true;
-  }
-
-  return typeof target.closest === 'function'
-    && target.closest('[role="dialog"], [data-disk-shortcuts-ignore="true"]') !== null;
-}
+import {
+  PaneGroup,
+  Pane,
+  PaneHandle,
+  usePaneLayout,
+  sizesFor,
+} from '@/renderer/shared/components/panes';
 
 interface DiskExplorerProps {
   showNavigationPane?: boolean;
@@ -48,6 +32,7 @@ interface DiskExplorerProps {
 export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   showNavigationPane = true,
 }) => {
+  const navigation = useFilesNavigation();
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
@@ -57,8 +42,6 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
   const invalidate = useDiskStore((state) => state.invalidate);
-  const openQuickLook = useDiskStore((state) => state.openQuickLook);
-  const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
   const layoutKey = showNavigationPane ? 'files' : 'files-shell';
@@ -67,29 +50,8 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
     showNavigationPane ? [20, 55, 25] : [72, 28]
   );
 
-  const activeTabPath = useTabsStore((state) => state.activePath);
-  const openPreviewTab = useTabsStore((state) => state.openPreview);
-  const hydrateTabs = useTabsStore((state) => state.hydrate);
-
-  // A path is a directory if it is a root, or if any cached listing describes
-  // it as one. That is enough without another IPC round-trip, because the tree
-  // can only surface a path it has already listed.
-  const isDirectory = useMemo(() => {
-    const directories = new Set(roots);
-    for (const entries of Object.values(listings)) {
-      for (const entry of entries) {
-        if (entry.isDirectory) directories.add(entry.path);
-      }
-    }
-    return (candidate: string) => directories.has(candidate);
-  }, [roots, listings]);
-
-  const activeDirectory =
-    (selectedPath
-      ? directoryForSelection(selectedPath, isDirectory, roots)
-      : currentDirectory) ??
-    roots[0] ??
-    null;
+  const openedPath = useTabsStore((state) => state.openedPath);
+  const activeDirectory = currentDirectory;
   const visibleEntries = useMemo(() => {
     if (!activeDirectory) return [];
     return sortEntries(
@@ -104,35 +66,67 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const selectedEntry = useMemo<DiskEntry | null>(() => {
     if (!selectedPath) return null;
     for (const entries of Object.values(listings)) {
-      const match = entries.find((candidate) => candidate.path === selectedPath);
+      const match = entries.find(
+        (candidate) => candidate.path === selectedPath
+      );
       if (match) return match;
     }
     return null;
   }, [selectedPath, listings]);
 
-  // The tab being viewed, which is not always the grid selection: clicking a
-  // different tab changes what is displayed without moving the grid cursor.
-  const tabEntry = useMemo<DiskEntry | null>(() => {
-    if (!activeTabPath) return selectedEntry;
-    for (const entries of Object.values(listings)) {
-      const match = entries.find((candidate) => candidate.path === activeTabPath);
-      if (match) return match;
+  const [focusedEntry, setFocusedEntry] = useState<{
+    path: string;
+    entry: DiskEntry | null;
+    loading: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!openedPath) {
+      setFocusedEntry(null);
+      return;
     }
-    return selectedEntry;
-  }, [activeTabPath, listings, selectedEntry]);
-  const showDetailPane = showNavigationPane || tabEntry !== null;
-
-  useEffect(() => {
-    hydrateTabs();
-  }, [hydrateTabs]);
-
-  useEffect(() => {
-    if (!selectedEntry || selectedEntry.isDirectory) return;
-    openPreviewTab(selectedEntry.path);
-  }, [openPreviewTab, selectedEntry]);
+    const cached = Object.values(listings)
+      .flat()
+      .find((entry) => entry.path === openedPath && !entry.isDirectory);
+    if (cached) {
+      setFocusedEntry({ path: openedPath, entry: cached, loading: false });
+      return;
+    }
+    let cancelled = false;
+    setFocusedEntry({ path: openedPath, entry: null, loading: true });
+    void Promise.resolve(window.diskAPI.stat(openedPath))
+      .then((result) => {
+        if (!cancelled)
+          setFocusedEntry({
+            path: openedPath,
+            entry:
+              result?.success &&
+              result.data.path === openedPath &&
+              !result.data.isDirectory
+                ? result.data
+                : null,
+            loading: false,
+          });
+      })
+      .catch(() => {
+        if (!cancelled)
+          setFocusedEntry({ path: openedPath, entry: null, loading: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openedPath, listings]);
+  const showDetailPane =
+    !openedPath && (showNavigationPane || selectedEntry !== null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreShortcutTarget(event.target as HTMLElement) ||
+        useDiskStore.getState().pendingAction ||
+        useDiskStore.getState().pendingDelete
+      )
+        return;
       if (!event.metaKey && !event.ctrlKey) return;
 
       const tabs = useTabsStore.getState();
@@ -140,32 +134,44 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       if (event.key === 'w') {
         if (!tabs.activePath) return;
         event.preventDefault();
-        tabs.close(tabs.activePath);
+        navigation.closeFile(tabs.activePath);
         return;
       }
 
       if (event.shiftKey && event.key === '[') {
         event.preventDefault();
-        tabs.activatePrevious();
+        const index = tabs.activePath
+          ? tabs.openPaths.indexOf(tabs.activePath)
+          : 0;
+        const path =
+          tabs.openPaths[
+            (index - 1 + tabs.openPaths.length) % tabs.openPaths.length
+          ];
+        if (path) navigation.openFile(path);
         return;
       }
 
       if (event.shiftKey && event.key === ']') {
         event.preventDefault();
-        tabs.activateNext();
+        const index = tabs.activePath
+          ? tabs.openPaths.indexOf(tabs.activePath)
+          : -1;
+        const path = tabs.openPaths[(index + 1) % tabs.openPaths.length];
+        if (path) navigation.openFile(path);
         return;
       }
 
       // Cmd+1..9 jump to a tab by position, as in every browser.
       if (event.key >= '1' && event.key <= '9') {
         event.preventDefault();
-        tabs.activateIndex(Number(event.key) - 1);
+        const path = tabs.openPaths[Number(event.key) - 1];
+        if (path) navigation.openFile(path);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
     return window.diskAPI.onChanged(({ directories }) => {
@@ -180,7 +186,14 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreShortcutTarget(event.target as HTMLElement)
+      )
+        return;
       const state = useDiskStore.getState();
+      if (state.pendingAction || state.pendingDelete) return;
+      if (openedPath) return;
       const selectionLocked = state.pendingDelete !== null;
 
       if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowDown') {
@@ -188,10 +201,9 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         event.preventDefault();
         if (!selectedEntry) return;
         if (selectedEntry.isDirectory) {
-          select(selectedEntry.path);
-          void useDiskStore.getState().toggleExpanded(selectedEntry.path);
+          navigation.navigateDirectory(selectedEntry.path);
         } else {
-          openQuickLook();
+          navigation.openFile(selectedEntry.path);
         }
         return;
       }
@@ -202,8 +214,11 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         if (!activeDirectory) return;
         // Never navigate above a root - the guard would reject it anyway.
         if (roots.includes(activeDirectory)) return;
-        const parent = activeDirectory.slice(0, activeDirectory.lastIndexOf('/'));
-        if (parent) select(parent);
+        const parent = activeDirectory.slice(
+          0,
+          activeDirectory.lastIndexOf('/')
+        );
+        if (parent) navigation.navigateDirectory(parent);
         return;
       }
 
@@ -245,7 +260,6 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         if (
           tag === 'INPUT' ||
           tag === 'TEXTAREA' ||
-          tag === 'BUTTON' ||
           target?.isContentEditable ||
           useDiskStore.getState().pendingAction !== null
         ) {
@@ -264,8 +278,9 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       // and the rename dialog in Task 15 both need it.
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-      if (!selectedEntry) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable)
+        return;
+      if (!selectedEntry || selectedEntry.isDirectory) return;
 
       event.preventDefault();
       toggleQuickLook();
@@ -273,7 +288,15 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDirectory, openQuickLook, roots, select, selectedEntry, toggleQuickLook, visibleEntries]);
+  }, [
+    activeDirectory,
+    navigation,
+    openedPath,
+    roots,
+    selectedEntry,
+    toggleQuickLook,
+    visibleEntries,
+  ]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -321,14 +344,42 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
           className="flex min-w-0 flex-col overflow-hidden"
         >
           {error && <ErrorBanner message={error} />}
-          {activeDirectory ? (
+          <TabStrip />
+          {openedPath ? (
+            <div
+              data-testid="files-focus"
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <button
+                type="button"
+                onClick={navigation.returnToFolder}
+                className="shrink-0 px-4 py-2 text-left text-sm"
+              >
+                Return to folder
+              </button>
+              <div className="min-h-0 flex-1">
+                {focusedEntry?.path === openedPath && focusedEntry.entry ? (
+                  <DetailPane entry={focusedEntry.entry} />
+                ) : (
+                  <div role="status" className="p-4">
+                    {focusedEntry?.path !== openedPath || focusedEntry.loading
+                      ? 'Loading file…'
+                      : 'File unavailable'}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : activeDirectory ? (
             <>
               <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
                 <Breadcrumb dirPath={activeDirectory} />
                 <Toolbar dirPath={activeDirectory} />
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
-                <DiskFolderView dirPath={activeDirectory} />
+                <DiskFolderView
+                  key={activeDirectory}
+                  dirPath={activeDirectory}
+                />
               </div>
             </>
           ) : (
@@ -353,9 +404,8 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               collapsible
               className="flex flex-col overflow-hidden border-l border-border/60"
             >
-              <TabStrip />
               <div className="min-h-0 flex-1 overflow-hidden">
-                <DetailPane entry={tabEntry} />
+                <DetailPane entry={selectedEntry} />
               </div>
             </Pane>
           </>

@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { segmentsWithinRoot } from '@/common/pathSegments';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { useDiskStore } from '../store/diskStore';
 
 export const Breadcrumb: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const roots = useDiskStore((state) => state.roots);
-  const select = useDiskStore((state) => state.select);
+  const {navigateDirectory: select} = useFilesNavigation();
 
   // A path belongs to exactly one root; find the one that contains it.
   const segments = useMemo(() => {

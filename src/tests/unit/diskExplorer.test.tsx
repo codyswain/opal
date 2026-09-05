@@ -1,3 +1,5 @@
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -23,6 +25,8 @@ let changedListener: ((payload: { directories: string[] }) => void) | null;
 let readDirectory: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  filesLocationSnapshots.clear();
+  useTabsStore.setState({openPaths: [], openedPath: null, activePath: null, previewPath: null});
   changedListener = null;
   toastError.mockClear();
   onChanged = vi.fn((callback: (payload: { directories: string[] }) => void) => {
@@ -145,7 +149,7 @@ describe('DiskExplorer', () => {
     expect(screen.getByTestId('quick-look')).toBeInTheDocument();
   });
 
-  it('opens the selected file in Quick Look on Cmd+Down', async () => {
+  it('opens the selected file in the main surface on Cmd+Down', async () => {
     const user = userEvent.setup();
     render(<DiskExplorer />);
 
@@ -153,31 +157,29 @@ describe('DiskExplorer', () => {
     await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
     fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
 
-    expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
-    expect(screen.getByTestId('quick-look')).toBeInTheDocument();
+    expect(useTabsStore.getState().openedPath).toBe(`${PHOTOS}/a.jpg`);
+    expect(screen.getByTestId('files-focus')).toBeInTheDocument();
   });
 
-  it('expands the selected folder on Cmd+Down', async () => {
+  it('navigates into the selected collection folder on Cmd+Down', async () => {
     const user = userEvent.setup();
     render(<DiskExplorer />);
-
-    await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
+    await user.click(screen.getByTestId('disk-folder-entry-/Vault/Photos'));
     fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
-
-    await waitFor(() => expect(useDiskStore.getState().expanded[PHOTOS]).toBe(true));
+    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(PHOTOS));
   });
 
-  it('selects the parent folder on Cmd+Up and stops at a root', async () => {
+  it('navigates to the parent folder on Cmd+Up and stops at a root', async () => {
     const user = userEvent.setup();
     render(<DiskExplorer />);
 
     await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
     await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
     fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
-    expect(useDiskStore.getState().selectedPath).toBe(ROOT);
+    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
 
     fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
-    expect(useDiskStore.getState().selectedPath).toBe(ROOT);
+    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
   });
 
   it('starts rename on bare Enter for the selected item', async () => {

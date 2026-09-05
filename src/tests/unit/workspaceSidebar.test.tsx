@@ -1,3 +1,4 @@
+import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
 import * as React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -44,7 +45,7 @@ function LocationProbe() {
   );
 }
 
-function renderSidebar() {
+function renderSidebar(withFiles = false) {
   return render(
     <MemoryRouter
       initialEntries={['/files']}
@@ -60,6 +61,7 @@ function renderSidebar() {
               <WorkspaceSidebar />
             </div>
             <LocationProbe />
+            {withFiles ? <FilesRoute /> : null}
           </ShellProvider>
         </TooltipProvider>
       </ThemeProvider>
@@ -133,14 +135,14 @@ describe('WorkspaceSidebar', () => {
 
   it('navigates a directory through React Router and canonical disk state', async () => {
     const user = userEvent.setup();
-    renderSidebar();
+    renderSidebar(true);
     await screen.findByTestId(`disk-tree-item-${ROOT}`);
     await user.click(screen.getByTestId(`disk-tree-toggle-${ROOT}`));
     const design = await screen.findByTestId(`disk-tree-item-${DESIGN}`);
 
     await user.click(design);
 
-    expect(useDiskStore.getState().currentDirectory).toBe(DESIGN);
+    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(DESIGN));
     expect(useDiskStore.getState().selectedPaths).toEqual([]);
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(

@@ -1,6 +1,8 @@
+import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import React, { useCallback, useState } from 'react';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, Image as ImageIcon, Film, Music, File } from 'lucide-react';
 import type { DiskEntry, FileKind } from '@/types/disk';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { useDiskStore } from '../store/diskStore';
 import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
 
@@ -25,10 +27,10 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
   const isSelected = useDiskStore((state) => state.selectedPath === entry.path);
   const children = useDiskStore((state) => state.listings[entry.path]);
   const toggleExpanded = useDiskStore((state) => state.toggleExpanded);
-  const select = useDiskStore((state) => state.select);
+  const navigation = useFilesNavigation();
   const [isDropTarget, setIsDropTarget] = useState(false);
 
-  const handleSelect = useCallback(() => select(entry.path), [select, entry.path]);
+  const handleSelect = useCallback(() => entry.isDirectory ? navigation.navigateDirectory(entry.path) : useDiskStore.getState().select(entry.path), [navigation, entry]);
 
   const handleToggle = useCallback(
     (event: React.MouseEvent) => {
@@ -43,8 +45,7 @@ export const DiskTreeItem: React.FC<DiskTreeItemProps> = ({ entry, depth }) => {
     if (!result.success) {
       useDiskStore.setState({ loading: { isLoading: false, error: result.error } });
     }
-    // On success the watcher refreshes both listings, so there is nothing to
-    // update here.
+    if (result.success) pathMutationCoordinator.applyAppMutation({kind: 'move', oldPath: source, newPath: result.data.path});
   }, []);
 
   const isNoopDropTarget = useCallback(

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { X } from 'lucide-react';
 import { useTabsStore } from '../store/tabsStore';
 
@@ -16,10 +17,7 @@ function basename(filePath: string): string {
 export const TabStrip: React.FC = () => {
   const openPaths = useTabsStore((state) => state.openPaths);
   const activePath = useTabsStore((state) => state.activePath);
-  const previewPath = useTabsStore((state) => state.previewPath);
-  const activate = useTabsStore((state) => state.activate);
-  const pin = useTabsStore((state) => state.pin);
-  const close = useTabsStore((state) => state.close);
+  const {openFile: activate, closeFile: close} = useFilesNavigation();
 
   if (openPaths.length === 0) return null;
 
@@ -31,7 +29,7 @@ export const TabStrip: React.FC = () => {
     >
       {openPaths.map((path) => {
         const isActive = path === activePath;
-        const isPreview = path === previewPath;
+
 
         return (
           <div
@@ -42,7 +40,7 @@ export const TabStrip: React.FC = () => {
             title={path}
             data-testid={`tab-${path}`}
             onClick={() => activate(path)}
-            onDoubleClick={() => pin(path)}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(path); } }}
             className={
               'group flex min-w-0 max-w-[200px] shrink-0 cursor-default items-center gap-1.5 ' +
               'border-r border-border/60 px-3 py-1.5 text-xs transition-colors duration-100 ' +
@@ -53,7 +51,7 @@ export const TabStrip: React.FC = () => {
           >
             <span
               data-testid={`tab-label-${path}`}
-              className={'truncate ' + (isPreview ? 'italic' : '')}
+              className="truncate"
             >
               {basename(path)}
             </span>

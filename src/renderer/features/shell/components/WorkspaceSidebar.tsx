@@ -38,9 +38,6 @@ export function WorkspaceSidebar({
   const roots = useDiskStore((state) => state.roots);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
   const openFolder = useDiskStore((state) => state.openFolder);
-  const navigateToDirectory = useDiskStore(
-    (state) => state.navigateToDirectory
-  );
   const { navigateFiles } = useShell();
   const currentRoot = rootForDirectory(roots, currentDirectory);
   const filesDestination = currentDirectory
@@ -54,7 +51,6 @@ export function WorkspaceSidebar({
     : FILES_ROUTE_PATH;
 
   const navigateToRoot = (path: string) => {
-    navigateToDirectory(path);
     navigateFiles(browseFiles(path));
     onNavigate?.();
   };

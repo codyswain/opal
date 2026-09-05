@@ -27,18 +27,18 @@ export const QuickLook: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => {
   if (!isOpen || !entry) return null;
 
   return (
-    <div data-testid="quick-look" className="fixed inset-0 z-50 flex items-center justify-center">
+    <div data-testid="quick-look" className="pointer-events-none fixed inset-0 z-50 flex items-center justify-end p-4">
       <div
         data-testid="quick-look-backdrop"
         onClick={close}
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        className="pointer-events-none absolute inset-0"
       />
 
       <div
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-label={entry.name}
-        className="relative flex h-[min(85vh,800px)] w-[min(90vw,1100px)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+        className="pointer-events-auto relative flex h-[min(85vh,800px)] w-[min(70vw,700px)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
       >
         <button
           type="button"

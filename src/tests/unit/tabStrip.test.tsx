@@ -53,13 +53,13 @@ describe('TabStrip', () => {
     expect(useTabsStore.getState().activePath).toBe(B);
   });
 
-  it('pins a preview tab on double click', async () => {
+  it('explicitly opens a tab on double click', async () => {
     const user = userEvent.setup();
-    useTabsStore.setState({ openPaths: [A], activePath: A, previewPath: A });
+    useTabsStore.setState({ openPaths: [A], activePath: A, previewPath: null });
     render(<TabStrip />);
 
     await user.dblClick(screen.getByText('alpha.md'));
-    expect(useTabsStore.getState().previewPath).toBeNull();
+    expect(useTabsStore.getState().openedPath).toBe(A);
   });
 
   it('closes a tab from its close button without activating it', async () => {
@@ -79,9 +79,9 @@ describe('TabStrip', () => {
     expect(screen.getByRole('tab')).toHaveAttribute('title', A);
   });
 
-  it('renders the preview tab in italics', () => {
-    useTabsStore.setState({ openPaths: [A], activePath: A, previewPath: A });
+  it('renders real file tabs without preview styling', () => {
+    useTabsStore.setState({ openPaths: [A], activePath: A, previewPath: null });
     render(<TabStrip />);
-    expect(screen.getByTestId(`tab-label-${A}`).className).toMatch(/italic/);
+    expect(screen.getByTestId(`tab-label-${A}`).className).not.toMatch(/italic/);
   });
 });

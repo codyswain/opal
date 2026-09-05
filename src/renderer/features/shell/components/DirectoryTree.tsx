@@ -106,9 +106,6 @@ export function DirectoryTree({ onNavigate }: DirectoryTreeProps) {
   const isLoading = useDiskStore((state) => state.loading.isLoading);
   const loadRoots = useDiskStore((state) => state.loadRoots);
   const openFolder = useDiskStore((state) => state.openFolder);
-  const navigateToDirectory = useDiskStore(
-    (state) => state.navigateToDirectory
-  );
   const toggleExpanded = useDiskStore((state) => state.toggleExpanded);
   const { navigateFiles } = useShell();
   const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
@@ -135,11 +132,10 @@ export function DirectoryTree({ onNavigate }: DirectoryTreeProps) {
 
   const activate = React.useCallback(
     (path: string) => {
-      navigateToDirectory(path);
       navigateFiles(browseFiles(path));
       onNavigate?.();
     },
-    [navigateFiles, navigateToDirectory, onNavigate]
+    [navigateFiles, onNavigate]
   );
 
   const focusIndex = React.useCallback(

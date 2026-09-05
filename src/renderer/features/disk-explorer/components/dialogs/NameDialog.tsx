@@ -1,3 +1,4 @@
+import { pathMutationCoordinator } from '../../navigation/pathMutationCoordinator';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDiskStore } from '../../store/diskStore';
 
@@ -63,6 +64,7 @@ export const NameDialog: React.FC = () => {
       return;
     }
 
+    if (isRename) pathMutationCoordinator.applyAppMutation({kind: 'rename', oldPath: pendingAction.target, newPath: result.data.path});
     cancelAction();
   };
 
