@@ -2,13 +2,19 @@ import { createHash } from 'crypto';
 import { constants } from 'fs';
 import { lstat, open, realpath } from 'fs/promises';
 import path from 'path';
-import { Document, isMap, isAlias, isNode, parseDocument, visit } from 'yaml';
+import { Document } from 'yaml';
 import { classifyFile, type FileKind } from '@/common/fileKind';
+import {
+  METADATA_LIMIT,
+  MetadataValidationError,
+  parseMetadataDocument,
+  validateMetadataProperties,
+} from '@/common/metadataValidation';
 import { normalizePath } from './paths';
 import type { RootRegistry } from './RootRegistry';
 import type { AuthoredLink, ItemProperties } from '@/types/metadata';
 
-export const METADATA_LIMIT = 64 * 1024;
+export { METADATA_LIMIT } from '@/common/metadataValidation';
 export const MARKDOWN_WRITE_LIMIT = 16 * 1024 * 1024;
 export const SIDECAR_SUFFIX = '.opal.yaml';
 
@@ -55,55 +61,21 @@ export async function assertNoSymlinks(registry: RootRegistry, target: string): 
 }
 
 export function validateProperties(properties: ItemProperties): void {
-  if (!properties || !Array.isArray(properties.tags) || properties.tags.length > 32 ||
-      properties.tags.some((tag) => typeof tag !== 'string' || [...tag].length > 64)) {
-    throw new MetadataError('Tags must be a list of at most 32 strings, with at most 64 characters each.');
+  try {
+    validateMetadataProperties(properties);
+  } catch (error) {
+    if (error instanceof MetadataValidationError) throw new MetadataError(error.message);
+    throw error;
   }
-  if (typeof properties.description !== 'string' || Buffer.byteLength(properties.description) > 8192) {
-    throw new MetadataError('Description exceeds the 8 KiB limit or is not text.');
-  }
-}
-
-function uuid(value: unknown): value is string {
-  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function parse(raw: string, required: boolean): { document: Document; id: string | null; links: AuthoredLink[]; properties: ItemProperties } {
-  if (Buffer.byteLength(raw) > METADATA_LIMIT) throw new MetadataError('Metadata exceeds the 64 KiB limit.');
-  const document = raw.trim() ? parseDocument(raw, { uniqueKeys: true, strict: true }) : new Document({});
-  if (document.contents === null && !required) document.contents = document.createNode({});
-  if (document.errors.length || document.warnings.length || !isMap(document.contents)) {
-    throw new MetadataError('Malformed or unsupported YAML metadata; the existing content was preserved.');
+  try {
+    return parseMetadataDocument(raw, required);
+  } catch (error) {
+    if (error instanceof MetadataValidationError) throw new MetadataError(error.message);
+    throw error;
   }
-  visit(document, (_key, node) => {
-    if (isAlias(node)) throw new MetadataError('YAML aliases are not supported in metadata.');
-    if (isNode(node) && node.tag && !/^tag:yaml.org,2002:(str|int|float|bool|null|map|seq)$/.test(node.tag)) {
-      throw new MetadataError('Custom YAML tags are not supported in metadata.');
-    }
-  });
-  const data = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
-  const properties = { tags: data.tags === undefined ? [] : data.tags, description: data.annotation === undefined ? '' : data.annotation } as ItemProperties;
-  validateProperties(properties);
-  const identity = required ? data : data.opal;
-  let id: string | null = null;
-  let links: AuthoredLink[] = [];
-  if (required || identity !== undefined) {
-    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) throw new MetadataError('Invalid metadata schema or sidecar collision.');
-    const fields = identity as Record<string, unknown>;
-    if (fields.schema !== 1 || !uuid(fields.id)) throw new MetadataError('Unsupported metadata schema or sidecar collision: expected schema 1 and a UUID.');
-    id = fields.id.toLowerCase();
-    if (fields.links !== undefined && !Array.isArray(fields.links)) throw new MetadataError('Metadata links must be a list.');
-    links = (fields.links ?? []) as AuthoredLink[];
-    const seen = new Set<string>();
-    links = links.map((link) => {
-      if (!link || !uuid(link.id) || !uuid(link.targetId) || typeof link.pathHint !== 'string' || seen.has(link.id.toLowerCase())) {
-        throw new MetadataError('Malformed or duplicate metadata connection.');
-      }
-      seen.add(link.id.toLowerCase());
-      return { id: link.id.toLowerCase(), targetId: link.targetId.toLowerCase(), pathHint: link.pathHint };
-    });
-  }
-  return { document, id, links, properties };
 }
 
 /** A bounded byte splitter; the body is never decoded and re-encoded. */

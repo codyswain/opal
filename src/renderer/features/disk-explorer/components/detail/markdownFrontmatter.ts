@@ -1,7 +1,7 @@
-import { isMap, parseDocument } from 'yaml';
+import { parseMetadataDocument } from '@/common/metadataValidation';
 
 /**
- * Removes a syntactically valid YAML frontmatter block before Markdown render.
+ * Removes a valid authored-metadata frontmatter block before Markdown render.
  * This is renderer-only display logic; authored bytes remain owned by main.
  */
 export function stripMarkdownFrontmatter(input: string): string {
@@ -16,8 +16,9 @@ export function stripMarkdownFrontmatter(input: string): string {
     const line = text.slice(cursor, lineEnd).replace(/\r$/, '');
     if (line === '---' || line === '...') {
       const raw = text.slice(opener[0].length, cursor);
-      const document = parseDocument(raw, { strict: true, uniqueKeys: true });
-      if (document.errors.length > 0 || (document.contents && !isMap(document.contents))) {
+      try {
+        parseMetadataDocument(raw, false);
+      } catch {
         return text;
       }
       return nextNewline === -1 ? '' : text.slice(nextNewline + 1);

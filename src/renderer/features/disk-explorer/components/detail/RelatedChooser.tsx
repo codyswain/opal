@@ -34,6 +34,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [listingReady, setListingReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef(0);
@@ -50,6 +51,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
   const browse = async (directory: string) => {
     const token = ++request.current;
     setLoading(true);
+    setListingReady(false);
     setError(null);
     setSelected(null);
     let result;
@@ -58,6 +60,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
     } catch {
       if (!alive.current || token !== request.current) return;
       setLoading(false);
+      setCurrentDirectory(null);
       setEntries([]);
       setError('Could not load folder.');
       return;
@@ -65,25 +68,35 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
     if (!alive.current || token !== request.current) return;
     setLoading(false);
     if (!result.success) {
+      setCurrentDirectory(null);
       setEntries([]);
       setError(result.error);
       return;
     }
     setCurrentDirectory(result.data.path);
     setEntries(result.data.entries);
+    setListingReady(true);
   };
 
   useEffect(() => {
     if (!open) {
       request.current += 1;
       setSubmitting(false);
+      setSelected(null);
+      setEntries([]);
+      setListingReady(false);
       return;
     }
 
     let cancelled = false;
     const token = ++request.current;
+    const retainedDirectory = currentDirectory;
     setLoading(true);
+    setListingReady(false);
     setError(null);
+    setRoots([]);
+    setEntries([]);
+    setSelected(null);
     void (async () => {
       let result;
       try {
@@ -92,7 +105,9 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
         if (cancelled || !alive.current || token !== request.current) return;
         setLoading(false);
         setRoots([]);
+        setCurrentDirectory(null);
         setEntries([]);
+        setSelected(null);
         setError('Could not load opened folders.');
         return;
       }
@@ -100,18 +115,23 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
       if (!result.success) {
         setLoading(false);
         setRoots([]);
+        setCurrentDirectory(null);
         setEntries([]);
+        setSelected(null);
         setError(result.error);
         return;
       }
       setRoots(result.data);
-      const retained = currentDirectory && result.data.some((root) =>
-        isFsPathAtOrBelow(root, currentDirectory)
-      ) ? currentDirectory : null;
+      const retained = retainedDirectory && result.data.some((root) =>
+        isFsPathAtOrBelow(root, retainedDirectory)
+      ) ? retainedDirectory : null;
       const initial = retained ?? result.data[0] ?? null;
+      if (!retained) setCurrentDirectory(null);
       if (!initial) {
         setLoading(false);
+        setCurrentDirectory(null);
         setEntries([]);
+        setSelected(null);
         return;
       }
       void browse(initial);
@@ -140,8 +160,14 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
     isFsPathAtOrBelow(containingRoot, parent)
   );
 
+  const selectionIsListed = !!(
+    listingReady &&
+    selected &&
+    (selected === currentDirectory || entries.some((entry) => entry.path === selected))
+  );
+
   const connect = async () => {
-    if (!selected || submitting) return;
+    if (!selectionIsListed || !selected || loading || submitting) return;
     setSubmitting(true);
     setError(null);
     let failure;
@@ -183,6 +209,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
                 size="compact"
                 variant={containingRoot === root ? 'secondary' : 'ghost'}
                 aria-label={`Browse opened folder ${basenameFsPath(root)}`}
+                disabled={loading || submitting}
                 onClick={() => void browse(root)}
               >
                 {basenameFsPath(root)}
@@ -196,7 +223,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
                 size="icon"
                 variant="ghost"
                 aria-label="Up one folder"
-                disabled={!canGoUp}
+                disabled={!canGoUp || loading || submitting}
                 onClick={() => parent && void browse(parent)}
               >
                 <ChevronUp aria-hidden className="h-4 w-4" />
@@ -211,6 +238,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
                   name="related-target"
                   aria-label={`Current folder ${basenameFsPath(currentDirectory)}`}
                   checked={selected === currentDirectory}
+                  disabled={!listingReady || loading || submitting}
                   onChange={() => setSelected(currentDirectory)}
                 />
                 Select folder
@@ -245,6 +273,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
                         name="related-target"
                         aria-label={entry.name}
                         checked={selected === entry.path}
+                        disabled={!listingReady || loading || submitting}
                         onChange={() => setSelected(entry.path)}
                       />
                       <span className="truncate" title={entry.name}>{entry.name}</span>
@@ -254,6 +283,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
                         size="compact"
                         variant="ghost"
                         aria-label={`Browse ${entry.name}`}
+                        disabled={!listingReady || loading || submitting}
                         onClick={() => void browse(entry.path)}
                       >
                         <FolderOpen aria-hidden className="h-4 w-4" />
@@ -271,7 +301,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!selected || submitting} onClick={() => void connect()}>
+          <Button disabled={!selectionIsListed || loading || submitting} onClick={() => void connect()}>
             {submitting ? 'Connecting…' : 'Connect'}
           </Button>
         </DialogFooter>

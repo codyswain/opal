@@ -80,3 +80,25 @@ All test commands used `npm test`, including its native Node ABI rebuild. No Ele
 Reviewed the main/preload/renderer boundary, handler payload validation, allowed-root delegation, shared mutation queue, watcher invalidation, explicit-only metadata reads, absence of path-hint navigation, incoming-row display semantics, current-path relation removal, stale read/save/mutation responses, StrictMode replay, rejected IPC promises, dirty drafts, chooser directory selection versus browsing, bounded Up navigation, filter scope, modal Escape ownership, file-shortcut isolation, frontmatter parsing, and accessible names.
 
 No unresolved Task 2 implementation concern was found. The repository retains its documented 13 TypeScript errors and 15 lint warnings. Existing tests also emit known React act, router-future, logger-mock, and Node deprecation warnings. Parent owns the disposable Electron acceptance and final Electron ABI rebuild; those were intentionally not run here.
+
+## Review fix round 1
+
+- Extracted the full YAML and authored-metadata schema parser into renderer-safe `src/common/metadataValidation.ts`. Main's `MetadataCodec` delegates to it and translates validation failures back into the existing exported `MetadataError`; Preview uses the same parser to decide whether frontmatter may be hidden. Aliases, custom tags, invalid tags/annotation/identity/links, unclosed blocks, and metadata over 64 KiB remain visible. Valid ordinary and comment-only metadata is stripped.
+- Reset chooser selection and listing state on every close/open cycle. Connect is disabled and guarded until the selected target belongs to the freshly loaded current listing. Failed or empty root refreshes clear stale directories and entries; a prior folder is retained only when refreshed roots still authorize it, and it must be re-read before selection or submission.
+
+RED command:
+`npm test -- src/tests/unit/textPreview.test.tsx src/tests/unit/detailPane.test.tsx src/tests/unit/fs/metadataService.test.ts`
+
+RED output: **2 failed files / 1 passed file; 10 failed tests / 63 passed tests**. The failures were the seven invalid/oversized Preview cases and three delayed/failed/empty chooser refresh cases. Duration: 2.92 s. Log: `/tmp/opal-task2-fix1-red.log`.
+
+GREEN command:
+`npm test -- src/tests/unit/textPreview.test.tsx src/tests/unit/detailPane.test.tsx src/tests/unit/fs/metadataService.test.ts`
+
+GREEN output: **3 passed files; 73 passed tests**. Duration: 2.86 s. Log: `/tmp/opal-task2-fix1-green-final2.log`.
+
+Review-fix verification:
+
+- Full `npm test`: **69 passed files / 708 passed tests**, exit 0. Duration: 11.37 s. Log: `/tmp/opal-task2-fix1-full.log`.
+- Full `npm run lint`: exit 0 with **0 errors / 15 pre-existing warnings**. Log: `/tmp/opal-task2-fix1-full-lint.log`.
+- `npx tsc --noEmit`: expected exit 2 with the same **13 pre-existing errors** and no errors in changed files. Log: `/tmp/opal-task2-fix1-types.log`.
+- `git diff --check`: clean.

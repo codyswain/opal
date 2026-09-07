@@ -344,6 +344,81 @@ describe('DetailPane', () => {
     expect(screen.queryByText('Loading folder…')).not.toBeInTheDocument();
   });
 
+  it('clears selection on reopen and waits for the retained folder listing before connecting', async () => {
+    const user = userEvent.setup();
+    let resolveRoots: (value: Awaited<ReturnType<typeof window.diskAPI.listRoots>>) => void = () => undefined;
+    let resolveFolder: (value: Awaited<ReturnType<typeof window.diskAPI.readDirectory>>) => void = () => undefined;
+    const delayedRoots = new Promise<Awaited<ReturnType<typeof window.diskAPI.listRoots>>>((resolve) => { resolveRoots = resolve; });
+    const delayedFolder = new Promise<Awaited<ReturnType<typeof window.diskAPI.readDirectory>>>((resolve) => { resolveFolder = resolve; });
+    const readDirectory = vi.fn()
+      .mockResolvedValueOnce({ success: true as const, data: { path: '/V', entries: [
+        entry({ path: '/V/Folder', name: 'Folder', kind: 'directory', isDirectory: true }),
+      ] } })
+      .mockResolvedValueOnce({ success: true as const, data: { path: '/V/Folder', entries: [
+        entry({ path: '/V/Folder/target.md', name: 'target.md', kind: 'markdown' }),
+      ] } })
+      .mockReturnValueOnce(delayedFolder);
+    installDiskApi({
+      listRoots: vi.fn()
+        .mockResolvedValueOnce({ success: true as const, data: ['/V'] })
+        .mockReturnValueOnce(delayedRoots),
+      readDirectory,
+    });
+    const api = installMetadataApi();
+    render(<DetailPane entry={entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' })} />);
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await screen.findByLabelText('Tags');
+    await user.click(screen.getByRole('button', { name: 'Add related item' }));
+    await user.click(await screen.findByRole('button', { name: 'Browse Folder' }));
+    await user.click(await screen.findByRole('radio', { name: 'target.md' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await user.click(screen.getByRole('button', { name: 'Add related item' }));
+    const staleConnect = screen.getByRole('button', { name: 'Connect' });
+    expect(staleConnect).toBeDisabled();
+    await user.click(staleConnect);
+    expect(api.addRelated).not.toHaveBeenCalled();
+    expect(screen.queryByRole('radio', { name: 'target.md' })).not.toBeInTheDocument();
+    resolveRoots({ success: true, data: ['/V'] });
+    await waitFor(() => expect(readDirectory).toHaveBeenLastCalledWith('/V/Folder'));
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+    resolveFolder({ success: true, data: { path: '/V/Folder', entries: [
+      entry({ path: '/V/Folder/target.md', name: 'target.md', kind: 'markdown' }),
+    ] } });
+    expect(await screen.findByRole('radio', { name: 'target.md' })).not.toBeChecked();
+    expect(api.addRelated).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['failed', { success: false as const, error: 'Roots changed.' }],
+    ['empty', { success: true as const, data: [] }],
+  ])('clears a stale folder when reopened roots are %s', async (_, refreshedRoots) => {
+    const user = userEvent.setup();
+    installDiskApi({
+      listRoots: vi.fn()
+        .mockResolvedValueOnce({ success: true as const, data: ['/V'] })
+        .mockResolvedValueOnce(refreshedRoots),
+      readDirectory: vi.fn(async (target: string) => ({ success: true as const, data: { path: target, entries: [
+        entry({ path: `${target}/target.md`, name: 'target.md', kind: 'markdown' }),
+      ] } })),
+    });
+    const api = installMetadataApi();
+    render(<DetailPane entry={entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' })} />);
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await screen.findByLabelText('Tags');
+    await user.click(screen.getByRole('button', { name: 'Add related item' }));
+    await user.click(await screen.findByRole('radio', { name: 'target.md' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await user.click(screen.getByRole('button', { name: 'Add related item' }));
+    if ('error' in refreshedRoots) expect(await screen.findByRole('alert')).toHaveTextContent('Roots changed.');
+    else expect(await screen.findByText('No opened folders.')).toBeInTheDocument();
+    expect(screen.queryByText('Current folder')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'target.md' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+    expect(api.addRelated).not.toHaveBeenCalled();
+  });
+
   it('lets a directory be selected independently from browsing into it', async () => {
     const user = userEvent.setup();
     const api = installMetadataApi();
