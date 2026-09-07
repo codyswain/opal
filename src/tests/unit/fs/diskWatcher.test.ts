@@ -116,3 +116,24 @@ describe('DiskWatcher', () => {
     expect(watcher.watchedRoots()).toEqual([root]);
   });
 });
+
+describe('metadata observation', () => {
+  it('observes directory carriers beneath hidden root ancestors and ignores hidden subtrees', async () => {
+    await watcher.closeAll();
+    root = path.join(tmp, '.worktrees', 'root');
+    await mkdir(path.join(root, '.hidden'), { recursive: true });
+    const onMetadataChanged = vi.fn();
+    watcher = new DiskWatcher({ onChanged, onMetadataChanged, debounceMs: 50 });
+    await watcher.watch(root);
+    await writeFile(path.join(root, '.opal.yaml'), 'schema: 1');
+    await settle();
+    expect(onChanged).toHaveBeenCalledWith([root]);
+    expect(onMetadataChanged).toHaveBeenCalled();
+    onChanged.mockClear();
+    onMetadataChanged.mockClear();
+    await writeFile(path.join(root, '.hidden', '.opal.yaml'), 'hidden');
+    await settle();
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(onMetadataChanged).not.toHaveBeenCalled();
+  });
+});

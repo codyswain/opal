@@ -5,6 +5,8 @@ import logger from '@/main/logger';
 export interface DiskWatcherDependencies {
   onChanged: (directories: string[]) => void;
   debounceMs?: number;
+  /** Invalidate the disposable metadata catalog for any observed item change. */
+  onMetadataChanged?: () => void;
 }
 
 const DEFAULT_DEBOUNCE_MS = 150;
@@ -35,12 +37,19 @@ export class DiskWatcher {
       // Wait for writes to settle so large copies report once instead of
       // spamming the renderer with intermediate change events.
       awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
-      ignored: /(^|[/\\])\../,
+      ignored: (candidate: string) => {
+        const relative = path.relative(rootPath, candidate);
+        if (!relative || relative.startsWith(`..${path.sep}`)) return false;
+        return relative.split(path.sep).some((segment, index, segments) =>
+          segment.startsWith('.') && !(segment === '.opal.yaml' && index === segments.length - 1));
+      },
+      followSymlinks: false,
       depth: 99,
     });
 
     for (const event of ['add', 'change', 'unlink', 'addDir', 'unlinkDir'] as const) {
       watcher.on(event, (changedPath: string) => {
+        this.deps.onMetadataChanged?.();
         this.enqueue(path.dirname(changedPath));
       });
     }
