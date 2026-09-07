@@ -1,9 +1,10 @@
+import { classifyFile } from '@/common/fileKind';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
 import { Button } from '@/renderer/shared/ui';
 import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
-import { FolderPlus, X, ArrowLeft } from 'lucide-react';
+import { FolderPlus, X, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
 import { sortEntries } from '@/common/sortEntries';
@@ -26,6 +27,7 @@ import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
 import { TabStrip } from './TabStrip';
 import { WelcomePanel } from './WelcomePanel';
+import { FileKindIcon } from './fileKindIcon';
 import { useTabsStore } from '../store/tabsStore';
 import {
   PaneGroup,
@@ -447,17 +449,24 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               data-testid="files-focus"
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="flex shrink-0 items-center px-2 py-1">
+              <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1" data-testid="focus-header">
                 <Button
                   size="compact"
                   variant="ghost"
                   onClick={navigation.returnToFolder}
                   aria-label={`Return to folder ${basenameFsPath(parentFsPath(openedPath) ?? openedPath)}`}
                   title="Return to folder"
+                  className="shrink-0"
                 >
                   <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-                  {basenameFsPath(parentFsPath(openedPath) ?? openedPath)}
                 </Button>
+                {/* The folder trail is live; the file itself is where you are. */}
+                <Breadcrumb dirPath={parentFsPath(openedPath) ?? openedPath} />
+                <ChevronRight aria-hidden className="h-3 w-3 shrink-0 opacity-40" />
+                <span className="flex min-w-0 items-center gap-1.5 px-1 text-2xs font-medium text-foreground" aria-current="page">
+                  <FileKindIcon kind={focusedEntry?.entry?.kind ?? classifyFile(basenameFsPath(openedPath))} className="h-3.5 w-3.5" />
+                  <span className="truncate">{basenameFsPath(openedPath)}</span>
+                </span>
               </div>
               <div className="min-h-0 flex-1">
                 {focusedEntry?.path === openedPath && focusedEntry.entry ? (
