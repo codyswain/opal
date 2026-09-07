@@ -8,8 +8,11 @@ import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
+import { useCollectionQueryStore } from '../store/collectionQueryStore';
 import type { RecentItem } from '@/types/activity';
+import type { CollectionRow } from '@/types/collectionQuery';
 import { RecentView } from './RecentView';
+import { QueryView } from './query/QueryView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { Breadcrumb } from './Breadcrumb';
@@ -33,6 +36,7 @@ interface DiskExplorerProps {
 }
 
 const NO_RECENT_ITEMS: RecentItem[] = [];
+const NO_QUERY_ROWS: CollectionRow[] = [];
 
 export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   showNavigationPane = true,
@@ -46,6 +50,10 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
   const currentCollection = useDiskStore((state) => state.currentCollection);
   const recentItems = useRecentStore((state) => state.result?.items ?? NO_RECENT_ITEMS);
+  const queryId = currentCollection?.kind === 'query' ? currentCollection.id : null;
+  const queryRows = useCollectionQueryStore((state) =>
+    queryId ? state.results[queryId]?.rows ?? NO_QUERY_ROWS : NO_QUERY_ROWS
+  );
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
@@ -64,6 +72,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const activeDirectory = currentDirectory;
   const isRecent = currentCollection?.kind === 'recent';
   const visibleEntries = useMemo(() => {
+    if (queryId) return queryRows.map((row) => row.entry);
     if (isRecent) {
       // Recent keeps its recency order; only the name filter applies.
       return filterEntries(recentItems.map((item) => item.entry), filter);
@@ -74,7 +83,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       sort.field,
       sort.direction
     );
-  }, [activeDirectory, filter, isRecent, listings, recentItems, sort.direction, sort.field]);
+  }, [activeDirectory, filter, isRecent, listings, queryId, queryRows, recentItems, sort.direction, sort.field]);
 
   // The selected entry object, found in whichever cached listing contains it,
   // or among Recent rows. The tree can only surface a path it has already
@@ -87,8 +96,12 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       );
       if (match) return match;
     }
-    return recentItems.find((item) => item.entry.path === selectedPath)?.entry ?? null;
-  }, [selectedPath, listings, recentItems]);
+    return (
+      recentItems.find((item) => item.entry.path === selectedPath)?.entry ??
+      queryRows.find((row) => row.entry.path === selectedPath)?.entry ??
+      null
+    );
+  }, [selectedPath, listings, recentItems, queryRows]);
 
   const [focusedEntry, setFocusedEntry] = useState<{
     path: string;
@@ -383,6 +396,16 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
                 </div>
               );
             }
+            if (!openedPath && queryId) {
+              return (
+                <div
+                  data-testid="files-query"
+                  className="min-h-0 flex-1 overflow-hidden"
+                >
+                  <QueryView id={queryId} trailing={previewToggle} />
+                </div>
+              );
+            }
             return null;
           })()}
           {openedPath ? (
@@ -409,7 +432,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
                 )}
               </div>
             </div>
-          ) : isRecent ? null : activeDirectory ? (
+          ) : isRecent || queryId ? null : activeDirectory ? (
             <>
               <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
                 <Breadcrumb dirPath={activeDirectory} />

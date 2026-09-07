@@ -22,20 +22,26 @@ import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import { recordOpened } from '../activity/recordActivity';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
+import { useQueryDraftsStore } from '../store/queryDraftsStore';
+import { useCollectionQueryStore } from '../store/collectionQueryStore';
 import { useTabsStore } from '../store/tabsStore';
 import { DiskExplorer } from './DiskExplorer';
 
 /** Router owns navigation; snapshots own only the collection's transient state. */
 export function FilesRoute() {
   const roots = useDiskStore((state) => state.roots);
+  const drafts = useQueryDraftsStore((state) => state.drafts);
   const location = useLocation();
   const navigate = useNavigate();
   const applied = React.useRef<FilesLocation | null>(null);
   const restoring = React.useRef(false);
   const [readyKey, setReadyKey] = React.useState<string | null>(null);
   const resolved = React.useMemo(
-    () => resolveFilesLocation(location.search, roots),
-    [location.search, roots]
+    () =>
+      resolveFilesLocation(location.search, roots, {
+        isKnownQuery: (id) => id in drafts,
+      }),
+    [location.search, roots, drafts]
   );
   const capture = React.useCallback(() => {
     const current = applied.current;
@@ -92,8 +98,10 @@ export function FilesRoute() {
     if (next.mode === 'focus') useTabsStore.getState().openFile(next.file);
     else useTabsStore.setState({ openedPath: null, activePath: null });
     let cancelled = false;
-    // Null means the directory could not be listed; Recent always resolves to
-    // a (possibly empty) list and reports its own errors in place.
+    // Null means the directory could not be listed; Recent and query
+    // collections always resolve to a (possibly empty) list and report their
+    // own errors in place.
+    const collection = next.collection;
     const visiblePaths: Promise<string[] | null> = directory
       ? state
           .loadDirectory(directory)
@@ -103,15 +111,29 @@ export function FilesRoute() {
                 .getState()
                 .listings[directory]?.map((entry) => entry.path) ?? null
           )
-      : useRecentStore
-          .getState()
-          .load()
-          .then(
-            () =>
-              useRecentStore
-                .getState()
-                .result?.items.map((item) => item.entry.path) ?? []
-          );
+      : collection.kind === 'query'
+        ? (() => {
+            const draft = useQueryDraftsStore.getState().drafts[collection.id];
+            if (!draft) return Promise.resolve<string[] | null>([]);
+            return useCollectionQueryStore
+              .getState()
+              .load(collection.id, draft.query, { immediate: true })
+              .then(
+                () =>
+                  useCollectionQueryStore
+                    .getState()
+                    .results[collection.id]?.rows.map((row) => row.entry.path) ?? []
+              );
+          })()
+        : useRecentStore
+            .getState()
+            .load()
+            .then(
+              () =>
+                useRecentStore
+                  .getState()
+                  .result?.items.map((item) => item.entry.path) ?? []
+            );
     void visiblePaths.then((paths) => {
       if (cancelled) return;
       if (!paths) {
@@ -224,7 +246,7 @@ export function FilesRoute() {
    */
   const collectionForFile = React.useCallback(
     (file: string, current: FilesCollection | null): FilesCollection | null => {
-      if (current?.kind === 'recent') return current;
+      if (current && current.kind !== 'directory') return current;
       const allowedRoots = useDiskStore.getState().roots;
       const directory = current ? collectionDirectory(current) : null;
       if (
