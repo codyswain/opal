@@ -10,6 +10,8 @@ interface ViewActionsProps {
   pending: ViewPendingAction;
   confirmingRemove: boolean;
   onSaveView: () => void;
+  /** Drops an unsaved draft; nothing on disk is touched. */
+  onDiscard: () => void;
   onSaveChanges: () => void;
   onSaveAsNew: () => void;
   onReset: () => void;
@@ -22,14 +24,17 @@ interface ViewActionsProps {
 /** The durable-definition controls; nothing here writes without an explicit click. */
 export const ViewActions: React.FC<ViewActionsProps> = ({
   draft, edited, pending, confirmingRemove,
-  onSaveView, onSaveChanges, onSaveAsNew, onReset, onDuplicate, onRemove, onConfirmRemove, onCancelRemove,
+  onSaveView, onDiscard, onSaveChanges, onSaveAsNew, onReset, onDuplicate, onRemove, onConfirmRemove, onCancelRemove,
 }) => {
   const busy = pending !== null;
   if (!draft.saved) {
     return (
-      <Button size="compact" disabled={busy} onClick={onSaveView}>
-        {pending === 'save-new' ? 'Saving…' : 'Save view'}
-      </Button>
+      <span className="flex items-center gap-1">
+        <Button size="compact" disabled={busy} onClick={onSaveView}>
+          {pending === 'save-new' ? 'Saving…' : 'Save view'}
+        </Button>
+        <Button size="compact" variant="ghost" disabled={busy} onClick={onDiscard}>Discard</Button>
+      </span>
     );
   }
   if (confirmingRemove) {

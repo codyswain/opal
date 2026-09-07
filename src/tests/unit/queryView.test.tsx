@@ -197,6 +197,17 @@ describe('QueryView', () => {
     await waitFor(() => expect(lastQuery(api).scope).toEqual({ kind: 'all-roots' }));
   });
 
+  it('Discard drops an unsaved draft and returns to the folder it came from', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const id = useViewDraftsStore.getState().create({ scope: folderScope('/Vault/Papers'), origin: '/Vault/Papers' });
+    const user = userEvent.setup();
+    renderQuery(id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('dir=%2FVault%2FPapers'));
+    await waitFor(() => expect(useViewDraftsStore.getState().has(id)).toBe(false));
+  });
+
   it('Cmd+F adds a Name chip and focuses it, then focuses the existing text chip', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
     const id = useViewDraftsStore.getState().create();

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { CollectionQueryError, emptyQuery, sameQuery, validateCollectionQuery } from '@/common/collectionQuery';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { CollectionQuery, CollectionScope } from '@/types/collectionQuery';
 import type { SavedView, ViewLayout } from '@/types/savedView';
 
@@ -27,7 +28,11 @@ export interface ViewDraft {
 }
 
 export interface ViewDraftsState {
-  /** Session-only; never persisted. */
+  /**
+   * Unsaved drafts and unsaved edits to saved views survive a relaunch
+   * through the prefs store; a draft that matches its saved view does not
+   * need to.
+   */
   drafts: Record<string, ViewDraft>;
   /** Transient (unsaved) draft ids in creation order. */
   order: string[];
@@ -76,9 +81,72 @@ function baselineOf(view: SavedView): ViewBaseline {
   return { name: view.name, query: view.query, layout: view.layout, revision: view.revision };
 }
 
+export const VIEW_DRAFTS_PREF = 'viewDrafts';
+/** Unsaved drafts kept across launches; the oldest fall off first. */
+export const MAX_PERSISTED_DRAFTS = 20;
+
+const LAYOUTS: readonly ViewLayout[] = ['list', 'gallery'];
+
+/** Accepts only a draft whose every field still validates; anything else is dropped silently. */
+function reviveDraft(candidate: unknown): ViewDraft | null {
+  if (typeof candidate !== 'object' || candidate === null) return null;
+  const raw = candidate as Record<string, unknown>;
+  if (typeof raw.id !== 'string' || typeof raw.name !== 'string' || !LAYOUTS.includes(raw.layout as ViewLayout)) return null;
+  if (raw.origin !== null && typeof raw.origin !== 'string') return null;
+  try {
+    const query = validateCollectionQuery(raw.query);
+    let saved: ViewBaseline | null = null;
+    if (raw.saved !== null && raw.saved !== undefined) {
+      const base = raw.saved as Record<string, unknown>;
+      if (typeof base.name !== 'string' || typeof base.revision !== 'string' || !LAYOUTS.includes(base.layout as ViewLayout)) return null;
+      saved = { name: base.name, layout: base.layout as ViewLayout, revision: base.revision, query: validateCollectionQuery(base.query) };
+    }
+    return {
+      id: raw.id,
+      name: raw.name.trim().slice(0, 120) || 'Untitled view',
+      query,
+      layout: raw.layout as ViewLayout,
+      origin: (raw.origin as string | null) ?? null,
+      saved,
+      createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+    };
+  } catch (error) {
+    if (error instanceof CollectionQueryError) return null;
+    throw error;
+  }
+}
+
+export function readPersistedDrafts(): ViewDraftsState {
+  const stored = readPref<{ drafts?: unknown; order?: unknown } | null>(VIEW_DRAFTS_PREF, null);
+  if (!stored || typeof stored !== 'object' || !Array.isArray(stored.order) || typeof stored.drafts !== 'object' || stored.drafts === null) {
+    return { drafts: {}, order: [] };
+  }
+  const drafts: Record<string, ViewDraft> = {};
+  for (const [id, candidate] of Object.entries(stored.drafts as Record<string, unknown>)) {
+    const draft = reviveDraft(candidate);
+    if (draft && draft.id === id) drafts[id] = draft;
+  }
+  const order = (stored.order as unknown[]).filter((id): id is string => typeof id === 'string' && !!drafts[id] && drafts[id].saved === null);
+  // Edited saved views are worth keeping; a transient draft must be listed to be reachable.
+  for (const id of Object.keys(drafts)) {
+    if (drafts[id].saved === null ? !order.includes(id) : !isDraftEdited(drafts[id])) delete drafts[id];
+  }
+  return { drafts, order };
+}
+
+/** Writes what is worth restoring: listed transient drafts (newest MAX_PERSISTED_DRAFTS) and edited saved views. */
+export function persistDrafts(state: ViewDraftsState): void {
+  const order = state.order.filter((id) => state.drafts[id]?.saved === null).slice(-MAX_PERSISTED_DRAFTS);
+  const drafts: Record<string, ViewDraft> = {};
+  for (const id of order) drafts[id] = state.drafts[id];
+  for (const draft of Object.values(state.drafts)) {
+    if (draft.saved && isDraftEdited(draft)) drafts[draft.id] = draft;
+  }
+  writePref(VIEW_DRAFTS_PREF, { drafts, order });
+}
+
 export const useViewDraftsStore = create<ViewDraftsStore>((set, get) => ({
-  drafts: {},
-  order: [],
+  ...readPersistedDrafts(),
 
   create: (initial = {}) => {
     const id = nextId();
@@ -169,3 +237,7 @@ export const useViewDraftsStore = create<ViewDraftsStore>((set, get) => ({
   has: (id) => id in get().drafts,
   clearAll: () => set({ drafts: {}, order: [] }),
 }));
+
+useViewDraftsStore.subscribe((state, previous) => {
+  if (state.drafts !== previous.drafts || state.order !== previous.order) persistDrafts(state);
+});

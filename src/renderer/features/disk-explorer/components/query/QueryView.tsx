@@ -190,6 +190,14 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     if (kind === 'save-view') setTimeout(() => useViewDraftsStore.getState().remove(id), 0);
   };
 
+  const discardDraft = () => {
+    if (!draft || draft.saved) return;
+    if (draft.origin) navigation.navigateDirectory(draft.origin);
+    else navigation.navigateCollection(RECENT_COLLECTION);
+    // Removed after the router leaves this location, like a saved transient draft.
+    setTimeout(() => useViewDraftsStore.getState().remove(id), 0);
+  };
+
   const saveChanges = async () => {
     const definition = definitionOf();
     if (!definition || !draft?.saved) return;
@@ -297,6 +305,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
             pending={pending}
             confirmingRemove={confirmingRemove}
             onSaveView={() => setNameDialog('save-view')}
+            onDiscard={discardDraft}
             onSaveChanges={() => void saveChanges()}
             onSaveAsNew={() => setNameDialog('save-new')}
             onReset={() => { useViewDraftsStore.getState().reset(id); setConflict(false); }}

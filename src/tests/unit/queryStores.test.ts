@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { isDraftEdited, useViewDraftsStore, type ViewDraft } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
+import { MAX_PERSISTED_DRAFTS, VIEW_DRAFTS_PREF, isDraftEdited, persistDrafts, readPersistedDrafts, useViewDraftsStore, type ViewDraft } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
 import { installViewsApi, savedView } from '@/tests/helpers/viewsApi';
 import { QUERY_EDIT_DEBOUNCE_MS, useCollectionQueryStore } from '@/renderer/features/disk-explorer/store/collectionQueryStore';
@@ -31,6 +32,40 @@ describe('queryDraftsStore', () => {
     store.remove(id);
     expect(useViewDraftsStore.getState().has(id)).toBe(false);
     expect(useViewDraftsStore.getState().order).toEqual([]);
+  });
+});
+
+describe('viewDraftsStore persistence', () => {
+  it('keeps unsaved drafts and edited saved views across a relaunch, drops clean and invalid ones', () => {
+    const store = useViewDraftsStore.getState();
+    const transient = store.create({ scope: folderScope('/Vault/A'), origin: '/Vault/A', name: 'Papers' });
+    store.openSaved(savedView({ id: 'clean', name: 'Clean' }));
+    store.openSaved(savedView({ id: 'edited', name: 'Edited' }));
+    store.update('edited', { name: 'Edited twice' });
+    // Every change is written through.
+    const stored = readPref<{ drafts: Record<string, ViewDraft>; order: string[] }>(VIEW_DRAFTS_PREF, { drafts: {}, order: [] });
+    expect(stored.order).toEqual([transient]);
+    expect(Object.keys(stored.drafts).sort()).toEqual([transient, 'edited'].sort());
+    // A fresh read restores the same state.
+    const restored = readPersistedDrafts();
+    expect(restored.order).toEqual([transient]);
+    expect(restored.drafts[transient]).toMatchObject({ name: 'Papers', origin: '/Vault/A' });
+    expect(restored.drafts.edited).toMatchObject({ name: 'Edited twice', saved: { name: 'Edited', revision: expect.any(String) } });
+    expect(restored.drafts.clean).toBeUndefined();
+    // Corrupt entries never crash a launch.
+    writePref(VIEW_DRAFTS_PREF, { drafts: { bad: { id: 'bad', name: 'x', layout: 'list', origin: null, saved: null, query: { version: 9 } }, [transient]: stored.drafts[transient] }, order: ['bad', transient, 'ghost'] });
+    expect(readPersistedDrafts()).toMatchObject({ order: [transient] });
+    writePref(VIEW_DRAFTS_PREF, 'garbage');
+    expect(readPersistedDrafts()).toEqual({ drafts: {}, order: [] });
+  });
+
+  it('caps the persisted transient drafts to the newest ones', () => {
+    const store = useViewDraftsStore.getState();
+    const ids = Array.from({ length: MAX_PERSISTED_DRAFTS + 3 }, () => store.create());
+    persistDrafts(useViewDraftsStore.getState());
+    const restored = readPersistedDrafts();
+    expect(restored.order).toEqual(ids.slice(3));
+    expect(Object.keys(restored.drafts)).toHaveLength(MAX_PERSISTED_DRAFTS);
   });
 });
 
