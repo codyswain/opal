@@ -71,14 +71,17 @@ describe('ChatRoute', () => {
   it('lists, switches and removes conversations', async () => {
     const api = installChatApi({ status: { ready: true, files: 1, chunks: 1 } });
     const first = await api.create();
-    api.conversations.get(first.data!.id)!.title = 'Older one';
+    const firstId = first.success ? first.data.id : '';
+    const older = api.conversations.get(firstId);
+    if (!older) throw new Error('conversation missing');
+    older.title = 'Older one';
     const user = userEvent.setup();
     renderChat();
     await screen.findByRole('button', { name: /^Older one/ });
     await user.click(screen.getByRole('button', { name: 'New' }));
     await waitFor(() => expect(useChatStore.getState().active?.title).toBe('New conversation'));
     await user.click(screen.getByRole('button', { name: /^Older one/ }));
-    await waitFor(() => expect(useChatStore.getState().active?.id).toBe(first.data!.id));
+    await waitFor(() => expect(useChatStore.getState().active?.id).toBe(firstId));
     await user.click(screen.getByRole('button', { name: 'Remove conversation Older one' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Older one/ })).not.toBeInTheDocument());
     expect(useChatStore.getState().active).toBeNull();
