@@ -169,3 +169,14 @@ contextBridge.exposeInMainWorld("metadataAPI", {
   removeRelated: (target: string, edgeId: string) =>
     ipcRenderer.invoke("metadata:remove-related", target, edgeId),
 });
+
+contextBridge.exposeInMainWorld("activityAPI", {
+  record: (target: string, kind: "opened") => ipcRenderer.invoke("activity:record", target, kind),
+  recent: (query?: { limit?: number }) => ipcRenderer.invoke("activity:recent", query ?? {}),
+  clear: () => ipcRenderer.invoke("activity:clear"),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("activity:changed", listener);
+    return () => ipcRenderer.removeListener("activity:changed", listener);
+  },
+});
