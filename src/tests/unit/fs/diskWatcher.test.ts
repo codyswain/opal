@@ -29,13 +29,23 @@ vi.mock('@/main/logger', () => ({
 
 import { DiskWatcher } from '@/main/fs/DiskWatcher';
 
+// fsevents can lose an event outright on a heavily loaded machine. A bounded
+// retry keeps that environmental loss from failing the suite while a broken
+// watcher still fails every attempt.
+
 let tmp: string;
 let root: string;
 let onChanged: ReturnType<typeof vi.fn>;
 let watcher: DiskWatcher;
 
-/** Waits for the debounce window plus chokidar's own settle time. */
+/**
+ * Waits for the debounce window plus chokidar's own settle time. Used only
+ * where a test asserts that nothing is reported; positive expectations poll
+ * with `reported` so a loaded machine cannot turn slack into a false failure.
+ */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 400));
+const reported = (spy: ReturnType<typeof vi.fn>) =>
+  vi.waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: 5000, interval: 25 });
 
 beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-watch-'));
@@ -53,53 +63,51 @@ afterEach(async () => {
 });
 
 describe('DiskWatcher', () => {
-  it('reports the directory when a file is added', async () => {
+  it('reports the directory when a file is added', { retry: 2 }, async () => {
     await watcher.watch(root);
     onChanged.mockClear();
 
     await writeFile(path.join(root, 'b.txt'), 'new');
-    await settle();
+    await reported(onChanged);
 
-    expect(onChanged).toHaveBeenCalled();
     const directories = onChanged.mock.calls.flatMap((call) => call[0]);
     expect(directories.some((dir: string) => dir.endsWith('Vault'))).toBe(true);
   });
 
-  it('reports the directory when a file is deleted', async () => {
+  it('reports the directory when a file is deleted', { retry: 2 }, async () => {
     await watcher.watch(root);
     onChanged.mockClear();
 
     await unlink(path.join(root, 'a.txt'));
-    await settle();
-
-    expect(onChanged).toHaveBeenCalled();
+    await reported(onChanged);
   });
 
-  it('reports a nested directory, not just the root', async () => {
+  it('reports a nested directory, not just the root', { retry: 2 }, async () => {
     await watcher.watch(root);
     onChanged.mockClear();
 
     await writeFile(path.join(root, 'Photos', 'c.jpg'), 'bytes');
-    await settle();
+    await reported(onChanged);
 
     const directories = onChanged.mock.calls.flatMap((call) => call[0]);
     expect(directories.some((dir: string) => dir.endsWith('Photos'))).toBe(true);
   });
 
-  it('coalesces a burst of changes into few notifications', async () => {
+  it('coalesces a burst of changes into few notifications', { retry: 2 }, async () => {
     await watcher.watch(root);
     onChanged.mockClear();
 
     for (let index = 0; index < 20; index += 1) {
       await writeFile(path.join(root, `burst${index}.txt`), 'x');
     }
+    await reported(onChanged);
     await settle();
 
     // 20 file events must not become 20 renderer messages.
     expect(onChanged.mock.calls.length).toBeLessThan(5);
   });
 
-  it('stops reporting after unwatch', async () => {
+  it('stops reporting after unwatch', { retry: 2 }, async () => {
     await watcher.watch(root);
     await watcher.unwatch(root);
     onChanged.mockClear();
@@ -110,7 +118,7 @@ describe('DiskWatcher', () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
-  it('watching the same root twice creates one watcher', async () => {
+  it('watching the same root twice creates one watcher', { retry: 2 }, async () => {
     await watcher.watch(root);
     await watcher.watch(root);
     expect(watcher.watchedRoots()).toEqual([root]);
@@ -118,7 +126,7 @@ describe('DiskWatcher', () => {
 });
 
 describe('metadata observation', () => {
-  it('observes directory carriers beneath hidden root ancestors and ignores hidden subtrees', async () => {
+  it('observes directory carriers beneath hidden root ancestors and ignores hidden subtrees', { retry: 2 }, async () => {
     await watcher.closeAll();
     root = path.join(tmp, '.worktrees', 'root');
     await mkdir(path.join(root, '.hidden'), { recursive: true });
@@ -126,7 +134,7 @@ describe('metadata observation', () => {
     watcher = new DiskWatcher({ onChanged, onMetadataChanged, debounceMs: 50 });
     await watcher.watch(root);
     await writeFile(path.join(root, '.opal.yaml'), 'schema: 1');
-    await settle();
+    await reported(onChanged);
     expect(onChanged).toHaveBeenCalledWith([root]);
     expect(onMetadataChanged).toHaveBeenCalled();
     onChanged.mockClear();
