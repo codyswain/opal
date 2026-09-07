@@ -1,7 +1,7 @@
 import { validateCollectionPage, validateCollectionQuery } from '@/common/collectionQuery';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import type { ActivityStore } from '@/main/activity/ActivityStore';
-import type { CollectionQueryResult } from '@/types/collectionQuery';
+import type { CollectionQueryResult, TagCount } from '@/types/collectionQuery';
 import type { CollectionIndex } from './CollectionIndex';
 import { evaluateCollectionQuery } from './evaluateQuery';
 
@@ -19,6 +19,20 @@ export interface CollectionQueryServiceDependencies {
  */
 export class CollectionQueryService {
   constructor(private deps: CollectionQueryServiceDependencies) {}
+
+  /** Distinct meaningful tags across the opened roots, most used first. */
+  async tags(): Promise<TagCount[]> {
+    const snapshot = await this.deps.index.get();
+    const allowedRoots = this.deps.registry.list();
+    const counts = new Map<string, number>();
+    for (const item of snapshot.items) {
+      if (!item.tags || !allowedRoots.some((root) => item.path === root || item.path.startsWith(`${root}/`))) continue;
+      for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag));
+  }
 
   async query(rawQuery: unknown, rawPage?: unknown): Promise<CollectionQueryResult> {
     const validated = validateCollectionQuery(rawQuery);

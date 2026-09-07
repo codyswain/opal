@@ -20,6 +20,8 @@ export type CollectionViewMode = 'gallery' | 'list';
 export interface CollectionRowDecoration {
   detail: string;
   secondary?: string;
+  /** Shown as small pills after the name; at most three are rendered. */
+  tags?: string[];
 }
 
 export interface CollectionViewProps {
@@ -350,10 +352,14 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSelect
       {...dragProps}
     >
       <Icon className="h-4 w-4 shrink-0 opacity-60" />
-      {decoration?.secondary ? (
+      {decoration?.secondary || decoration?.tags?.length ? (
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="truncate">{entry.name}</span>
-          <span className="truncate text-2xs text-muted-foreground">{decoration.secondary}</span>
+          {decoration.tags?.slice(0, 3).map((tag) => (
+            <span key={tag} data-testid="row-tag" className="shrink-0 rounded-full bg-surface-hover px-1.5 text-2xs text-foreground-secondary">{tag}</span>
+          ))}
+          {decoration.tags && decoration.tags.length > 3 ? <span className="shrink-0 text-2xs text-muted-foreground">+{decoration.tags.length - 3}</span> : null}
+          {decoration.secondary ? <span className="truncate text-2xs text-muted-foreground">{decoration.secondary}</span> : null}
         </span>
       ) : (
         <span className="flex-1 truncate">{entry.name}</span>

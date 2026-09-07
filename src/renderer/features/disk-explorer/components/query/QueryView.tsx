@@ -19,7 +19,9 @@ import type { SavedViewDefinition } from '@/types/savedView';
 import { CollectionView, type CollectionRowDecoration } from '../CollectionView';
 import { EmptyState } from '../EmptyState';
 import { GallerySkeleton } from '../Skeleton';
-import { FilterChips } from './FilterChips';
+import { CHIP_TEXT_INPUT, FilterChips } from './FilterChips';
+import { useTagSuggestions } from './useTagSuggestions';
+import { newChip } from './editableFilters';
 import { ScopeControl } from './ScopeControl';
 import { SortControl } from './SortControl';
 import { chipFromFilter, filtersFromChips, type EditableChip } from './editableFilters';
@@ -77,6 +79,8 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const roots = useDiskStore((state) => state.roots);
   const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const now = useNow();
+  const tagSuggestions = useTagSuggestions();
+  const header = useRef<HTMLDivElement>(null);
   const [chips, setChips] = useState<EditableChip[]>(() => (draft ? draft.query.filters.map(chipFromFilter) : []));
   const [dismissed, setDismissed] = useState<string[]>([]);
   const lastLoaded = useRef<CollectionQuery | null>(draft?.query ?? null);
@@ -137,6 +141,20 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     };
   }, [relativeTime, id, load]);
 
+  // Cmd+F filters the view: focus the first text chip, or start a Name chip.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f' || event.defaultPrevented) return;
+      event.preventDefault();
+      const existing = header.current?.querySelector<HTMLInputElement>(`[${CHIP_TEXT_INPUT}]`);
+      if (existing) { existing.focus(); existing.select(); return; }
+      setChips((previous) => [...previous, newChip('name')]);
+      requestAnimationFrame(() => header.current?.querySelector<HTMLInputElement>(`[${CHIP_TEXT_INPUT}]`)?.focus());
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const byPath = useMemo(() => new Map(result.rows.map((row) => [row.entry.path, row])), [result.rows]);
   const entries = useMemo(() => result.rows.map((row) => row.entry), [result.rows]);
   const decorate = useMemo(
@@ -144,7 +162,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
       const row = byPath.get(entry.path);
       if (!row || !draft) return null;
       const parent = parentFsPath(entry.path);
-      return { detail: detailFor(row, draft.query, now), secondary: parent ? basenameFsPath(parent) : undefined };
+      return { detail: detailFor(row, draft.query, now), secondary: parent ? basenameFsPath(parent) : undefined, tags: row.tags ?? undefined };
     },
     [byPath, draft, now]
   );
@@ -259,7 +277,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div data-disk-shortcuts-ignore="true" data-testid="query-header" className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2">
+      <div ref={header} data-disk-shortcuts-ignore="true" data-testid="query-header" className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <SlidersHorizontal aria-hidden className="h-4 w-4 text-muted-foreground" />
           <input
@@ -313,7 +331,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
           origin={draft.origin}
           onChange={(scope) => updateDraft(id, { query: { ...draft.query, scope } })}
         />
-        <FilterChips chips={chips} onChange={setChipsFromUser} />
+        <FilterChips chips={chips} onChange={setChipsFromUser} tagSuggestions={tagSuggestions} />
       </div>
 
       {result.unavailableScopes.length > 0 ? (

@@ -37,6 +37,7 @@ export function collectionResult(rows: CollectionRow[] = [], over: Partial<Colle
 export function installCollectionsApi(overrides: Partial<CollectionsAPI> = {}): CollectionsAPI {
   const api: CollectionsAPI = {
     query: vi.fn(async () => ({ success: true as const, data: collectionResult() })),
+    tags: vi.fn(async () => ({ success: true as const, data: [] })),
     onChanged: vi.fn(() => () => undefined),
     ...overrides,
   };

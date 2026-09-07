@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { FolderPlus, X } from 'lucide-react';
 import { basenameFsPath } from '@/common/fsPaths';
-import { SegmentedControl, Switch } from '@/renderer/shared/ui';
+import { Button, SegmentedControl, Switch } from '@/renderer/shared/ui';
 import type { CollectionScope } from '@/types/collectionQuery';
+import { FolderPickerDialog } from './FolderPickerDialog';
 
 interface ScopeControlProps {
   scope: CollectionScope;
@@ -16,7 +18,7 @@ interface ScopeControlProps {
  * the scope must always be visible.
  */
 export const ScopeControl: React.FC<ScopeControlProps> = ({ scope, roots, origin, onChange }) => {
-  const choices = [...new Set([...(origin ? [origin] : []), ...roots])];
+  const [picking, setPicking] = useState(false);
   const chosen = scope.kind === 'folders' ? scope.folders : [];
   const includeDescendants = scope.kind === 'folders' ? scope.includeDescendants : true;
 
@@ -24,10 +26,15 @@ export const ScopeControl: React.FC<ScopeControlProps> = ({ scope, roots, origin
     if (mode === 'all') onChange({ kind: 'all-roots' });
     else onChange({ kind: 'folders', folders: chosen.length > 0 ? chosen : [origin ?? roots[0]].filter(Boolean), includeDescendants });
   };
-  const toggleFolder = (folder: string) => {
-    const next = chosen.includes(folder) ? chosen.filter((candidate) => candidate !== folder) : [...chosen, folder];
-    if (next.length === 0) return; // A scope needs at least one folder; remove the last by switching to all roots.
-    onChange({ kind: 'folders', folders: next, includeDescendants });
+  const addFolder = (folder: string) => {
+    if (chosen.includes(folder)) return;
+    onChange({ kind: 'folders', folders: [...chosen, folder], includeDescendants });
+  };
+  const removeFolder = (folder: string) => {
+    const next = chosen.filter((candidate) => candidate !== folder);
+    // A scope needs at least one folder; removing the last widens to all roots.
+    if (next.length === 0) onChange({ kind: 'all-roots' });
+    else onChange({ kind: 'folders', folders: next, includeDescendants });
   };
 
   return (
@@ -38,24 +45,25 @@ export const ScopeControl: React.FC<ScopeControlProps> = ({ scope, roots, origin
         onValueChange={setMode}
         options={[
           { value: 'all', label: 'All opened folders' },
-          { value: 'folders', label: 'Chosen folders', disabled: choices.length === 0 },
+          { value: 'folders', label: 'Chosen folders', disabled: roots.length === 0 && !origin },
         ]}
       />
       {scope.kind === 'folders' ? (
         <>
-          <ul className="flex flex-wrap items-center gap-2" aria-label="Scope folders">
-            {choices.map((folder) => {
-              const checked = chosen.includes(folder);
-              return (
-                <li key={folder}>
-                  <label className="flex items-center gap-1 text-xs" title={folder}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleFolder(folder)} />
-                    <span className="max-w-40 truncate">{basenameFsPath(folder)}</span>
-                  </label>
-                </li>
-              );
-            })}
+          <ul className="flex flex-wrap items-center gap-1" aria-label="Scope folders">
+            {chosen.map((folder) => (
+              <li key={folder} className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-xs" title={folder}>
+                <span className="max-w-48 truncate">{basenameFsPath(folder)}</span>
+                <button type="button" aria-label={`Remove ${basenameFsPath(folder)} from scope`} onClick={() => removeFolder(folder)} className="rounded p-0.5 text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              </li>
+            ))}
           </ul>
+          <Button size="compact" variant="outline" onClick={() => setPicking(true)}>
+            <FolderPlus aria-hidden className="h-3.5 w-3.5" />
+            Choose folder…
+          </Button>
           <label className="flex items-center gap-1 text-xs">
             <Switch
               label="Include subfolders"
@@ -64,6 +72,7 @@ export const ScopeControl: React.FC<ScopeControlProps> = ({ scope, roots, origin
             />
             Include subfolders
           </label>
+          <FolderPickerDialog open={picking} roots={roots} onOpenChange={setPicking} onChoose={addFolder} />
         </>
       ) : null}
     </div>

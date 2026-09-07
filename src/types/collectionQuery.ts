@@ -69,5 +69,10 @@ export interface CollectionQueryResult {
   generation: number;
 }
 
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
 export const COLLECTION_PAGE_DEFAULT = 200;
 export const COLLECTION_PAGE_MAX = 1000;

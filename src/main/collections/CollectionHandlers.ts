@@ -3,7 +3,7 @@ import logger from '@/main/logger';
 import { CollectionQueryError } from '@/common/collectionQuery';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { IPCResponse } from '@/types/ipc';
-import type { CollectionQueryResult } from '@/types/collectionQuery';
+import type { CollectionQueryResult, TagCount } from '@/types/collectionQuery';
 import type { CollectionQueryService } from './CollectionQueryService';
 
 export interface CollectionHandlerDependencies {
@@ -15,6 +15,14 @@ export class CollectionHandlers {
   constructor(private deps: CollectionHandlerDependencies) {}
 
   registerAll(): void {
+    this.deps.ipc.handle('collections:tags', async (): Promise<IPCResponse<TagCount[]>> => {
+      try {
+        return { success: true, data: await this.deps.service.tags() };
+      } catch (error) {
+        logger.error('Tag listing failed', error instanceof Error ? error : undefined);
+        return { success: false, error: 'Failed to list tags' };
+      }
+    });
     this.deps.ipc.handle(
       'collections:query',
       async (_, query: unknown, page: unknown): Promise<IPCResponse<CollectionQueryResult>> => {

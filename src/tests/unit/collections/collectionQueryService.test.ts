@@ -83,12 +83,25 @@ describe('CollectionQueryService', () => {
   });
 });
 
+describe('CollectionQueryService.tags', () => {
+  it('counts tags across opened roots, most common first, and ignores unreadable metadata', async () => {
+    await writeFile(path.join(root, 'a.md'), '---\ntags: [alpha, beta]\n---\n# a\n');
+    await writeFile(path.join(root, 'b.md'), '---\ntags: [alpha, " "]\n---\n# b\n');
+    await writeFile(path.join(root, 'Sub', 'd.pdf.opal.yaml'), 'schema: 1\nid: 00000000-0000-4000-8000-000000000001\ntags: [beta]\n');
+    expect(await service.tags()).toEqual([
+      { tag: 'alpha', count: 2 },
+      { tag: 'beta', count: 2 },
+    ]);
+  });
+});
+
 describe('CollectionHandlers', () => {
   it('registers the query channel and translates failures', async () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new CollectionHandlers({ ipc, service }).registerAll();
-    expect([...handlers.keys()]).toEqual(['collections:query']);
+    expect([...handlers.keys()].sort()).toEqual(['collections:query', 'collections:tags']);
+    expect(await handlers.get('collections:tags')?.({})).toEqual({ success: true, data: [] });
     const invoke = (...args: unknown[]) => {
       const handler = handlers.get('collections:query');
       if (!handler) throw new Error('missing handler');

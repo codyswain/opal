@@ -91,7 +91,7 @@ describe('QueryView', () => {
     expect(within(row).getByText('Papers')).toBeInTheDocument();
     expect(within(row).getByText('2 KB')).toBeInTheDocument();
     expect(screen.getByText('Match all filters')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Papers' })).toBeChecked();
+    expect(within(screen.getByRole('list', { name: 'Scope folders' })).getByText('Papers')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Include subfolders' })).toHaveAttribute('aria-checked', 'true');
     expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'query', id });
     expect(window.activityAPI.record).not.toHaveBeenCalled();
@@ -137,6 +137,80 @@ describe('QueryView', () => {
     await user.clear(input);
     await waitFor(() => expect(lastQuery(api).filters).toEqual([]));
     expect(screen.getByTestId('query-chip-name')).toBeInTheDocument();
+  });
+
+  it('shows tag pills on rows and suggests known tags in the tags chip', async () => {
+    const listeners: (() => void)[] = [];
+    const api = installCollectionsApi({
+      query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })),
+      tags: vi.fn(async () => ({ success: true as const, data: [{ tag: 'research', count: 2 }] })),
+      onChanged: vi.fn((listener: () => void) => { listeners.push(listener); return () => undefined; }),
+    });
+    const id = useViewDraftsStore.getState().create();
+    const user = userEvent.setup();
+    renderQuery(id);
+    const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    expect(within(row).getByTestId('row-tag')).toHaveTextContent('research');
+    expect(within(screen.getByTestId(`disk-folder-entry-${NOTE}`)).queryByTestId('row-tag')).toBeNull();
+    await user.selectOptions(screen.getByLabelText('Add filter'), 'tags');
+    const input = screen.getByLabelText('Tags value');
+    const listId = input.getAttribute('list');
+    expect(listId).toBeTruthy();
+    const options = () => [...(document.getElementById(listId ?? '')?.querySelectorAll('option') ?? [])].map((option) => option.getAttribute('value'));
+    await waitFor(() => expect(options()).toEqual(['research']));
+    (api.tags as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ success: true, data: [{ tag: 'atlas', count: 1 }, { tag: 'research', count: 2 }] });
+    act(() => { listeners.forEach((listener) => listener()); });
+    await waitFor(() => expect(options()).toEqual(['atlas', 'research']));
+  });
+
+  it('adds a folder to the scope from the picker and widens to all roots when the last one is removed', async () => {
+    const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
+      readDirectory: vi.fn(async (path: string) => ({
+        success: true as const,
+        data: {
+          path,
+          entries: path === ROOT
+            ? [entry({ path: '/Vault/Papers', name: 'Papers', isDirectory: true }), entry({ path: '/Vault/notes.md', name: 'notes.md', kind: 'markdown' })]
+            : [],
+        },
+      })),
+      stat: vi.fn(async (path: string) => ({ success: true as const, data: entry({ path, name: path.split('/').pop() ?? path, kind: 'pdf' }) })),
+    });
+    const id = useViewDraftsStore.getState().create({ scope: folderScope('/Vault/Projects') });
+    const user = userEvent.setup();
+    renderQuery(id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.click(screen.getByRole('button', { name: 'Choose folder…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a folder' });
+    await user.click(within(dialog).getByRole('button', { name: 'Vault' }));
+    expect(await within(dialog).findByRole('button', { name: 'Papers' })).toBeInTheDocument();
+    expect(within(dialog).queryByText('notes.md')).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Papers' }));
+    await within(dialog).findByText('No subfolders.');
+    await user.click(within(dialog).getByRole('button', { name: 'Choose Papers' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(lastQuery(api).scope).toEqual({ kind: 'folders', folders: ['/Vault/Projects', '/Vault/Papers'], includeDescendants: true }));
+    await user.click(screen.getByRole('button', { name: 'Remove Projects from scope' }));
+    await user.click(screen.getByRole('button', { name: 'Remove Papers from scope' }));
+    await waitFor(() => expect(lastQuery(api).scope).toEqual({ kind: 'all-roots' }));
+  });
+
+  it('Cmd+F adds a Name chip and focuses it, then focuses the existing text chip', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const id = useViewDraftsStore.getState().create();
+    const user = userEvent.setup();
+    renderQuery(id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.keyboard('{Meta>}f{/Meta}');
+    const input = await screen.findByLabelText('Name value');
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.type(input, 'atlas');
+    input.blur();
+    await user.keyboard('{Meta>}f{/Meta}');
+    expect(screen.getAllByTestId('query-chip-name')).toHaveLength(1);
+    expect(input).toHaveFocus();
   });
 
   it('shows the unavailable scope and offers to widen it', async () => {
