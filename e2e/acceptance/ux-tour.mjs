@@ -64,7 +64,14 @@ try {
   await page.getByRole('dialog', { name: 'Choose a folder' }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Vault' }).click();
   await page.waitForTimeout(300);
+  await page.getByRole('dialog').getByRole('button', { name: 'Projects' }).click();
+  await page.waitForTimeout(300);
   await shot('07-folder-picker');
+  await page.getByRole('dialog').getByRole('button', { name: 'Choose Projects' }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: 'Save view' }).click();
+  await page.getByRole('dialog').waitFor();
+  await shot('07b-save-dialog');
   await page.keyboard.press('Escape');
   await page.evaluate(() => { window.location.hash = '#/chat'; });
   await page.getByTestId('chat-index-status').waitFor();
