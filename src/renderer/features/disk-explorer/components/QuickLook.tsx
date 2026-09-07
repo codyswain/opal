@@ -13,6 +13,9 @@ export const QuickLook: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // A modal opened from inside Quick Look owns Escape. The event reaches
+        // this capture listener before Radix can close that nested dialog.
+        if (document.querySelector('[data-related-chooser="true"]')) return;
         event.preventDefault();
         close();
       }

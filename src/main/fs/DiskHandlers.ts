@@ -7,6 +7,7 @@ import type { DiskReader } from '@/main/fs/DiskReader';
 import type { FileWriter } from '@/main/fs/FileWriter';
 import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
 import logger from '@/main/logger';
+import { MetadataError } from '@/main/fs/MetadataCodec';
 
 export interface DiskShell {
   showItemInFolder: (fullPath: string) => void;
@@ -244,6 +245,7 @@ function describeError(error: unknown, fallback: string): string {
   if (error instanceof PathNotAllowedError) return error.message;
   if (error instanceof DestinationExistsError) return error.message;
   if (error instanceof InvalidNameError) return error.message;
+  if (error instanceof MetadataError) return error.message;
   if (error instanceof Error && /not a directory|into itself|opened folder/i.test(error.message)) {
     return error.message;
   }

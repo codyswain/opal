@@ -5,11 +5,13 @@ import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { QuickLook } from '@/renderer/features/disk-explorer/components/QuickLook';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
+import { installMetadataApi } from '@/tests/helpers/metadataApi';
 
 const PHOTO = entry({ path: '/V/a.jpg', name: 'a.jpg', kind: 'image', size: 2048 });
 
 beforeEach(() => {
   installDiskApi();
+  installMetadataApi();
   useDiskStore.setState({
     focusedPath: null,
     selectedPath: null,
@@ -73,6 +75,21 @@ describe('QuickLook', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'false');
     expect(dialog).toHaveAttribute('aria-label', 'a.jpg');
+  });
+
+  it('keeps Quick Look open when Escape closes the nested related chooser', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({ isQuickLookOpen: true });
+    render(<QuickLook entry={PHOTO} />);
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await screen.findByLabelText('Tags');
+    await user.click(screen.getByRole('button', { name: 'Add related item' }));
+    expect(await screen.findByRole('dialog', { name: 'Add related item' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Add related item' })).not.toBeInTheDocument();
+    expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
   });
 });
 

@@ -159,3 +159,13 @@ contextBridge.exposeInMainWorld("diskAPI", {
     return () => ipcRenderer.removeListener("disk:changed", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("metadataAPI", {
+  read: (target: string) => ipcRenderer.invoke("metadata:read", target),
+  saveProperties: (target: string, properties: { tags: string[]; description: string }, expectedRevision: string) =>
+    ipcRenderer.invoke("metadata:save-properties", target, properties, expectedRevision),
+  addRelated: (target: string, relatedTarget: string) =>
+    ipcRenderer.invoke("metadata:add-related", target, relatedTarget),
+  removeRelated: (target: string, edgeId: string) =>
+    ipcRenderer.invoke("metadata:remove-related", target, edgeId),
+});

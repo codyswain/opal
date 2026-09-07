@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId, useState } from 'react';
 import { Folder } from 'lucide-react';
 import { formatBytes } from '@/common/formatBytes';
 import type { DiskEntry } from '@/types/disk';
@@ -10,6 +10,7 @@ import { TextPreview } from './TextPreview';
 import { UnsupportedPreview } from './UnsupportedPreview';
 import { EntryActions } from '../EntryActions';
 import { EmptyState } from '../EmptyState';
+import { DetailsPanel } from './DetailsPanel';
 
 /**
  * Dispatches on file kind. Later tasks in Phase A add cases here; the default
@@ -46,6 +47,9 @@ function renderPreview(entry: DiskEntry): React.ReactNode {
 }
 
 export const DetailPane: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => {
+  const tabsId = useId();
+  const [activeTab, setActiveTab] = useState<'preview' | 'details'>('preview');
+
   if (!entry) {
     return (
       <div
@@ -75,7 +79,42 @@ export const DetailPane: React.FC<{ entry: DiskEntry | null }> = ({ entry }) => 
         <EntryActions entry={entry} />
       </header>
 
-      {renderPreview(entry)}
+      <div data-disk-shortcuts-ignore="true" role="tablist" aria-label="Item view" className="flex shrink-0 gap-1 border-b border-border/60 px-4 py-1">
+        <button
+          type="button"
+          role="tab"
+          id={`${tabsId}-preview-tab`}
+          aria-controls={`${tabsId}-preview-panel`}
+          aria-selected={activeTab === 'preview'}
+          onClick={() => setActiveTab('preview')}
+          className="rounded-md px-2 py-1 text-xs aria-selected:bg-muted aria-selected:text-foreground text-muted-foreground"
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id={`${tabsId}-details-tab`}
+          aria-controls={`${tabsId}-details-panel`}
+          aria-selected={activeTab === 'details'}
+          onClick={() => setActiveTab('details')}
+          className="rounded-md px-2 py-1 text-xs aria-selected:bg-muted aria-selected:text-foreground text-muted-foreground"
+        >
+          Details
+        </button>
+      </div>
+
+      <div
+        key={`${entry.path}-${activeTab}`}
+        id={`${tabsId}-${activeTab}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${tabsId}-${activeTab}-tab`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {activeTab === 'preview'
+          ? renderPreview(entry)
+          : <DetailsPanel key={entry.path} entry={entry} />}
+      </div>
     </div>
   );
 };

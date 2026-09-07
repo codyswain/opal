@@ -42,6 +42,8 @@ import { DiskHandlers } from "@/main/fs/DiskHandlers";
 import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { FileWriter } from "@/main/fs/FileWriter";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
+import { MetadataService } from "@/main/fs/MetadataService";
+import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
 import {
   OPAL_FILE_SCHEME,
   OPAL_THUMB_SCHEME,
@@ -327,14 +329,17 @@ const rootRegistry = new RootRegistry({
   ),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
+const metadataService = new MetadataService({ registry: rootRegistry });
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
+  onMetadataChanged: () => metadataService.invalidate(),
 });
 const fileWriter = new FileWriter({
   registry: rootRegistry,
+  metadata: metadataService,
   trashItem: (fullPath) => shell.trashItem(fullPath),
 });
 const thumbnailService = new ThumbnailService({
@@ -363,6 +368,10 @@ const diskHandlers = new DiskHandlers({
   },
   watcher: diskWatcher,
   writer: fileWriter,
+});
+const metadataHandlers = new MetadataHandlers({
+  ipc: ipcMain,
+  service: metadataService,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -393,6 +402,7 @@ app.whenReady().then(async () => {
     registerOpalFileProtocol({ registry: rootRegistry });
     registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
+    metadataHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();

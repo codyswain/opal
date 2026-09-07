@@ -36,6 +36,25 @@ describe('markdown preview', () => {
     render(<DetailPane entry={MD} />);
     await waitFor(() => expect(window.diskAPI.readTextFile).toHaveBeenCalledWith('/V/note.md'));
   });
+
+  it('does not render valid YAML frontmatter as document content', async () => {
+    installDiskApi({
+      readTextFile: vi.fn(async (p: string) => ({
+        success: true as const,
+        data: {
+          path: p,
+          text: '---\ntags:\n  - work\nopal:\n  schema: 1\n  id: 11111111-1111-4111-8111-111111111111\n---\n# Visible title',
+          truncated: false,
+          size: 120,
+        },
+      })),
+    });
+    render(<DetailPane entry={MD} />);
+
+    expect(await screen.findByRole('heading', { name: 'Visible title' })).toBeInTheDocument();
+    expect(screen.queryByText(/11111111/)).not.toBeInTheDocument();
+    expect(screen.queryByText('tags:')).not.toBeInTheDocument();
+  });
 });
 
 describe('text preview', () => {
