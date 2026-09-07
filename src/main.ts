@@ -39,7 +39,18 @@ import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
 import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
-import { activityStorePath, libraryDirectory } from "@/main/library/libraryPaths";
+import {
+  activityStorePath,
+  chatConversationsDirectory,
+  chatIndexDirectory,
+  libraryDirectory,
+} from "@/main/library/libraryPaths";
+import { OpenAI } from "openai";
+import { CredentialAccount } from "@/types/credentials";
+import { LibraryTextIndex } from "@/main/chat/LibraryTextIndex";
+import { OpenAIEmbeddingProvider } from "@/main/chat/EmbeddingProvider";
+import { ChatError, ChatService, openAICompletionClient } from "@/main/chat/ChatService";
+import { ChatHandlers } from "@/main/chat/ChatHandlers";
 import { ViewRepository } from "@/main/views/ViewRepository";
 import { ViewHandlers } from "@/main/views/ViewHandlers";
 import { CollectionIndex } from "@/main/collections/CollectionIndex";
@@ -371,6 +382,31 @@ const viewRepository = new ViewRepository({
     mainWindow.webContents.send("views:changed", {});
   },
 });
+// Chat: an explicit embedding index over the library's text and JSON
+// conversations, both under the library directory. The OpenAI key is read
+// from the keychain at call time so Settings changes apply immediately.
+const openAIClient = async () => {
+  const key = await CredentialManager.getInstance().getCredential(CredentialAccount.OPENAI);
+  if (!key) throw new ChatError("Add your OpenAI API key in Settings to use Chat.");
+  return new OpenAI({ apiKey: key });
+};
+const libraryTextIndex = new LibraryTextIndex({
+  registry: rootRegistry,
+  directory: chatIndexDirectory(libraryDirectory(userDataDir)),
+  provider: async () => new OpenAIEmbeddingProvider(await openAIClient()),
+  onChanged: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("chat:index-changed", {});
+  },
+});
+const chatService = new ChatService({
+  directory: chatConversationsDirectory(libraryDirectory(userDataDir)),
+  index: libraryTextIndex,
+  clients: async () => {
+    const client = await openAIClient();
+    return { embeddings: new OpenAIEmbeddingProvider(client), completions: openAICompletionClient(client) };
+  },
+});
 const collectionQueryService = new CollectionQueryService({
   registry: rootRegistry,
   index: collectionIndex,
@@ -383,6 +419,7 @@ const metadataService = new MetadataService({
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
     collectionIndex.invalidateDirectories(directories);
+    libraryTextIndex.markChanged(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -443,6 +480,11 @@ const markdownHandlers = new MarkdownHandlers({
   ipc: ipcMain,
   service: markdownDocuments,
 });
+const chatHandlers = new ChatHandlers({
+  ipc: ipcMain,
+  service: chatService,
+  index: libraryTextIndex,
+});
 const viewHandlers = new ViewHandlers({
   ipc: ipcMain,
   repository: viewRepository,
@@ -487,6 +529,7 @@ app.whenReady().then(async () => {
     collectionHandlers.registerAll();
     viewHandlers.registerAll();
     markdownHandlers.registerAll();
+    chatHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await windowStateStore.load();

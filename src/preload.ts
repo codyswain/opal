@@ -116,3 +116,34 @@ contextBridge.exposeInMainWorld("markdownAPI", {
   create: (parentDir: string, baseName?: string) =>
     ipcRenderer.invoke("markdown:create", parentDir, baseName),
 });
+
+contextBridge.exposeInMainWorld("chatAPI", {
+  list: () => ipcRenderer.invoke("chat:list"),
+  get: (id: string) => ipcRenderer.invoke("chat:get", id),
+  create: () => ipcRenderer.invoke("chat:create"),
+  remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
+  indexStatus: () => ipcRenderer.invoke("chat:index-status"),
+  indexUpdate: () => ipcRenderer.invoke("chat:index-update"),
+  onIndexChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("chat:index-changed", listener);
+    return () => ipcRenderer.removeListener("chat:index-changed", listener);
+  },
+  // One response channel per question; `null` ends the stream.
+  ask: (
+    conversationId: string,
+    question: string,
+    onDelta: (delta: string) => void,
+    onError: (error: string) => void
+  ) => {
+    const channel = `chat:answer:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const listener = (_event: IpcRendererEvent, payload: { delta?: string; error?: string } | null) => {
+      if (payload === null) { ipcRenderer.removeListener(channel, listener); return; }
+      if (payload.error) onError(payload.error);
+      else if (payload.delta) onDelta(payload.delta);
+    };
+    ipcRenderer.on(channel, listener);
+    const result = ipcRenderer.invoke("chat:ask", conversationId, question, channel);
+    return { result, cancel: () => ipcRenderer.removeListener(channel, listener) };
+  },
+});

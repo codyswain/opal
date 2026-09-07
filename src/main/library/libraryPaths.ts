@@ -9,6 +9,8 @@ import path from 'path';
  *   <userData>/library/views/<id>.yaml     saved views
  *   <userData>/library/views/.trash/       removed views kept for undo
  *   <userData>/library/library.json        library preferences (view order)
+ *   <userData>/library/index/              chat embedding index (disposable)
+ *   <userData>/library/chat/<id>.json      chat conversations
  */
 export function libraryDirectory(userDataDir: string): string {
   return path.join(userDataDir, 'library');
@@ -28,4 +30,12 @@ export function viewsTrashDirectory(libraryDir: string): string {
 
 export function libraryPreferencesPath(libraryDir: string): string {
   return path.join(libraryDir, 'library.json');
+}
+
+export function chatIndexDirectory(libraryDir: string): string {
+  return path.join(libraryDir, 'index');
+}
+
+export function chatConversationsDirectory(libraryDir: string): string {
+  return path.join(libraryDir, 'chat');
 }
