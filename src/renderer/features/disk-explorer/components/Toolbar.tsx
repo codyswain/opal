@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowUp, FolderPlus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, FilePlus, FolderPlus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { SortField } from '@/common/sortEntries';
 import { folderScope } from '@/common/collectionQuery';
 import { useDiskStore } from '../store/diskStore';
@@ -24,6 +25,13 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const createDraft = useViewDraftsStore((state) => state.create);
   const navigation = useFilesNavigation();
   const filterRef = useRef<HTMLInputElement>(null);
+
+  const newNote = async () => {
+    const result = await window.markdownAPI.create(dirPath);
+    if (!result.success) { toast.error(result.error); return; }
+    await useDiskStore.getState().loadDirectory(dirPath, { force: true });
+    navigation.openFile(result.data.path);
+  };
 
   // A view made from a folder starts recursive; the scope control shows that.
   const filterThisFolder = () => {
@@ -56,6 +64,17 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
         className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
       >
         <FolderPlus className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void newNote()}
+        aria-label="New note"
+        title="New Markdown note in this folder"
+        data-testid="toolbar-new-note"
+        data-disk-shortcuts-ignore="true"
+        className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+      >
+        <FilePlus className="h-4 w-4" />
       </button>
       <button
         type="button"

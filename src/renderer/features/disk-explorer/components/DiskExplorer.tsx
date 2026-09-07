@@ -15,6 +15,7 @@ import { RecentView } from './RecentView';
 import { QueryView } from './query/QueryView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
+import { MarkdownEditor } from './editor/MarkdownEditor';
 import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
@@ -435,7 +436,11 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               </button>
               <div className="min-h-0 flex-1">
                 {focusedEntry?.path === openedPath && focusedEntry.entry ? (
-                  <DetailPane entry={focusedEntry.entry} />
+                  focusedEntry.entry.kind === 'markdown' ? (
+                    <MarkdownEditor key={focusedEntry.entry.path} path={focusedEntry.entry.path} />
+                  ) : (
+                    <DetailPane entry={focusedEntry.entry} />
+                  )
                 ) : (
                   <div role="status" className="p-4">
                     {focusedEntry?.path !== openedPath || focusedEntry.loading
