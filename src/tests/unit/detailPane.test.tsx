@@ -451,3 +451,208 @@ describe('DetailPane', () => {
     expect(screen.getByText('Could not scan /V/Locked')).toBeInTheDocument();
   });
 });
+
+describe('Details integration integrity', () => {
+  const related: ItemMetadata['related'][number] = {
+    edgeId: 'edge-1', ownerId: 'owner', ownerPath: '/V/note.md', direction: 'outgoing',
+    targetId: 'file', targetPath: '/V/other.md', targetName: 'other.md',
+    targetKind: 'markdown', pathHint: 'other.md', status: 'available',
+  };
+  const source = entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' });
+  const renderDetails = () => {
+    const navigation = { navigateDirectory: vi.fn(), openFile: vi.fn(), returnToFolder: vi.fn(), closeFile: vi.fn() };
+    const view = render(<FilesNavigationContext.Provider value={navigation}><DetailPane entry={source} /></FilesNavigationContext.Provider>);
+    return { ...view, navigation };
+  };
+
+  it.each([
+    ['same-name replacement without its identity', [{ ...related, status: 'missing', targetPath: null, targetKind: null }]],
+    ['ambiguous target', [{ ...related, status: 'ambiguous', targetPath: null, targetKind: null }]],
+    ['removed edge', []],
+    ['changed target identity', [{ ...related, targetId: 'replacement' }]],
+    ['changed owner identity', [{ ...related, ownerId: 'replacement' }]],
+    ['changed direction', [{ ...related, direction: 'incoming' }]],
+    ['changed edge identity', [{ ...related, edgeId: 'replacement' }]],
+  ] satisfies [string, ItemMetadata['related']][])('revalidates a retained row and refuses %s', async (_, freshRelated) => {
+    const user = userEvent.setup();
+    const api = installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related] }) })
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: freshRelated }) }),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Open other.md' }));
+    expect(navigation.openFile).not.toHaveBeenCalled();
+    expect(navigation.navigateDirectory).not.toHaveBeenCalled();
+    expect(api.read).toHaveBeenNthCalledWith(2, '/V/note.md');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/reload|remove|retry/i);
+  });
+
+  it.each([
+    ['markdown', '/V/moved/renamed.md', 'openFile'],
+    ['directory', '/V/moved/Folder', 'navigateDirectory'],
+  ] as const)('follows a freshly resolved moved %s endpoint', async (targetKind, targetPath, action) => {
+    const user = userEvent.setup();
+    installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related] }) })
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [{ ...related, targetPath, targetKind, targetName: 'Moved' }] }) }),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Open other.md' }));
+    expect(navigation[action]).toHaveBeenCalledExactlyOnceWith(targetPath);
+    expect(screen.getByRole('button', { name: 'Open Moved' })).toBeInTheDocument();
+  });
+
+  it('refuses to follow when the current source identity changed', async () => {
+    const user = userEvent.setup();
+    installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related] }) })
+      .mockResolvedValueOnce({ success: true, data: metadata({ id: 'replacement-source', related: [related] }) }),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Open other.md' }));
+    expect(navigation.openFile).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/changed.*reload/i);
+  });
+
+  it('refreshes Related warnings and status without overwriting drafts or their saved revision', async () => {
+    const user = userEvent.setup();
+    const api = installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related], properties: { tags: ['original'], description: '' } }) })
+      .mockResolvedValueOnce({ success: true, data: metadata({ revision: 'external-revision', properties: { tags: ['external'], description: 'External edit' }, related: [{ ...related, status: 'missing', targetPath: null, targetKind: null }], warnings: ['Duplicate identity warning'] }) }),
+      saveProperties: vi.fn(async () => ({ success: false as const, error: 'Metadata changed on disk. Reload Details.' })),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.type(await screen.findByLabelText('Description'), 'My draft');
+    await user.type(screen.getByLabelText('Tags'), ', edited');
+    await user.click(screen.getByRole('button', { name: 'Open other.md' }));
+    expect(navigation.openFile).not.toHaveBeenCalled();
+    expect(await screen.findByText('Missing')).toBeInTheDocument();
+    expect(screen.getByText('Duplicate identity warning')).toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toHaveValue('My draft');
+    expect(screen.getByLabelText('Tags')).toHaveValue('original, edited');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveProperties).toHaveBeenCalledWith('/V/note.md', { tags: ['original', 'edited'], description: 'My draft' }, 'rev-1');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Metadata changed on disk.');
+  });
+
+  it.each(['save', 'remove'] as const)('locks property typing and Related actions during a delayed %s', async (operation) => {
+    const user = userEvent.setup();
+    let resolve!: (value: { success: true; data: ItemMetadata }) => void;
+    const pending = new Promise<{ success: true; data: ItemMetadata }>((done) => { resolve = done; });
+    const api = installMetadataApi({
+      read: vi.fn(async () => ({ success: true as const, data: metadata({ related: [related], properties: { tags: ['work'], description: '' } }) })),
+      saveProperties: vi.fn(() => pending), removeRelated: vi.fn(() => pending),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await screen.findByLabelText('Description');
+    if (operation === 'save') await user.type(screen.getByLabelText('Description'), 'Submitted');
+    await user.click(screen.getByRole('button', { name: operation === 'save' ? 'Save' : 'Remove related item other.md' }));
+    await user.type(screen.getByLabelText('Description'), 'New typing');
+    await user.type(screen.getByLabelText('Tags'), ', later');
+    expect(screen.getByLabelText('Description')).toHaveValue(operation === 'save' ? 'Submitted' : '');
+    expect(screen.getByLabelText('Tags')).toHaveValue('work');
+    expect(screen.getByLabelText('Description')).toBeDisabled();
+    expect(screen.getByLabelText('Tags')).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Open other.md' }));
+    expect(navigation.openFile).not.toHaveBeenCalled();
+    expect(api.read).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Add related item' })).toBeDisabled();
+    resolve({ success: true, data: metadata({ properties: { tags: ['work'], description: operation === 'save' ? 'Submitted' : '' }, revision: 'rev-2' }) });
+    await waitFor(() => expect(screen.getByLabelText('Description')).toBeEnabled());
+    await user.type(screen.getByLabelText('Description'), 'After');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('locks editing and concurrent actions while revalidating Open, then unlocks after a read error', async () => {
+    const user = userEvent.setup();
+    let reject!: (error: Error) => void;
+    const pending = new Promise<never>((_, fail) => { reject = fail; });
+    const api = installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related] }) })
+      .mockReturnValueOnce(pending),
+    });
+    const { navigation } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    const open = await screen.findByRole('button', { name: 'Open other.md' });
+    await user.dblClick(open);
+    await user.type(screen.getByLabelText('Description'), 'Late typing');
+    await user.type(screen.getByLabelText('Tags'), 'Late tag');
+    expect(screen.getByLabelText('Description')).toHaveValue('');
+    expect(screen.getByLabelText('Tags')).toHaveValue('');
+    expect(open).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add related item' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Remove related item other.md' }));
+    expect(api.removeRelated).not.toHaveBeenCalled();
+    expect(api.read).toHaveBeenCalledTimes(2);
+    reject(new Error('Disconnected'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not.*retry|reload/i);
+    expect(screen.getByLabelText('Description')).toBeEnabled();
+    expect(screen.getByLabelText('Tags')).toBeEnabled();
+    expect(open).toBeEnabled();
+    expect(navigation.openFile).not.toHaveBeenCalled();
+  });
+
+  it('ignores an Open response after the selected item changes', async () => {
+    const user = userEvent.setup();
+    let resolve!: (value: { success: true; data: ItemMetadata }) => void;
+    const pending = new Promise<{ success: true; data: ItemMetadata }>((done) => { resolve = done; });
+    installMetadataApi({ read: vi.fn()
+      .mockResolvedValueOnce({ success: true, data: metadata({ related: [related] }) })
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce({ success: true, data: metadata({ path: '/V/new.md', properties: { tags: [], description: 'New item' } }) }),
+    });
+    const { navigation, rerender } = renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Open other.md' }));
+    rerender(<FilesNavigationContext.Provider value={navigation}><DetailPane entry={entry({ path: '/V/new.md', name: 'new.md', kind: 'markdown' })} /></FilesNavigationContext.Provider>);
+    expect(await screen.findByDisplayValue('New item')).toBeInTheDocument();
+    resolve({ success: true, data: metadata({ related: [related] }) });
+    await Promise.resolve();
+    expect(navigation.openFile).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Description')).toHaveValue('New item');
+    expect(screen.getByLabelText('Description')).toBeEnabled();
+  });
+
+  it('preserves comma, whitespace and empty tags on a description-only save until tags are edited', async () => {
+    const user = userEvent.setup();
+    const api = installMetadataApi({ read: vi.fn(async () => ({ success: true as const, data: metadata({ properties: { tags: ['research, primary', ' padded ', ''], description: '' } }) })) });
+    renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await screen.findByLabelText('Tags');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add related item' })).toBeEnabled();
+    await user.type(screen.getByLabelText('Description'), 'Description only');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveProperties).toHaveBeenLastCalledWith('/V/note.md', { tags: ['research, primary', ' padded ', ''], description: 'Description only' }, 'rev-1');
+    await screen.findByText('Saved');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.clear(screen.getByLabelText('Tags'));
+    await user.type(screen.getByLabelText('Tags'), 'work, urgent');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.saveProperties).toHaveBeenLastCalledWith('/V/note.md', { tags: ['work', 'urgent'], description: 'Description only' }, 'rev-2');
+  });
+
+  it('shows a duplicate-current-identity warning without an incomplete-index message', async () => {
+    const user = userEvent.setup();
+    installMetadataApi({ read: vi.fn(async () => ({ success: true as const, data: metadata({ warnings: ['This item has a duplicate UUID; its identity is ambiguous.'], incomplete: false }) })) });
+    renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    expect(await screen.findByText('This item has a duplicate UUID; its identity is ambiguous.')).toBeInTheDocument();
+    expect(screen.queryByText('Related results may be incomplete.')).not.toBeInTheDocument();
+  });
+
+  it('shows the distinguishing current folder name with the absolute path in its title', async () => {
+    const user = userEvent.setup();
+    const folder = '/V/a/long/path/Distinctive';
+    installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [folder] })), readDirectory: vi.fn(async () => ({ success: true as const, data: { path: folder, entries: [] } })) });
+    renderDetails();
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Add related item' }));
+    expect(await screen.findByTitle(folder)).toHaveTextContent(/^Distinctive$/);
+  });
+});

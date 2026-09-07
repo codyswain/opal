@@ -230,7 +230,7 @@ export const RelatedChooser: React.FC<RelatedChooserProps> = ({
               </Button>
               <div className="min-w-0 flex-1">
                 <p className="text-2xs text-muted-foreground">Current folder</p>
-                <p className="truncate text-sm" title={currentDirectory}>{currentDirectory}</p>
+                <p className="truncate text-sm" title={currentDirectory}>{basenameFsPath(currentDirectory)}</p>
               </div>
               <label className="flex shrink-0 items-center gap-1.5 text-xs">
                 <input
