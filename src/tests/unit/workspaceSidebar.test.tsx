@@ -214,8 +214,11 @@ describe('WorkspaceSidebar', () => {
     );
     expect(screen.getByText('Filter any folder to start a view.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'New view' }));
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentCollection).toMatchObject({ kind: 'query' })
+    // Route application, draft creation and the collection load chain through
+    // several stores; under full-suite load this exceeds the default wait.
+    await waitFor(
+      () => expect(useDiskStore.getState().currentCollection).toMatchObject({ kind: 'query' }),
+      { timeout: 4000 }
     );
     const id = useViewDraftsStore.getState().order[0];
     expect(screen.getByTestId('location')).toHaveTextContent(

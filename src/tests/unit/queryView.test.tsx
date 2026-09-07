@@ -17,6 +17,7 @@ import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/
 import { installViewsApi, savedView } from '@/tests/helpers/viewsApi';
 import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
 import { toast } from 'sonner';
+import { TIME_REFRESH_MS } from '@/renderer/features/disk-explorer/components/query/QueryView';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
@@ -343,5 +344,68 @@ describe('saved views', () => {
     options.action.onClick();
     await waitFor(() => expect(api.restore).toHaveBeenCalled());
     await waitFor(() => expect(useSavedViewsStore.getState().has(copy.id)).toBe(true));
+  });
+});
+
+describe('view polish', () => {
+  it('Show in folder lands in the parent with the item selected', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
+      readDirectory: vi.fn(async (path: string) => ({
+        success: true as const,
+        data: { path, entries: path === '/Vault/Papers' ? [entry({ path: PDF, name: 'atlas.pdf', kind: 'pdf' })] : [] },
+      })),
+    });
+    const id = useViewDraftsStore.getState().create();
+    const user = userEvent.setup();
+    renderQuery(id);
+    expect(await screen.findByRole('button', { name: 'Show in folder' })).toBeDisabled();
+    await user.click(screen.getByTestId(`disk-folder-entry-${PDF}`));
+    await user.click(screen.getByRole('button', { name: 'Show in folder' }));
+    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe('/Vault/Papers'));
+    await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([PDF]));
+    expect(window.activityAPI.record).toHaveBeenCalledWith('/Vault/Papers', 'opened');
+  });
+
+  it('re-evaluates relative-time filters on focus and once a minute', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+      const id = useViewDraftsStore.getState().create();
+      useViewDraftsStore.getState().update(id, { query: { ...emptyQuery(), filters: [{ field: 'touched', op: 'within', durationMs: 7 * 24 * 3600 * 1000 }] } });
+      renderQuery(id);
+      await screen.findByTestId(`disk-folder-entry-${PDF}`);
+      const calls = () => (api.query as ReturnType<typeof vi.fn>).mock.calls.length;
+      const before = calls();
+      act(() => { window.dispatchEvent(new Event('focus')); });
+      await waitFor(() => expect(calls()).toBe(before + 1));
+      act(() => { vi.advanceTimersByTime(TIME_REFRESH_MS + 10); });
+      await waitFor(() => expect(calls()).toBe(before + 2));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the selected item preview when its row stops matching', async () => {
+    let changed: (() => void) | null = null;
+    const query = vi.fn()
+      .mockResolvedValueOnce({ success: true as const, data: collectionResult(rows()) })
+      .mockResolvedValue({ success: true as const, data: collectionResult(rows().slice(1)) });
+    installCollectionsApi({ query, onChanged: vi.fn((callback: () => void) => { changed = callback; return () => undefined; }) });
+    useDiskStore.setState({ isPreviewPaneOpen: true });
+    const id = useViewDraftsStore.getState().create();
+    const user = userEvent.setup();
+    renderQuery(id);
+    await user.click(await screen.findByTestId(`disk-folder-entry-${PDF}`));
+    expect(screen.getByTestId('detail-title')).toHaveTextContent('atlas.pdf');
+    act(() => changed?.());
+    await waitFor(() => expect(screen.queryByTestId(`disk-folder-entry-${PDF}`)).not.toBeInTheDocument());
+    expect(screen.getByTestId('detail-title')).toHaveTextContent('atlas.pdf');
+    expect(screen.getByTestId('query-selection-missing')).toBeInTheDocument();
+    expect(useDiskStore.getState().selectedPaths).toEqual([PDF]);
+    await user.click(screen.getByTestId(`disk-folder-entry-${IMAGE}`));
+    expect(screen.getByTestId('detail-title')).toHaveTextContent('cover.png');
+    expect(screen.queryByTestId('query-selection-missing')).not.toBeInTheDocument();
   });
 });

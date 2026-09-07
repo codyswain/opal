@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FolderOpen, RotateCw, SearchX, SlidersHorizontal, X } from 'lucide-react';
+import { filesLocationSnapshots } from '../../navigation/filesLocationSnapshots';
 import { toast } from 'sonner';
 import { activityReason, formatRelativeTime } from '@/common/relativeTime';
 import { formatBytes } from '@/common/formatBytes';
@@ -12,7 +13,7 @@ import { useDiskStore } from '../../store/diskStore';
 import { isDraftEdited, useViewDraftsStore } from '../../store/viewDraftsStore';
 import { useSavedViewsStore } from '../../store/savedViewsStore';
 import { EMPTY_RESULT, useCollectionQueryStore } from '../../store/collectionQueryStore';
-import { RECENT_COLLECTION, queryCollection, viewCollection } from '../../navigation/filesLocation';
+import { RECENT_COLLECTION, directoryCollection, queryCollection, viewCollection } from '../../navigation/filesLocation';
 import { useFilesNavigation } from '../../navigation/FilesNavigationContext';
 import type { SavedViewDefinition } from '@/types/savedView';
 import { CollectionView, type CollectionRowDecoration } from '../CollectionView';
@@ -26,6 +27,12 @@ import { NameViewDialog } from './NameViewDialog';
 import { ViewActions, type ViewPendingAction } from './ViewActions';
 
 const UNDO_WINDOW_MS = 10_000;
+/** Relative-time filters drift; re-evaluate at least once a minute while visible. */
+export const TIME_REFRESH_MS = 60_000;
+
+function hasRelativeTimeFilter(query: CollectionQuery): boolean {
+  return query.filters.some((filter) => filter.op === 'within');
+}
 
 interface QueryViewProps {
   id: string;
@@ -68,6 +75,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const result = useCollectionQueryStore((state) => state.results[id] ?? EMPTY_RESULT);
   const load = useCollectionQueryStore((state) => state.load);
   const roots = useDiskStore((state) => state.roots);
+  const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const now = useNow();
   const [chips, setChips] = useState<EditableChip[]>(() => (draft ? draft.query.filters.map(chipFromFilter) : []));
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -97,6 +105,22 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
       if (current) void load(id, current.query, { immediate: true });
     });
   }, [draft, id, load]);
+
+  // "Past 7 days" is a rolling window: refresh on focus and once a minute.
+  const relativeTime = draft ? hasRelativeTimeFilter(draft.query) : false;
+  useEffect(() => {
+    if (!relativeTime) return undefined;
+    const refresh = () => {
+      const current = useViewDraftsStore.getState().drafts[id];
+      if (current) void load(id, current.query, { immediate: true });
+    };
+    const timer = setInterval(refresh, TIME_REFRESH_MS);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [relativeTime, id, load]);
 
   const byPath = useMemo(() => new Map(result.rows.map((row) => [row.entry.path, row])), [result.rows]);
   const entries = useMemo(() => result.rows.map((row) => row.entry), [result.rows]);
@@ -197,6 +221,19 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     });
   };
 
+  const selectedTarget = selectedPaths.length === 1 ? selectedPaths[0] : null;
+  const selectionMissing = !!selectedTarget && !byPath.has(selectedTarget) && result.query !== null && !result.loading;
+  const showInFolder = () => {
+    const parent = selectedTarget ? parentFsPath(selectedTarget) : null;
+    if (!selectedTarget || !parent) return;
+    // Arriving in the folder restores this snapshot, so the item lands selected.
+    filesLocationSnapshots.patch(
+      { mode: 'browse', collection: directoryCollection(parent) },
+      { selectedPaths: [selectedTarget], focusedPath: selectedTarget }
+    );
+    navigation.navigateDirectory(parent);
+  };
+
   if (!draft) {
     return <div role="alert" className="p-4 text-sm text-destructive">This view is no longer available.</div>;
   }
@@ -236,9 +273,17 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
             onCancelRemove={() => setConfirmingRemove(false)}
           />
           <div className="min-w-0 flex-1" />
+          <Button size="compact" variant="ghost" disabled={!selectedTarget} onClick={showInFolder}>
+            Show in folder
+          </Button>
           <SortControl sort={draft.query.sort} onChange={(sort) => updateDraft(id, { query: { ...draft.query, sort } })} />
           {trailing}
         </div>
+        {selectionMissing ? (
+          <p role="status" data-testid="query-selection-missing" className="text-xs text-muted-foreground">
+            The selected item no longer matches these filters. Its preview stays open until you select something else.
+          </p>
+        ) : null}
         {conflict ? (
           <div role="alert" data-testid="view-conflict" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs">
             <span className="flex-1">This view changed on disk since you opened it. Reload it to take the disk version, or keep your edits as a new view.</span>

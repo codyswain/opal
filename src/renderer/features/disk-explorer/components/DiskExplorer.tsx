@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useId } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
 import { FolderPlus, X } from 'lucide-react';
@@ -91,19 +91,29 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   // The selected entry object, found in whichever cached listing contains it,
   // or among Recent rows. The tree can only surface a path it has already
   // listed, so no IPC is needed.
+  // A selected item whose row stops matching a live collection keeps its
+  // preview and Details until the selection changes; the last known entry is
+  // retained for exactly that path.
+  const retainedEntry = useRef<DiskEntry | null>(null);
   const selectedEntry = useMemo<DiskEntry | null>(() => {
-    if (!selectedPath) return null;
+    if (!selectedPath) {
+      retainedEntry.current = null;
+      return null;
+    }
+    let found: DiskEntry | null = null;
     for (const entries of Object.values(listings)) {
       const match = entries.find(
         (candidate) => candidate.path === selectedPath
       );
-      if (match) return match;
+      if (match) { found = match; break; }
     }
-    return (
+    found ??=
       recentItems.find((item) => item.entry.path === selectedPath)?.entry ??
       queryRows.find((row) => row.entry.path === selectedPath)?.entry ??
-      null
-    );
+      null;
+    if (found) retainedEntry.current = found;
+    else if (retainedEntry.current?.path !== selectedPath) retainedEntry.current = null;
+    return found ?? retainedEntry.current;
   }, [selectedPath, listings, recentItems, queryRows]);
 
   const [focusedEntry, setFocusedEntry] = useState<{
