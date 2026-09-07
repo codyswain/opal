@@ -10,5 +10,6 @@ test('app launches into the Files surface', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Files' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Recent' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Notes' })).toHaveCount(0);
-  await expect(page.getByText('Open a folder to get started')).toBeVisible();
+  await expect(page.getByTestId('welcome-panel')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open folder…' })).toBeVisible();
 });
