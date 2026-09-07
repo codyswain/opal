@@ -190,3 +190,18 @@ contextBridge.exposeInMainWorld("collectionsAPI", {
     return () => ipcRenderer.removeListener("collections:changed", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("viewsAPI", {
+  list: () => ipcRenderer.invoke("views:list"),
+  create: (definition: unknown) => ipcRenderer.invoke("views:create", definition),
+  save: (id: string, definition: unknown, expectedRevision: string) =>
+    ipcRenderer.invoke("views:save", id, definition, expectedRevision),
+  duplicate: (id: string) => ipcRenderer.invoke("views:duplicate", id),
+  remove: (id: string) => ipcRenderer.invoke("views:remove", id),
+  restore: (undoToken: string) => ipcRenderer.invoke("views:restore", undoToken),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("views:changed", listener);
+    return () => ipcRenderer.removeListener("views:changed", listener);
+  },
+});

@@ -47,7 +47,9 @@ import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
 import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
-import { activityStorePath } from "@/main/library/libraryPaths";
+import { activityStorePath, libraryDirectory } from "@/main/library/libraryPaths";
+import { ViewRepository } from "@/main/views/ViewRepository";
+import { ViewHandlers } from "@/main/views/ViewHandlers";
 import { CollectionIndex } from "@/main/collections/CollectionIndex";
 import { CollectionQueryService } from "@/main/collections/CollectionQueryService";
 import { CollectionHandlers } from "@/main/collections/CollectionHandlers";
@@ -357,6 +359,13 @@ const activityService = new ActivityService({
     mainWindow.webContents.send("activity:changed", {});
   },
 });
+const viewRepository = new ViewRepository({
+  libraryDirectory: libraryDirectory(userDataDir),
+  onChanged: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("views:changed", {});
+  },
+});
 const collectionQueryService = new CollectionQueryService({
   registry: rootRegistry,
   index: collectionIndex,
@@ -420,6 +429,10 @@ const collectionHandlers = new CollectionHandlers({
   ipc: ipcMain,
   service: collectionQueryService,
 });
+const viewHandlers = new ViewHandlers({
+  ipc: ipcMain,
+  repository: viewRepository,
+});
 
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
@@ -437,6 +450,14 @@ app.whenReady().then(async () => {
 
     await rootRegistry.load();
     await activityStore.load();
+    try {
+      await viewRepository.watch();
+    } catch (error) {
+      log.error(
+        "Failed to watch the views directory; external view edits will not refresh until restart",
+        error instanceof Error ? error : undefined
+      );
+    }
     for (const root of rootRegistry.list()) {
       try {
         await diskWatcher.watch(root);
@@ -453,6 +474,7 @@ app.whenReady().then(async () => {
     metadataHandlers.registerAll();
     activityHandlers.registerAll();
     collectionHandlers.registerAll();
+    viewHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();
@@ -485,6 +507,7 @@ app.whenReady().then(async () => {
 app.on("before-quit", async () => {
   try {
     void diskWatcher.closeAll();
+    void viewRepository.close();
     await closeDatabase();
   } catch (error) {
     log.error("Error during app shutdown:", error);
