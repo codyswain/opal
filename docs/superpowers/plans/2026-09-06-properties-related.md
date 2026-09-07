@@ -2,6 +2,12 @@
 
 Spec: `docs/superpowers/specs/2026-09-06-properties-related-design.md`
 
+Completed 2026-09-06. Evidence: `docs/superpowers/plans/2026-09-06-properties-related-verification.md`.
+
+- [x] Durable metadata and safe file operations, reviewed and corrected.
+- [x] Details and Related workflow, reviewed and corrected.
+- [x] Full suite, Electron boundary checks, real workflow/persistence acceptance, and final branch review.
+
 ## Global Constraints
 
 - Work only in `/Users/codyswain/code/opal/.worktrees/core-ux`, branch `codex/core-ux`. Do not merge, push, or restart the user's running app.
