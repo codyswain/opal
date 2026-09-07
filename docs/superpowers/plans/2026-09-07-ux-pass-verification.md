@@ -21,3 +21,17 @@ Unit and contract: **913 tests pass in 90 files**. Type check: **0 errors**. Lin
 - PDF extraction runs in the main process; a very large PDF blocks other main-process work for its extraction time. A worker would fix this if it shows up in practice.
 - Tag suggestions in the datalist have no counts; the picker only browses opened roots.
 - The launch route itself is not restored; drafts reappear in the sidebar instead.
+
+## Addendum: tab strip (`27814a6`)
+
+The open-files strip was rebuilt to behave like a browser or editor tab bar:
+
+- Kind-tinted file icons; the active tab shares the content background under a 2 px accent line; inactive tabs separate with hairlines and reveal their close glyph on hover.
+- An unsaved file shows a dot in place of the close glyph (amber for a conflict or error); the dot yields to the glyph on hover. The Markdown editor publishes its save state through `documentStatusStore`.
+- Middle-click and Delete close a tab; arrow keys, Home and End move between tabs; Enter activates.
+- Tabs drag to reorder with a drop indicator; the wheel scrolls the strip sideways; the active tab is kept in view.
+- Right-click: Close, Close others, Close to the right, Close all, Keep open (preview tabs), Show in folder, Reveal in Finder, Copy path.
+- An overflow menu lists every tab once the strip is crowded (eight tabs or a measured overflow).
+- Ctrl+Tab / Ctrl+Shift+Tab cycle; Cmd+Shift+T reopens the most recently closed tab (the store remembers the last twenty).
+
+Evidence: 927 tests in 91 files, 0 type errors, 0 lint errors, 8 Electron tests; screenshot tour shows the strip with five tabs, an unsaved dot, the hover state and the context menu in light and dark.
