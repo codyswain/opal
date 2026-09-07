@@ -114,7 +114,7 @@ describe('RecentView', () => {
     );
     expect(window.activityAPI.record).toHaveBeenCalledTimes(1);
     expect(window.activityAPI.record).toHaveBeenCalledWith(NOTE, 'opened');
-    await user.click(await screen.findByRole('button', { name: 'Return to folder' }));
+    await user.click(await screen.findByRole('button', { name: /^Return to folder/ }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('?mode=browse&collection=recent')
     );

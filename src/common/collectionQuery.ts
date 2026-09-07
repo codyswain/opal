@@ -264,3 +264,31 @@ export function describeFilter(filter: CollectionFilter): string {
 export function sameQuery(a: CollectionQuery, b: CollectionQuery): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
+
+const KIND_PLURALS: Partial<Record<FileKind, string>> = {
+  markdown: 'Markdown notes', text: 'Text files', pdf: 'PDFs', image: 'Images', video: 'Videos', audio: 'Audio', directory: 'Folders', other: 'Other files',
+};
+
+/**
+ * A readable default name for a view built from its definition, such as
+ * "PDFs tagged research in Projects"; empty when nothing narrows the query.
+ */
+export function suggestViewName(query: CollectionQuery): string {
+  const kinds = query.filters.find((filter): filter is Extract<CollectionFilter, { field: 'kind' }> => filter.field === 'kind' && filter.op === 'in');
+  const tags = query.filters.find((filter): filter is Extract<CollectionFilter, { field: 'tags'; values: string[] }> => filter.field === 'tags' && (filter.op === 'has-any' || filter.op === 'has-all'));
+  const name = query.filters.find((filter): filter is Extract<CollectionFilter, { field: 'name' }> => filter.field === 'name' && filter.op === 'contains');
+  const time = query.filters.find((filter) => (filter.field === 'modified' || filter.field === 'opened' || filter.field === 'touched') && filter.op === 'within');
+  const parts: string[] = [];
+  parts.push(kinds && kinds.values.length > 0 ? kinds.values.map((kind) => KIND_PLURALS[kind] ?? KIND_LABELS[kind]).join(' and ') : '');
+  if (tags && tags.values.length > 0) parts.push(`tagged ${tags.values.join(tags.op === 'has-all' ? ' and ' : ', ')}`);
+  if (name && name.value.trim()) parts.push(`named “${name.value.trim()}”`);
+  if (time && time.op === 'within') parts.push(`${FIELD_LABELS[time.field].toLowerCase()} ${durationLabel(time.durationMs)}`);
+  if (query.scope.kind === 'folders' && query.scope.folders.length > 0) {
+    parts.push(`in ${query.scope.folders.map((folder) => folder.split('/').filter(Boolean).pop() ?? folder).join(', ')}`);
+  }
+  const narrowed = parts.filter(Boolean);
+  if (narrowed.length === 0) return '';
+  if (!parts[0]) narrowed.unshift(narrowed.length === 1 && query.scope.kind === 'folders' ? 'Everything' : 'Items');
+  const text = narrowed.join(' ');
+  return (text.charAt(0).toUpperCase() + text.slice(1)).slice(0, 120);
+}

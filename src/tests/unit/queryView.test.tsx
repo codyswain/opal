@@ -189,6 +189,7 @@ describe('QueryView', () => {
     expect(within(dialog).queryByText('notes.md')).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Papers' }));
     await within(dialog).findByText('No subfolders.');
+    expect(within(dialog).getByTestId('folder-picker-path')).toHaveTextContent('Vault › Papers');
     await user.click(within(dialog).getByRole('button', { name: 'Choose Papers' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(lastQuery(api).scope).toEqual({ kind: 'folders', folders: ['/Vault/Projects', '/Vault/Papers'], includeDescendants: true }));
@@ -329,7 +330,11 @@ describe('saved views', () => {
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
     await user.click(screen.getByRole('button', { name: 'Save view' }));
     const dialog = await screen.findByRole('dialog');
-    await user.type(within(dialog).getByLabelText('View name'), 'Papers');
+    const nameInput = within(dialog).getByLabelText('View name');
+    // The dialog suggests a name from the definition; typing over it replaces it.
+    expect((nameInput as HTMLInputElement).value).toMatch(/PDFs|Items|Everything|^$/);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Papers');
     await user.click(within(dialog).getByRole('button', { name: 'Save view' }));
     await waitFor(() => expect(api.create).toHaveBeenCalledWith({
       name: 'Papers', layout: 'list', query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] },

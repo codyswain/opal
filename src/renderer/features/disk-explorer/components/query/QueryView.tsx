@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { activityReason, formatRelativeTime } from '@/common/relativeTime';
 import { formatBytes } from '@/common/formatBytes';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
-import { sameQuery } from '@/common/collectionQuery';
+import { sameQuery, suggestViewName } from '@/common/collectionQuery';
 import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { Button } from '@/renderer/shared/ui';
@@ -418,7 +418,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
         open={nameDialog !== null}
         title={nameDialog === 'save-new' ? 'Save as new view' : 'Save view'}
         description={nameDialog === 'save-new' ? 'Your edits become a separate view; the original keeps its saved definition.' : 'Name this collection to reopen it from the sidebar.'}
-        initialName={draft.name === 'Untitled view' ? '' : draft.name}
+        initialName={draft.name === 'Untitled view' ? suggestViewName(draft.query) : draft.name}
         submitLabel={nameDialog === 'save-new' ? 'Save as new' : 'Save view'}
         busy={pending === 'save-new'}
         error={actionError}

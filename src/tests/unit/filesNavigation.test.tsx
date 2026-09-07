@@ -137,7 +137,7 @@ it('explicit file open occupies the main surface and return restores browse sele
   await screen.findByTestId('files-focus');
   expect(screen.queryByTestId('disk-folder-list')).toBeNull();
   expect(useTabsStore.getState().openPaths).toEqual([NOTE]);
-  fireEvent.click(screen.getByRole('button', { name: 'Return to folder' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
   await waitFor(() =>
     expect(item(NOTE)).toHaveAttribute('aria-pressed', 'true')
   );
@@ -375,7 +375,7 @@ it('successful drag move remaps the opened tab', async () => {
   await setup();
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
-  fireEvent.click(screen.getByRole('button', { name: 'Return to folder' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
   await waitFor(() => expect(item(FOLDER)).toBeVisible());
   window.diskAPI.move = vi.fn(async () => ({
     success: true as const,
@@ -470,7 +470,7 @@ it('keeps Browse active when an unrelated cached sibling disappears after return
   await setup();
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
-  fireEvent.click(screen.getByRole('button', { name: 'Return to folder' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
   await screen.findByTestId('disk-folder-list');
   window.diskAPI.readDirectory = vi.fn(async (path) => ({
     success: true as const,
@@ -540,7 +540,7 @@ it('records explicit opens and navigations but not restoration, Back or return',
   await user.dblClick(item(NOTE));
   await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTE));
   expect(api.record).toHaveBeenCalledWith(NOTE, 'opened');
-  await user.click(screen.getByRole('button', { name: 'Return to folder' }));
+  await user.click(screen.getByRole('button', { name: /^Return to folder/ }));
   await waitFor(() => expect(useTabsStore.getState().openedPath).toBeNull());
   expect(api.record).toHaveBeenCalledTimes(2);
 });

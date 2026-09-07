@@ -50,6 +50,8 @@ export const NameViewDialog: React.FC<NameViewDialogProps> = ({
             <input
               id={inputId}
               autoFocus
+              placeholder="Untitled view"
+              onFocus={(event) => event.target.select()}
               value={name}
               disabled={busy}
               onChange={(event) => setName(event.target.value)}

@@ -62,6 +62,10 @@ export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, ro
     [current, roots]
   );
   const parent = current ? parentFsPath(current) : null;
+  // Shown as "Vault › Projects › Atlas"; the absolute path stays in the tooltip.
+  const crumbs = current && containingRoot
+    ? [basenameFsPath(containingRoot), ...current.slice(containingRoot.length).split('/').filter(Boolean)]
+    : current ? [basenameFsPath(current)] : [];
   const canGoUp = !!(containingRoot && parent && isFsPathAtOrBelow(containingRoot, parent));
 
   return (
@@ -76,8 +80,8 @@ export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, ro
             <ChevronUp aria-hidden className="h-3.5 w-3.5" />
             Up
           </Button>
-          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={current ?? undefined}>
-            {current ?? 'Opened folders'}
+          <span className="min-w-0 flex-1 truncate text-muted-foreground" title={current ?? undefined} data-testid="folder-picker-path">
+            {crumbs.length > 0 ? crumbs.join(' › ') : 'Opened folders'}
           </span>
         </div>
         <ul aria-label="Folders" className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60">

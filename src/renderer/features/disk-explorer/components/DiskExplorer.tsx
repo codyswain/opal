@@ -1,7 +1,9 @@
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import { Button } from '@/renderer/shared/ui';
 import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
-import { FolderPlus, X } from 'lucide-react';
+import { FolderPlus, X, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
 import { sortEntries } from '@/common/sortEntries';
@@ -427,13 +429,18 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               data-testid="files-focus"
               className="flex min-h-0 flex-1 flex-col"
             >
-              <button
-                type="button"
-                onClick={navigation.returnToFolder}
-                className="shrink-0 px-4 py-2 text-left text-sm"
-              >
-                Return to folder
-              </button>
+              <div className="flex shrink-0 items-center px-2 py-1">
+                <Button
+                  size="compact"
+                  variant="ghost"
+                  onClick={navigation.returnToFolder}
+                  aria-label={`Return to folder ${basenameFsPath(parentFsPath(openedPath) ?? openedPath)}`}
+                  title="Return to folder"
+                >
+                  <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+                  {basenameFsPath(parentFsPath(openedPath) ?? openedPath)}
+                </Button>
+              </div>
               <div className="min-h-0 flex-1">
                 {focusedEntry?.path === openedPath && focusedEntry.entry ? (
                   focusedEntry.entry.kind === 'markdown' ? (
