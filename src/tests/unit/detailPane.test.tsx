@@ -237,7 +237,7 @@ describe('DetailPane', () => {
       ] }) })),
     });
     render(
-      <FilesNavigationContext.Provider value={{ navigateDirectory, openFile, returnToFolder: vi.fn(), closeFile: vi.fn() }}>
+      <FilesNavigationContext.Provider value={{ navigateDirectory, navigateCollection: vi.fn(), openFile, returnToFolder: vi.fn(), closeFile: vi.fn() }}>
         <DetailPane entry={entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' })} />
       </FilesNavigationContext.Provider>
     );
