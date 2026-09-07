@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, FolderPlus, Search, SlidersHorizontal, X } from 'lu
 import type { SortField } from '@/common/sortEntries';
 import { folderScope } from '@/common/collectionQuery';
 import { useDiskStore } from '../store/diskStore';
-import { useQueryDraftsStore } from '../store/queryDraftsStore';
+import { useViewDraftsStore } from '../store/viewDraftsStore';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { queryCollection } from '../navigation/filesLocation';
 
@@ -21,7 +21,7 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const setFilter = useDiskStore((state) => state.setFilter);
   const density = useDiskStore((state) => state.density);
   const setDensity = useDiskStore((state) => state.setDensity);
-  const createDraft = useQueryDraftsStore((state) => state.create);
+  const createDraft = useViewDraftsStore((state) => state.create);
   const navigation = useFilesNavigation();
   const filterRef = useRef<HTMLInputElement>(null);
 

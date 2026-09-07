@@ -8,9 +8,9 @@ import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { Button } from '@/renderer/shared/ui';
 import { useDiskStore } from '../../store/diskStore';
-import { useQueryDraftsStore } from '../../store/queryDraftsStore';
+import { useViewDraftsStore } from '../../store/viewDraftsStore';
 import { EMPTY_RESULT, useCollectionQueryStore } from '../../store/collectionQueryStore';
-import { queryCollection } from '../../navigation/filesLocation';
+import { queryCollection, viewCollection } from '../../navigation/filesLocation';
 import { CollectionView, type CollectionRowDecoration } from '../CollectionView';
 import { EmptyState } from '../EmptyState';
 import { GallerySkeleton } from '../Skeleton';
@@ -47,8 +47,8 @@ function detailFor(row: CollectionRow, query: CollectionQuery, now: number): str
 }
 
 export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
-  const draft = useQueryDraftsStore((state) => state.drafts[id] ?? null);
-  const updateDraft = useQueryDraftsStore((state) => state.update);
+  const draft = useViewDraftsStore((state) => state.drafts[id] ?? null);
+  const updateDraft = useViewDraftsStore((state) => state.update);
   const result = useCollectionQueryStore((state) => state.results[id] ?? EMPTY_RESULT);
   const load = useCollectionQueryStore((state) => state.load);
   const roots = useDiskStore((state) => state.roots);
@@ -62,7 +62,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     if (!draft) return;
     const filters = filtersFromChips(chips);
     const next = { ...draft.query, filters };
-    if (!sameQuery(next, draft.query)) updateDraft(id, next);
+    if (!sameQuery(next, draft.query)) updateDraft(id, { query: next });
   }, [chips, draft, id, updateDraft]);
 
   // FilesRoute performs the first load; later draft edits reload with the debounce.
@@ -77,7 +77,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     const api = window.collectionsAPI;
     if (!api?.onChanged || !draft) return undefined;
     return api.onChanged(() => {
-      const current = useQueryDraftsStore.getState().drafts[id];
+      const current = useViewDraftsStore.getState().drafts[id];
       if (current) void load(id, current.query, { immediate: true });
     });
   }, [draft, id, load]);
@@ -108,14 +108,14 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
           <SlidersHorizontal aria-hidden className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-medium">{draft.name}</h2>
           <div className="min-w-0 flex-1" />
-          <SortControl sort={draft.query.sort} onChange={(sort) => updateDraft(id, { ...draft.query, sort })} />
+          <SortControl sort={draft.query.sort} onChange={(sort) => updateDraft(id, { query: { ...draft.query, sort } })} />
           {trailing}
         </div>
         <ScopeControl
           scope={draft.query.scope}
           roots={roots}
           origin={draft.origin}
-          onChange={(scope) => updateDraft(id, { ...draft.query, scope })}
+          onChange={(scope) => updateDraft(id, { query: { ...draft.query, scope } })}
         />
         <FilterChips chips={chips} onChange={setChips} />
       </div>
@@ -126,7 +126,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
             {result.unavailableScopes.length === 1 ? 'This folder is not open: ' : 'These folders are not open: '}
             {result.unavailableScopes.join(', ')}. Open it again or change the scope.
           </span>
-          <Button size="compact" variant="outline" onClick={() => updateDraft(id, { ...draft.query, scope: { kind: 'all-roots' } })}>
+          <Button size="compact" variant="outline" onClick={() => updateDraft(id, { query: { ...draft.query, scope: { kind: 'all-roots' } } })}>
             Search all opened folders
           </Button>
         </div>
@@ -161,7 +161,9 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
             <CollectionView
-              location={{ mode: 'browse', collection: queryCollection(id) }}
+              location={{ mode: 'browse', collection: draft.saved ? viewCollection(id) : queryCollection(id) }}
+              mode={draft.layout}
+              onModeChange={(layout) => updateDraft(id, { layout })}
               entries={entries}
               suggestedMode="list"
               filter=""

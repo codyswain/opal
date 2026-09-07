@@ -5,7 +5,7 @@ import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi } from '@/tests/helpers/diskApi';
-import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
+import { useViewDraftsStore } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
 
 beforeEach(() => {
   installDiskApi();
@@ -107,14 +107,14 @@ describe('Toolbar filtering', () => {
 
 describe('Toolbar views', () => {
   it('starts a view scoped to this folder and its subfolders', async () => {
-    useQueryDraftsStore.getState().reset();
+    useViewDraftsStore.getState().clearAll();
     const user = userEvent.setup();
     render(<Toolbar dirPath="/V/Papers" />);
 
     await user.click(screen.getByTestId('toolbar-filter-folder'));
 
-    const id = useQueryDraftsStore.getState().order[0];
-    expect(useQueryDraftsStore.getState().get(id)).toMatchObject({
+    const id = useViewDraftsStore.getState().order[0];
+    expect(useViewDraftsStore.getState().get(id)).toMatchObject({
       origin: '/V/Papers',
       query: { scope: { kind: 'folders', folders: ['/V/Papers'], includeDescendants: true }, filters: [] },
     });

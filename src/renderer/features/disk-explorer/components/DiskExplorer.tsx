@@ -50,7 +50,10 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
   const currentCollection = useDiskStore((state) => state.currentCollection);
   const recentItems = useRecentStore((state) => state.result?.items ?? NO_RECENT_ITEMS);
-  const queryId = currentCollection?.kind === 'query' ? currentCollection.id : null;
+  const queryId =
+    currentCollection?.kind === 'query' || currentCollection?.kind === 'view'
+      ? currentCollection.id
+      : null;
   const queryRows = useCollectionQueryStore((state) =>
     queryId ? state.results[queryId]?.rows ?? NO_QUERY_ROWS : NO_QUERY_ROWS
   );

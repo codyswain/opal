@@ -22,7 +22,8 @@ import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import { recordOpened } from '../activity/recordActivity';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
-import { useQueryDraftsStore } from '../store/queryDraftsStore';
+import { useViewDraftsStore } from '../store/viewDraftsStore';
+import { useSavedViewsStore } from '../store/savedViewsStore';
 import { useCollectionQueryStore } from '../store/collectionQueryStore';
 import { useTabsStore } from '../store/tabsStore';
 import { DiskExplorer } from './DiskExplorer';
@@ -30,18 +31,27 @@ import { DiskExplorer } from './DiskExplorer';
 /** Router owns navigation; snapshots own only the collection's transient state. */
 export function FilesRoute() {
   const roots = useDiskStore((state) => state.roots);
-  const drafts = useQueryDraftsStore((state) => state.drafts);
+  const drafts = useViewDraftsStore((state) => state.drafts);
+  const savedViews = useSavedViewsStore((state) => state.views);
+  const viewsLoaded = useSavedViewsStore((state) => state.loaded);
   const location = useLocation();
   const navigate = useNavigate();
   const applied = React.useRef<FilesLocation | null>(null);
   const restoring = React.useRef(false);
   const [readyKey, setReadyKey] = React.useState<string | null>(null);
+  // A view URL cannot be judged until the library listing has loaded.
+  const awaitingViews =
+    !viewsLoaded &&
+    new URLSearchParams(location.search).get('collection') === 'view';
   const resolved = React.useMemo(
     () =>
-      resolveFilesLocation(location.search, roots, {
-        isKnownQuery: (id) => id in drafts,
-      }),
-    [location.search, roots, drafts]
+      awaitingViews
+        ? null
+        : resolveFilesLocation(location.search, roots, {
+            isKnownQuery: (id) => id in drafts,
+            isKnownView: (id) => id in savedViews,
+          }),
+    [awaitingViews, location.search, roots, drafts, savedViews]
   );
   const capture = React.useCallback(() => {
     const current = applied.current;
@@ -67,10 +77,13 @@ export function FilesRoute() {
   React.useEffect(() => {
     useTabsStore.getState().hydrate();
     void useDiskStore.getState().loadRoots();
+    useSavedViewsStore.getState().subscribe();
+    void useSavedViewsStore.getState().load();
   }, []);
   React.useEffect(() => useDiskStore.subscribe(() => capture()), [capture]);
   React.useEffect(() => {
     if (!resolved) {
+      if (awaitingViews) return;
       applied.current = null;
       useTabsStore.setState({ openedPath: null, activePath: null });
       return;
@@ -111,9 +124,14 @@ export function FilesRoute() {
                 .getState()
                 .listings[directory]?.map((entry) => entry.path) ?? null
           )
-      : collection.kind === 'query'
+      : collection.kind === 'query' || collection.kind === 'view'
         ? (() => {
-            const draft = useQueryDraftsStore.getState().drafts[collection.id];
+            const draftsStore = useViewDraftsStore.getState();
+            if (collection.kind === 'view') {
+              const view = useSavedViewsStore.getState().views[collection.id];
+              if (view) draftsStore.openSaved(view);
+            }
+            const draft = useViewDraftsStore.getState().drafts[collection.id];
             if (!draft) return Promise.resolve<string[] | null>([]);
             return useCollectionQueryStore
               .getState()
@@ -170,7 +188,7 @@ export function FilesRoute() {
     return () => {
       cancelled = true;
     };
-  }, [resolved, capture, navigate, go, roots]);
+  }, [resolved, awaitingViews, capture, navigate, go, roots]);
 
   React.useEffect(
     () =>
@@ -311,7 +329,7 @@ export function FilesRoute() {
   const key = resolved ? serializeFilesLocation(resolved.location) : null;
   return (
     <FilesNavigationContext.Provider value={actions}>
-      {key && key !== readyKey ? (
+      {(key && key !== readyKey) || awaitingViews ? (
         <div role="status">Loading…</div>
       ) : (
         <DiskExplorer showNavigationPane={false} />

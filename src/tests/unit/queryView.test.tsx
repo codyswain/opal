@@ -6,7 +6,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
-import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
+import { useViewDraftsStore } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
 import { useCollectionQueryStore } from '@/renderer/features/disk-explorer/store/collectionQueryStore';
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { emptyQuery, folderScope } from '@/common/collectionQuery';
@@ -54,7 +54,7 @@ function lastQuery(api: ReturnType<typeof installCollectionsApi>): CollectionQue
 
 beforeEach(() => {
   filesLocationSnapshots.clear();
-  useQueryDraftsStore.getState().reset();
+  useViewDraftsStore.getState().clearAll();
   useCollectionQueryStore.getState().reset();
   installDiskApi({
     listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
@@ -74,7 +74,7 @@ beforeEach(() => {
 describe('QueryView', () => {
   it('loads the draft once, shows rows with folder and detail, and marks the scope', async () => {
     const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
-    const id = useQueryDraftsStore.getState().create({ scope: folderScope('/Vault/Papers'), origin: '/Vault/Papers' });
+    const id = useViewDraftsStore.getState().create({ scope: folderScope('/Vault/Papers'), origin: '/Vault/Papers' });
     renderQuery(id);
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
     expect(api.query).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe('QueryView', () => {
 
   it('turns a kind chip and a tags chip into one validated query after the debounce', async () => {
     const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
-    const id = useQueryDraftsStore.getState().create();
+    const id = useViewDraftsStore.getState().create();
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
@@ -104,7 +104,7 @@ describe('QueryView', () => {
       { field: 'kind', op: 'in', values: ['pdf', 'image'] },
       { field: 'tags', op: 'has-any', values: ['research', 'reference'] },
     ]));
-    expect(useQueryDraftsStore.getState().get(id)?.query.filters).toHaveLength(2);
+    expect(useViewDraftsStore.getState().get(id)?.query.filters).toHaveLength(2);
     await user.selectOptions(screen.getByLabelText('Sort by'), 'touched');
     await waitFor(() => expect(lastQuery(api).sort).toEqual({ field: 'touched', direction: 'asc' }));
     await user.click(screen.getByRole('button', { name: 'Sort descending' }));
@@ -115,7 +115,7 @@ describe('QueryView', () => {
 
   it('keeps an incomplete chip out of the query and never renames while typing', async () => {
     const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
-    const id = useQueryDraftsStore.getState().create();
+    const id = useViewDraftsStore.getState().create();
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
@@ -139,7 +139,7 @@ describe('QueryView', () => {
           : collectionResult(rows()),
       })),
     });
-    const id = useQueryDraftsStore.getState().create({ scope: folderScope('/Gone') });
+    const id = useViewDraftsStore.getState().create({ scope: folderScope('/Gone') });
     const user = userEvent.setup();
     renderQuery(id);
     expect(await screen.findByTestId('query-unavailable')).toHaveTextContent('/Gone');
@@ -157,7 +157,7 @@ describe('QueryView', () => {
           : collectionResult(page?.offset ? [rows()[2]] : rows().slice(0, 2), { total: 3, incomplete: true, warnings: ['1 item with unreadable metadata was left out because a filter needs it.'] }),
       })),
     });
-    const id = useQueryDraftsStore.getState().create();
+    const id = useViewDraftsStore.getState().create();
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
@@ -175,8 +175,8 @@ describe('QueryView', () => {
 
   it('opens a result inside the query, records it, and Back restores the draft and selection', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
-    const id = useQueryDraftsStore.getState().create();
-    useQueryDraftsStore.getState().update(id, { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] });
+    const id = useViewDraftsStore.getState().create();
+    useViewDraftsStore.getState().update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
     const user = userEvent.setup();
     renderQuery(id);
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
@@ -197,7 +197,7 @@ describe('QueryView', () => {
       .mockResolvedValueOnce({ success: false as const, error: 'nope' })
       .mockResolvedValue({ success: true as const, data: collectionResult(rows()) });
     const api = installCollectionsApi({ query, onChanged: vi.fn((callback: () => void) => { changed = callback; return () => undefined; }) });
-    const id = useQueryDraftsStore.getState().create();
+    const id = useViewDraftsStore.getState().create();
     const user = userEvent.setup();
     renderQuery(id);
     expect(await screen.findByRole('alert')).toHaveTextContent('nope');

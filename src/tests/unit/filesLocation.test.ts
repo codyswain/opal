@@ -382,6 +382,16 @@ describe('collections', () => {
       .toEqual({ mode: 'focus', collection: { kind: 'query', id: 'q1' }, file: '/Vault/New/a.md' });
   });
 
+  it('round-trips view collections only when the view is known', () => {
+    const known = { isKnownView: (id: string) => id === 'v1' };
+    const browse = { mode: 'browse' as const, collection: { kind: 'view' as const, id: 'v1' } };
+    expect(serializeFilesLocation(browse)).toBe('?mode=browse&collection=view&id=v1');
+    expect(parseFilesLocation('?mode=browse&collection=view&id=v1', roots, known)).toEqual(browse);
+    expect(parseFilesLocation('?mode=browse&collection=view&id=v1', roots, { isKnownQuery: () => true })).toBeNull();
+    expect(collectionKey({ kind: 'view', id: 'v1' })).toBe('view:v1');
+    expect(sameCollection({ kind: 'view', id: 'v1' }, { kind: 'query', id: 'v1' })).toBe(false);
+  });
+
   it('exposes directory helpers', () => {
     expect(locationDirectory({ mode: 'browse', collection: RECENT_COLLECTION })).toBeNull();
     expect(locationDirectory(browseFiles('/Vault/A').location)).toBe('/Vault/A');

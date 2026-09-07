@@ -19,7 +19,8 @@ export type FilesHistoryMutation = 'push' | 'replace' | 'none';
 export type FilesCollection =
   | { kind: 'directory'; directory: string }
   | { kind: 'recent' }
-  | { kind: 'query'; id: string };
+  | { kind: 'query'; id: string }
+  | { kind: 'view'; id: string };
 
 export const RECENT_COLLECTION: FilesCollection = { kind: 'recent' };
 
@@ -33,9 +34,15 @@ export function queryCollection(id: string): FilesCollection {
   return { kind: 'query', id };
 }
 
+export function viewCollection(id: string): FilesCollection {
+  return { kind: 'view', id };
+}
+
 export interface FilesLocationOptions {
   /** Transient query definitions live in session state; unknown ids are invalid. */
   isKnownQuery?: (id: string) => boolean;
+  /** Saved views come from the library; unknown ids are invalid. */
+  isKnownView?: (id: string) => boolean;
 }
 
 export function collectionDirectory(collection: FilesCollection): string | null {
@@ -48,7 +55,7 @@ export function locationDirectory(location: FilesLocation): string | null {
 
 export function collectionKey(collection: FilesCollection): string {
   if (collection.kind === 'directory') return `directory:${normalizeFsPath(collection.directory)}`;
-  if (collection.kind === 'query') return `query:${collection.id}`;
+  if (collection.kind === 'query' || collection.kind === 'view') return `${collection.kind}:${collection.id}`;
   return collection.kind;
 }
 
@@ -102,6 +109,10 @@ function normalizeCollection(
     if (!QUERY_ID.test(candidate.id) || !options.isKnownQuery?.(candidate.id)) return null;
     return { kind: 'query', id: candidate.id };
   }
+  if (candidate.kind === 'view') {
+    if (!QUERY_ID.test(candidate.id) || !options.isKnownView?.(candidate.id)) return null;
+    return { kind: 'view', id: candidate.id };
+  }
   const directory = normalizeFsPath(candidate.directory);
   if (!isAbsoluteFsPath(directory) || !isWithinOneRoot([directory], roots)) {
     return null;
@@ -140,9 +151,9 @@ function parseCollection(params: URLSearchParams): FilesCollection | null {
   const collection = params.get('collection');
   if (collection !== null) {
     if (collection === 'recent') return RECENT_COLLECTION;
-    if (collection === 'query') {
+    if (collection === 'query' || collection === 'view') {
       const id = params.get('id');
-      return id ? { kind: 'query', id } : null;
+      return id ? { kind: collection, id } : null;
     }
     return null;
   }
@@ -179,7 +190,9 @@ export function serializeFilesLocation(location: FilesLocation): string {
     params.set('dir', normalizeFsPath(location.collection.directory));
   } else {
     params.set('collection', location.collection.kind);
-    if (location.collection.kind === 'query') params.set('id', location.collection.id);
+    if (location.collection.kind === 'query' || location.collection.kind === 'view') {
+      params.set('id', location.collection.id);
+    }
   }
   if (location.mode === 'focus') {
     params.set('file', normalizeFsPath(location.file));

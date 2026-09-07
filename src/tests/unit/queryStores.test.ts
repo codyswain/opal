@@ -1,32 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
+import { isDraftEdited, useViewDraftsStore, type ViewDraft } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
+import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
+import { installViewsApi, savedView } from '@/tests/helpers/viewsApi';
 import { QUERY_EDIT_DEBOUNCE_MS, useCollectionQueryStore } from '@/renderer/features/disk-explorer/store/collectionQueryStore';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { emptyQuery, folderScope } from '@/common/collectionQuery';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 
 beforeEach(() => {
-  useQueryDraftsStore.getState().reset();
+  useViewDraftsStore.getState().clearAll();
   useCollectionQueryStore.getState().reset();
 });
 
 describe('queryDraftsStore', () => {
   it('creates, updates, renames and removes session drafts', () => {
-    const store = useQueryDraftsStore.getState();
+    const store = useViewDraftsStore.getState();
     const id = store.create({ scope: folderScope('/Vault/A'), origin: '/Vault/A' });
-    expect(useQueryDraftsStore.getState().get(id)).toMatchObject({
+    expect(useViewDraftsStore.getState().get(id)).toMatchObject({
       name: 'Untitled view', origin: '/Vault/A',
       query: { scope: { kind: 'folders', folders: ['/Vault/A'], includeDescendants: true }, filters: [] },
     });
-    store.update(id, { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] });
-    expect(useQueryDraftsStore.getState().get(id)?.query.filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]);
-    expect(() => store.update(id, { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: [] }] })).toThrow();
-    store.rename(id, '  Papers  ');
-    expect(useQueryDraftsStore.getState().get(id)?.name).toBe('Papers');
-    expect(useQueryDraftsStore.getState().order).toEqual([id]);
+    store.update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
+    expect(useViewDraftsStore.getState().get(id)?.query.filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]);
+    expect(() => store.update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: [] }] } })).toThrow();
+    store.update(id, { name: '  Papers  ' });
+    expect(useViewDraftsStore.getState().get(id)?.name).toBe('Papers');
+    expect(useViewDraftsStore.getState().order).toEqual([id]);
     store.remove(id);
-    expect(useQueryDraftsStore.getState().has(id)).toBe(false);
-    expect(useQueryDraftsStore.getState().order).toEqual([]);
+    expect(useViewDraftsStore.getState().has(id)).toBe(false);
+    expect(useViewDraftsStore.getState().order).toEqual([]);
   });
 });
 
@@ -88,5 +90,48 @@ describe('diskStore.navigateToCollection', () => {
     expect(useDiskStore.getState()).toMatchObject({ currentCollection: { kind: 'query', id: 'q1' }, currentDirectory: null });
     store.navigateToCollection({ kind: 'directory', directory: '/Vault/A/' });
     expect(useDiskStore.getState()).toMatchObject({ currentCollection: { kind: 'directory', directory: '/Vault/A' }, currentDirectory: '/Vault/A' });
+  });
+});
+
+describe('viewDraftsStore baselines', () => {
+  it('opens a saved view once, tracks edits against the baseline, resets and adopts', () => {
+    const view = savedView({ name: 'Papers', layout: 'gallery', query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
+    const store = useViewDraftsStore.getState();
+    store.openSaved(view);
+    const draft = useViewDraftsStore.getState().get(view.id);
+    expect(draft).toMatchObject({ name: 'Papers', layout: 'gallery', saved: { revision: view.revision } });
+    expect(isDraftEdited(draft as ViewDraft)).toBe(false);
+    expect(useViewDraftsStore.getState().order).toEqual([]);
+    store.update(view.id, { name: 'Papers (edited)', layout: 'list' });
+    expect(isDraftEdited(useViewDraftsStore.getState().get(view.id) as ViewDraft)).toBe(true);
+    store.openSaved({ ...view, name: 'Changed elsewhere', revision: 'rev-x' });
+    expect(useViewDraftsStore.getState().get(view.id)).toMatchObject({ name: 'Papers (edited)', saved: { revision: view.revision } });
+    store.reset(view.id);
+    expect(isDraftEdited(useViewDraftsStore.getState().get(view.id) as ViewDraft)).toBe(false);
+    expect(useViewDraftsStore.getState().get(view.id)?.layout).toBe('gallery');
+    store.update(view.id, { query: emptyQuery() });
+    store.markSaved(view.id, { ...view, query: emptyQuery(), revision: 'rev-2' });
+    expect(useViewDraftsStore.getState().get(view.id)).toMatchObject({ saved: { revision: 'rev-2', query: emptyQuery() } });
+    store.update(view.id, { name: 'Draft again' });
+    store.adoptBaseline(view.id, { ...view, name: 'From disk', revision: 'rev-3' });
+    expect(useViewDraftsStore.getState().get(view.id)).toMatchObject({ name: 'From disk', saved: { revision: 'rev-3' } });
+    expect(isDraftEdited(useViewDraftsStore.getState().get(view.id) as ViewDraft)).toBe(false);
+  });
+});
+
+describe('savedViewsStore', () => {
+  it('loads the listing, exposes ids, and reloads on change', async () => {
+    let changed: (() => void) | null = null;
+    const api = installViewsApi([savedView({ name: 'A' })], { onChanged: vi.fn((callback: () => void) => { changed = callback; return () => undefined; }) });
+    useSavedViewsStore.getState().reset();
+    expect(useSavedViewsStore.getState().loaded).toBe(false);
+    useSavedViewsStore.getState().subscribe();
+    await useSavedViewsStore.getState().load();
+    expect(useSavedViewsStore.getState().order).toEqual([api.views[0].id]);
+    expect(useSavedViewsStore.getState().has(api.views[0].id)).toBe(true);
+    api.views.push(savedView({ name: 'B' }));
+    changed?.();
+    await vi.waitFor(() => expect(useSavedViewsStore.getState().order).toHaveLength(2));
+    useSavedViewsStore.getState().reset();
   });
 });

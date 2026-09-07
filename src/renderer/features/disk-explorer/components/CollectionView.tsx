@@ -34,6 +34,9 @@ export interface CollectionViewProps {
   emptyState: React.ReactNode;
   decorate?: (entry: DiskEntry) => CollectionRowDecoration | null;
   countLabel?: string;
+  /** Controlled layout, for collections whose layout is part of their definition. */
+  mode?: CollectionViewMode;
+  onModeChange?: (mode: CollectionViewMode) => void;
 }
 
 const ICONS: Record<FileKind, React.ComponentType<{ className?: string }>> = {
@@ -54,6 +57,7 @@ const TILE = {
  */
 export const CollectionView: React.FC<CollectionViewProps> = ({
   location, entries, suggestedMode, filter, onClearFilter, emptyState, decorate, countLabel,
+  mode: controlledMode, onModeChange,
 }) => {
   const navigation = useFilesNavigation();
   const [snapshot] = useState(() => filesLocationSnapshots.read(location));
@@ -61,7 +65,12 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
   const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const density = useDiskStore((state) => state.density);
 
-  const [mode, setMode] = useState<CollectionViewMode | null>(snapshot?.scroll ? snapshot.scroll.view === 'details' ? 'list' : 'gallery' : null);
+  const [localMode, setLocalMode] = useState<CollectionViewMode | null>(snapshot?.scroll ? snapshot.scroll.view === 'details' ? 'list' : 'gallery' : null);
+  const mode = controlledMode ?? localMode;
+  const setMode = (next: CollectionViewMode) => {
+    if (onModeChange) onModeChange(next);
+    if (controlledMode === undefined) setLocalMode(next);
+  };
   const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
   const gridRef = useRef<FixedSizeGrid>(null);
   const listRef = useRef<FixedSizeList>(null);

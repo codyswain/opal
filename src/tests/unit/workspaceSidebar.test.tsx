@@ -15,7 +15,7 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installCollectionsApi } from '@/tests/helpers/collectionsApi';
-import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
+import { useViewDraftsStore } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
 
 const ROOT = '/Vault';
 const DESIGN = '/Vault/Design';
@@ -76,7 +76,7 @@ beforeEach(() => {
   window.localStorage.clear();
   installActivityApi();
   installCollectionsApi();
-  useQueryDraftsStore.getState().reset();
+  useViewDraftsStore.getState().clearAll();
   installDiskApi({
     listRoots: vi.fn(async () => ({
       success: true as const,
@@ -213,7 +213,7 @@ describe('WorkspaceSidebar', () => {
     await waitFor(() =>
       expect(useDiskStore.getState().currentCollection).toMatchObject({ kind: 'query' })
     );
-    const id = useQueryDraftsStore.getState().order[0];
+    const id = useViewDraftsStore.getState().order[0];
     expect(screen.getByTestId('location')).toHaveTextContent(
       `/files?mode=browse&collection=query&id=${id}`
     );
@@ -221,6 +221,6 @@ describe('WorkspaceSidebar', () => {
     expect(view).toHaveClass('bg-surface-selected');
     expect(screen.getByRole('link', { name: 'Files' })).not.toHaveClass('bg-surface-selected');
     expect(window.activityAPI.record).not.toHaveBeenCalled();
-    expect(useQueryDraftsStore.getState().get(id)?.query.scope).toEqual({ kind: 'all-roots' });
+    expect(useViewDraftsStore.getState().get(id)?.query.scope).toEqual({ kind: 'all-roots' });
   });
 });
