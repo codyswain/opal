@@ -16,6 +16,7 @@ import { Command, commandRegistry } from "@/renderer/features/commands/services/
 import { COMMAND_IDS } from "@/common/commandIds";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
 import { FilesRoute, useDiskStore } from "@/renderer/features/disk-explorer";
+import { ChatRoute } from "@/renderer/features/chat";
 import {
   AppShell,
   ShellProvider,
@@ -28,6 +29,11 @@ import { useSettingsStore } from "./store/settingsStore";
 const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
   header: { title: "Files" },
+};
+
+const CHAT_ROUTE: ShellRouteDescriptor = {
+  id: "chat",
+  header: { title: "Chat" },
 };
 
 const SETTINGS_ROUTE: ShellRouteDescriptor = {
@@ -50,6 +56,11 @@ const APP_ROUTES: ShellRouteObject[] = [
     path: "/files",
     element: <FilesRoute />,
     handle: { shell: FILES_ROUTE },
+  },
+  {
+    path: "/chat",
+    element: <ChatRoute />,
+    handle: { shell: CHAT_ROUTE },
   },
   {
     path: "/settings",

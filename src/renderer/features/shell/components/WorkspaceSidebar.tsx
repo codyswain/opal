@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertTriangle, Bookmark, Clock, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Bookmark, Clock, Files, FolderPlus, MessageSquare, Plus, Settings, SlidersHorizontal } from 'lucide-react';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
@@ -128,6 +128,12 @@ export function WorkspaceSidebar({
             icon={Clock}
             label="Recent"
             active={onFiles && isRecent}
+            onActivate={onNavigate}
+          />
+          <SidebarItem
+            to="/chat"
+            icon={MessageSquare}
+            label="Chat"
             onActivate={onNavigate}
           />
         </SidebarSection>

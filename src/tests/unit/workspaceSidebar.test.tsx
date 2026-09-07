@@ -123,6 +123,7 @@ describe('WorkspaceSidebar', () => {
     renderSidebar();
 
     expect(screen.queryByRole('link', { name: 'Notes' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('href', '/chat');
     expect(screen.getByRole('link', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.queryByText('Favorites')).toBeNull();
