@@ -25,6 +25,7 @@ import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
 import { Toolbar } from './Toolbar';
 import { TabStrip } from './TabStrip';
+import { WelcomePanel } from './WelcomePanel';
 import { useTabsStore } from '../store/tabsStore';
 import {
   PaneGroup,
@@ -498,9 +499,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               </div>
             </>
           ) : (
-            <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
-              Open a folder to get started
-            </div>
+            <WelcomePanel />
           )}
         </Pane>
 

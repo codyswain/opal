@@ -104,4 +104,15 @@ describe('ChatRoute', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Older one/ })).not.toBeInTheDocument());
     expect(useChatStore.getState().active).toBeNull();
   });
+
+  it('offers starter questions on an empty conversation that fill the composer', async () => {
+    installChatApi({ status: { ready: true, files: 2, chunks: 5 } });
+    const user = userEvent.setup();
+    renderChat();
+    const suggestions = await screen.findByRole('list', { name: 'Suggested questions' });
+    await user.click(within(suggestions).getByRole('button', { name: 'Summarize the notes in my library' }));
+    const composer = screen.getByLabelText('Ask about your library') as HTMLTextAreaElement;
+    expect(composer.value).toBe('Summarize the notes in my library');
+    expect(composer).toHaveFocus();
+  });
 });

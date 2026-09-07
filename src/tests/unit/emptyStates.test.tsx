@@ -77,3 +77,16 @@ describe('density', () => {
     expect(useDiskStore.getState().density).toBe('compact');
   });
 });
+
+describe('welcome panel', () => {
+  it('explains the app and opens a folder', async () => {
+    const { WelcomePanel } = await import('@/renderer/features/disk-explorer/components/WelcomePanel');
+    const api = installDiskApi();
+    const user = userEvent.setup();
+    render(<WelcomePanel />);
+    expect(screen.getByText('Open a folder to begin')).toBeInTheDocument();
+    expect(screen.getByText('Ask your library')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open folder…' }));
+    expect(api.openFolder).toHaveBeenCalled();
+  });
+});

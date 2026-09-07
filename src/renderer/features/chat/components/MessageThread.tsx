@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, MessageSquareText } from 'lucide-react';
 import { Button } from '@/renderer/shared/ui';
 import type { ChatMessage, ChatSource } from '@/types/chat';
 
@@ -9,6 +9,8 @@ interface MessageThreadProps {
   messages: ChatMessage[];
   streaming: string | null;
   onOpenSource: (source: ChatSource) => void;
+  /** Fills the composer with a starter question. */
+  onSuggest?: (question: string) => void;
 }
 
 const Sources: React.FC<{ sources: ChatSource[]; onOpen: (source: ChatSource) => void }> = ({ sources, onOpen }) => (
@@ -29,14 +31,40 @@ const Sources: React.FC<{ sources: ChatSource[]; onOpen: (source: ChatSource) =>
   </ol>
 );
 
-export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource }) => {
+export const SUGGESTED_QUESTIONS = [
+  'What did I write about most recently?',
+  'Summarize the notes in my library',
+  'Which files mention a deadline?',
+  'What are the open to-dos across my notes?',
+];
+
+export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource, onSuggest }) => {
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }); }, [messages.length, streaming]);
 
   if (messages.length === 0 && streaming === null) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-        Ask about anything in your library. Answers cite the files they come from.
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center" data-testid="chat-empty">
+        <span aria-hidden className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-focus/10 text-focus">
+          <MessageSquareText className="h-6 w-6" />
+        </span>
+        <p className="text-base font-medium text-foreground">Ask about anything in your library</p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">Answers come from your own files and cite the passages they used, so you can open the source in one click.</p>
+        {onSuggest ? (
+          <ul className="mt-6 flex max-w-lg flex-wrap justify-center gap-2" aria-label="Suggested questions">
+            {SUGGESTED_QUESTIONS.map((question) => (
+              <li key={question}>
+                <button
+                  type="button"
+                  onClick={() => onSuggest(question)}
+                  className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 text-xs text-foreground-secondary transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground"
+                >
+                  {question}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     );
   }

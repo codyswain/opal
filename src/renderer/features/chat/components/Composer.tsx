@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/renderer/shared/ui';
 
@@ -6,10 +6,18 @@ interface ComposerProps {
   sending: boolean;
   onSend: (question: string) => void;
   onCancel: () => void;
+  /** Text handed in from outside (a suggested question); adopted and focused when it changes. */
+  prefill?: { text: string; seq: number } | null;
 }
 
-export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel }) => {
+export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, prefill = null }) => {
   const [draft, setDraft] = useState('');
+  const prefillRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!prefill) return;
+    setDraft(prefill.text);
+    prefillRef.current?.focus();
+  }, [prefill]);
   const submit = () => {
     const text = draft.trim();
     if (!text || sending) return;
@@ -22,6 +30,7 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel })
       onSubmit={(event) => { event.preventDefault(); submit(); }}
     >
       <textarea
+        ref={prefillRef}
         aria-label="Ask about your library"
         value={draft}
         rows={Math.min(6, Math.max(1, draft.split('\n').length))}

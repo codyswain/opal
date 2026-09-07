@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { parentFsPath } from '@/common/fsPaths';
 import { focusFile } from '@/renderer/features/disk-explorer/navigation';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
@@ -28,6 +28,7 @@ export const ChatRoute: React.FC = () => {
   const cancel = useChatStore((state) => state.cancel);
   const updateIndex = useChatStore((state) => state.updateIndex);
   const cancelIndex = useChatStore((state) => state.cancelIndex);
+  const [prefill, setPrefill] = useState<{ text: string; seq: number } | null>(null);
 
   useEffect(() => {
     useChatStore.getState().subscribe();
@@ -52,9 +53,14 @@ export const ChatRoute: React.FC = () => {
       />
       <section className="flex min-w-0 flex-1 flex-col" aria-label="Chat">
         <IndexStatusBar status={index} error={indexError} onUpdate={() => void updateIndex()} onCancel={() => void cancelIndex()} />
-        <MessageThread messages={active?.messages ?? []} streaming={streaming} onOpenSource={openSource} />
+        <MessageThread
+          messages={active?.messages ?? []}
+          streaming={streaming}
+          onOpenSource={openSource}
+          onSuggest={(question) => setPrefill((previous) => ({ text: question, seq: (previous?.seq ?? 0) + 1 }))}
+        />
         {error ? <p role="alert" className="px-4 py-1 text-xs text-destructive">{error}</p> : null}
-        <Composer sending={sending} onSend={(question) => void send(question)} onCancel={cancel} />
+        <Composer sending={sending} onSend={(question) => void send(question)} onCancel={cancel} prefill={prefill} />
       </section>
     </div>
   );
