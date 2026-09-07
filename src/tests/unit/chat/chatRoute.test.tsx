@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -44,6 +44,24 @@ describe('ChatRoute', () => {
     expect(await screen.findByText(/2 files, 5 passages/)).toBeInTheDocument();
     api.setStatus({ error: 'Add your OpenAI API key in Settings to use Chat.' });
     expect(await screen.findByRole('link', { name: /API key in Settings/ })).toHaveAttribute('href', '/settings');
+  });
+
+  it('shows progress with a Stop button while indexing, then the stopped-early note and skipped files', async () => {
+    const api = installChatApi({ status: { indexing: true, progress: { phase: 'embedding', done: 20, total: 80, currentFile: '/Vault/Papers/atlas.pdf' } } });
+    const user = userEvent.setup();
+    renderChat();
+    const bar = await screen.findByTestId('chat-index-status');
+    await waitFor(() => expect(within(bar).getByRole('status')).toHaveTextContent('Embedding passages 20 of 80 · atlas.pdf'));
+    expect(screen.getByRole('progressbar', { name: 'Indexing progress' })).toHaveAttribute('aria-valuenow', '25');
+    expect(screen.queryByRole('button', { name: /Index library|Update index/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(api.indexCancel).toHaveBeenCalled());
+    api.setStatus({ ready: true, files: 12, chunks: 40, cancelled: true, staleFiles: 60, skipped: [{ path: '/Vault/Papers/scan.pdf', reason: 'no text layer (scanned document?)' }] });
+    expect(await screen.findByText(/stopped early/)).toBeInTheDocument();
+    expect(screen.getByText(/60 changes since/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '1 file skipped' }));
+    expect(await screen.findByText('no text layer (scanned document?)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update index' })).toBeInTheDocument();
   });
 
   it('sends a question with Enter, streams, renders the cited answer, and opens a source', async () => {

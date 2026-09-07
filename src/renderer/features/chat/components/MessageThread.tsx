@@ -16,7 +16,10 @@ const Sources: React.FC<{ sources: ChatSource[]; onOpen: (source: ChatSource) =>
     {sources.map((source) => (
       <li key={source.n} className="flex items-center gap-2">
         <span className="shrink-0 rounded bg-surface-hover px-1.5 py-0.5 font-medium tabular-nums">{source.n}</span>
-        <span className="min-w-0 flex-1 truncate" title={source.path}>{source.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={source.path}>
+          {source.name}
+          {source.page ? <span className="text-muted-foreground"> · page {source.page}</span> : null}
+        </span>
         <Button size="compact" variant="ghost" aria-label={`Open ${source.name}`} onClick={() => onOpen(source)}>
           <ExternalLink aria-hidden className="h-3.5 w-3.5" />
           Open

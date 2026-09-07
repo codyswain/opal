@@ -55,4 +55,13 @@ describe('chatStore', () => {
     expect(useChatStore.getState().index?.staleFiles).toBe(4);
     await useChatStore.getState().removeConversation(useChatStore.getState().active?.id ?? 'none');
   });
+
+  it('stops an update and adopts the returned status', async () => {
+    const api = installChatApi({ status: { indexing: true, progress: { phase: 'embedding', done: 10, total: 50, currentFile: '/V/a.md' } } });
+    await useChatStore.getState().load();
+    expect(useChatStore.getState().index?.indexing).toBe(true);
+    await useChatStore.getState().cancelIndex();
+    expect(api.indexCancel).toHaveBeenCalled();
+    expect(useChatStore.getState().index).toMatchObject({ indexing: false, cancelled: true, progress: null });
+  });
 });

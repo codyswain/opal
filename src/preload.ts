@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld("chatAPI", {
   remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
   indexStatus: () => ipcRenderer.invoke("chat:index-status"),
   indexUpdate: () => ipcRenderer.invoke("chat:index-update"),
+  indexCancel: () => ipcRenderer.invoke("chat:index-cancel"),
   onIndexChanged: (callback: () => void) => {
     const listener = () => callback();
     ipcRenderer.on("chat:index-changed", listener);

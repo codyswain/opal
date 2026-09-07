@@ -27,6 +27,7 @@ export const ChatRoute: React.FC = () => {
   const send = useChatStore((state) => state.send);
   const cancel = useChatStore((state) => state.cancel);
   const updateIndex = useChatStore((state) => state.updateIndex);
+  const cancelIndex = useChatStore((state) => state.cancelIndex);
 
   useEffect(() => {
     useChatStore.getState().subscribe();
@@ -50,7 +51,7 @@ export const ChatRoute: React.FC = () => {
         onRemove={(id) => void removeConversation(id)}
       />
       <section className="flex min-w-0 flex-1 flex-col" aria-label="Chat">
-        <IndexStatusBar status={index} error={indexError} onUpdate={() => void updateIndex()} />
+        <IndexStatusBar status={index} error={indexError} onUpdate={() => void updateIndex()} onCancel={() => void cancelIndex()} />
         <MessageThread messages={active?.messages ?? []} streaming={streaming} onOpenSource={openSource} />
         {error ? <p role="alert" className="px-4 py-1 text-xs text-destructive">{error}</p> : null}
         <Composer sending={sending} onSend={(question) => void send(question)} onCancel={cancel} />

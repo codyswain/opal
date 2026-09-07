@@ -6,9 +6,18 @@ import { isInsideRoot, normalizePath } from '@/main/fs/paths';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { scanRootsFor, walkRoot } from '@/main/fs/rootTraversal';
 import { splitMarkdown } from '@/main/fs/MetadataCodec';
-import { CHAT_INDEX_FILE_LIMIT, type IndexHit, type LibraryIndexStatus, type TextChunk } from '@/types/chat';
+import {
+  CHAT_EMBED_BATCH,
+  CHAT_INDEX_FILE_LIMIT,
+  CHAT_INDEX_PDF_LIMIT,
+  type IndexHit,
+  type IndexProgress,
+  type LibraryIndexStatus,
+  type TextChunk,
+} from '@/types/chat';
 import { chunkText } from './chunkText';
 import type { EmbeddingProvider } from './EmbeddingProvider';
+import { extractPdfText, isPdf, pageAt, type ExtractPdfOptions } from './pdfText';
 
 interface IndexedFile {
   path: string;
@@ -22,6 +31,7 @@ interface StoredChunk {
   index: number;
   start: number;
   text: string;
+  page?: number;
 }
 
 interface IndexFile {
@@ -32,20 +42,35 @@ interface IndexFile {
   lastIndexedAt: number | null;
 }
 
+interface PendingFile {
+  path: string;
+  revision: string;
+  chunks: (TextChunk & { page?: number })[];
+}
+
 export interface LibraryTextIndexDependencies {
   registry: RootRegistry;
   directory: string;
   provider: () => Promise<EmbeddingProvider>;
   onChanged?: () => void;
   now?: () => number;
+  /** Text of a PDF; replaceable in tests. */
+  extractPdf?: (bytes: Uint8Array, options: ExtractPdfOptions) => Promise<string>;
+  /** Milliseconds between progress notifications and between mid-run saves. */
+  progressIntervalMs?: number;
+  persistIntervalMs?: number;
 }
 
-const INDEXABLE = new Set(['markdown', 'text']);
+const INDEXABLE = new Set(['markdown', 'text', 'pdf']);
+
+class Cancelled extends Error {}
 
 /**
  * Chunks and vectors for the library's text, kept in memory and mirrored to
  * two files under the library directory. Updates embed only new or changed
- * files, so unchanged text never costs another API call.
+ * files, so unchanged text never costs another API call. An update reports
+ * progress, saves as it goes, and can be cancelled: files already embedded
+ * are kept and the rest stay counted as changes.
  */
 export class LibraryTextIndex {
   private files = new Map<string, IndexedFile>();
@@ -58,12 +83,17 @@ export class LibraryTextIndex {
   private skipped: { path: string; reason: string }[] = [];
   private stale = new Set<string>();
   private indexing: Promise<LibraryIndexStatus> | null = null;
+  private progress: IndexProgress | null = null;
+  private cancelRequested = false;
+  private cancelled = false;
+  private lastNotified = 0;
   private loaded = false;
 
   constructor(private deps: LibraryTextIndexDependencies) {}
 
   private get metaFile(): string { return path.join(this.deps.directory, 'chunks.json'); }
   private get vectorFile(): string { return path.join(this.deps.directory, 'vectors.f32'); }
+  private get now(): number { return (this.deps.now ?? Date.now)(); }
 
   status(): LibraryIndexStatus {
     return {
@@ -71,6 +101,8 @@ export class LibraryTextIndex {
       chunks: this.chunks.size,
       staleFiles: this.stale.size,
       indexing: this.indexing !== null,
+      progress: this.progress ? { ...this.progress } : null,
+      cancelled: this.cancelled,
       lastIndexedAt: this.lastIndexedAt,
       error: this.error,
       skipped: [...this.skipped],
@@ -117,8 +149,26 @@ export class LibraryTextIndex {
 
   update(): Promise<LibraryIndexStatus> {
     if (this.indexing) return this.indexing;
-    this.indexing = this.run().finally(() => { this.indexing = null; this.deps.onChanged?.(); });
+    this.cancelRequested = false;
+    this.cancelled = false;
+    this.indexing = (async () => {
+      try {
+        await this.run();
+      } finally {
+        this.indexing = null;
+        this.progress = null;
+      }
+      this.deps.onChanged?.();
+      return this.status();
+    })();
     this.deps.onChanged?.();
+    return this.indexing;
+  }
+
+  /** Stops the running update after the current step; resolves with the final status. */
+  async cancel(): Promise<LibraryIndexStatus> {
+    if (!this.indexing) return this.status();
+    this.cancelRequested = true;
     return this.indexing;
   }
 
@@ -131,70 +181,173 @@ export class LibraryTextIndex {
       if (dot < floor) continue;
       const chunk = this.chunks.get(id);
       if (!chunk) continue;
-      scored.push({ path: chunk.path, chunkIndex: chunk.index, start: chunk.start, text: chunk.text, score: dot });
+      scored.push({ path: chunk.path, chunkIndex: chunk.index, start: chunk.start, text: chunk.text, score: dot, ...(chunk.page ? { page: chunk.page } : {}) });
     }
     scored.sort((left, right) => right.score - left.score || (left.path < right.path ? -1 : 1) || left.chunkIndex - right.chunkIndex);
     return scored.slice(0, k);
   }
 
-  private async run(): Promise<LibraryIndexStatus> {
+  private async run(): Promise<void> {
     await this.load();
     this.error = null;
     this.skipped = [];
+    let remaining: PendingFile[] = [];
     try {
       const provider = await this.deps.provider();
       if (this.dimensions !== 0 && this.dimensions !== provider.dimensions) {
         this.files.clear(); this.chunks.clear(); this.vectors.clear();
       }
       this.dimensions = provider.dimensions;
-      const seen = new Set<string>();
-      const pending: { path: string; revision: string; chunks: TextChunk[] }[] = [];
-      for (const root of scanRootsFor(this.deps.registry.list())) {
-        await walkRoot(this.deps.registry, root, {
-          onDirectory: () => undefined,
-          onFile: async (file) => {
-            if (!INDEXABLE.has(classifyFile(path.basename(file)))) return;
-            seen.add(file);
-            try {
-              const info = await stat(file);
-              if (info.size > CHAT_INDEX_FILE_LIMIT) { this.skipped.push({ path: file, reason: 'larger than 1 MiB' }); return; }
-              const bytes = await readFile(file);
-              const revision = createHash('sha256').update(bytes).digest('hex');
-              if (this.files.get(file)?.revision === revision) return;
-              const text = bodyOf(file, bytes);
-              pending.push({ path: file, revision, chunks: chunkText(text) });
-            } catch (error) {
-              this.skipped.push({ path: file, reason: error instanceof Error ? error.message : String(error) });
-            }
-          },
-          onError: (target, error) => { this.skipped.push({ path: target, reason: error instanceof Error ? error.message : String(error) }); },
-        });
-      }
+
+      const candidates = await this.scan();
+      const seen = new Set(candidates);
       for (const file of [...this.files.keys()]) {
         if (!seen.has(file)) this.dropFile(file);
       }
-      const texts = pending.flatMap((entry) => entry.chunks.map((chunk) => chunk.text));
-      const vectors = texts.length > 0 ? await provider.embed(texts) : [];
-      if (vectors.length !== texts.length) throw new Error('The embedding service returned the wrong number of vectors.');
-      let cursor = 0;
-      for (const entry of pending) {
-        this.dropFile(entry.path);
-        const chunkIds: number[] = [];
-        for (const chunk of entry.chunks) {
-          const id = this.nextId++;
-          this.chunks.set(id, { id, path: entry.path, index: chunk.index, start: chunk.start, text: chunk.text });
-          this.vectors.set(id, vectors[cursor++]);
-          chunkIds.push(id);
-        }
-        this.files.set(entry.path, { path: entry.path, revision: entry.revision, chunkIds });
-      }
+      remaining = await this.read(candidates);
+      await this.embed(provider, remaining);
       this.stale.clear();
-      this.lastIndexedAt = (this.deps.now ?? Date.now)();
+      this.lastIndexedAt = this.now;
       await this.persist();
     } catch (error) {
-      this.error = error instanceof Error ? error.message : String(error);
+      if (error instanceof Cancelled) {
+        this.cancelled = true;
+        // What was embedded is kept; the rest shows up as pending changes.
+        this.stale = new Set(remaining.map((entry) => entry.path));
+        if (this.files.size > 0 || this.lastIndexedAt !== null) this.lastIndexedAt = this.now;
+        try { await this.persist(); } catch (persistError) { this.error = describe(persistError); }
+      } else {
+        this.error = describe(error);
+      }
     }
-    return this.status();
+  }
+
+  /** Every indexable file under the opened roots. */
+  private async scan(): Promise<string[]> {
+    const files: string[] = [];
+    this.report({ phase: 'scanning', done: 0, total: 0, currentFile: null }, true);
+    for (const root of scanRootsFor(this.deps.registry.list())) {
+      await walkRoot(this.deps.registry, root, {
+        onDirectory: () => { this.checkCancelled(); },
+        onFile: async (file) => {
+          if (!INDEXABLE.has(classifyFile(path.basename(file)))) return;
+          files.push(file);
+          this.report({ phase: 'scanning', done: files.length, total: 0, currentFile: null });
+        },
+        onError: (target, error) => { this.skipped.push({ path: target, reason: describe(error) }); },
+      });
+    }
+    return files;
+  }
+
+  /** Reads, hashes and chunks files whose bytes changed since they were indexed. */
+  private async read(candidates: string[]): Promise<PendingFile[]> {
+    const pending: PendingFile[] = [];
+    this.report({ phase: 'reading', done: 0, total: candidates.length, currentFile: null }, true);
+    for (const [position, file] of candidates.entries()) {
+      this.checkCancelled();
+      this.report({ phase: 'reading', done: position, total: candidates.length, currentFile: file });
+      try {
+        const pdf = isPdf(file);
+        const info = await stat(file);
+        const limit = pdf ? CHAT_INDEX_PDF_LIMIT : CHAT_INDEX_FILE_LIMIT;
+        if (info.size > limit) { this.skipped.push({ path: file, reason: `larger than ${pdf ? '25' : '1'} MiB` }); continue; }
+        const bytes = await readFile(file);
+        const revision = createHash('sha256').update(bytes).digest('hex');
+        if (this.files.get(file)?.revision === revision) continue;
+        if (pdf) {
+          const extract = this.deps.extractPdf ?? extractPdfText;
+          const text = await extract(bytes, { maxCharacters: CHAT_INDEX_FILE_LIMIT, isCancelled: () => this.cancelRequested });
+          this.checkCancelled();
+          if (text.trim().length === 0) { this.skipped.push({ path: file, reason: 'no text layer (scanned document?)' }); continue; }
+          const chunks = chunkText(text.slice(0, CHAT_INDEX_FILE_LIMIT)).map((chunk) => ({ ...chunk, page: pageAt(text, chunk.start) }));
+          pending.push({ path: file, revision, chunks });
+        } else {
+          pending.push({ path: file, revision, chunks: chunkText(bodyOf(file, bytes)) });
+        }
+      } catch (error) {
+        this.skipped.push({ path: file, reason: describe(error) });
+      }
+    }
+    return pending;
+  }
+
+  /**
+   * Embeds in fixed batches and commits a file as soon as all its passages
+   * have vectors. `remaining` is trimmed in place so a cancellation knows
+   * what was left.
+   */
+  private async embed(provider: EmbeddingProvider, remaining: PendingFile[]): Promise<void> {
+    const total = remaining.reduce((sum, entry) => sum + entry.chunks.length, 0);
+    let done = 0;
+    let lastPersist = this.now;
+    this.report({ phase: 'embedding', done, total, currentFile: remaining[0]?.path ?? null }, true);
+    const buffered = new Map<string, Float32Array[]>();
+    const sent = new Map<string, number>();
+    while (remaining.length > 0) {
+      this.checkCancelled();
+      // Take up to one batch of passages, possibly spanning several files.
+      const batch: { file: PendingFile; text: string }[] = [];
+      for (const entry of remaining) {
+        let count = sent.get(entry.path) ?? 0;
+        while (count < entry.chunks.length && batch.length < CHAT_EMBED_BATCH) {
+          batch.push({ file: entry, text: entry.chunks[count].text });
+          count += 1;
+        }
+        sent.set(entry.path, count);
+        if (batch.length >= CHAT_EMBED_BATCH) break;
+      }
+      if (batch.length === 0) {
+        // Only files without passages are left; commit them as empty.
+        for (const entry of remaining.splice(0)) this.commit(entry, []);
+        break;
+      }
+      const vectors = await provider.embed(batch.map((item) => item.text));
+      if (vectors.length !== batch.length) throw new Error('The embedding service returned the wrong number of vectors.');
+      batch.forEach((item, position) => {
+        const list = buffered.get(item.file.path) ?? [];
+        list.push(vectors[position]);
+        buffered.set(item.file.path, list);
+      });
+      done += batch.length;
+      while (remaining.length > 0) {
+        const head = remaining[0];
+        const vectorsFor = buffered.get(head.path) ?? [];
+        if (vectorsFor.length < head.chunks.length) break;
+        this.commit(head, vectorsFor);
+        buffered.delete(head.path);
+        remaining.shift();
+      }
+      this.report({ phase: 'embedding', done, total, currentFile: remaining[0]?.path ?? null });
+      if (this.now - lastPersist >= (this.deps.persistIntervalMs ?? 15_000)) {
+        await this.persist();
+        lastPersist = this.now;
+      }
+    }
+  }
+
+  private commit(entry: PendingFile, vectors: Float32Array[]): void {
+    this.dropFile(entry.path);
+    const chunkIds: number[] = [];
+    entry.chunks.forEach((chunk, position) => {
+      const id = this.nextId++;
+      this.chunks.set(id, { id, path: entry.path, index: chunk.index, start: chunk.start, text: chunk.text, ...(chunk.page ? { page: chunk.page } : {}) });
+      this.vectors.set(id, vectors[position]);
+      chunkIds.push(id);
+    });
+    this.files.set(entry.path, { path: entry.path, revision: entry.revision, chunkIds });
+  }
+
+  private checkCancelled(): void {
+    if (this.cancelRequested) throw new Cancelled();
+  }
+
+  private report(progress: IndexProgress, force = false): void {
+    this.progress = progress;
+    const interval = this.deps.progressIntervalMs ?? 250;
+    if (!force && this.now - this.lastNotified < interval) return;
+    this.lastNotified = this.now;
+    this.deps.onChanged?.();
   }
 
   private dropFile(file: string): void {
@@ -230,6 +383,10 @@ function bodyOf(file: string, bytes: Buffer): string {
     }
   }
   return bytes.toString('utf8');
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function isIndexable(target: string, roots: readonly string[]): boolean {

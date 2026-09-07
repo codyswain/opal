@@ -3,7 +3,7 @@ import type { ChatAPI } from '@/renderer/shared/types/chatApi';
 import type { ChatMessage, Conversation, LibraryIndexStatus } from '@/types/chat';
 
 export function indexStatus(over: Partial<LibraryIndexStatus> = {}): LibraryIndexStatus {
-  return { files: 0, chunks: 0, staleFiles: 0, indexing: false, lastIndexedAt: null, error: null, skipped: [], ready: false, ...over };
+  return { files: 0, chunks: 0, staleFiles: 0, indexing: false, progress: null, cancelled: false, lastIndexedAt: null, error: null, skipped: [], ready: false, ...over };
 }
 
 /**
@@ -41,6 +41,7 @@ export function installChatApi(options: {
     remove: vi.fn(async (id: string) => { conversations.delete(id); return { success: true as const, data: undefined }; }),
     indexStatus: vi.fn(async () => ({ success: true as const, data: status })),
     indexUpdate: vi.fn(async () => { status = { ...status, ready: true, files: status.files || 2, chunks: status.chunks || 5, staleFiles: 0, lastIndexedAt: Date.now() }; return { success: true as const, data: status }; }),
+    indexCancel: vi.fn(async () => { status = { ...status, indexing: false, progress: null, cancelled: true }; return { success: true as const, data: status }; }),
     onIndexChanged: vi.fn((callback: () => void) => { listeners.add(callback); return () => listeners.delete(callback); }),
     ask: vi.fn((conversationId: string, question: string, onDelta: (delta: string) => void, onError: (error: string) => void) => {
       const conversation = conversations.get(conversationId);

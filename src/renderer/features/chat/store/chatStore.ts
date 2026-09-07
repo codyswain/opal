@@ -22,6 +22,7 @@ export interface ChatActions {
   cancel: () => void;
   refreshIndex: () => Promise<void>;
   updateIndex: () => Promise<void>;
+  cancelIndex: () => Promise<void>;
   /** Registers the index-changed listener once; later calls are no-ops. */
   subscribe: () => void;
   reset: () => void;
@@ -119,6 +120,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => ({ index: state.index ? { ...state.index, indexing: true } : state.index, indexError: null }));
     const response = await window.chatAPI.indexUpdate();
     if (!response.success) { set({ indexError: response.error }); await get().refreshIndex(); return; }
+    set({ index: response.data, indexError: response.data.error });
+  },
+
+  cancelIndex: async () => {
+    const response = await window.chatAPI.indexCancel();
+    if (!response.success) { set({ indexError: response.error }); return; }
     set({ index: response.data, indexError: response.data.error });
   },
 

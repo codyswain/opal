@@ -133,13 +133,14 @@ export class ChatService {
         name: path.basename(hit.path),
         excerpt: hit.text.slice(0, 600),
         score: hit.score,
+        ...(hit.page ? { page: hit.page } : {}),
       }));
     }
     const system = [
       'You answer questions about the person\'s own library of files. Use only the numbered sources below.',
       'Cite a source inline as [n] right after the sentence it supports. If the sources do not contain the answer, say so plainly and do not guess.',
       status.ready ? '' : 'The library is not indexed yet; tell the person to run Index library before you can answer from their files.',
-      sources.length > 0 ? `Sources:\n${sources.map((source) => `[${source.n}] ${source.name}\n${source.excerpt}`).join('\n\n')}` : 'Sources: none matched this question.',
+      sources.length > 0 ? `Sources:\n${sources.map((source) => `[${source.n}] ${source.name}${source.page ? ` (page ${source.page})` : ''}\n${source.excerpt}`).join('\n\n')}` : 'Sources: none matched this question.',
     ].filter(Boolean).join('\n\n');
     const history = conversation.messages.slice(-9).map((message) => ({ role: message.role, content: message.content }));
     const assistant: ChatMessage = { id: randomUUID(), role: 'assistant', content: '', createdAt: (this.deps.now ?? Date.now)(), sources };

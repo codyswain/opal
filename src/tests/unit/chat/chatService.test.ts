@@ -128,7 +128,7 @@ describe('ChatHandlers', () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new ChatHandlers({ ipc, service, index }).registerAll();
-    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:get', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove']);
+    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove']);
     const frames: unknown[] = [];
     const event = { sender: { isDestroyed: () => false, send: (_channel: string, payload: unknown) => frames.push(payload) } };
     const invoke = (channel: string, ...args: unknown[]) => {
@@ -137,6 +137,7 @@ describe('ChatHandlers', () => {
       return handler(event, ...args);
     };
     await invoke('chat:index-update');
+    expect(await invoke('chat:index-cancel')).toMatchObject({ success: true, data: { indexing: false } });
     const created = await invoke('chat:create') as { data: { id: string } };
     expect(await invoke('chat:ask', created.data.id, 'Mountains?', 'bad channel')).toMatchObject({ success: false });
     const answered = await invoke('chat:ask', created.data.id, 'Mountains?', 'chat:answer:abc-123') as { success: boolean };

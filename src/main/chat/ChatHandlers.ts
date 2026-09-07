@@ -24,6 +24,7 @@ export class ChatHandlers {
     ipc.handle('chat:remove', async (_, id: unknown): Promise<IPCResponse> => this.act(() => service.remove(id), 'Failed to remove the conversation'));
     ipc.handle('chat:index-status', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(async () => { await index.load(); return index.status(); }, 'Failed to read the index'));
     ipc.handle('chat:index-update', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(() => index.update(), 'Failed to update the index'));
+    ipc.handle('chat:index-cancel', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(() => index.cancel(), 'Failed to stop indexing'));
     // Deltas stream on a per-request channel the renderer names; `null` ends the stream.
     ipc.handle('chat:ask', async (event, conversationId: unknown, question: unknown, channel: unknown): Promise<IPCResponse<ChatAnswer>> => {
       if (typeof channel !== 'string' || !CHANNEL.test(channel)) return { success: false, error: 'Invalid chat request.' };

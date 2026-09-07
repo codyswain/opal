@@ -8,6 +8,7 @@ export interface ChatAPI {
   remove: (id: string) => Promise<DiskResult>;
   indexStatus: () => Promise<DiskResult<LibraryIndexStatus>>;
   indexUpdate: () => Promise<DiskResult<LibraryIndexStatus>>;
+  indexCancel: () => Promise<DiskResult<LibraryIndexStatus>>;
   onIndexChanged: (callback: () => void) => () => void;
   ask: (
     conversationId: string,
