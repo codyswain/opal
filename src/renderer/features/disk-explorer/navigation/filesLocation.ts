@@ -18,12 +18,24 @@ export type FilesHistoryMutation = 'push' | 'replace' | 'none';
  */
 export type FilesCollection =
   | { kind: 'directory'; directory: string }
-  | { kind: 'recent' };
+  | { kind: 'recent' }
+  | { kind: 'query'; id: string };
 
 export const RECENT_COLLECTION: FilesCollection = { kind: 'recent' };
 
+const QUERY_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 export function directoryCollection(directory: string): FilesCollection {
   return { kind: 'directory', directory: normalizeFsPath(directory) };
+}
+
+export function queryCollection(id: string): FilesCollection {
+  return { kind: 'query', id };
+}
+
+export interface FilesLocationOptions {
+  /** Transient query definitions live in session state; unknown ids are invalid. */
+  isKnownQuery?: (id: string) => boolean;
 }
 
 export function collectionDirectory(collection: FilesCollection): string | null {
@@ -35,9 +47,9 @@ export function locationDirectory(location: FilesLocation): string | null {
 }
 
 export function collectionKey(collection: FilesCollection): string {
-  return collection.kind === 'directory'
-    ? `directory:${normalizeFsPath(collection.directory)}`
-    : collection.kind;
+  if (collection.kind === 'directory') return `directory:${normalizeFsPath(collection.directory)}`;
+  if (collection.kind === 'query') return `query:${collection.id}`;
+  return collection.kind;
 }
 
 export function sameCollection(
@@ -82,9 +94,14 @@ function isWithinOneRoot(
 
 function normalizeCollection(
   candidate: FilesCollection,
-  roots: readonly string[]
+  roots: readonly string[],
+  options: FilesLocationOptions
 ): FilesCollection | null {
   if (candidate.kind === 'recent') return RECENT_COLLECTION;
+  if (candidate.kind === 'query') {
+    if (!QUERY_ID.test(candidate.id) || !options.isKnownQuery?.(candidate.id)) return null;
+    return { kind: 'query', id: candidate.id };
+  }
   const directory = normalizeFsPath(candidate.directory);
   if (!isAbsoluteFsPath(directory) || !isWithinOneRoot([directory], roots)) {
     return null;
@@ -94,11 +111,12 @@ function normalizeCollection(
 
 export function normalizeFilesLocation(
   candidate: FilesLocation | null,
-  roots: readonly string[]
+  roots: readonly string[],
+  options: FilesLocationOptions = {}
 ): FilesLocation | null {
   if (!candidate || roots.length === 0) return null;
 
-  const collection = normalizeCollection(candidate.collection, roots);
+  const collection = normalizeCollection(candidate.collection, roots, options);
   if (!collection) return null;
 
   if (candidate.mode === 'browse') {
@@ -121,7 +139,12 @@ export function normalizeFilesLocation(
 function parseCollection(params: URLSearchParams): FilesCollection | null {
   const collection = params.get('collection');
   if (collection !== null) {
-    return collection === 'recent' ? RECENT_COLLECTION : null;
+    if (collection === 'recent') return RECENT_COLLECTION;
+    if (collection === 'query') {
+      const id = params.get('id');
+      return id ? { kind: 'query', id } : null;
+    }
+    return null;
   }
   const directory = params.get('dir');
   return directory ? { kind: 'directory', directory } : null;
@@ -129,7 +152,8 @@ function parseCollection(params: URLSearchParams): FilesCollection | null {
 
 export function parseFilesLocation(
   search: string,
-  roots: readonly string[]
+  roots: readonly string[],
+  options: FilesLocationOptions = {}
 ): FilesLocation | null {
   const params = new URLSearchParams(
     search.startsWith('?') ? search.slice(1) : search
@@ -140,12 +164,12 @@ export function parseFilesLocation(
   if (!collection) return null;
 
   if (mode === 'browse') {
-    return normalizeFilesLocation({ mode, collection }, roots);
+    return normalizeFilesLocation({ mode, collection }, roots, options);
   }
 
   const file = params.get('file');
   if (!file) return null;
-  return normalizeFilesLocation({ mode, collection, file }, roots);
+  return normalizeFilesLocation({ mode, collection, file }, roots, options);
 }
 
 export function serializeFilesLocation(location: FilesLocation): string {
@@ -155,6 +179,7 @@ export function serializeFilesLocation(location: FilesLocation): string {
     params.set('dir', normalizeFsPath(location.collection.directory));
   } else {
     params.set('collection', location.collection.kind);
+    if (location.collection.kind === 'query') params.set('id', location.collection.id);
   }
   if (location.mode === 'focus') {
     params.set('file', normalizeFsPath(location.file));
@@ -224,9 +249,10 @@ export interface ResolvedFilesLocation {
 /** Resolves a URL to a valid canonical location or the first-root fallback. */
 export function resolveFilesLocation(
   search: string,
-  roots: readonly string[]
+  roots: readonly string[],
+  options: FilesLocationOptions = {}
 ): ResolvedFilesLocation | null {
-  const location = parseFilesLocation(search, roots);
+  const location = parseFilesLocation(search, roots, options);
   if (!location) {
     const fallback = roots[0] ? normalizeFsPath(roots[0]) : null;
     return fallback

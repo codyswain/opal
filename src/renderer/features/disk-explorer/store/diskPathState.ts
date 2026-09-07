@@ -20,7 +20,7 @@ function collectionFor(
   previous: FilesCollection | null,
   currentDirectory: string | null
 ): FilesCollection | null {
-  if (previous?.kind === 'recent') return previous;
+  if (previous && previous.kind !== 'directory') return previous;
   return currentDirectory ? directoryCollection(currentDirectory) : null;
 }
 

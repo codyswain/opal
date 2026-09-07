@@ -62,6 +62,8 @@ export interface DiskActions {
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   navigateToDirectory: (dirPath: string) => void;
+  /** Recent and query collections have no directory; selection resets either way. */
+  navigateToCollection: (collection: FilesCollection) => void;
   navigateToRecent: () => void;
   select: (targetPath: string | null) => void;
   toggleSelected: (targetPath: string) => void;
@@ -127,8 +129,8 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       const roots = samePaths(state.roots, response.data)
         ? state.roots
         : response.data;
-      // Recent is not tied to a root; never substitute one for it.
-      if (state.currentCollection?.kind === 'recent') {
+      // Recent and query collections are not tied to a root; never substitute one.
+      if (state.currentCollection && state.currentCollection.kind !== 'directory') {
         return {
           roots,
           currentDirectory: null,
@@ -247,16 +249,23 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       isQuickLookOpen: false,
     }),
 
-  navigateToRecent: () =>
+  navigateToCollection: (collection) => {
+    if (collection.kind === 'directory') {
+      get().navigateToDirectory(collection.directory);
+      return;
+    }
     set({
-      currentCollection: { kind: 'recent' },
+      currentCollection: collection,
       currentDirectory: null,
       focusedPath: null,
       selectedPath: null,
       selectedPaths: [],
       quickPreviewPath: null,
       isQuickLookOpen: false,
-    }),
+    });
+  },
+
+  navigateToRecent: () => get().navigateToCollection({ kind: 'recent' }),
 
   select: (targetPath) =>
     set((state) => {

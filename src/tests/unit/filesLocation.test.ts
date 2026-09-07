@@ -365,6 +365,23 @@ describe('collections', () => {
     expect(remapFilesLocation(focus, '/Vault/Old', '/Vault/New')).toEqual({ location: { ...focus, file: '/Vault/New/a.md' }, history: 'replace' });
     expect(remapFilesLocation({ mode: 'browse', collection: RECENT_COLLECTION }, '/Vault/Old', '/Vault/New').history).toBe('none');
   });
+  it('round-trips query collections only when the draft is known', () => {
+    const known = { isKnownQuery: (id: string) => id === 'q1' };
+    const browse = { mode: 'browse' as const, collection: { kind: 'query' as const, id: 'q1' } };
+    expect(serializeFilesLocation(browse)).toBe('?mode=browse&collection=query&id=q1');
+    expect(parseFilesLocation('?mode=browse&collection=query&id=q1', roots, known)).toEqual(browse);
+    expect(parseFilesLocation(serializeFilesLocation({ mode: 'focus', collection: { kind: 'query', id: 'q1' }, file: '/Vault/a.md' }), roots, known))
+      .toEqual({ mode: 'focus', collection: { kind: 'query', id: 'q1' }, file: '/Vault/a.md' });
+    expect(parseFilesLocation('?mode=browse&collection=query&id=q1', roots)).toBeNull();
+    expect(parseFilesLocation('?mode=browse&collection=query&id=q2', roots, known)).toBeNull();
+    expect(parseFilesLocation('?mode=browse&collection=query&id=bad%20id', roots, { isKnownQuery: () => true })).toBeNull();
+    expect(parseFilesLocation('?mode=browse&collection=query', roots, known)).toBeNull();
+    expect(resolveFilesLocation('?mode=browse&collection=query&id=q9', roots, known)?.location).toEqual(browseFiles(ROOT).location);
+    expect(collectionKey({ kind: 'query', id: 'q1' })).toBe('query:q1');
+    expect(remapFilesLocation({ mode: 'focus', collection: { kind: 'query', id: 'q1' }, file: '/Vault/Old/a.md' }, '/Vault/Old', '/Vault/New').location)
+      .toEqual({ mode: 'focus', collection: { kind: 'query', id: 'q1' }, file: '/Vault/New/a.md' });
+  });
+
   it('exposes directory helpers', () => {
     expect(locationDirectory({ mode: 'browse', collection: RECENT_COLLECTION })).toBeNull();
     expect(locationDirectory(browseFiles('/Vault/A').location)).toBe('/Vault/A');

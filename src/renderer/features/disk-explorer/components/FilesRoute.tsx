@@ -88,8 +88,7 @@ export function FilesRoute() {
     applied.current = next;
     const state = useDiskStore.getState();
     const directory = collectionDirectory(next.collection);
-    if (directory) state.navigateToDirectory(directory);
-    else state.navigateToRecent();
+    state.navigateToCollection(next.collection);
     if (next.mode === 'focus') useTabsStore.getState().openFile(next.file);
     else useTabsStore.setState({ openedPath: null, activePath: null });
     let cancelled = false;
