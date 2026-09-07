@@ -14,6 +14,8 @@ import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
+import { installCollectionsApi } from '@/tests/helpers/collectionsApi';
+import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
 
 const ROOT = '/Vault';
 const DESIGN = '/Vault/Design';
@@ -73,6 +75,8 @@ function renderSidebar(withFiles = false) {
 beforeEach(() => {
   window.localStorage.clear();
   installActivityApi();
+  installCollectionsApi();
+  useQueryDraftsStore.getState().reset();
   installDiskApi({
     listRoots: vi.fn(async () => ({
       success: true as const,
@@ -196,5 +200,27 @@ describe('WorkspaceSidebar', () => {
       expect(useDiskStore.getState().currentDirectory).toBe(ROOT)
     );
     expect(files).toHaveClass('bg-surface-selected');
+  });
+
+  it('creates a transient view from the Views section and lists it', async () => {
+    const user = userEvent.setup();
+    renderSidebar(true);
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentDirectory).toBe(ROOT)
+    );
+    expect(screen.getByText('Filter any folder to start a view.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'New view' }));
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentCollection).toMatchObject({ kind: 'query' })
+    );
+    const id = useQueryDraftsStore.getState().order[0];
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      `/files?mode=browse&collection=query&id=${id}`
+    );
+    const view = screen.getByRole('link', { name: 'Untitled view' });
+    expect(view).toHaveClass('bg-surface-selected');
+    expect(screen.getByRole('link', { name: 'Files' })).not.toHaveClass('bg-surface-selected');
+    expect(window.activityAPI.record).not.toHaveBeenCalled();
+    expect(useQueryDraftsStore.getState().get(id)?.query.scope).toEqual({ kind: 'all-roots' });
   });
 });

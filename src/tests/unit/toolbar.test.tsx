@@ -5,6 +5,7 @@ import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi } from '@/tests/helpers/diskApi';
+import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
 
 beforeEach(() => {
   installDiskApi();
@@ -101,5 +102,23 @@ describe('Toolbar filtering', () => {
     expect(input).toHaveFocus();
     expect(input.selectionStart).toBe(0);
     expect(input.selectionEnd).toBe(input.value.length);
+  });
+});
+
+describe('Toolbar views', () => {
+  it('starts a view scoped to this folder and its subfolders', async () => {
+    useQueryDraftsStore.getState().reset();
+    const user = userEvent.setup();
+    render(<Toolbar dirPath="/V/Papers" />);
+
+    await user.click(screen.getByTestId('toolbar-filter-folder'));
+
+    const id = useQueryDraftsStore.getState().order[0];
+    expect(useQueryDraftsStore.getState().get(id)).toMatchObject({
+      origin: '/V/Papers',
+      query: { scope: { kind: 'folders', folders: ['/V/Papers'], includeDescendants: true }, filters: [] },
+    });
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'query', id });
+    expect(useDiskStore.getState().currentDirectory).toBeNull();
   });
 });

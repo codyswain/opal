@@ -1,13 +1,16 @@
-import { Clock, FileText, Files, FolderPlus, Settings } from 'lucide-react';
+import { Clock, FileText, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
   RECENT_COLLECTION,
+  browseCollection,
   browseFiles,
   directoryCollection,
+  queryCollection,
   serializeFilesLocation,
 } from '@/renderer/features/disk-explorer/navigation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
 import { ThemeToggle } from '@/renderer/features/theme';
 import { IconButton } from '@/renderer/shared/ui';
 import { useShell } from '../context/ShellContext';
@@ -43,8 +46,17 @@ export function WorkspaceSidebar({
   const openFolder = useDiskStore((state) => state.openFolder);
   const { navigateFiles, location } = useShell();
   const currentRoot = rootForDirectory(roots, currentDirectory);
+  const drafts = useQueryDraftsStore((state) => state.drafts);
+  const draftOrder = useQueryDraftsStore((state) => state.order);
+  const createDraft = useQueryDraftsStore((state) => state.create);
   const onFiles = location.pathname === FILES_ROUTE_PATH;
   const isRecent = currentCollection?.kind === 'recent';
+  const currentQueryId = currentCollection?.kind === 'query' ? currentCollection.id : null;
+  const newView = () => {
+    const id = createDraft();
+    navigateFiles(browseCollection(queryCollection(id)));
+    onNavigate?.();
+  };
   const recentDestination = {
     pathname: FILES_ROUTE_PATH,
     search: serializeFilesLocation({
@@ -101,7 +113,7 @@ export function WorkspaceSidebar({
             to={filesDestination}
             icon={Files}
             label="Files"
-            active={onFiles && !isRecent}
+            active={onFiles && !isRecent && !currentQueryId}
             onActivate={onNavigate}
           />
           <SidebarItem
@@ -113,6 +125,39 @@ export function WorkspaceSidebar({
           />
         </SidebarSection>
       </nav>
+
+      <SidebarSection
+        title="Views"
+        className="border-t border-border-subtle pt-1"
+        action={
+          <IconButton label="New view" onClick={newView} size="compact">
+            <Plus aria-hidden className="h-3.5 w-3.5" />
+          </IconButton>
+        }
+      >
+        {draftOrder.length === 0 ? (
+          <p className="px-2 py-1 text-metadata text-foreground-tertiary">
+            Filter any folder to start a view.
+          </p>
+        ) : (
+          <ul aria-label="Views" className="flex flex-col">
+            {draftOrder.map((id) => (
+              <li key={id}>
+                <SidebarItem
+                  to={{
+                    pathname: FILES_ROUTE_PATH,
+                    search: serializeFilesLocation({ mode: 'browse', collection: queryCollection(id) }),
+                  }}
+                  icon={SlidersHorizontal}
+                  label={drafts[id]?.name ?? 'Untitled view'}
+                  active={onFiles && currentQueryId === id}
+                  onActivate={onNavigate}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </SidebarSection>
 
       <SidebarSection
         title="Open folders"

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowUp, FolderPlus, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, FolderPlus, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { SortField } from '@/common/sortEntries';
+import { folderScope } from '@/common/collectionQuery';
 import { useDiskStore } from '../store/diskStore';
+import { useQueryDraftsStore } from '../store/queryDraftsStore';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
+import { queryCollection } from '../navigation/filesLocation';
 
 const SORT_FIELDS: { field: SortField; label: string }[] = [
   { field: 'name', label: 'Name' },
@@ -17,7 +21,15 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
   const setFilter = useDiskStore((state) => state.setFilter);
   const density = useDiskStore((state) => state.density);
   const setDensity = useDiskStore((state) => state.setDensity);
+  const createDraft = useQueryDraftsStore((state) => state.create);
+  const navigation = useFilesNavigation();
   const filterRef = useRef<HTMLInputElement>(null);
+
+  // A view made from a folder starts recursive; the scope control shows that.
+  const filterThisFolder = () => {
+    const id = createDraft({ scope: folderScope(dirPath), origin: dirPath });
+    navigation.navigateCollection(queryCollection(id));
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -44,6 +56,17 @@ export const Toolbar: React.FC<{ dirPath: string }> = ({ dirPath }) => {
         className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
       >
         <FolderPlus className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={filterThisFolder}
+        aria-label="Filter this folder"
+        title="Filter this folder and its subfolders"
+        data-testid="toolbar-filter-folder"
+        data-disk-shortcuts-ignore="true"
+        className="rounded-md p-2 text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground"
+      >
+        <SlidersHorizontal className="h-4 w-4" />
       </button>
       <div className="relative shrink-0">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />

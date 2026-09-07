@@ -278,6 +278,7 @@ export function FilesRoute() {
         recordOpened(directory);
         go({ mode: 'browse', collection: directoryCollection(directory) });
       },
+      navigateCollection: (collection) => go({ mode: 'browse', collection }),
       openFile: (file) => {
         const collection = collectionForFile(file, currentCollection());
         if (!collection) return;
