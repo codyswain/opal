@@ -31,27 +31,34 @@ import { DiskExplorer } from './DiskExplorer';
 /** Router owns navigation; snapshots own only the collection's transient state. */
 export function FilesRoute() {
   const roots = useDiskStore((state) => state.roots);
-  const drafts = useViewDraftsStore((state) => state.drafts);
-  const savedViews = useSavedViewsStore((state) => state.views);
-  const viewsLoaded = useSavedViewsStore((state) => state.loaded);
   const location = useLocation();
+  // Only the URL's own collection id is subscribed to, so unrelated draft or
+  // listing churn cannot re-key the apply effect while it is restoring.
+  const urlParams = new URLSearchParams(location.search);
+  const urlCollection = urlParams.get('collection');
+  const urlId = urlParams.get('id');
+  const knownQuery = useViewDraftsStore((state) =>
+    urlCollection === 'query' && urlId ? urlId in state.drafts : false
+  );
+  const knownView = useSavedViewsStore((state) =>
+    urlCollection === 'view' && urlId ? urlId in state.views : false
+  );
+  const viewsLoaded = useSavedViewsStore((state) => state.loaded);
   const navigate = useNavigate();
   const applied = React.useRef<FilesLocation | null>(null);
   const restoring = React.useRef(false);
   const [readyKey, setReadyKey] = React.useState<string | null>(null);
   // A view URL cannot be judged until the library listing has loaded.
-  const awaitingViews =
-    !viewsLoaded &&
-    new URLSearchParams(location.search).get('collection') === 'view';
+  const awaitingViews = !viewsLoaded && urlCollection === 'view';
   const resolved = React.useMemo(
     () =>
       awaitingViews
         ? null
         : resolveFilesLocation(location.search, roots, {
-            isKnownQuery: (id) => id in drafts,
-            isKnownView: (id) => id in savedViews,
+            isKnownQuery: () => knownQuery,
+            isKnownView: () => knownView,
           }),
-    [awaitingViews, location.search, roots, drafts, savedViews]
+    [awaitingViews, location.search, roots, knownQuery, knownView]
   );
   const capture = React.useCallback(() => {
     const current = applied.current;

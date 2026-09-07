@@ -93,10 +93,11 @@ export class ActivityService implements ActivityRecorder {
       let entry: DiskEntry;
       try { entry = await this.deps.statEntry(record.path); } catch { continue; }
       if (record.id !== null) {
-        // A different readable identity means the item was replaced; unreadable
-        // metadata is unknown and the record is kept.
+        // A different readable identity means the item was replaced. Unreadable
+        // metadata is unknown, and an item that simply lost its identity is
+        // still the same file; both keep the record.
         const currentId = await this.readCurrentId(record.path);
-        if (currentId !== undefined && currentId !== record.id) continue;
+        if (typeof currentId === 'string' && currentId !== record.id) continue;
       }
       items.push({
         entry,

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { emptyQuery, sameQuery, validateCollectionQuery } from '@/common/collectionQuery';
+import { CollectionQueryError, emptyQuery, sameQuery, validateCollectionQuery } from '@/common/collectionQuery';
 import type { CollectionQuery, CollectionScope } from '@/types/collectionQuery';
 import type { SavedView, ViewLayout } from '@/types/savedView';
 
@@ -114,8 +114,17 @@ export const useViewDraftsStore = create<ViewDraftsStore>((set, get) => ({
     set((state) => {
       const draft = state.drafts[id];
       if (!draft) return {};
-      // Only validated values reach main; an invalid edit is rejected here.
-      const query = patch.query ? validateCollectionQuery(patch.query) : draft.query;
+      // Only validated values reach main; an invalid edit is refused here
+      // without throwing, because callers run inside React effects.
+      let query = draft.query;
+      if (patch.query) {
+        try {
+          query = validateCollectionQuery(patch.query);
+        } catch (error) {
+          if (error instanceof CollectionQueryError) return {};
+          throw error;
+        }
+      }
       const name = patch.name !== undefined ? patch.name.trim().slice(0, 120) || draft.name : draft.name;
       const layout = patch.layout ?? draft.layout;
       return { drafts: { ...state.drafts, [id]: { ...draft, name, query, layout } } };

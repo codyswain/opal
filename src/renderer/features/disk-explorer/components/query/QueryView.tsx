@@ -80,14 +80,29 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const [chips, setChips] = useState<EditableChip[]>(() => (draft ? draft.query.filters.map(chipFromFilter) : []));
   const [dismissed, setDismissed] = useState<string[]>([]);
   const lastLoaded = useRef<CollectionQuery | null>(draft?.query ?? null);
+  // The filters the current chips were last derived from or pushed into. A
+  // draft whose filters differ from this came from outside the chips (Reset,
+  // Reload from disk, a save) and must rebuild the chips instead.
+  const chipFilters = useRef<string>(JSON.stringify(draft?.query.filters ?? []));
 
-  // Complete chips become the draft's filters; incomplete ones stay visible only.
   useEffect(() => {
     if (!draft) return;
-    const filters = filtersFromChips(chips);
-    const next = { ...draft.query, filters };
-    if (!sameQuery(next, draft.query)) updateDraft(id, { query: next });
-  }, [chips, draft, id, updateDraft]);
+    const draftFilters = JSON.stringify(draft.query.filters);
+    if (draftFilters !== chipFilters.current) {
+      chipFilters.current = draftFilters;
+      setChips(draft.query.filters.map(chipFromFilter));
+    }
+  }, [draft]);
+
+  // Complete chips become the draft's filters; incomplete ones stay visible only.
+  const setChipsFromUser = (next: EditableChip[]) => {
+    setChips(next);
+    if (!draft) return;
+    const filters = filtersFromChips(next);
+    chipFilters.current = JSON.stringify(filters);
+    const query = { ...draft.query, filters };
+    if (!sameQuery(query, draft.query)) updateDraft(id, { query });
+  };
 
   // FilesRoute performs the first load; later draft edits reload with the debounce.
   useEffect(() => {
@@ -298,7 +313,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
           origin={draft.origin}
           onChange={(scope) => updateDraft(id, { query: { ...draft.query, scope } })}
         />
-        <FilterChips chips={chips} onChange={setChips} />
+        <FilterChips chips={chips} onChange={setChipsFromUser} />
       </div>
 
       {result.unavailableScopes.length > 0 ? (
@@ -348,7 +363,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
               entries={entries}
               suggestedMode="list"
               filter=""
-              onClearFilter={() => setChips([])}
+              onClearFilter={() => setChipsFromUser([])}
               decorate={decorate}
               countLabel={`${entries.length === result.total ? entries.length : `${entries.length} of ${result.total}`} ${result.total === 1 ? 'item' : 'items'}${result.incomplete ? ' (incomplete)' : ''}`}
               emptyState={hasFilters ? (
@@ -356,7 +371,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
                   Icon={SearchX}
                   title="No items match these filters"
                   description="Loosen a filter or clear them to see everything in scope."
-                  action={<Button size="compact" variant="outline" onClick={() => setChips([])}>Clear filters</Button>}
+                  action={<Button size="compact" variant="outline" onClick={() => setChipsFromUser([])}>Clear filters</Button>}
                 />
               ) : (
                 <EmptyState Icon={FolderOpen} title="Nothing in scope" description="Open a folder or widen the scope." />

@@ -1,10 +1,10 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import { DURATION_PRESETS, FIELD_LABELS, FILE_KINDS, KIND_LABELS } from '@/common/collectionQuery';
+import { DURATION_PRESETS, FIELD_LABELS, FILE_KINDS, KIND_LABELS, MAX_FILTERS } from '@/common/collectionQuery';
 import type { FileKind } from '@/common/fileKind';
 import type { CollectionFilterField } from '@/types/collectionQuery';
 import { Button, Chip } from '@/renderer/shared/ui';
-import { OPERATORS, newChip, type EditableChip } from './editableFilters';
+import { CUSTOM_PRESET_PREFIX, OPERATORS, newChip, presetDuration, type EditableChip } from './editableFilters';
 
 interface FilterChipsProps {
   chips: EditableChip[];
@@ -29,9 +29,11 @@ export const FilterChips: React.FC<FilterChipsProps> = ({ chips, onChange }) => 
       <select
         aria-label="Add filter"
         value=""
+        disabled={chips.length >= MAX_FILTERS}
+        title={chips.length >= MAX_FILTERS ? `At most ${MAX_FILTERS} filters` : undefined}
         onChange={(event) => {
           const field = event.target.value as CollectionFilterField;
-          if (field) onChange([...chips, newChip(field)]);
+          if (field && chips.length < MAX_FILTERS) onChange([...chips, newChip(field)]);
         }}
         className={inputStyles}
       >
@@ -104,6 +106,9 @@ const ChipEditor: React.FC<ChipEditorProps> = ({ chip, onChange, onRemove }) => 
       ) : null}
       {isDuration ? (
         <select aria-label={`${label} duration`} value={chip.preset} onChange={(event) => onChange({ preset: event.target.value })} className={inputStyles}>
+          {chip.preset.startsWith(CUSTOM_PRESET_PREFIX) ? (
+            <option value={chip.preset}>{`past ${Math.round((presetDuration(chip.preset) ?? 0) / 3_600_000)} hours`}</option>
+          ) : null}
           {DURATION_PRESETS.map((preset) => (
             <option key={preset.id} value={preset.id}>{preset.label}</option>
           ))}

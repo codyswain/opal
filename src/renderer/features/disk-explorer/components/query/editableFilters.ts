@@ -1,5 +1,13 @@
 import type { FileKind } from '@/common/fileKind';
-import { DURATION_PRESETS, dayBoundary, localDayOf, meaningfulTags } from '@/common/collectionQuery';
+import {
+  DURATION_PRESETS,
+  MAX_NAME_LENGTH,
+  MAX_TAG_LENGTH,
+  MAX_TAG_VALUES,
+  dayBoundary,
+  localDayOf,
+  meaningfulTags,
+} from '@/common/collectionQuery';
 import type { CollectionFilter, CollectionFilterField } from '@/types/collectionQuery';
 
 /**
@@ -12,8 +20,21 @@ export interface EditableChip {
   op: string;
   text: string;
   kinds: FileKind[];
+  /** A preset id, or `custom:<ms>` for a duration authored outside the app. */
   preset: string;
   day: string;
+}
+
+export const CUSTOM_PRESET_PREFIX = 'custom:';
+
+export function presetDuration(preset: string): number | null {
+  const known = DURATION_PRESETS.find((candidate) => candidate.id === preset);
+  if (known) return known.ms;
+  if (preset.startsWith(CUSTOM_PRESET_PREFIX)) {
+    const ms = Number(preset.slice(CUSTOM_PRESET_PREFIX.length));
+    return Number.isFinite(ms) && ms > 0 ? ms : null;
+  }
+  return null;
 }
 
 export const OPERATORS: Record<CollectionFilterField, ReadonlyArray<{ op: string; label: string }>> = {
@@ -70,7 +91,9 @@ export function chipFromFilter(filter: CollectionFilter): EditableChip {
     case 'opened':
     case 'modified':
       if (filter.op === 'within') {
-        chip.preset = DURATION_PRESETS.find((preset) => preset.ms === filter.durationMs)?.id ?? DURATION_PRESETS[2].id;
+        // A duration authored outside the presets is kept, never rounded.
+        chip.preset = DURATION_PRESETS.find((preset) => preset.ms === filter.durationMs)?.id
+          ?? `${CUSTOM_PRESET_PREFIX}${filter.durationMs}`;
       } else if (filter.op === 'before') {
         chip.day = localDayOf(filter.at);
       } else if (filter.op === 'after') {
@@ -84,12 +107,15 @@ export function chipFromFilter(filter: CollectionFilter): EditableChip {
   return chip;
 }
 
-/** Null while the chip is incomplete; such chips are shown but not queried. */
+/**
+ * Null while the chip is incomplete or over a validator limit; such chips are
+ * shown but not queried, so the draft only ever receives valid filters.
+ */
 export function filterFromChip(chip: EditableChip): CollectionFilter | null {
   switch (chip.field) {
     case 'name': {
       const value = chip.text.trim();
-      if (!value) return null;
+      if (!value || value.length > MAX_NAME_LENGTH) return null;
       return { field: 'name', op: chip.op === 'not-contains' ? 'not-contains' : 'contains', value };
     }
     case 'kind':
@@ -98,7 +124,8 @@ export function filterFromChip(chip: EditableChip): CollectionFilter | null {
     case 'tags': {
       if (chip.op === 'is-empty') return { field: 'tags', op: 'is-empty' };
       const values = [...new Set(meaningfulTags(chip.text.split(',').map((tag) => tag.trim())))];
-      if (values.length === 0) return null;
+      if (values.length === 0 || values.length > MAX_TAG_VALUES) return null;
+      if (values.some((tag) => [...tag].length > MAX_TAG_LENGTH)) return null;
       const op = chip.op === 'has-all' ? 'has-all' : chip.op === 'has-none' ? 'has-none' : 'has-any';
       return { field: 'tags', op, values };
     }
@@ -109,8 +136,8 @@ export function filterFromChip(chip: EditableChip): CollectionFilter | null {
     case 'modified': {
       if (chip.op === 'never') return chip.field === 'modified' ? null : { field: chip.field, op: 'never' };
       if (chip.op === 'within') {
-        const preset = DURATION_PRESETS.find((candidate) => candidate.id === chip.preset) ?? DURATION_PRESETS[2];
-        return { field: chip.field, op: 'within', durationMs: preset.ms };
+        const durationMs = presetDuration(chip.preset);
+        return durationMs === null ? null : { field: chip.field, op: 'within', durationMs };
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(chip.day)) return null;
       try {

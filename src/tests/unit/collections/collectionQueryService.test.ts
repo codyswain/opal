@@ -67,6 +67,15 @@ describe('CollectionQueryService', () => {
     expect(scoped.unavailableScopes).toEqual([]);
   });
 
+  it('matches a scope spelled through an alias by its resolved path', async () => {
+    // On macOS os.tmpdir() lives under /var, an alias of /private/var; the
+    // registry stores the resolved form and the index uses it too.
+    const spelled = path.join(tmp, 'root', 'Sub');
+    const scoped = await service.query(emptyQuery(folderScope(spelled)));
+    expect(scoped.unavailableScopes).toEqual([]);
+    expect(scoped.rows.map((row) => row.entry.name)).toEqual(['d.pdf', 'e.pdf', 'e.pdf.opal.yaml']);
+  });
+
   it('rejects invalid queries and pages with plain errors', async () => {
     await expect(service.query({ version: 1 })).rejects.toThrow(/filters/i);
     await expect(service.query({ version: 1, filters: [] })).rejects.toThrow(/scope/i);

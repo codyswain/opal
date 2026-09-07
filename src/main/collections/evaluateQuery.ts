@@ -109,7 +109,10 @@ export function evaluateCollectionQuery(input: EvaluationInput): Evaluation {
   let excludedUnknown = 0;
   for (const item of input.items) {
     if (!inScope(item, query, input.allowedRoots)) continue;
-    const record = input.activity(item.path);
+    // A record whose identity no longer matches the item belongs to a
+    // replaced file; its history is not inherited, matching Recent.
+    const stored = input.activity(item.path);
+    const record = stored && stored.id !== null && item.id !== null && stored.id !== item.id ? null : stored;
     const touched = record ? input.touchedOf(record) : null;
     const row: CollectionRow = {
       entry: { path: item.path, name: item.name, kind: item.kind, isDirectory: item.isDirectory, size: item.size, mtimeMs: item.mtimeMs },

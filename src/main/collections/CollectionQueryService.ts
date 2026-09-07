@@ -21,18 +21,23 @@ export class CollectionQueryService {
   constructor(private deps: CollectionQueryServiceDependencies) {}
 
   async query(rawQuery: unknown, rawPage?: unknown): Promise<CollectionQueryResult> {
-    const query = validateCollectionQuery(rawQuery);
+    const validated = validateCollectionQuery(rawQuery);
     const page = validateCollectionPage(rawPage);
     const allowedRoots = this.deps.registry.list();
     const unavailableScopes: string[] = [];
-    if (query.scope.kind === 'folders') {
-      for (const folder of query.scope.folders) {
+    let query = validated;
+    if (validated.scope.kind === 'folders') {
+      // Index paths are real paths; a scope spelled through a symlink or an
+      // alias like /tmp must match by its resolved form.
+      const resolved: string[] = [];
+      for (const folder of validated.scope.folders) {
         try {
-          await this.deps.registry.assertAllowed(folder);
+          resolved.push(await this.deps.registry.assertAllowed(folder));
         } catch {
           unavailableScopes.push(folder);
         }
       }
+      query = { ...validated, scope: { ...validated.scope, folders: [...new Set(resolved)] } };
     }
     const indexState = this.deps.index.state() === 'ready' ? 'ready' : 'building';
     if (unavailableScopes.length > 0) {

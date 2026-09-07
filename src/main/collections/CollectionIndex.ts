@@ -151,7 +151,9 @@ export class CollectionIndex {
         onError: (target, error) => { this.scanWarnings.set(normalizePath(target), describe(target, error)); },
       });
     }
-    for (const candidate of [...this.items.keys()]) {
+    // Vanished children include directories that never indexed because they
+    // could not be read; their warnings must go with them.
+    for (const candidate of [...this.items.keys(), ...this.scanWarnings.keys()]) {
       if (path.dirname(candidate) === directory && !keep.has(candidate)) this.removeSubtree(candidate);
     }
   }

@@ -347,6 +347,56 @@ describe('saved views', () => {
   });
 });
 
+describe('review fixes', () => {
+  it('Reset and Reload from disk restore the saved chips', async () => {
+    const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Papers', query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
+    installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.selectOptions(screen.getByLabelText('Add filter'), 'description');
+    await screen.findByTestId('view-edited');
+    await waitFor(() => expect(lastQuery(api).filters).toHaveLength(2));
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() => expect(screen.queryByTestId('query-chip-description')).not.toBeInTheDocument());
+    expect(screen.getByTestId('query-chip-kind')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
+    await waitFor(() => expect(lastQuery(api).filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]));
+    expect(useViewDraftsStore.getState().get(view.id)?.query.filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]);
+  });
+
+  it('opens a view with a non-preset duration without rewriting or marking it', async () => {
+    const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Three hours', query: { ...emptyQuery(), filters: [{ field: 'touched', op: 'within', durationMs: 10_800_000 }] } });
+    installViewsApi([view]);
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await waitFor(() => expect((api.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1));
+    expect(lastQuery(api).filters).toEqual([{ field: 'touched', op: 'within', durationMs: 10_800_000 }]);
+    expect(screen.getByLabelText('Last touched duration')).toHaveValue('custom:10800000');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument();
+    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+
+  it('refuses an over-long chip value without crashing or sending it', async () => {
+    const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const id = useViewDraftsStore.getState().create();
+    const user = userEvent.setup();
+    renderQuery(id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.selectOptions(screen.getByLabelText('Add filter'), 'name');
+    const input = screen.getByLabelText('Name value');
+    await user.click(input);
+    await user.paste('x'.repeat(300));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(screen.getByTestId('query-chip-name')).toBeInTheDocument();
+    expect(lastQuery(api).filters).toEqual([]);
+    expect(useViewDraftsStore.getState().get(id)?.query.filters).toEqual([]);
+  });
+});
+
 describe('view polish', () => {
   it('Show in folder lands in the parent with the item selected', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, rename, rm, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { CollectionIndex } from '@/main/collections/CollectionIndex';
@@ -132,6 +132,24 @@ describe('CollectionIndex', () => {
     await flushTimers();
     const refreshed = await index.get();
     expect(refreshed.items.find((entry) => entry.path === item('a.md'))).toMatchObject({ tags: ['saved'], descriptionEmpty: false });
+  });
+
+  it('drops the warning of an unreadable directory once its parent no longer lists it', async () => {
+    await mkdir(item('Locked'));
+    await writeFile(item('Locked', 'secret.md'), 'x');
+    await chmod(item('Locked'), 0o000);
+    try {
+      const built = await index.get();
+      expect(built.warnings).toEqual([expect.stringMatching(/Locked/)]);
+    } finally {
+      await chmod(item('Locked'), 0o755);
+    }
+    await rm(item('Locked'), { recursive: true });
+    index.invalidateDirectories([root]);
+    await flushTimers();
+    const refreshed = await index.get();
+    expect(refreshed.warnings).toEqual([]);
+    expect(names(refreshed)).not.toContain('Locked');
   });
 
   it('serves the finished build to a caller that asks during the build', async () => {

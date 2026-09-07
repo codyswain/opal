@@ -125,6 +125,28 @@ describe('predicates', () => {
   });
 });
 
+describe('identity', () => {
+  it('does not let a replaced item inherit the old record\'s activity', () => {
+    const replaced = item({ path: '/V/replaced.pdf', kind: 'pdf', id: 'new-id' });
+    const unannotated = item({ path: '/V/plain.pdf', kind: 'pdf', id: null });
+    const unreadable = item({ path: '/V/unknown.pdf', kind: 'pdf', id: null, tags: null, metadataWarning: 'bad' });
+    const records: Record<string, ActivityRecord> = {
+      '/V/replaced.pdf': { path: '/V/replaced.pdf', id: 'old-id', openedAt: NOW - DAY, organizedAt: null, editedAt: null },
+      '/V/plain.pdf': { path: '/V/plain.pdf', id: 'was-annotated', openedAt: NOW - DAY, organizedAt: null, editedAt: null },
+      '/V/unknown.pdf': { path: '/V/unknown.pdf', id: 'some-id', openedAt: NOW - DAY, organizedAt: null, editedAt: null },
+    };
+    const result = evaluateCollectionQuery({
+      items: [replaced, unannotated, unreadable],
+      activity: (target) => records[target] ?? null,
+      touchedOf: (record) => ({ at: record.openedAt ?? 0, kind: 'opened' }),
+      allowedRoots: ['/V'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'opened', op: 'within', durationMs: 7 * DAY }], sort: { field: 'name', direction: 'asc' } },
+      now: NOW,
+    });
+    expect(paths(result)).toEqual(['/V/plain.pdf', '/V/unknown.pdf']);
+  });
+});
+
 describe('sorting', () => {
   it('sorts by name both ways with path tie-break and no folders-first rule', () => {
     expect(paths(run([], {}, { field: 'name', direction: 'desc' }))).toEqual([

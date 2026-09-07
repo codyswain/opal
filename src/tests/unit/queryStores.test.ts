@@ -22,7 +22,9 @@ describe('queryDraftsStore', () => {
     });
     store.update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
     expect(useViewDraftsStore.getState().get(id)?.query.filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]);
-    expect(() => store.update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: [] }] } })).toThrow();
+    // Callers run inside React effects; an invalid edit is refused, never thrown.
+    expect(() => store.update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: [] }] } })).not.toThrow();
+    expect(useViewDraftsStore.getState().get(id)?.query.filters).toEqual([{ field: 'kind', op: 'in', values: ['pdf'] }]);
     store.update(id, { name: '  Papers  ' });
     expect(useViewDraftsStore.getState().get(id)?.name).toBe('Papers');
     expect(useViewDraftsStore.getState().order).toEqual([id]);

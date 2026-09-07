@@ -102,6 +102,14 @@ describe('ActivityService', () => {
     expect((await service.recent()).items.map((row) => row.entry.name)).toEqual(['copy.pdf']);
   });
 
+  it('keeps an item that merely lost its identity', async () => {
+    const metadata = new MetadataService({ registry });
+    await metadata.saveProperties(item('b.pdf'), { tags: ['x'], description: '' }, (await metadata.read(item('b.pdf'))).revision);
+    await service.recordOpened(item('b.pdf'));
+    await rm(item('b.pdf.opal.yaml'));
+    expect((await service.recent()).items.map((row) => row.entry.name)).toEqual(['b.pdf']);
+  });
+
   it('remaps on move, records organized at the new path, removes on trash, and never throws from recorder methods', async () => {
     await service.recordOpened(item('Folder'));
     await mkdir(item('Folder/Inner')); await writeFile(item('Folder/Inner/c.md'), '# c');
