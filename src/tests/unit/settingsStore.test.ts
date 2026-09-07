@@ -13,14 +13,14 @@ describe('settingsStore.loadSettings', () => {
   });
 
   it('treats a missing key, a failed response, or a bare string safely', async () => {
-    const api = { getKey: vi.fn(async () => ({ success: true, data: null })), setKey: vi.fn(), deleteKey: vi.fn() };
+    const api: { getKey: () => Promise<unknown>; setKey: () => void; deleteKey: () => void } = { getKey: vi.fn(async () => ({ success: true, data: null })), setKey: vi.fn(), deleteKey: vi.fn() };
     (window as unknown as { credentialAPI: unknown }).credentialAPI = api;
     await useSettingsStore.getState().loadSettings();
     expect(useSettingsStore.getState().settings.openAIKey).toBe('');
     api.getKey = vi.fn(async () => ({ success: false, error: 'keychain locked' }));
     await useSettingsStore.getState().loadSettings();
     expect(useSettingsStore.getState().settings.openAIKey).toBe('');
-    api.getKey = vi.fn(async () => 'sk-bare' as never);
+    api.getKey = vi.fn(async () => 'sk-bare');
     await useSettingsStore.getState().loadSettings();
     expect(useSettingsStore.getState().settings.openAIKey).toBe('sk-bare');
   });
