@@ -1,8 +1,6 @@
-import { readdir } from 'fs/promises';
-import path from 'path';
-import { isInsideRoot } from './paths';
-import { readMetadata, isValidAdjacentCarrier, assertNoSymlinks, type MetadataState } from './MetadataCodec';
+import { readMetadata, type MetadataState } from './MetadataCodec';
 import type { RootRegistry } from './RootRegistry';
+import { scanRootsFor, walkRoot } from './rootTraversal';
 
 export type CatalogItem = Pick<MetadataState, 'path' | 'id' | 'kind' | 'links' | 'revision'>;
 
@@ -46,27 +44,14 @@ export class MetadataCatalog {
         result.warnings.push(`${target}: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
-    const walk = async (directory: string) => {
-      try {
-        await assertNoSymlinks(this.registry, directory);
-        await record(directory);
-        for (const entry of await readdir(directory, { withFileTypes: true })) {
-          if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
-          const target = path.join(directory, entry.name);
-          if (entry.isDirectory()) await walk(target);
-          else if (entry.isFile() && !(await isValidAdjacentCarrier(this.registry, target))) await record(target);
-        }
-      } catch (error) {
-        result.warnings.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    };
-    // An ancestor covers an opened root only when its ordinary traversal can
-    // reach it. Hidden path components must not erase an explicit root.
-    const scanRoots = roots.filter((candidate) => !roots.some((other) =>
-      other !== candidate && isInsideRoot(other, candidate) &&
-      !path.relative(other, candidate).split(path.sep).some((segment) => segment.startsWith('.'))));
-    for (const root of scanRoots) {
-      await walk(root);
+    for (const root of scanRootsFor(roots)) {
+      await walkRoot(this.registry, root, {
+        onDirectory: record,
+        onFile: record,
+        onError: (target, error) => {
+          result.warnings.push(`${target}: ${error instanceof Error ? error.message : String(error)}`);
+        },
+      });
     }
     // A watcher event during the scan means the next explicit request rebuilds.
     if (generation === this.generation && rootKey === JSON.stringify(this.registry.list().sort())) this.snapshot = result;
