@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   HashRouter as Router,
   Navigate,
@@ -15,7 +15,6 @@ import { useCommands } from "@/renderer/features/commands";
 import { Command, commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
 import { COMMAND_IDS } from "@/common/commandIds";
 import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
-import { Explorer } from "@/renderer/features/file-explorer-v2";
 import { FilesRoute, useDiskStore } from "@/renderer/features/disk-explorer";
 import {
   AppShell,
@@ -25,11 +24,6 @@ import {
   type ShellRouteObject,
 } from "@/renderer/features/shell";
 import { useSettingsStore } from "./store/settingsStore";
-
-const NOTES_ROUTE: ShellRouteDescriptor = {
-  id: "notes",
-  header: { title: "Notes" },
-};
 
 const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
@@ -46,30 +40,11 @@ const FALLBACK_ROUTE: ShellRouteDescriptor = {
   header: { title: "Opal" },
 };
 
-const NotesRoute: React.FC = () => {
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-
-  return (
-    <Explorer
-      isLeftSidebarOpen={isLeftSidebarOpen}
-      isRightSidebarOpen={isRightSidebarOpen}
-      setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-      setIsRightSidebarOpen={setIsRightSidebarOpen}
-    />
-  );
-};
-
 const APP_ROUTES: ShellRouteObject[] = [
   {
     path: "/",
-    element: <Navigate to="/explorer" replace />,
-    handle: { shell: NOTES_ROUTE },
-  },
-  {
-    path: "/explorer",
-    element: <NotesRoute />,
-    handle: { shell: NOTES_ROUTE },
+    element: <Navigate to="/files" replace />,
+    handle: { shell: FILES_ROUTE },
   },
   {
     path: "/files",
@@ -87,8 +62,8 @@ const APP_ROUTES: ShellRouteObject[] = [
   },
   {
     path: "*",
-    element: <Navigate to="/explorer" replace />,
-    handle: { shell: NOTES_ROUTE },
+    element: <Navigate to="/files" replace />,
+    handle: { shell: FILES_ROUTE },
   },
 ];
 

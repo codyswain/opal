@@ -14,21 +14,10 @@ import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
   DEFAULT_BROWSER_WINDOW_WIDTH,
 } from "@/common/constants";
-import {
-  closeDatabase,
-  initializeDatabase,
-  registerEmbeddingIPCHandlers,
-  registerDatabaseIPCHandlers,
-  log,
-} from "@/main/index";
-import { ensureAllTablesExist } from "@/main/database/handlers";
+import { log } from "@/main/index";
 import { SystemHandlers } from "@/main/services/system/SystemHandlers";
 import { CredentialHandlers } from "@/main/services/credentials/CredentialHandlers";
-import { VFSManager } from "@/main/services/vfs/VfsManager";
-import { VFSHandlers } from "@/main/services/vfs/VfsHandlers";
 import { CredentialManager } from "@/main/services/credentials/CredentialManager";
-import DatabaseManager from "@/main/database/db";
-import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
 import { isAllowedNavigation } from "@/main/window/navigationGuard";
@@ -300,10 +289,6 @@ process.on("uncaughtException", (error) => {
 });
 
 // --- IPC Handlers ---
-const dbManager = DatabaseManager.getInstance();
-const dbItemRepository = new ItemRepository({ dbManager });
-const vfsManager = new VFSManager({ itemRepository: dbItemRepository });
-
 const systemHandlers = new SystemHandlers({
   ipc: ipcMain,
   dialog,
@@ -321,12 +306,9 @@ const credentialHandlers = new CredentialHandlers({
   credentialManager: CredentialManager.getInstance(),
 });
 
-const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
-
-// OPAL_TEST_USER_DATA_DIR lets the E2E suite point the roots file at a temp
-// directory, mirroring the existing OPAL_TEST_DB_DIR convention. Without it,
-// tests would write into the real app's user data and corrupt the user's
-// actual list of opened folders.
+// OPAL_TEST_USER_DATA_DIR lets the E2E suite point every store at a temp
+// directory. Without it, tests would write into the real app's user data and
+// corrupt the user's actual list of opened folders.
 const userDataDir = process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData");
 const windowStateStore = new WindowStateStore({
   storePath: path.join(userDataDir, "window-state.json"),
@@ -466,9 +448,6 @@ app.whenReady().then(async () => {
     credentialHandlers.registerAll();
     log.info("Credential IPC handlers registered");
 
-    vfsHandlers.registerAll();
-    log.info("Virtual File System (VFS) IPC handlers registered");
-
     await rootRegistry.load();
     await activityStore.load();
     try {
@@ -498,19 +477,6 @@ app.whenReady().then(async () => {
     viewHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
-    await registerDatabaseIPCHandlers();
-    log.info("Database IPC handlers registered");
-
-    await registerEmbeddingIPCHandlers();
-    log.info("Embedding IPC handlers registered");
-
-    await initializeDatabase();
-    log.info("Database initialized successfully");
-
-    // Ensure all database tables exist with correct schema
-    await ensureAllTablesExist();
-    log.info("Database tables verified");
-
     await windowStateStore.load();
     log.info("Window state loaded");
 
@@ -527,9 +493,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", async () => {
   try {
-    void diskWatcher.closeAll();
-    void viewRepository.close();
-    await closeDatabase();
+    await Promise.all([diskWatcher.closeAll(), viewRepository.close()]);
   } catch (error) {
     log.error("Error during app shutdown:", error);
   }

@@ -67,7 +67,7 @@ describe('usePaneLayout', () => {
     act(() => files.current.onLayout([30, 70]));
     act(() => { vi.advanceTimersByTime(400); });
 
-    const { result: explorer } = renderHook(() => usePaneLayout('explorer', [18, 82]));
+    const { result: explorer } = renderHook(() => usePaneLayout('chat', [18, 82]));
     expect(explorer.current.sizes).toEqual([18, 82]);
     vi.useRealTimers();
   });

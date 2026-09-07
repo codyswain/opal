@@ -32,13 +32,10 @@ export const test = base.extend<ElectronFixtures>({
       );
     }
 
-    const testDbDir = await mkdtemp(path.join(os.tmpdir(), 'opal-test-'));
-
     const app = await electron.launch({
       args: [PROJECT_ROOT],
       env: {
         ...process.env,
-        OPAL_TEST_DB_DIR: testDbDir,
         OPAL_TEST_USER_DATA_DIR: userDataDir,
       },
     });
@@ -46,7 +43,6 @@ export const test = base.extend<ElectronFixtures>({
     await use(app);
 
     await app.close();
-    await rm(testDbDir, { recursive: true, force: true });
   },
 
   page: async ({ electronApp }, use) => {

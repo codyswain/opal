@@ -1,28 +1,33 @@
 # Project: Opal
 
-A desktop note-taking and file management app.
+A desktop information workspace over folders on disk: browse files, edit
+Markdown, organize items with tags, descriptions and connections, gather them
+in Recent and saved views, and chat over the library.
 
 ## Stack
 
 - **Runtime:** Electron 31 (main + preload + renderer processes)
 - **Frontend:** React 18 + TypeScript + Tailwind CSS
 - **State:** Zustand for global state, React hooks for local state
-- **Editor:** TipTap (rich text with Markdown)
-- **Database:** Better-SQLite3 (synchronous, singleton `DatabaseManager`)
-- **Embeddings:** SQLite VSS for vector search
-- **AI:** OpenAI SDK for RAG/chat features
+- **Editor:** TipTap with `tiptap-markdown` (Markdown files on disk)
+- **Storage:** the user's folders are the store; authored metadata lives in
+  frontmatter or `.opal.yaml` sidecars; personal state (activity, saved views,
+  chat index) lives under `<userData>/library/` as JSON and YAML
+- **AI:** OpenAI SDK for chat over the library (key in the system keychain)
 - **Build:** Vite (3 configs: main, preload, renderer) + Electron Forge
 - **Testing:** Vitest + Testing Library + Happy DOM
 - **Linting:** ESLint with TypeScript plugin
-- **Pre-commit:** Husky + lint-staged (ESLint fix + tests on *.ts/*.tsx)
+- **Pre-commit:** Husky + lint-staged (ESLint fix + the full vitest suite)
 
 ## Architecture
 
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
-  - Exposed APIs: `systemAPI`, `vfsAPI`, `chatAPI`, `credentialAPI`, `syncAPI`, `adminAPI`
+  - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `metadataAPI`,
+    `activityAPI`, `collectionsAPI`, `viewsAPI`
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
-- **Repository pattern:** Data access through `src/main/database/repositories/`
-- **Service layer:** Business logic in `src/main/services/` (VFS, Credentials, System)
+  (`disk-explorer` is the Files feature; `shell` is the workspace frame)
+- **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
+  every path that crosses IPC is resolved and checked against opened folders
 - **Path alias:** `@/*` maps to `src/*`
 
 ## Directory Structure
@@ -33,25 +38,29 @@ src/
   preload.ts           # IPC bridge
   renderer.tsx         # React entry point
   main/                # Main process
-    database/          # Schema, handlers, repositories, transforms
-    embeddings/        # Vector search
-    file-system/       # FS operations
-    services/          # VFS, credentials, system
+    fs/                # Roots, listings, watcher, metadata, file mutations
+    activity/          # Personal activity behind Recent
+    collections/       # Disposable index and query evaluation for views
+    views/             # Saved view definitions on disk
+    library/           # The <userData>/library layout
+    services/          # Credentials, system
+    window/            # Window state, navigation guard
   renderer/            # React renderer
-    features/          # Feature modules (file-explorer-v2, navbar, settings, theme, kbar, commands)
+    features/          # disk-explorer, shell, settings, theme, kbar, commands
     shared/            # Reusable components, hooks, utils, types
     store/             # Zustand stores
     styles/            # Global CSS
-  types/               # Shared types (IPC, credentials)
-  common/              # Shared constants
+  types/               # Shared contracts (disk, metadata, activity, queries, views)
+  common/              # Renderer-safe shared logic (validation, paths, formatting)
   tests/               # Vitest tests
+e2e/                   # Playwright Electron suite and acceptance scripts
 ```
 
 ## Commands
 
 - `npm run dev` — Start in dev mode (Electron Forge)
 - `npm run lint` — Run ESLint
-- `npm test` — Run tests (rebuilds better-sqlite3 first)
+- `npm test` — Run unit and contract tests
 - `npm run test:watch` — Tests in watch mode
 - `npm run test:coverage` — Tests with coverage report
 - `npx tsc --noEmit` — Type check without emitting
@@ -81,15 +90,11 @@ font-dependent; its false failures destroy trust in the suite.
 
 ### Commands
 
-- `npm test` — unit + contract. Rebuilds better-sqlite3 for **Node**.
-- `npm run test:e2e` — Playwright. Rebuilds better-sqlite3 for **Electron**.
-- `npm run test:all` — both, in the correct order.
-
-Both commands rebuild the native module for the ABI they need, so they are safe
-to run in any order. Use `npm test` rather than a bare `npx vitest run`, which
-skips the rebuild and will fail confusingly after an E2E run. `npm run test:watch`
-and `npm run test:ui` also skip the rebuild, so they will fail confusingly after
-an E2E run unless you run `npm test` first.
+- `npm test` — unit + contract (vitest).
+- `npm run test:e2e` — builds the three Vite bundles, then Playwright.
+- `npm run test:all` — both.
+- `node e2e/acceptance/<name>-acceptance.mjs` — disposable acceptance runs against
+  the built app; see `e2e/acceptance/README.md`.
 
 ### When a UI test fails
 
@@ -101,8 +106,8 @@ Traces and screenshots are captured on failure. Run
 - Commit after completing each discrete task
 - Don't ask for confirmation on file creation or refactors — just do it
 - When creating new UI features, follow the feature-based structure under `src/renderer/features/`
-- New data access logic goes in a repository under `src/main/database/repositories/`
-- New IPC channels must be registered in `preload.ts` and exposed via the appropriate API namespace
-- Use Zustand for global state that spans components; use `useLocalStorage` hook for UI preferences
+- Filesystem work stays in main behind `RootRegistry`; the renderer never touches paths it has not been handed
+- New IPC channels must be registered in `preload.ts`, exposed via the appropriate API namespace, validated in main, and typed under `src/renderer/shared/types/*.d.ts`
+- Use Zustand for global state that spans components; use the prefs helpers for UI preferences
 - Use TipTap extensions for editor enhancements
 - Keep main process and renderer process code strictly separated

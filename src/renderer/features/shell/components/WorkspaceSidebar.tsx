@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertTriangle, Bookmark, Clock, FileText, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Bookmark, Clock, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
@@ -116,12 +116,6 @@ export function WorkspaceSidebar({
 
       <nav aria-label="Primary" className="shrink-0 py-2">
         <SidebarSection>
-          <SidebarItem
-            to="/explorer"
-            icon={FileText}
-            label="Notes"
-            onActivate={onNavigate}
-          />
           <SidebarItem
             to={filesDestination}
             icon={Files}

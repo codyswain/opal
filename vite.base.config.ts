@@ -6,7 +6,7 @@ import type { ConfigEnv, Plugin, UserConfig } from 'vite';
 export const builtins = ['electron', ...builtinModules.map((m) => [m, `node:${m}`]).flat()];
 
 // Externalize problematic modules that need special handling
-export const external = [...builtins, 'electron-log', 'better-sqlite3'];
+export const external = [...builtins, 'electron-log'];
 
 export function getBuildConfig(env: ConfigEnv<'build'>): UserConfig {
   const { root, mode, command } = env;

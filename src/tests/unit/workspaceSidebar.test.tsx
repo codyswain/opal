@@ -29,11 +29,6 @@ const ROUTES: ShellRouteObject[] = [
     handle: { shell: { id: 'files', header: { title: 'Files' } } },
   },
   {
-    path: '/explorer',
-    element: null,
-    handle: { shell: { id: 'notes', header: { title: 'Notes' } } },
-  },
-  {
     path: '/settings',
     element: null,
     handle: { shell: { id: 'settings', header: { title: 'Settings' } } },
@@ -127,7 +122,7 @@ describe('WorkspaceSidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    expect(screen.getByRole('link', { name: 'Notes' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Notes' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.queryByText('Favorites')).toBeNull();

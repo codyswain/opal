@@ -15,7 +15,6 @@ const check = (name, ok, detail = '') => {
 };
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-recent-userdata-'));
-const dbDir = await mkdtemp(path.join(os.tmpdir(), 'opal-recent-db-'));
 const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-recent-vault-'));
 await mkdir(path.join(vaultParent, 'Vault', 'Notes'), { recursive: true });
 await mkdir(path.join(vaultParent, 'Vault', 'Papers'), { recursive: true });
@@ -31,7 +30,7 @@ const activityPath = path.join(userData, 'library', 'activity.json');
 async function launch() {
   const app = await electron.launch({
     args: [PROJECT_ROOT],
-    env: { ...process.env, OPAL_TEST_DB_DIR: dbDir, OPAL_TEST_USER_DATA_DIR: userData },
+    env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -147,7 +146,6 @@ check('no renderer errors in phase 2', errors.length === 0, errors.join(' | '));
 await app.close();
 
 await rm(userData, { recursive: true, force: true });
-await rm(dbDir, { recursive: true, force: true });
 await rm(vaultParent, { recursive: true, force: true });
 
 const failed = results.filter((r) => !r.ok);

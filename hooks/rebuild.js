@@ -15,7 +15,6 @@ module.exports = async (forgeConfig, packageJSON, electronVersion, platform, arc
       electronVersion,
       arch,
       // mode: 'sequential', // Try without specifying mode first
-      // onlyModules: ['better-sqlite3'], // Try rebuilding all native modules first
       force: true // Force rebuilding even if not strictly necessary
     });
     console.log('--- @electron/rebuild hook completed successfully ---');

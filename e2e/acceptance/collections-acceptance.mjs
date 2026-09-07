@@ -1,5 +1,5 @@
 // Disposable Electron acceptance for filtered collections (handoff criteria
-// 4, 6, 8, 9, 10). Own userData, database and temp vault; run from the
+// 4, 6, 8, 9, 10). Own userData and temp vault; run from the
 // repository root after the Vite bundles are built: see README.md here.
 import { _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, rm, realpath, unlink } from 'fs/promises';
@@ -14,7 +14,6 @@ const check = (name, ok, detail = '') => {
 };
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-collections-userdata-'));
-const dbDir = await mkdtemp(path.join(os.tmpdir(), 'opal-collections-db-'));
 const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-collections-vault-'));
 await mkdir(path.join(vaultParent, 'Vault', 'Projects', 'Deep'), { recursive: true });
 await mkdir(path.join(vaultParent, 'Vault', 'Papers'), { recursive: true });
@@ -37,7 +36,7 @@ await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version
 async function launch() {
   const app = await electron.launch({
     args: [PROJECT_ROOT],
-    env: { ...process.env, OPAL_TEST_DB_DIR: dbDir, OPAL_TEST_USER_DATA_DIR: userData },
+    env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -134,7 +133,6 @@ check('no renderer errors', errors.length === 0, errors.join(' | '));
 await app.close();
 
 await rm(userData, { recursive: true, force: true });
-await rm(dbDir, { recursive: true, force: true });
 await rm(vaultParent, { recursive: true, force: true });
 
 const failed = results.filter((result) => !result.ok);

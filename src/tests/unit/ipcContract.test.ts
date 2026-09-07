@@ -14,17 +14,7 @@ const REPO_ROOT = path.resolve(__dirname, '../../..');
  *
  * This list may only shrink. If you implement a handler, delete its entry.
  */
-const KNOWN_DEAD_CHANNELS: readonly string[] = [
-  'create-embedded-item',
-  'delete-embedded-item',
-  'delete-note',
-  'get-embedded-item',
-  'get-note-embedded-items',
-  'move-note',
-  'update-embedded-item',
-  'vfs:get-folder',
-  'vfs:move-folder',
-];
+const KNOWN_DEAD_CHANNELS: readonly string[] = [];
 
 /** Recursively collect .ts files. Hand-rolled so this works on any Node 18+. */
 function collectTsFiles(dir: string, found: string[] = []): string[] {
@@ -79,8 +69,8 @@ describe('IPC contract between preload and main', () => {
   it('finds channels on both sides (guards against a silently broken scan)', () => {
     // If a refactor made these regexes match nothing, every other assertion in
     // this file would pass vacuously forever. Fail loudly instead.
-    expect(invokedChannels.length).toBeGreaterThan(30);
-    expect(registeredChannels.size).toBeGreaterThan(30);
+    expect(invokedChannels.length).toBeGreaterThan(25);
+    expect(registeredChannels.size).toBeGreaterThan(25);
   });
 
   it('introduces no new dead channels', () => {
@@ -89,7 +79,7 @@ describe('IPC contract between preload and main', () => {
       introduced,
       `preload.ts invokes ${introduced.length} channel(s) that no main-process ` +
         `handler registers:\n  ${introduced.join('\n  ')}\n\n` +
-        `Register a handler (see src/main/services/vfs/VfsHandlers.ts for the ` +
+        `Register a handler (see src/main/fs/MetadataHandlers.ts for the ` +
         `pattern), or remove the call from preload.ts.`
     ).toEqual([]);
   });
