@@ -1,4 +1,4 @@
-import { mkdir, realpath, stat, writeFile } from 'fs/promises';
+import { mkdir, readFile, realpath, stat, writeFile } from 'fs/promises';
 import path from 'path';
 import { expect, test } from '../fixtures/electronApp';
 import { createTempVault, seedRoots, type TempVault } from '../helpers/tempVault';
@@ -49,6 +49,35 @@ test('creates, renames, and moves real files on disk', async ({ page }) => {
   expect(moved.success).toBe(true);
   expect(await exists(path.join(vaultRoot, 'Renamed Folder', 'readme.md'))).toBe(true);
   expect(await exists(path.join(vaultRoot, 'readme.md'))).toBe(false);
+
+  // Metadata is authored by main and marshalled through preload. Exercise the
+  // real boundary in this existing app session, not another slow UI scenario.
+  const imagePath = path.join(vaultRoot, 'Photos', 'alpha.png');
+  const notePath = path.join(vaultRoot, 'Renamed Folder', 'readme.md');
+  const metadata = await page.evaluate(async ({ imagePath, notePath }) => {
+    const initial = await window.metadataAPI.read(imagePath);
+    if (!initial.success) throw new Error(initial.error);
+    const saved = await window.metadataAPI.saveProperties(imagePath,
+      { tags: ['reference'], description: 'A visual reference' }, initial.data.revision);
+    if (!saved.success) throw new Error(saved.error);
+    const connected = await window.metadataAPI.addRelated(imagePath, notePath);
+    if (!connected.success) throw new Error(connected.error);
+    const reverse = await window.metadataAPI.read(notePath);
+    if (!reverse.success) throw new Error(reverse.error);
+    const edge = reverse.data.related[0];
+    if (!edge) throw new Error('Reverse connection missing');
+    const removed = await window.metadataAPI.removeRelated(notePath, edge.edgeId);
+    if (!removed.success) throw new Error(removed.error);
+    return { saved: saved.data, reverse: reverse.data, remaining: await window.metadataAPI.read(imagePath) };
+  }, { imagePath, notePath });
+
+  expect(metadata.saved.properties).toEqual({ tags: ['reference'], description: 'A visual reference' });
+  expect(metadata.reverse.related).toEqual([expect.objectContaining({
+    direction: 'incoming', targetPath: imagePath, status: 'available',
+  })]);
+  expect(metadata.remaining).toMatchObject({ success: true, data: { related: [] } });
+  expect(await readFile(`${imagePath}.opal.yaml`, 'utf8')).toContain('A visual reference');
+  expect(await readFile(notePath, 'utf8')).toContain('# Test Vault');
 });
 
 test('refuses every mutation outside an opened root', async ({ page }) => {
@@ -88,4 +117,14 @@ test('refuses every mutation outside an opened root', async ({ page }) => {
   expect(await exists(openedFile)).toBe(true);
   expect(await exists(forbiddenFile)).toBe(true);
   expect(await exists(path.join(forbidden, 'nope'))).toBe(false);
+
+  const metadataDenied = await page.evaluate(async ({ openedFile, forbiddenFile }) => [
+    await window.metadataAPI.read(forbiddenFile),
+    await window.metadataAPI.saveProperties(forbiddenFile, { tags: [], description: 'changed' }, 'stale'),
+    await window.metadataAPI.addRelated(openedFile, forbiddenFile),
+    await window.metadataAPI.removeRelated(forbiddenFile, '00000000-0000-4000-8000-000000000001'),
+  ], { openedFile, forbiddenFile });
+  expect(metadataDenied.every((result) => !result.success)).toBe(true);
+  expect(await readFile(forbiddenFile, 'utf8')).toBe('do not touch');
+  expect(await exists(`${forbiddenFile}.opal.yaml`)).toBe(false);
 });
