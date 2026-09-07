@@ -29,9 +29,12 @@ export class MetadataCatalog {
     if (this.snapshot) return this.snapshot;
     const generation = this.generation;
     const result: CatalogSnapshot = { items: [], byId: new Map(), warnings: [] };
+    const visitedItems = new Set<string>();
     const record = async (target: string) => {
       try {
         const item = await readMetadata(this.registry, target);
+        if (visitedItems.has(item.path)) return;
+        visitedItems.add(item.path);
         if (item.id) {
           const summary: CatalogItem = { path: item.path, id: item.id, kind: item.kind, links: item.links, revision: item.revision };
           result.items.push(summary);
@@ -57,7 +60,12 @@ export class MetadataCatalog {
         result.warnings.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
-    for (const root of roots.filter((candidate) => !roots.some((other) => other !== candidate && isInsideRoot(other, candidate)))) {
+    // An ancestor covers an opened root only when its ordinary traversal can
+    // reach it. Hidden path components must not erase an explicit root.
+    const scanRoots = roots.filter((candidate) => !roots.some((other) =>
+      other !== candidate && isInsideRoot(other, candidate) &&
+      !path.relative(other, candidate).split(path.sep).some((segment) => segment.startsWith('.'))));
+    for (const root of scanRoots) {
       await walk(root);
     }
     // A watcher event during the scan means the next explicit request rebuilds.

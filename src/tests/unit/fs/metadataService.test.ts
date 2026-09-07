@@ -241,3 +241,38 @@ it('connects to already identified large Markdown without rewriting that target'
   expect(result.related[0]).toMatchObject({ status: 'available', targetPath: item('large.md') });
   expect((await readFile(item('large.md'))).equals(original)).toBe(true);
 });
+
+it('resolves both directions for an explicitly opened root beneath a hidden ancestor', async () => {
+  const project = item('.worktrees/project');
+  await mkdir(project, { recursive: true });
+  await registry.add(project);
+  await writeFile(item('source.md'), 'source');
+  const target = path.join(project, 'target.jpg');
+  await writeFile(target, 'target');
+  await save(target);
+  // A copied identity in an ordinary hidden tree must remain excluded.
+  await mkdir(item('.private'));
+  await writeFile(item('.private/copy.jpg'), 'copy');
+  await writeFile(item('.private/copy.jpg.opal.yaml'), await readFile(`${target}.opal.yaml`));
+  service.invalidate();
+
+  const source = await service.addRelated(item('source.md'), target);
+  expect(source.related).toHaveLength(1);
+  expect(source.related[0]).toMatchObject({ status: 'available', targetPath: target });
+  const reverse = await service.read(target);
+  expect(reverse.related).toHaveLength(1);
+  expect(reverse.related[0]).toMatchObject({ status: 'available', direction: 'incoming', targetPath: item('source.md') });
+});
+
+it('detects duplicate identities inside an explicitly opened hidden descendant root', async () => {
+  await writeFile(item('source.md'), 'source');
+  await writeFile(item('target.md'), 'target');
+  await service.addRelated(item('source.md'), item('target.md'));
+  const project = item('.worktrees/project');
+  await mkdir(project, { recursive: true });
+  await writeFile(path.join(project, 'copy.md'), await readFile(item('target.md')));
+  await registry.add(project);
+
+  expect((await service.read(item('source.md'))).related[0].status).toBe('ambiguous');
+  await expect(service.addRelated(item('source.md'), path.join(project, 'copy.md'))).rejects.toThrow(/ambiguous/i);
+});
