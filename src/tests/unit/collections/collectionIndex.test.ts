@@ -43,7 +43,11 @@ describe('CollectionIndex', () => {
     const snapshot = await index.get();
     expect(index.state()).toBe('ready');
     expect(names(snapshot)).toEqual(['.', 'Sub', 'Sub/Deep', 'Sub/Deep/b.txt', 'a.md', 'broken.pdf', 'broken.pdf.opal.yaml', 'photo.jpg']);
-    const by = (name: string) => snapshot.items.find((entry) => entry.path === item(...name.split('/')))!;
+    const by = (name: string) => {
+      const found = snapshot.items.find((entry) => entry.path === item(...name.split('/')));
+      if (!found) throw new Error(`missing ${name}`);
+      return found;
+    };
     expect(by('a.md')).toMatchObject({ kind: 'markdown', isDirectory: false, id: null, tags: ['research'], descriptionEmpty: true, metadataWarning: null });
     expect(by('photo.jpg')).toMatchObject({ kind: 'image', id: '11111111-1111-4111-8111-111111111111', tags: ['reference'], descriptionEmpty: false });
     expect(by('Sub')).toMatchObject({ kind: 'directory', isDirectory: true, tags: ['folder-tag'], descriptionEmpty: true });
