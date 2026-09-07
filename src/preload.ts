@@ -108,3 +108,11 @@ contextBridge.exposeInMainWorld("viewsAPI", {
     return () => ipcRenderer.removeListener("views:changed", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("markdownAPI", {
+  read: (target: string) => ipcRenderer.invoke("markdown:read", target),
+  write: (target: string, body: string, expectedRevision: string) =>
+    ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
+  create: (parentDir: string, baseName?: string) =>
+    ipcRenderer.invoke("markdown:create", parentDir, baseName),
+});

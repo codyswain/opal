@@ -34,6 +34,8 @@ import { FileWriter } from "@/main/fs/FileWriter";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import { MetadataService } from "@/main/fs/MetadataService";
 import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
+import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
+import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
 import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
@@ -386,6 +388,11 @@ const diskWatcher = new DiskWatcher({
   },
   onMetadataChanged: () => metadataService.invalidate(),
 });
+const markdownDocuments = new MarkdownDocumentService({
+  registry: rootRegistry,
+  metadata: metadataService,
+  activity: activityService,
+});
 const fileWriter = new FileWriter({
   registry: rootRegistry,
   metadata: metadataService,
@@ -432,6 +439,10 @@ const collectionHandlers = new CollectionHandlers({
   ipc: ipcMain,
   service: collectionQueryService,
 });
+const markdownHandlers = new MarkdownHandlers({
+  ipc: ipcMain,
+  service: markdownDocuments,
+});
 const viewHandlers = new ViewHandlers({
   ipc: ipcMain,
   repository: viewRepository,
@@ -475,6 +486,7 @@ app.whenReady().then(async () => {
     activityHandlers.registerAll();
     collectionHandlers.registerAll();
     viewHandlers.registerAll();
+    markdownHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await windowStateStore.load();

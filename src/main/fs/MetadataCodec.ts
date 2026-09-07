@@ -79,7 +79,7 @@ function parse(raw: string, required: boolean): { document: Document; id: string
 }
 
 /** A bounded byte splitter; the body is never decoded and re-encoded. */
-function splitMarkdown(bytes: Buffer): { raw: string; bodyOffset: number; bom: Buffer; newline: string } {
+export function splitMarkdown(bytes: Buffer): { raw: string; bodyOffset: number; bom: Buffer; newline: string } {
   const hasBom = bytes.subarray(0, 3).equals(Buffer.from('\ufeff'));
   const start = hasBom ? 3 : 0;
   const bom = bytes.subarray(0, start);

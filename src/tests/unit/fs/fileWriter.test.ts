@@ -286,7 +286,7 @@ describe('FileWriter leaves nothing behind on rejection', () => {
 
 describe('activity hooks', () => {
   it('remaps on rename and move, removes on trash, and skips failed mutations', async () => {
-    const activity = { noteOrganized: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
+    const activity = { noteOrganized: vi.fn(async () => undefined), noteEdited: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
     const tracked = new FileWriter({ registry, trashItem, activity });
     // Activity receives resolved real paths, matching every other guard.
     const source = await realpath(path.join(root, 'note.md'));

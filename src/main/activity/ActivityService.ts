@@ -18,6 +18,7 @@ const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
 
 export interface ActivityRecorder {
   noteOrganized(target: string): Promise<void>;
+  noteEdited(target: string): Promise<void>;
   noteMoved(oldPath: string, newPath: string): Promise<void>;
   noteRemoved(target: string): Promise<void>;
 }
@@ -50,6 +51,15 @@ export class ActivityService implements ActivityRecorder {
     try {
       const resolved = await this.deps.registry.assertAllowed(target);
       if (await this.deps.store.touch(resolved, 'organized', await this.readId(resolved))) this.emit();
+    } catch (error) {
+      logger.warn(`Activity not recorded for ${target}: ${message(error)}`);
+    }
+  }
+
+  async noteEdited(target: string): Promise<void> {
+    try {
+      const resolved = await this.deps.registry.assertAllowed(target);
+      if (await this.deps.store.touch(resolved, 'edited', await this.readId(resolved))) this.emit();
     } catch (error) {
       logger.warn(`Activity not recorded for ${target}: ${message(error)}`);
     }

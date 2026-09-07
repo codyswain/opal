@@ -279,7 +279,7 @@ it('detects duplicate identities inside an explicitly opened hidden descendant r
 
 describe('activity hooks', () => {
   function recorder() {
-    return { noteOrganized: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
+    return { noteOrganized: vi.fn(async () => undefined), noteEdited: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
   }
   it('records organized only after successful property saves and connection changes', async () => {
     const activity = recorder();
