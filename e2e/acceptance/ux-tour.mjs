@@ -43,11 +43,23 @@ try {
   await page.locator('.ProseMirror').waitFor();
   await page.waitForTimeout(500);
   await shot('03-editor');
+  // Open a few more files so the strip has several tabs, then leave one unsaved.
+  for (const file of ['Projects/Atlas/budget.md', 'Projects/roadmap.md', 'Reading/paper.pdf', 'Reading/sourdough.md']) {
+    await page.evaluate(([v, f]) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/' + f.split('/').slice(0, -1).join('/'))}&file=${encodeURIComponent(v + '/' + f)}`; }, [vault, file]);
+    await page.waitForTimeout(350);
+  }
   await page.locator('.ProseMirror').click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(' Edited from the tour.');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\n\nEdited from the tour.');
+  await page.waitForTimeout(150);
+  await shot('04-tabs-unsaved');
   await page.waitForTimeout(1200);
-  await shot('04-editor-saved');
+  await page.getByTestId('tab-strip').getByText('plan.md').click({ button: 'right' });
+  await page.getByRole('menu').waitFor();
+  await shot('04b-tab-menu');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('tab-strip').getByText('roadmap.md').hover();
+  await shot('04c-tab-hover');
   await page.evaluate(() => { window.location.hash = '#/files?mode=browse&collection=recent'; });
   await page.waitForTimeout(600);
   await shot('05-recent');

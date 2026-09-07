@@ -25,6 +25,8 @@ export interface TabsState {
    * Finder and VS Code both work this way: browsing must not litter the strip.
    */
   previewPath: string | null;
+  /** Most recently closed first; Cmd+Shift+T reopens the head. Session only. */
+  recentlyClosed: string[];
 }
 
 export interface TabsActions {
@@ -36,7 +38,13 @@ export interface TabsActions {
   openPinned: (path: string) => void;
   pin: (path: string) => void;
   close: (path: string) => void;
+  /** Closes every other tab; the kept tab becomes active. */
+  closeOthers: (path: string) => void;
+  /** Closes every tab after this one; the active tab moves here if it was among them. */
+  closeToRight: (path: string) => void;
   closeAll: () => void;
+  /** Reopens the most recently closed tab that is not already open; returns it. */
+  reopenClosed: () => string | null;
   activate: (path: string) => void;
   activateIndex: (index: number) => void;
   activateNext: () => void;
@@ -125,11 +133,31 @@ function nearestRealPath(
   );
 }
 
+const RECENTLY_CLOSED_LIMIT = 20;
+
+function remember(recentlyClosed: readonly string[], closed: readonly string[]): string[] {
+  return [...closed, ...recentlyClosed.filter((path) => !closed.includes(path))].slice(0, RECENTLY_CLOSED_LIMIT);
+}
+
+/** Keeps only `kept` tabs (in their current order), moving the active and opened tabs onto a kept one. */
+function keepOnly(state: TabsState, kept: readonly string[]): TabsState {
+  const openPaths = state.openPaths.filter((path) => kept.includes(path));
+  const closed = state.openPaths.filter((path) => !kept.includes(path));
+  const previewPath = state.previewPath && openPaths.includes(state.previewPath) ? state.previewPath : null;
+  const fallback = openPaths[openPaths.length - 1] ?? null;
+  const activePath = state.activePath && openPaths.includes(state.activePath) ? state.activePath : fallback;
+  const openedPath = state.openedPath && openPaths.includes(state.openedPath)
+    ? state.openedPath
+    : nearestRealPath(openPaths, previewPath, Math.max(0, openPaths.length - 1));
+  return { openPaths, openedPath, activePath, previewPath, recentlyClosed: remember(state.recentlyClosed, closed) };
+}
+
 export const useTabsStore = create<TabsStore>((set, get) => ({
   openPaths: [],
   openedPath: null,
   activePath: null,
   previewPath: null,
+  recentlyClosed: [],
 
   openFile: (path) =>
     set((state) => {
@@ -199,20 +227,48 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
         openedPath = activePath;
       }
 
-      const next = { openPaths, openedPath, activePath, previewPath };
+      const next = { openPaths, openedPath, activePath, previewPath, recentlyClosed: remember(state.recentlyClosed, [path]) };
       persist({ ...state, ...next });
       return next;
     }),
 
-  closeAll: () => {
-    const next: TabsState = {
-      openPaths: [],
-      openedPath: null,
-      activePath: null,
-      previewPath: null,
-    };
-    persist(next);
-    set(next);
+  closeOthers: (path) =>
+    set((state) => {
+      if (!state.openPaths.includes(path)) return {};
+      const next = keepOnly(state, [path]);
+      persist(next);
+      return next;
+    }),
+
+  closeToRight: (path) =>
+    set((state) => {
+      const index = state.openPaths.indexOf(path);
+      if (index === -1 || index === state.openPaths.length - 1) return {};
+      const next = keepOnly(state, state.openPaths.slice(0, index + 1));
+      persist(next);
+      return next;
+    }),
+
+  closeAll: () =>
+    set((state) => {
+      const next: TabsState = {
+        openPaths: [],
+        openedPath: null,
+        activePath: null,
+        previewPath: null,
+        recentlyClosed: remember(state.recentlyClosed, state.openPaths),
+      };
+      persist(next);
+      return next;
+    }),
+
+  reopenClosed: () => {
+    const state = get();
+    const path = state.recentlyClosed.find((candidate) => !state.openPaths.includes(candidate)) ?? null;
+    if (!path) return null;
+    set({ recentlyClosed: state.recentlyClosed.filter((candidate) => candidate !== path) });
+    get().openFile(path);
+    return path;
   },
 
   activate: (path) =>
@@ -266,6 +322,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
       openedPath: openPaths[0] ?? null,
       activePath: openPaths[0] ?? null,
       previewPath: null,
+      recentlyClosed: get().recentlyClosed,
     };
     const allowedRoots = pathMutationCoordinator.getAllowedRoots();
     const next = allowedRoots
@@ -305,6 +362,7 @@ export function remapTabsState(
       activePath && openPaths.includes(activePath) ? activePath : null,
     previewPath:
       previewPath && openPaths.includes(previewPath) ? previewPath : null,
+    recentlyClosed: state.recentlyClosed.map((path) => remapFsPath(path, mutation.oldPath, mutation.newPath)),
   };
 }
 
@@ -354,6 +412,7 @@ export function removePathsFromTabsState(
       activePath && openPaths.includes(activePath) ? activePath : null,
     previewPath:
       previewPath && openPaths.includes(previewPath) ? previewPath : null,
+    recentlyClosed: state.recentlyClosed.filter((path) => !isRemoved(path)),
   };
 }
 
@@ -376,7 +435,7 @@ export function retainTabsWithinRoots(
     state.activePath && openPaths.includes(state.activePath)
       ? state.activePath
       : openedPath ?? openPaths[0] ?? null;
-  return { openPaths, openedPath, activePath, previewPath };
+  return { openPaths, openedPath, activePath, previewPath, recentlyClosed: state.recentlyClosed.filter(isAllowed) };
 }
 
 pathMutationCoordinator.register({

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDocumentStatusStore } from '../../store/documentStatusStore';
 import { parentFsPath } from '@/common/fsPaths';
 
 export type MarkdownSaveState = 'clean' | 'dirty' | 'saving' | 'saved' | 'conflict' | 'error';
@@ -184,6 +185,12 @@ export function useMarkdownDocument(path: string): MarkdownDocumentState & Markd
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [flush]);
+
+  // Publish the save state so the tab strip can show an unsaved dot or a problem.
+  useEffect(() => {
+    useDocumentStatusStore.getState().set(path, state.saveState);
+  }, [path, state.saveState]);
+  useEffect(() => () => useDocumentStatusStore.getState().clear(path), [path]);
 
   return { ...state, onChange, flush, reloadFromDisk, keepMine };
 }

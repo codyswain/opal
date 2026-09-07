@@ -236,3 +236,51 @@ describe('persistence', () => {
     expect(restored.openPaths).toEqual([]);
   });
 });
+
+describe('bulk closing and reopening', () => {
+  const A = '/V/a.md';
+  const B = '/V/b.md';
+  const C = '/V/c.md';
+  const D = '/V/d.md';
+
+  beforeEach(() => {
+    useTabsStore.setState({ openPaths: [A, B, C, D], openedPath: B, activePath: B, previewPath: null, recentlyClosed: [] });
+  });
+
+  it('closeOthers keeps one tab and makes it active', () => {
+    useTabsStore.getState().closeOthers(C);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [C], activePath: C, openedPath: C, recentlyClosed: [A, B, D] });
+  });
+
+  it('closeToRight keeps the tab and everything before it', () => {
+    useTabsStore.getState().closeToRight(B);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [A, B], activePath: B, openedPath: B, recentlyClosed: [C, D] });
+    useTabsStore.setState({ activePath: A, openedPath: A });
+    useTabsStore.getState().closeToRight(B);
+    expect(useTabsStore.getState().openPaths).toEqual([A, B]);
+  });
+
+  it('closeToRight moves the active tab left when it was among the closed', () => {
+    useTabsStore.setState({ activePath: D, openedPath: D });
+    useTabsStore.getState().closeToRight(A);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [A], activePath: A, openedPath: A });
+  });
+
+  it('remembers closed tabs most recent first and reopens them in that order', () => {
+    const store = useTabsStore.getState();
+    store.close(A);
+    store.close(C);
+    expect(useTabsStore.getState().recentlyClosed).toEqual([C, A]);
+    expect(useTabsStore.getState().reopenClosed()).toBe(C);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [B, D, C], activePath: C, recentlyClosed: [A] });
+    expect(useTabsStore.getState().reopenClosed()).toBe(A);
+    expect(useTabsStore.getState().reopenClosed()).toBeNull();
+  });
+
+  it('closeAll remembers everything and skips paths that are open again', () => {
+    useTabsStore.getState().closeAll();
+    expect(useTabsStore.getState().recentlyClosed).toEqual([A, B, C, D]);
+    useTabsStore.getState().openFile(A);
+    expect(useTabsStore.getState().reopenClosed()).toBe(B);
+  });
+});

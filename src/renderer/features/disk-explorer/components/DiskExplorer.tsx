@@ -175,6 +175,23 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
       const tabs = useTabsStore.getState();
 
+      // Ctrl+Tab cycles like a browser; Cmd+Shift+T brings back the last closed tab.
+      if (event.key === 'Tab' && event.ctrlKey) {
+        if (tabs.openPaths.length === 0) return;
+        event.preventDefault();
+        const index = tabs.activePath ? tabs.openPaths.indexOf(tabs.activePath) : -1;
+        const step = event.shiftKey ? -1 : 1;
+        const path = tabs.openPaths[(index + step + tabs.openPaths.length) % tabs.openPaths.length];
+        if (path) navigation.openFile(path);
+        return;
+      }
+
+      if (event.shiftKey && event.key.toLowerCase() === 't') {
+        const path = tabs.reopenClosed();
+        if (path) { event.preventDefault(); navigation.openFile(path); }
+        return;
+      }
+
       if (event.key === 'w') {
         if (!tabs.activePath) return;
         event.preventDefault();
