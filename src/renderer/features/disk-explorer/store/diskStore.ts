@@ -12,6 +12,10 @@ import {
   remapDiskState,
   removePathsFromDiskState,
 } from './diskPathState';
+import {
+  directoryCollection,
+  type FilesCollection,
+} from '../navigation/filesLocation';
 
 export interface PendingAction {
   /** The parent directory for new-folder; the item being renamed for rename. */
@@ -26,7 +30,9 @@ export interface DiskState {
   listings: Record<string, DiskEntry[]>;
   /** Directory path -> whether it is expanded in the tree. */
   expanded: Record<string, boolean>;
-  /** Canonical directory whose immediate children occupy the browse surface. */
+  /** The collection occupying the browse surface: a folder or built-in Recent. */
+  currentCollection: FilesCollection | null;
+  /** Directory of currentCollection when it is a folder; null otherwise. */
   currentDirectory: string | null;
   /** Canonical selection anchor and keyboard cursor. */
   focusedPath: string | null;
@@ -56,6 +62,7 @@ export interface DiskActions {
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   navigateToDirectory: (dirPath: string) => void;
+  navigateToRecent: () => void;
   select: (targetPath: string | null) => void;
   toggleSelected: (targetPath: string) => void;
   selectRange: (entries: DiskEntry[], targetPath: string) => void;
@@ -84,6 +91,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   roots: [],
   listings: {},
   expanded: {},
+  currentCollection: null,
   currentDirectory: null,
   focusedPath: null,
   selectedPath: null,
@@ -116,6 +124,17 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     pathMutationCoordinator.reconcileAllowedRoots(response.data);
 
     set((state) => {
+      const roots = samePaths(state.roots, response.data)
+        ? state.roots
+        : response.data;
+      // Recent is not tied to a root; never substitute one for it.
+      if (state.currentCollection?.kind === 'recent') {
+        return {
+          roots,
+          currentDirectory: null,
+          loading: { isLoading: false, error: null },
+        };
+      }
       const previousDirectory = state.currentDirectory;
       const currentDirectory =
         previousDirectory &&
@@ -126,10 +145,11 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
           : response.data[0] ?? null;
 
       return {
-        roots: samePaths(state.roots, response.data)
-          ? state.roots
-          : response.data,
+        roots,
         currentDirectory,
+        currentCollection: currentDirectory
+          ? directoryCollection(currentDirectory)
+          : null,
         loading: { isLoading: false, error: null },
       };
     });
@@ -154,6 +174,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     set((state) => ({
       roots: state.roots.includes(root) ? state.roots : [...state.roots, root],
       expanded: { ...state.expanded, [root]: true },
+      currentCollection: directoryCollection(root),
       currentDirectory: root,
       loading: { isLoading: false, error: null },
     }));
@@ -217,7 +238,19 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
 
   navigateToDirectory: (dirPath) =>
     set({
+      currentCollection: directoryCollection(dirPath),
       currentDirectory: normalizeFsPath(dirPath),
+      focusedPath: null,
+      selectedPath: null,
+      selectedPaths: [],
+      quickPreviewPath: null,
+      isQuickLookOpen: false,
+    }),
+
+  navigateToRecent: () =>
+    set({
+      currentCollection: { kind: 'recent' },
+      currentDirectory: null,
       focusedPath: null,
       selectedPath: null,
       selectedPaths: [],

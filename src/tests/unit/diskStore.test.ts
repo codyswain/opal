@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
+import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import type { DiskEntry } from '@/types/disk';
 
 const ROOT = '/Vault';
@@ -28,6 +29,7 @@ beforeEach(() => {
     listings: {},
     expanded: {},
     currentDirectory: null,
+    currentCollection: null,
     focusedPath: null,
     selectedPath: null,
     selectedPaths: [],
@@ -282,5 +284,45 @@ describe('useDiskStore', () => {
     useTabsStore.getState().hydrate();
 
     expect(useTabsStore.getState().openPaths).toEqual([]);
+  });
+});
+
+describe('collections', () => {
+  it('navigateToDirectory and navigateToRecent keep currentDirectory consistent and clear selection', () => {
+    useDiskStore.getState().navigateToDirectory('/Vault/A');
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: '/Vault/A' });
+    useDiskStore.getState().select('/Vault/A/x.md');
+    useDiskStore.getState().navigateToRecent();
+    const state = useDiskStore.getState();
+    expect(state.currentCollection).toEqual({ kind: 'recent' });
+    expect(state.currentDirectory).toBeNull();
+    expect(state.selectedPaths).toEqual([]);
+    expect(state.focusedPath).toBeNull();
+  });
+
+  it('loadRoots keeps a recent collection current instead of substituting a root', async () => {
+    listRoots.mockResolvedValueOnce({ success: true, data: [ROOT] });
+    useDiskStore.getState().navigateToRecent();
+    await useDiskStore.getState().loadRoots();
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' });
+    expect(useDiskStore.getState().currentDirectory).toBeNull();
+    // Without a collection, the first root becomes current as before.
+    useDiskStore.setState({ currentCollection: null, currentDirectory: null });
+    listRoots.mockResolvedValueOnce({ success: true, data: [ROOT] });
+    await useDiskStore.getState().loadRoots();
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: ROOT });
+  });
+
+  it('remaps and removes the current directory collection with its path', () => {
+    useDiskStore.setState({ roots: [ROOT] });
+    useDiskStore.getState().navigateToDirectory('/Vault/Old');
+    pathMutationCoordinator.applyAppMutation({ kind: 'rename', oldPath: '/Vault/Old', newPath: '/Vault/New' });
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: '/Vault/New' });
+    pathMutationCoordinator.applyExternalRemoval(['/Vault/New']);
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: ROOT });
+    useDiskStore.getState().navigateToRecent();
+    pathMutationCoordinator.applyExternalRemoval(['/Vault/Photos']);
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' });
+    expect(useDiskStore.getState().currentDirectory).toBeNull();
   });
 });
