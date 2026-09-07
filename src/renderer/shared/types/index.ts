@@ -1,3 +1,4 @@
+import type { IPCResponse } from '@/types/ipc';
 import type { ThemeReport } from '@/common/theme';
 import { CredentialAccount } from "@/types/credentials";
 
@@ -12,7 +13,7 @@ declare global {
     };
 
     credentialAPI: {
-      getKey: (account: CredentialAccount) => Promise<string>;
+      getKey: (account: CredentialAccount) => Promise<IPCResponse<string>>;
       setKey: (account: CredentialAccount, password: string) => Promise<void>;
       deleteKey: (account: CredentialAccount) => Promise<void>;
     };
