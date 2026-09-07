@@ -3,11 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
+  collectionDirectory,
   directoryCollection,
   locationDirectory,
   resolveFilesLocation,
+  sameCollection,
   serializeFilesLocation,
   remapFilesLocation,
+  type FilesCollection,
   type FilesLocation,
 } from '../navigation/filesLocation';
 import {
@@ -16,7 +19,9 @@ import {
 } from '../navigation/FilesNavigationContext';
 import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
 import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
+import { recordOpened } from '../activity/recordActivity';
 import { useDiskStore } from '../store/diskStore';
+import { useRecentStore } from '../store/recentStore';
 import { useTabsStore } from '../store/tabsStore';
 import { DiskExplorer } from './DiskExplorer';
 
@@ -36,8 +41,7 @@ export function FilesRoute() {
     const current = applied.current;
     if (!current || current.mode !== 'browse' || restoring.current) return;
     const state = useDiskStore.getState();
-    const directory = locationDirectory(current);
-    if (!directory || state.currentDirectory !== directory) return;
+    if (!sameCollection(state.currentCollection, current.collection)) return;
     filesLocationSnapshots.patch(current, {
       selectedPaths: state.selectedPaths,
       focusedPath: state.focusedPath,
@@ -83,30 +87,49 @@ export function FilesRoute() {
     restoring.current = true;
     applied.current = next;
     const state = useDiskStore.getState();
-    // Task 9 adds the Recent collection; until then a non-directory
-    // collection cannot reach this route because parsing requires roots.
-    const nextDirectory = locationDirectory(next) ?? roots[0];
-    state.navigateToDirectory(nextDirectory);
+    const directory = collectionDirectory(next.collection);
+    if (directory) state.navigateToDirectory(directory);
+    else state.navigateToRecent();
     if (next.mode === 'focus') useTabsStore.getState().openFile(next.file);
     else useTabsStore.setState({ openedPath: null, activePath: null });
     let cancelled = false;
-    void state.loadDirectory(nextDirectory).then(() => {
+    // Null means the directory could not be listed; Recent always resolves to
+    // a (possibly empty) list and reports its own errors in place.
+    const visiblePaths: Promise<string[] | null> = directory
+      ? state
+          .loadDirectory(directory)
+          .then(
+            () =>
+              useDiskStore
+                .getState()
+                .listings[directory]?.map((entry) => entry.path) ?? null
+          )
+      : useRecentStore
+          .getState()
+          .load()
+          .then(
+            () =>
+              useRecentStore
+                .getState()
+                .result?.items.map((item) => item.entry.path) ?? []
+          );
+    void visiblePaths.then((paths) => {
       if (cancelled) return;
-      const entries = useDiskStore.getState().listings[nextDirectory];
-      if (!entries) {
+      if (!paths) {
         restoring.current = false;
-        const parent = parentFsPath(nextDirectory);
+        const missing = directory ?? roots[0];
+        const parent = parentFsPath(missing);
         const fallback =
           parent && roots.some((root) => isFsPathAtOrBelow(root, parent))
             ? parent
             : roots[0];
-        if (fallback && fallback !== nextDirectory)
+        if (fallback && fallback !== missing)
           go({ mode: 'browse', collection: directoryCollection(fallback) }, true);
         setReadyKey(key);
         return;
       }
       if (next.mode === 'browse') {
-        const visible = new Set(entries.map((entry) => entry.path));
+        const visible = new Set(paths);
         const selectedPaths =
           snapshot?.selectedPaths.filter((path) => visible.has(path)) ?? [];
         const focusedPath =
@@ -156,6 +179,17 @@ export function FilesRoute() {
             !(previous.mode === 'focus' && removed(previous.file))
           )
             return;
+          if (!previousDirectory) {
+            // Only the focused file vanished; Recent itself is unaffected.
+            const back = { mode: 'browse' as const, collection: previous.collection };
+            return {
+              commit: () => {
+                applied.current = null;
+                go(back, true);
+              },
+              rollback: () => go(previous, true),
+            };
+          }
           let directory: string | null = previousDirectory;
           while (directory && removed(directory))
             directory = parentFsPath(directory);
@@ -184,31 +218,50 @@ export function FilesRoute() {
     [go, navigate]
   );
 
-  const directoryForFile = React.useCallback(
-    (file: string, current: string | null) => {
+  /**
+   * The collection a newly opened file belongs to. Recent keeps its identity;
+   * a folder keeps it while the file shares its root; otherwise the file's
+   * parent folder becomes the origin.
+   */
+  const collectionForFile = React.useCallback(
+    (file: string, current: FilesCollection | null): FilesCollection | null => {
+      if (current?.kind === 'recent') return current;
       const allowedRoots = useDiskStore.getState().roots;
-      return current &&
+      const directory = current ? collectionDirectory(current) : null;
+      if (
+        directory &&
         allowedRoots.some(
           (root) =>
-            isFsPathAtOrBelow(root, current) && isFsPathAtOrBelow(root, file)
+            isFsPathAtOrBelow(root, directory) && isFsPathAtOrBelow(root, file)
         )
-        ? current
-        : parentFsPath(file);
+      )
+        return current;
+      const parent = parentFsPath(file);
+      return parent ? directoryCollection(parent) : null;
     },
     []
   );
+  const currentCollection = React.useCallback(
+    () =>
+      applied.current?.collection ??
+      useDiskStore.getState().currentCollection ??
+      null,
+    []
+  );
+  // Only these explicit actions record activity. The URL-application effect,
+  // its fallbacks, returnToFolder and closeFile call the router directly, so
+  // restoration, Back/Forward and tab closing stay silent.
   const actions = React.useMemo<FilesNavigationActions>(
     () => ({
-      navigateDirectory: (directory) =>
-        go({ mode: 'browse', collection: directoryCollection(directory) }),
+      navigateDirectory: (directory) => {
+        recordOpened(directory);
+        go({ mode: 'browse', collection: directoryCollection(directory) });
+      },
       openFile: (file) => {
-        const directory = directoryForFile(
-          file,
-          (applied.current && locationDirectory(applied.current)) ??
-            useDiskStore.getState().currentDirectory
-        );
-        if (directory)
-          go({ mode: 'focus', collection: directoryCollection(directory), file });
+        const collection = collectionForFile(file, currentCollection());
+        if (!collection) return;
+        recordOpened(file);
+        go({ mode: 'focus', collection, file });
       },
       returnToFolder: () => {
         if (applied.current)
@@ -219,26 +272,25 @@ export function FilesRoute() {
         useTabsStore.getState().close(path);
         if (active?.mode === 'focus' && active.file === path) {
           const file = useTabsStore.getState().openedPath;
-          const activeDirectory = locationDirectory(active);
-          const directory = file
-            ? directoryForFile(file, activeDirectory)
-            : activeDirectory;
-          if (directory)
+          const collection = file
+            ? collectionForFile(file, active.collection)
+            : active.collection;
+          if (collection)
             go(
               file
-                ? { mode: 'focus', collection: directoryCollection(directory), file }
-                : { mode: 'browse', collection: directoryCollection(directory) }
+                ? { mode: 'focus', collection, file }
+                : { mode: 'browse', collection }
             );
         }
       },
     }),
-    [go, directoryForFile]
+    [go, collectionForFile, currentCollection]
   );
   const key = resolved ? serializeFilesLocation(resolved.location) : null;
   return (
     <FilesNavigationContext.Provider value={actions}>
       {key && key !== readyKey ? (
-        <div role="status">Loading folder…</div>
+        <div role="status">Loading…</div>
       ) : (
         <DiskExplorer showNavigationPane={false} />
       )}

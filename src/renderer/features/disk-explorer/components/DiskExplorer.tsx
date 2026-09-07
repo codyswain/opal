@@ -7,6 +7,9 @@ import { filterEntries } from '@/common/filterEntries';
 import { sortEntries } from '@/common/sortEntries';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { useRecentStore } from '../store/recentStore';
+import type { RecentItem } from '@/types/activity';
+import { RecentView } from './RecentView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { Breadcrumb } from './Breadcrumb';
@@ -29,6 +32,8 @@ interface DiskExplorerProps {
   showNavigationPane?: boolean;
 }
 
+const NO_RECENT_ITEMS: RecentItem[] = [];
+
 export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   showNavigationPane = true,
 }) => {
@@ -39,6 +44,8 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
+  const currentCollection = useDiskStore((state) => state.currentCollection);
+  const recentItems = useRecentStore((state) => state.result?.items ?? NO_RECENT_ITEMS);
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
@@ -55,17 +62,23 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
   const openedPath = useTabsStore((state) => state.openedPath);
   const activeDirectory = currentDirectory;
+  const isRecent = currentCollection?.kind === 'recent';
   const visibleEntries = useMemo(() => {
+    if (isRecent) {
+      // Recent keeps its recency order; only the name filter applies.
+      return filterEntries(recentItems.map((item) => item.entry), filter);
+    }
     if (!activeDirectory) return [];
     return sortEntries(
       filterEntries(listings[activeDirectory] ?? [], filter),
       sort.field,
       sort.direction
     );
-  }, [activeDirectory, filter, listings, sort.direction, sort.field]);
+  }, [activeDirectory, filter, isRecent, listings, recentItems, sort.direction, sort.field]);
 
-  // The selected entry object, found in whichever cached listing contains it.
-  // The tree can only surface a path it has already listed, so no IPC is needed.
+  // The selected entry object, found in whichever cached listing contains it,
+  // or among Recent rows. The tree can only surface a path it has already
+  // listed, so no IPC is needed.
   const selectedEntry = useMemo<DiskEntry | null>(() => {
     if (!selectedPath) return null;
     for (const entries of Object.values(listings)) {
@@ -74,8 +87,8 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       );
       if (match) return match;
     }
-    return null;
-  }, [selectedPath, listings]);
+    return recentItems.find((item) => item.entry.path === selectedPath)?.entry ?? null;
+  }, [selectedPath, listings, recentItems]);
 
   const [focusedEntry, setFocusedEntry] = useState<{
     path: string;
@@ -347,6 +360,31 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         >
           {error && <ErrorBanner message={error} />}
           <TabStrip />
+          {(() => {
+            const previewToggle = (
+              <button
+                type="button"
+                aria-pressed={isPreviewPaneOpen}
+                aria-controls={previewPaneId}
+                data-disk-shortcuts-ignore="true"
+                onClick={togglePreviewPane}
+                className="mr-3 shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Preview
+              </button>
+            );
+            if (!openedPath && isRecent) {
+              return (
+                <div
+                  data-testid="files-recent"
+                  className="min-h-0 flex-1 overflow-hidden"
+                >
+                  <RecentView trailing={previewToggle} />
+                </div>
+              );
+            }
+            return null;
+          })()}
           {openedPath ? (
             <div
               data-testid="files-focus"
@@ -371,7 +409,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
                 )}
               </div>
             </div>
-          ) : activeDirectory ? (
+          ) : isRecent ? null : activeDirectory ? (
             <>
               <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
                 <Breadcrumb dirPath={activeDirectory} />

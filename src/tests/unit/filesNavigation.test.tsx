@@ -15,6 +15,7 @@ import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore'
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
+import { installActivityApi } from '@/tests/helpers/activityApi';
 const ROOT = '/Vault',
   FOLDER = '/Vault/References',
   NOTE = '/Vault/brief.md';
@@ -62,6 +63,7 @@ const item = (path: string) => screen.getByTestId('disk-folder-entry-' + path);
 beforeEach(() => {
   localStorage.clear();
   filesLocationSnapshots.clear();
+  installActivityApi();
   installDiskApi({
     listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
     readDirectory: vi.fn(async (path) => ({
@@ -523,3 +525,22 @@ it.each(['list', 'gallery'])(
     ).toBeNull();
   }
 );
+
+it('records explicit opens and navigations but not restoration, Back or return', async () => {
+  const api = window.activityAPI;
+  await setup();
+  expect(api.record).not.toHaveBeenCalled();
+  const user = userEvent.setup();
+  await user.dblClick(item(FOLDER));
+  await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(FOLDER));
+  expect(api.record).toHaveBeenCalledWith(FOLDER, 'opened');
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(ROOT));
+  await waitFor(() => expect(screen.queryByTestId('disk-folder-entry-' + NOTE)).toBeInTheDocument());
+  await user.dblClick(item(NOTE));
+  await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTE));
+  expect(api.record).toHaveBeenCalledWith(NOTE, 'opened');
+  await user.click(screen.getByRole('button', { name: 'Return to folder' }));
+  await waitFor(() => expect(useTabsStore.getState().openedPath).toBeNull());
+  expect(api.record).toHaveBeenCalledTimes(2);
+});
