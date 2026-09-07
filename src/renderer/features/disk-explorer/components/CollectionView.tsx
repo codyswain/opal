@@ -41,15 +41,15 @@ export interface CollectionViewProps {
   onModeChange?: (mode: CollectionViewMode) => void;
 }
 
-const ICONS: Record<FileKind, React.ComponentType<{ className?: string }>> = {
+const ICONS: Record<FileKind, React.ComponentType<{ className?: string; strokeWidth?: string | number }>> = {
   directory: Folder, image: ImageIcon, markdown: FileText, text: FileText,
   pdf: File, video: Film, audio: Music, other: File,
 };
 
 const ROW_HEIGHT = 40;
 const TILE = {
-  comfortable: { width: 172, height: 208, min: 160 },
-  compact: { width: 116, height: 144, min: 104 },
+  comfortable: { width: 176, height: 196, min: 160 },
+  compact: { width: 124, height: 152, min: 104 },
 } as const;
 
 /**
@@ -116,22 +116,6 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 shrink-0">
-        <span className="truncate text-2xs text-muted-foreground">
-          {countLabel ?? `${entries.length} ${entries.length === 1 ? 'item' : 'items'}`}
-        </span>
-        <div className="flex items-center gap-1">
-          <ModeButton
-            mode="gallery" active={activeMode === 'gallery'} onSelect={setMode}
-            label="Gallery view" Icon={LayoutGrid}
-          />
-          <ModeButton
-            mode="list" active={activeMode === 'list'} onSelect={setMode}
-            label="List view" Icon={ListIcon}
-          />
-        </div>
-      </div>
-
       {entries.length === 0 ? (
         <div
           data-testid={hasActiveFilter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
@@ -208,6 +192,18 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
           </FixedSizeList>
         </div>
       )}
+
+      {/* A Finder-style status bar: counts on the left, layout on the right. */}
+      <div className="flex h-8 shrink-0 items-center justify-between border-t border-border-subtle bg-surface px-3" data-testid="collection-status">
+        <span className="truncate text-2xs text-muted-foreground">
+          {countLabel ?? `${entries.length} ${entries.length === 1 ? 'item' : 'items'}`}
+          {selectedPaths.length > 1 ? ` · ${selectedPaths.length} selected` : ''}
+        </span>
+        <div className="flex items-center gap-0.5" role="group" aria-label="Layout">
+          <ModeButton mode="list" active={activeMode === 'list'} onSelect={setMode} label="List view" Icon={ListIcon} />
+          <ModeButton mode="gallery" active={activeMode === 'gallery'} onSelect={setMode} label="Gallery view" Icon={LayoutGrid} />
+        </div>
+      </div>
     </div>
   );
 };
@@ -263,9 +259,9 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
     data-testid={`disk-folder-view-${mode}`}
     data-disk-shortcuts-ignore="true"
     onClick={() => onSelect(mode)}
-    className={`rounded-md p-2 transition-colors duration-100 ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+    className={`flex h-6 w-6 items-center justify-center rounded transition-colors duration-100 ${active ? 'bg-surface-active text-foreground' : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}`}
   >
-    <Icon className="h-4 w-4" />
+    <Icon className="h-3.5 w-3.5" />
   </button>
 );
 
@@ -276,6 +272,11 @@ interface EntryProps {
   onOpen: () => void;
   onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
+
+const TILE_TINTS: Record<FileKind, string> = {
+  directory: 'text-amber-500', image: 'text-violet-500', markdown: 'text-sky-500', text: 'text-slate-400',
+  pdf: 'text-rose-500', video: 'text-fuchsia-500', audio: 'text-emerald-500', other: 'text-slate-400',
+};
 
 const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSelect, onOpen }) => {
   const Icon = ICONS[entry.kind];
@@ -290,6 +291,7 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSe
   // — on macOS that includes PDFs and video first-frames.
   const canThumbnail =
     !entry.isDirectory && ['image', 'pdf', 'video'].includes(entry.kind) && !thumbFailed;
+  const meta = decoration ? decoration.detail : entry.isDirectory ? 'Folder' : formatBytes(entry.size);
 
   return (
     <button
@@ -303,12 +305,14 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSe
       // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
       // refuses to shrink below its content's intrinsic width. A long filename
       // would push the tile past its track and overlap its neighbours.
-      className={`flex h-full min-w-0 w-full flex-col gap-2 rounded-lg p-2 text-left transition-colors duration-100 ${
-        isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'
-      } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
+      className={`group flex h-full min-w-0 w-full flex-col gap-1.5 rounded-lg p-1.5 text-left transition-colors duration-100 outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        isSelected ? 'bg-surface-selected' : 'hover:bg-surface-hover'
+      } ${isDropTarget ? 'ring-2 ring-focus bg-focus/10' : ''}`}
       {...dragProps}
     >
-      <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
+      <div className={`grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-md border transition-colors ${
+        isSelected ? 'border-focus/60 bg-background' : 'border-border-subtle bg-surface group-hover:border-border'
+      }`}>
         {canThumbnail ? (
           <img
             src={toOpalThumbUrl(entry.path)}
@@ -316,20 +320,18 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSe
             loading="lazy"
             decoding="async"
             onError={() => setThumbFailed(true)}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
           />
         ) : (
-          <Icon className="h-8 w-8 opacity-40" />
+          <Icon className={`h-9 w-9 ${TILE_TINTS[entry.kind]} opacity-80`} strokeWidth={1.5} />
         )}
       </div>
       {/* Two lines then ellipsis, with a reserved height so tiles stay on a
           consistent baseline regardless of how long each name is. */}
-      <span className="min-h-8 break-words px-1 text-xs leading-snug line-clamp-2">
+      <span className="min-h-8 break-words px-1 text-xs font-medium leading-snug line-clamp-2 text-foreground">
         {entry.name}
       </span>
-      {decoration ? (
-        <span className="truncate px-1 text-2xs text-muted-foreground">{decoration.detail}</span>
-      ) : null}
+      <span className="truncate px-1 text-2xs text-muted-foreground">{meta}</span>
     </button>
   );
 };

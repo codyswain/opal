@@ -21,28 +21,35 @@ describe('Toolbar sorting', () => {
     const user = userEvent.setup();
     render(<Toolbar dirPath="/V" />);
 
-    await user.click(screen.getByTestId('sort-size'));
+    await user.click(screen.getByTestId('sort-menu'));
+    await user.click(await screen.findByTestId('sort-size'));
     expect(useDiskStore.getState().sort).toEqual({
       field: 'size',
       direction: 'asc',
     });
+    expect(screen.getByTestId('sort-menu')).toHaveTextContent('Size');
   });
 
   it('flips direction when the active field is chosen again', async () => {
     const user = userEvent.setup();
     render(<Toolbar dirPath="/V" />);
 
-    await user.click(screen.getByTestId('sort-name'));
+    await user.click(screen.getByTestId('sort-menu'));
+    await user.click(await screen.findByTestId('sort-name'));
     expect(useDiskStore.getState().sort.direction).toBe('desc');
 
-    await user.click(screen.getByTestId('sort-name'));
+    // The arrow beside the menu flips without opening it.
+    await user.click(screen.getByTestId('sort-direction'));
     expect(useDiskStore.getState().sort.direction).toBe('asc');
   });
 
-  it('marks the active sort field', () => {
+  it('marks the active sort field', async () => {
+    const user = userEvent.setup();
     render(<Toolbar dirPath="/V" />);
-    expect(screen.getByTestId('sort-name')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('sort-size')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('sort-menu')).toHaveTextContent('Name');
+    await user.click(screen.getByTestId('sort-menu'));
+    expect(await screen.findByTestId('sort-name')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('sort-size')).toHaveAttribute('aria-checked', 'false');
   });
 
   it('starts a new-folder action for the current directory', async () => {
@@ -95,7 +102,7 @@ describe('Toolbar filtering', () => {
     render(<Toolbar dirPath="/V" />);
 
     const input = screen.getByTestId('filter-input') as HTMLInputElement;
-    await user.click(screen.getByTestId('sort-size'));
+    await user.click(screen.getByTestId('sort-direction'));
     expect(input).not.toHaveFocus();
 
     await user.keyboard('{Meta>}f{/Meta}');
