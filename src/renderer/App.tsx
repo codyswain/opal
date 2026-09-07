@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   HashRouter as Router,
   Navigate,
@@ -10,17 +10,13 @@ import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Settings } from "@/renderer/features/settings";
-import { usePref } from "@/renderer/shared/prefs/usePref";
-import { useCommands } from "@/renderer/features/commands";
-import { Command, commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
-import { COMMAND_IDS } from "@/common/commandIds";
-import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
-import { FilesRoute, useDiskStore } from "@/renderer/features/disk-explorer";
+import { AppCommands, CommandPalette } from "@/renderer/features/commands";
+import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
+import { FilesRoute } from "@/renderer/features/disk-explorer";
 import { ChatRoute } from "@/renderer/features/chat";
 import {
   AppShell,
   ShellProvider,
-  useShellStore,
   type ShellRouteDescriptor,
   type ShellRouteObject,
 } from "@/renderer/features/shell";
@@ -81,84 +77,7 @@ const APP_ROUTES: ShellRouteObject[] = [
 const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 
 const App: React.FC = () => {
-  const { registerCommand, unregisterCommand } = useCommands();
   const loadSettings = useSettingsStore((state) => state.loadSettings);
-  const toggleLeftSidebar = useShellStore((state) => state.toggleSidebar);
-  const toggleRightSidebar = useShellStore((state) => state.toggleInspector);
-  const [isBottomPaneOpen, setIsBottomPaneOpen] = usePref(
-    "isBottomPaneOpen",
-    true
-  );
-  const toggleBottomPane = useCallback(
-    () => setIsBottomPaneOpen(!isBottomPaneOpen),
-    [isBottomPaneOpen]
-  );
-
-  useEffect(() => {
-    const commands: Command[] = [
-      {
-        id: COMMAND_IDS.toggleLeftPane,
-        name: "Toggle Left Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+B"],
-        keywords: ["pane", "toggle"],
-        perform: toggleLeftSidebar,
-      },
-      {
-        id: COMMAND_IDS.toggleRightPane,
-        name: "Toggle Right Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+Alt+B"],
-        keywords: ["pane", "toggle"],
-        perform: toggleRightSidebar,
-      },
-      {
-        id: COMMAND_IDS.toggleBottomPane,
-        name: "Toggle Bottom Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+J"],
-        keywords: ["pane", "toggle"],
-        perform: toggleBottomPane,
-      },
-      {
-        id: COMMAND_IDS.openFolder,
-        name: "Open Folder on Disk",
-        type: "navigation",
-        shortcut: ["CmdOrCtrl+O"],
-        keywords: ["files", "folder", "open", "disk"],
-        perform: () => { void useDiskStore.getState().openFolder(); },
-      },
-      {
-        id: COMMAND_IDS.openSettings,
-        name: "Settings…",
-        type: "navigation",
-        shortcut: ["CmdOrCtrl+,"],
-        keywords: ["settings", "preferences"],
-        perform: () => { window.location.hash = "#/settings"; },
-      },
-    ];
-
-    commands.forEach(registerCommand);
-
-    // Tell main what exists, so the menu and the palette can never disagree.
-    window.systemAPI.reportCommands(
-      commands.map((command) => ({
-        id: command.id,
-        label: command.name,
-        accelerator: command.shortcut?.[0],
-      }))
-    );
-
-    return () => {
-      commands.forEach((command) => unregisterCommand(command));
-    };
-  }, [
-    registerCommand,
-    unregisterCommand,
-    toggleLeftSidebar,
-    toggleRightSidebar,
-    toggleBottomPane,
-  ]);
 
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
@@ -176,22 +95,21 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <KBarActionsProvider>
-        <KBar />
-        <ThemeProvider>
-          <TooltipProvider>
-            <Toaster />
-            <ShellProvider
-              routes={APP_ROUTES}
-              fallbackRoute={FALLBACK_ROUTE}
-            >
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
-            </ShellProvider>
-          </TooltipProvider>
-        </ThemeProvider>
-      </KBarActionsProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <ShellProvider
+            routes={APP_ROUTES}
+            fallbackRoute={FALLBACK_ROUTE}
+          >
+            <AppCommands />
+            <CommandPalette />
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </ShellProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </Router>
   );
 };
