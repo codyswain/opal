@@ -89,6 +89,25 @@ describe('useMarkdownDocument', () => {
     expect(api.documents.get(NOTE)?.body).toBe('# Mine again\n');
   });
 
+  it('Keep mine waits for a conflicting write in flight, then overwrites', async () => {
+    const api = installMarkdownApi({ [NOTE]: '# Brief\n' });
+    let resolveWrite!: (value: unknown) => void;
+    const { result } = renderHook(() => useMarkdownDocument(NOTE));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    api.externalEdit(NOTE, '# Elsewhere\n');
+    act(() => { result.current.onChange('# Mine\n'); });
+    // The blur flush is still in flight when Keep mine is clicked.
+    (api.write as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise((resolve) => { resolveWrite = resolve; }));
+    await act(async () => {
+      const blurFlush = result.current.flush();
+      const keep = result.current.keepMine();
+      resolveWrite({ success: false, error: 'This file changed on disk since you opened it.', conflict: true });
+      await Promise.all([blurFlush, keep]);
+    });
+    expect(result.current.saveState).toBe('saved');
+    expect(api.documents.get(NOTE)?.body).toBe('# Mine\n');
+  });
+
   it('follows an external change silently while clean and reports other write failures', async () => {
     const api = installMarkdownApi({ [NOTE]: '# Brief\n' });
     const { result } = renderHook(() => useMarkdownDocument(NOTE));

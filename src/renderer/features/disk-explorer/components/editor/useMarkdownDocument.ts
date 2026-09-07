@@ -38,6 +38,7 @@ export function useMarkdownDocument(path: string): MarkdownDocumentState & Markd
   const latest = useRef<string>('');
   const dirty = useRef(false);
   const inFlight = useRef(false);
+  const inFlightWrite = useRef<Promise<void> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
   const generation = useRef(0);
@@ -72,33 +73,39 @@ export function useMarkdownDocument(path: string): MarkdownDocumentState & Markd
     }));
   }, [path, patch]);
 
-  const save = useCallback(async () => {
-    if (!dirty.current || inFlight.current || revision.current === null) return;
+  const save = useCallback((): Promise<void> => {
+    if (inFlight.current && inFlightWrite.current) return inFlightWrite.current;
+    if (!dirty.current || revision.current === null) return Promise.resolve();
     inFlight.current = true;
     const text = latest.current;
     const basedOn = revision.current;
     patch({ saveState: 'saving', error: null });
-    let response: Awaited<ReturnType<typeof window.markdownAPI.write>>;
-    try {
-      response = await window.markdownAPI.write(path, text, basedOn);
-    } catch {
-      response = { success: false, error: 'Could not save this note.' };
-    }
-    inFlight.current = false;
-    if (!alive.current) return;
-    if (!response.success) {
-      patch({ saveState: response.conflict ? 'conflict' : 'error', error: response.error });
-      return;
-    }
-    revision.current = response.data.revision;
-    if (latest.current === text) {
-      dirty.current = false;
-      patch({ saveState: 'saved' });
-    } else {
-      // Typing continued while the write was in flight; the next save covers it.
-      patch({ saveState: 'dirty' });
-      timer.current = setTimeout(() => { timer.current = null; void save(); }, AUTOSAVE_DELAY_MS);
-    }
+    const run = (async () => {
+      let response: Awaited<ReturnType<typeof window.markdownAPI.write>>;
+      try {
+        response = await window.markdownAPI.write(path, text, basedOn);
+      } catch {
+        response = { success: false, error: 'Could not save this note.' };
+      }
+      inFlight.current = false;
+      inFlightWrite.current = null;
+      if (!alive.current) return;
+      if (!response.success) {
+        patch({ saveState: response.conflict ? 'conflict' : 'error', error: response.error });
+        return;
+      }
+      revision.current = response.data.revision;
+      if (latest.current === text) {
+        dirty.current = false;
+        patch({ saveState: 'saved' });
+      } else {
+        // Typing continued while the write was in flight; the next save covers it.
+        patch({ saveState: 'dirty' });
+        timer.current = setTimeout(() => { timer.current = null; void save(); }, AUTOSAVE_DELAY_MS);
+      }
+    })();
+    inFlightWrite.current = run;
+    return run;
   }, [path, patch]);
 
   const onChange = useCallback((markdown: string) => {
@@ -123,7 +130,9 @@ export function useMarkdownDocument(path: string): MarkdownDocumentState & Markd
   }, [load]);
 
   const keepMine = useCallback(async () => {
-    // Adopt the current on-disk revision, then write the editor's text over it.
+    // A blur-triggered write may still be in flight (and about to conflict);
+    // let it settle, then adopt the on-disk revision and write over it.
+    if (inFlightWrite.current) await inFlightWrite.current;
     let response: Awaited<ReturnType<typeof window.markdownAPI.read>>;
     try {
       response = await window.markdownAPI.read(path);
