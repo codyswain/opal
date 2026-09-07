@@ -19,6 +19,7 @@ import type { MetadataService } from './MetadataService';
 import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import { MetadataError, readMetadata, SIDECAR_SUFFIX, assertNoSymlinks } from './MetadataCodec';
 import { classifyFile } from '@/common/fileKind';
+import type { ActivityRecorder } from '@/main/activity/ActivityService';
 
 export class DestinationExistsError extends Error {
   constructor(target: string) {
@@ -42,6 +43,8 @@ export interface FileWriterDependencies {
   trashItem: (fullPath: string) => Promise<void>;
   /** Injected in tests to force EXDEV behavior. */
   renameEntry?: (source: string, destination: string) => Promise<void>;
+  /** Remaps and records activity after a mutation succeeds; failures never affect the mutation. */
+  activity?: ActivityRecorder;
 }
 
 /**
@@ -105,6 +108,7 @@ export class FileWriter {
     const carrier = await this.preflightMetadata(target, source, destination);
     if (carrier) await this.renamePair(source, destination, carrier);
     else await this.renameEntry(source, destination);
+    await this.deps.activity?.noteMoved(source, destination);
     return destination;
   }
 
@@ -131,6 +135,7 @@ export class FileWriter {
     const carrier = await this.preflightMetadata(target, source, destination);
     if (carrier) {
       await this.renamePair(source, destination, carrier);
+      await this.deps.activity?.noteMoved(source, destination);
       return destination;
     }
 
@@ -145,6 +150,7 @@ export class FileWriter {
       await removeRecursive(source);
     }
 
+    await this.deps.activity?.noteMoved(source, destination);
     return destination;
   }
 
@@ -152,7 +158,11 @@ export class FileWriter {
     const resolved = await assertMutableTarget(this.deps.registry, target);
     await assertNoSymlinks(this.deps.registry, target);
     const carrier = await this.carrierFor(resolved);
-    if (!carrier) { await this.deps.trashItem(resolved); return; }
+    if (!carrier) {
+      await this.deps.trashItem(resolved);
+      await this.deps.activity?.noteRemoved(resolved);
+      return;
+    }
     const bundle = await mkdtemp(path.join(path.dirname(resolved), '.opal-trash-'));
     const stagedPrimary = path.join(bundle, path.basename(resolved));
     const stagedCarrier = path.join(bundle, path.basename(carrier));
@@ -163,6 +173,7 @@ export class FileWriter {
       await this.renameEntry(carrier, stagedCarrier);
       staged.push([stagedCarrier, carrier]);
       await this.deps.trashItem(bundle);
+      await this.deps.activity?.noteRemoved(resolved);
     } catch (error) {
       const failures: unknown[] = [];
       for (const [from, to] of staged.reverse()) {

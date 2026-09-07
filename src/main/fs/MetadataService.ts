@@ -7,10 +7,13 @@ import { MetadataCatalog, type CatalogSnapshot, type CatalogItem } from './Metad
 import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import { MetadataError, MetadataConflictError, readMetadata, serializeMetadata, validateProperties, type MetadataState } from './MetadataCodec';
 import type { ItemMetadata, ItemProperties, RelatedItem, AuthoredLink } from '@/types/metadata';
+import type { ActivityRecorder } from '@/main/activity/ActivityService';
 
 export interface MetadataServiceDependencies {
   registry: RootRegistry;
   queue?: MutationQueue;
+  /** Records organized activity after a write succeeds; failures never affect the write. */
+  activity?: ActivityRecorder;
   /** Filesystem replacement seam, also used for failure-injection tests. */
   renameEntry?: (source: string, destination: string) => Promise<void>;
 }
@@ -39,6 +42,7 @@ export class MetadataService {
       state.document.set('tags', properties.tags);
       state.document.set('annotation', properties.description);
       await this.write(state);
+      await this.deps.activity?.noteOrganized(state.path);
       return this.readInternal(state.path);
     });
   }
@@ -75,6 +79,7 @@ export class MetadataService {
       serializeMetadata(source);
       if (destinationNeedsIdentity) { serializeMetadata(destination); await this.write(destination); }
       await this.write(source);
+      await this.deps.activity?.noteOrganized(source.path);
       return this.readInternal(source.path);
     });
   }
@@ -96,6 +101,7 @@ export class MetadataService {
       if (index < 0) throw new MetadataConflictError();
       links.delete(index);
       await this.write(owner);
+      await this.deps.activity?.noteOrganized(current.path);
       return this.readInternal(current.path);
     });
   }

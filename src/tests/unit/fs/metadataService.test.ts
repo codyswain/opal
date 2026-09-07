@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, rename, symlink, chmod } from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -275,4 +275,28 @@ it('detects duplicate identities inside an explicitly opened hidden descendant r
 
   expect((await service.read(item('source.md'))).related[0].status).toBe('ambiguous');
   await expect(service.addRelated(item('source.md'), path.join(project, 'copy.md'))).rejects.toThrow(/ambiguous/i);
+});
+
+describe('activity hooks', () => {
+  function recorder() {
+    return { noteOrganized: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
+  }
+  it('records organized only after successful property saves and connection changes', async () => {
+    const activity = recorder();
+    service = new MetadataService({ registry, activity });
+    await writeFile(item('a.md'), '# a'); await writeFile(item('b.md'), '# b');
+    await expect(service.saveProperties(item('a.md'), props, 'stale')).rejects.toThrow();
+    expect(activity.noteOrganized).not.toHaveBeenCalled();
+    await save(item('a.md'));
+    expect(activity.noteOrganized).toHaveBeenCalledWith(item('a.md'));
+    const linked = await service.addRelated(item('a.md'), item('b.md'));
+    expect(activity.noteOrganized).toHaveBeenLastCalledWith(item('a.md'));
+    expect(activity.noteOrganized).toHaveBeenCalledTimes(2);
+    // Re-adding an existing connection is a no-op and records nothing.
+    await service.addRelated(item('b.md'), item('a.md'));
+    expect(activity.noteOrganized).toHaveBeenCalledTimes(2);
+    await service.removeRelated(item('b.md'), linked.related[0].edgeId);
+    expect(activity.noteOrganized).toHaveBeenLastCalledWith(item('b.md'));
+    expect(activity.noteOrganized).toHaveBeenCalledTimes(3);
+  });
 });

@@ -44,6 +44,10 @@ import { FileWriter } from "@/main/fs/FileWriter";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import { MetadataService } from "@/main/fs/MetadataService";
 import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
+import { ActivityStore } from "@/main/activity/ActivityStore";
+import { ActivityService } from "@/main/activity/ActivityService";
+import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
+import { activityStorePath } from "@/main/library/libraryPaths";
 import {
   OPAL_FILE_SCHEME,
   OPAL_THUMB_SCHEME,
@@ -297,11 +301,9 @@ const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
 // directory, mirroring the existing OPAL_TEST_DB_DIR convention. Without it,
 // tests would write into the real app's user data and corrupt the user's
 // actual list of opened folders.
+const userDataDir = process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData");
 const windowStateStore = new WindowStateStore({
-  storePath: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "window-state.json"
-  ),
+  storePath: path.join(userDataDir, "window-state.json"),
 });
 
 const appMenu = new AppMenu({
@@ -323,13 +325,23 @@ ipcMain.on("menu:commands", (_event, commands) => {
 });
 
 const rootRegistry = new RootRegistry({
-  storePath: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "disk-roots.json"
-  ),
+  storePath: path.join(userDataDir, "disk-roots.json"),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
-const metadataService = new MetadataService({ registry: rootRegistry });
+const activityStore = new ActivityStore({ storePath: activityStorePath(userDataDir) });
+const activityService = new ActivityService({
+  registry: rootRegistry,
+  store: activityStore,
+  statEntry: (target) => diskReader.statEntry(target),
+  onChanged: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("activity:changed", {});
+  },
+});
+const metadataService = new MetadataService({
+  registry: rootRegistry,
+  activity: activityService,
+});
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -340,14 +352,12 @@ const diskWatcher = new DiskWatcher({
 const fileWriter = new FileWriter({
   registry: rootRegistry,
   metadata: metadataService,
+  activity: activityService,
   trashItem: (fullPath) => shell.trashItem(fullPath),
 });
 const thumbnailService = new ThumbnailService({
   registry: rootRegistry,
-  cacheDir: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "thumbnails"
-  ),
+  cacheDir: path.join(userDataDir, "thumbnails"),
   createThumbnail: (sourcePath, maxSize) =>
     nativeImage.createThumbnailFromPath(sourcePath, maxSize),
 });
@@ -373,6 +383,10 @@ const metadataHandlers = new MetadataHandlers({
   ipc: ipcMain,
   service: metadataService,
 });
+const activityHandlers = new ActivityHandlers({
+  ipc: ipcMain,
+  service: activityService,
+});
 
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
@@ -389,6 +403,7 @@ app.whenReady().then(async () => {
     log.info("Virtual File System (VFS) IPC handlers registered");
 
     await rootRegistry.load();
+    await activityStore.load();
     for (const root of rootRegistry.list()) {
       try {
         await diskWatcher.watch(root);
@@ -403,6 +418,7 @@ app.whenReady().then(async () => {
     registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
     metadataHandlers.registerAll();
+    activityHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();
