@@ -15,6 +15,8 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installCollectionsApi } from '@/tests/helpers/collectionsApi';
+import { installViewsApi, savedView } from '@/tests/helpers/viewsApi';
+import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
 import { useViewDraftsStore } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
 
 const ROOT = '/Vault';
@@ -76,6 +78,8 @@ beforeEach(() => {
   window.localStorage.clear();
   installActivityApi();
   installCollectionsApi();
+  installViewsApi();
+  useSavedViewsStore.getState().reset();
   useViewDraftsStore.getState().clearAll();
   installDiskApi({
     listRoots: vi.fn(async () => ({
@@ -222,5 +226,25 @@ describe('WorkspaceSidebar', () => {
     expect(screen.getByRole('link', { name: 'Files' })).not.toHaveClass('bg-surface-selected');
     expect(window.activityAPI.record).not.toHaveBeenCalled();
     expect(useViewDraftsStore.getState().get(id)?.query.scope).toEqual({ kind: 'all-roots' });
+  });
+
+  it('lists saved views and unreadable files, and opens a saved view', async () => {
+    const view = savedView({ name: 'Project references' });
+    installViewsApi([view], {
+      list: vi.fn(async () => ({
+        success: true as const,
+        data: { views: [view], unreadable: [{ file: '/library/views/broken.yaml', error: 'Malformed YAML' }] },
+      })),
+    });
+    const user = userEvent.setup();
+    renderSidebar(true);
+    const link = await screen.findByRole('link', { name: 'Project references' });
+    expect(screen.getByRole('note', { name: 'Unreadable view file broken.yaml' })).toHaveAttribute('title', 'Malformed YAML');
+    await user.click(link);
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'view', id: view.id })
+    );
+    expect(link).toHaveClass('bg-surface-selected');
+    expect(screen.getByRole('link', { name: 'Files' })).not.toHaveClass('bg-surface-selected');
   });
 });

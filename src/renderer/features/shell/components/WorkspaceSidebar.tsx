@@ -1,4 +1,5 @@
-import { Clock, FileText, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
+import * as React from 'react';
+import { AlertTriangle, Bookmark, Clock, FileText, Files, FolderPlus, Plus, Settings, SlidersHorizontal } from 'lucide-react';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
@@ -8,9 +9,11 @@ import {
   directoryCollection,
   queryCollection,
   serializeFilesLocation,
+  viewCollection,
 } from '@/renderer/features/disk-explorer/navigation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { useQueryDraftsStore } from '@/renderer/features/disk-explorer/store/queryDraftsStore';
+import { useViewDraftsStore } from '@/renderer/features/disk-explorer/store/viewDraftsStore';
+import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
 import { ThemeToggle } from '@/renderer/features/theme';
 import { IconButton } from '@/renderer/shared/ui';
 import { useShell } from '../context/ShellContext';
@@ -46,12 +49,22 @@ export function WorkspaceSidebar({
   const openFolder = useDiskStore((state) => state.openFolder);
   const { navigateFiles, location } = useShell();
   const currentRoot = rootForDirectory(roots, currentDirectory);
-  const drafts = useQueryDraftsStore((state) => state.drafts);
-  const draftOrder = useQueryDraftsStore((state) => state.order);
-  const createDraft = useQueryDraftsStore((state) => state.create);
+  const drafts = useViewDraftsStore((state) => state.drafts);
+  const draftOrder = useViewDraftsStore((state) => state.order);
+  const createDraft = useViewDraftsStore((state) => state.create);
+  const savedViews = useSavedViewsStore((state) => state.views);
+  const savedOrder = useSavedViewsStore((state) => state.order);
+  const unreadableViews = useSavedViewsStore((state) => state.unreadable);
+  React.useEffect(() => {
+    useSavedViewsStore.getState().subscribe();
+    void useSavedViewsStore.getState().load();
+  }, []);
   const onFiles = location.pathname === FILES_ROUTE_PATH;
   const isRecent = currentCollection?.kind === 'recent';
-  const currentQueryId = currentCollection?.kind === 'query' ? currentCollection.id : null;
+  const currentQueryId =
+    currentCollection?.kind === 'query' || currentCollection?.kind === 'view'
+      ? currentCollection.id
+      : null;
   const newView = () => {
     const id = createDraft();
     navigateFiles(browseCollection(queryCollection(id)));
@@ -135,12 +148,39 @@ export function WorkspaceSidebar({
           </IconButton>
         }
       >
-        {draftOrder.length === 0 ? (
+        {draftOrder.length === 0 && savedOrder.length === 0 && unreadableViews.length === 0 ? (
           <p className="px-2 py-1 text-metadata text-foreground-tertiary">
             Filter any folder to start a view.
           </p>
         ) : (
           <ul aria-label="Views" className="flex flex-col">
+            {savedOrder.map((id) => (
+              <li key={id}>
+                <SidebarItem
+                  to={{
+                    pathname: FILES_ROUTE_PATH,
+                    search: serializeFilesLocation({ mode: 'browse', collection: viewCollection(id) }),
+                  }}
+                  icon={Bookmark}
+                  label={savedViews[id]?.name ?? 'View'}
+                  active={onFiles && currentQueryId === id}
+                  onActivate={onNavigate}
+                />
+              </li>
+            ))}
+            {unreadableViews.map((entry) => (
+              <li key={entry.file}>
+                <div
+                  role="note"
+                  title={entry.error}
+                  aria-label={`Unreadable view file ${entry.file.split('/').pop() ?? entry.file}`}
+                  className="flex h-row-compact items-center gap-2 rounded-row px-2 text-ui text-foreground-tertiary opacity-70"
+                >
+                  <AlertTriangle aria-hidden className="h-4 w-4 shrink-0 text-icon" />
+                  <span className="min-w-0 flex-1 truncate">{entry.file.split('/').pop()}</span>
+                </div>
+              </li>
+            ))}
             {draftOrder.map((id) => (
               <li key={id}>
                 <SidebarItem

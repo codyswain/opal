@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FolderOpen, RotateCw, SearchX, SlidersHorizontal, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { activityReason, formatRelativeTime } from '@/common/relativeTime';
 import { formatBytes } from '@/common/formatBytes';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
@@ -8,9 +9,12 @@ import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { Button } from '@/renderer/shared/ui';
 import { useDiskStore } from '../../store/diskStore';
-import { useViewDraftsStore } from '../../store/viewDraftsStore';
+import { isDraftEdited, useViewDraftsStore } from '../../store/viewDraftsStore';
+import { useSavedViewsStore } from '../../store/savedViewsStore';
 import { EMPTY_RESULT, useCollectionQueryStore } from '../../store/collectionQueryStore';
-import { queryCollection, viewCollection } from '../../navigation/filesLocation';
+import { RECENT_COLLECTION, queryCollection, viewCollection } from '../../navigation/filesLocation';
+import { useFilesNavigation } from '../../navigation/FilesNavigationContext';
+import type { SavedViewDefinition } from '@/types/savedView';
 import { CollectionView, type CollectionRowDecoration } from '../CollectionView';
 import { EmptyState } from '../EmptyState';
 import { GallerySkeleton } from '../Skeleton';
@@ -18,6 +22,10 @@ import { FilterChips } from './FilterChips';
 import { ScopeControl } from './ScopeControl';
 import { SortControl } from './SortControl';
 import { chipFromFilter, filtersFromChips, type EditableChip } from './editableFilters';
+import { NameViewDialog } from './NameViewDialog';
+import { ViewActions, type ViewPendingAction } from './ViewActions';
+
+const UNDO_WINDOW_MS = 10_000;
 
 interface QueryViewProps {
   id: string;
@@ -47,8 +55,16 @@ function detailFor(row: CollectionRow, query: CollectionQuery, now: number): str
 }
 
 export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
+  const navigation = useFilesNavigation();
   const draft = useViewDraftsStore((state) => state.drafts[id] ?? null);
   const updateDraft = useViewDraftsStore((state) => state.update);
+  const [pending, setPending] = useState<ViewPendingAction>(null);
+  const [conflict, setConflict] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [nameDialog, setNameDialog] = useState<'save-view' | 'save-new' | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [nameInput, setNameInput] = useState(draft?.name ?? '');
+  useEffect(() => { setNameInput(draft?.name ?? ''); }, [draft?.name]);
   const result = useCollectionQueryStore((state) => state.results[id] ?? EMPTY_RESULT);
   const load = useCollectionQueryStore((state) => state.load);
   const roots = useDiskStore((state) => state.roots);
@@ -94,9 +110,97 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     [byPath, draft, now]
   );
 
+  const definitionOf = (): SavedViewDefinition | null =>
+    draft ? { name: draft.name, query: draft.query, layout: draft.layout } : null;
+
+  const createView = async (name: string, kind: 'save-view' | 'save-new') => {
+    const definition = definitionOf();
+    if (!definition) return;
+    setPending('save-new');
+    setActionError(null);
+    const response = await window.viewsAPI.create({ ...definition, name });
+    setPending(null);
+    if (!response.success) { setActionError(response.error); return; }
+    setNameDialog(null);
+    await useSavedViewsStore.getState().load();
+    const drafts = useViewDraftsStore.getState();
+    drafts.openSaved(response.data);
+    setConflict(false);
+    navigation.navigateCollection(viewCollection(response.data.id));
+    // The transient draft is dropped only after the router has applied the
+    // view location; removing it sooner makes the departing URL unknown and
+    // triggers the invalid-location fallback.
+    if (kind === 'save-view') setTimeout(() => useViewDraftsStore.getState().remove(id), 0);
+  };
+
+  const saveChanges = async () => {
+    const definition = definitionOf();
+    if (!definition || !draft?.saved) return;
+    setPending('save');
+    setActionError(null);
+    const response = await window.viewsAPI.save(id, definition, draft.saved.revision);
+    setPending(null);
+    if (!response.success) {
+      if (response.conflict) setConflict(true);
+      else setActionError(response.error);
+      return;
+    }
+    useViewDraftsStore.getState().markSaved(id, response.data);
+    setConflict(false);
+    void useSavedViewsStore.getState().load();
+  };
+
+  const reloadFromDisk = async () => {
+    setPending('reload');
+    await useSavedViewsStore.getState().load();
+    const view = useSavedViewsStore.getState().views[id];
+    setPending(null);
+    if (!view) { setActionError('This view no longer exists on disk.'); return; }
+    useViewDraftsStore.getState().adoptBaseline(id, view);
+    setConflict(false);
+  };
+
+  const duplicateView = async () => {
+    setPending('duplicate');
+    setActionError(null);
+    const response = await window.viewsAPI.duplicate(id);
+    setPending(null);
+    if (!response.success) { setActionError(response.error); return; }
+    await useSavedViewsStore.getState().load();
+    useViewDraftsStore.getState().openSaved(response.data);
+    navigation.navigateCollection(viewCollection(response.data.id));
+  };
+
+  const removeView = async () => {
+    setPending('remove');
+    setActionError(null);
+    const response = await window.viewsAPI.remove(id);
+    setPending(null);
+    setConfirmingRemove(false);
+    if (!response.success) { setActionError(response.error); return; }
+    const removedName = draft?.name ?? 'View';
+    useViewDraftsStore.getState().remove(id);
+    await useSavedViewsStore.getState().load();
+    navigation.navigateCollection(RECENT_COLLECTION);
+    const { undoToken } = response.data;
+    toast(`Removed “${removedName}”`, {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          void window.viewsAPI.restore(undoToken).then((restored) => {
+            if (restored.success) void useSavedViewsStore.getState().load();
+            else toast.error(restored.error);
+          });
+        },
+      },
+    });
+  };
+
   if (!draft) {
     return <div role="alert" className="p-4 text-sm text-destructive">This view is no longer available.</div>;
   }
+  const edited = isDraftEdited(draft);
 
   const warnings = result.warnings.filter((warning) => !dismissed.includes(warning));
   const hasFilters = draft.query.filters.length > 0 || chips.length > 0;
@@ -104,13 +208,45 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div data-disk-shortcuts-ignore="true" data-testid="query-header" className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SlidersHorizontal aria-hidden className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">{draft.name}</h2>
+          <input
+            aria-label="View name"
+            value={nameInput}
+            onChange={(event) => setNameInput(event.target.value)}
+            onBlur={() => updateDraft(id, { name: nameInput })}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); updateDraft(id, { name: nameInput }); }
+              if (event.key === 'Escape') setNameInput(draft.name);
+            }}
+            className="min-w-0 max-w-64 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none hover:border-border focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <ViewActions
+            draft={draft}
+            edited={edited}
+            pending={pending}
+            confirmingRemove={confirmingRemove}
+            onSaveView={() => setNameDialog('save-view')}
+            onSaveChanges={() => void saveChanges()}
+            onSaveAsNew={() => setNameDialog('save-new')}
+            onReset={() => { useViewDraftsStore.getState().reset(id); setConflict(false); }}
+            onDuplicate={() => void duplicateView()}
+            onRemove={() => setConfirmingRemove(true)}
+            onConfirmRemove={() => void removeView()}
+            onCancelRemove={() => setConfirmingRemove(false)}
+          />
           <div className="min-w-0 flex-1" />
           <SortControl sort={draft.query.sort} onChange={(sort) => updateDraft(id, { query: { ...draft.query, sort } })} />
           {trailing}
         </div>
+        {conflict ? (
+          <div role="alert" data-testid="view-conflict" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs">
+            <span className="flex-1">This view changed on disk since you opened it. Reload it to take the disk version, or keep your edits as a new view.</span>
+            <Button size="compact" variant="outline" disabled={pending !== null} onClick={() => void reloadFromDisk()}>Reload from disk</Button>
+            <Button size="compact" disabled={pending !== null} onClick={() => setNameDialog('save-new')}>Save as new</Button>
+          </div>
+        ) : null}
+        {actionError ? <p role="alert" className="text-xs text-destructive">{actionError}</p> : null}
         <ScopeControl
           scope={draft.query.scope}
           roots={roots}
@@ -191,6 +327,17 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
           ) : null}
         </div>
       )}
+      <NameViewDialog
+        open={nameDialog !== null}
+        title={nameDialog === 'save-new' ? 'Save as new view' : 'Save view'}
+        description={nameDialog === 'save-new' ? 'Your edits become a separate view; the original keeps its saved definition.' : 'Name this collection to reopen it from the sidebar.'}
+        initialName={draft.name === 'Untitled view' ? '' : draft.name}
+        submitLabel={nameDialog === 'save-new' ? 'Save as new' : 'Save view'}
+        busy={pending === 'save-new'}
+        error={actionError}
+        onOpenChange={(open) => { if (!open) setNameDialog(null); }}
+        onSubmit={(name) => void createView(name, nameDialog ?? 'save-view')}
+      />
     </div>
   );
 };

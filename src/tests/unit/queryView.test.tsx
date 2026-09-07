@@ -14,6 +14,11 @@ import type { CollectionQuery } from '@/types/collectionQuery';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
+import { installViewsApi, savedView } from '@/tests/helpers/viewsApi';
+import { useSavedViewsStore } from '@/renderer/features/disk-explorer/store/savedViewsStore';
+import { toast } from 'sonner';
+
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 const ROOT = '/Vault';
 const PDF = '/Vault/Papers/atlas.pdf';
@@ -56,6 +61,9 @@ beforeEach(() => {
   filesLocationSnapshots.clear();
   useViewDraftsStore.getState().clearAll();
   useCollectionQueryStore.getState().reset();
+  useSavedViewsStore.getState().reset();
+  installViewsApi();
+  (toast as unknown as ReturnType<typeof vi.fn>).mockClear();
   installDiskApi({
     listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
     readDirectory: vi.fn(async (path: string) => ({ success: true as const, data: { path, entries: [] } })),
@@ -213,5 +221,127 @@ describe('QueryView', () => {
     renderQuery('missing');
     await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(ROOT));
     expect(screen.getByTestId('location')).toHaveTextContent('?mode=browse&dir=%2FVault');
+  });
+});
+
+function renderView(id: string) {
+  return render(
+    <MemoryRouter initialEntries={[`/files?mode=browse&collection=view&id=${id}`]}>
+      <Harness />
+    </MemoryRouter>
+  );
+}
+
+describe('saved views', () => {
+  it('saves a transient draft as a view and lands on it', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const api = installViewsApi();
+    const id = useViewDraftsStore.getState().create();
+    useViewDraftsStore.getState().update(id, { query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] } });
+    const user = userEvent.setup();
+    renderQuery(id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('View name'), 'Papers');
+    await user.click(within(dialog).getByRole('button', { name: 'Save view' }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith({
+      name: 'Papers', layout: 'list', query: { ...emptyQuery(), filters: [{ field: 'kind', op: 'in', values: ['pdf'] }] },
+    }));
+    const saved = api.views[0];
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`?mode=browse&collection=view&id=${saved.id}`));
+    expect(useViewDraftsStore.getState().has(id)).toBe(false);
+    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'view', id: saved.id });
+    expect(await screen.findByLabelText('View name')).toHaveValue('Papers');
+    expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument();
+  });
+
+  it('marks edits, resets them, and saves changes against the baseline revision', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Papers' });
+    const api = installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    expect(screen.getByLabelText('View name')).toHaveValue('Papers');
+    expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('disk-folder-view-gallery'));
+    expect(await screen.findByTestId('view-edited')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
+    expect(screen.getByTestId('disk-folder-view-list')).toHaveAttribute('aria-pressed', 'true');
+    await user.selectOptions(screen.getByLabelText('Add filter'), 'description');
+    await screen.findByTestId('view-edited');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith(view.id, { name: 'Papers', layout: 'list', query: { ...emptyQuery(), filters: [{ field: 'description', op: 'is-empty' }] } }, view.revision));
+    await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
+    expect(useViewDraftsStore.getState().get(view.id)?.saved?.revision).toBe(api.views[0].revision);
+  });
+
+  it('reports a conflict and keeps both states recoverable', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Papers' });
+    const api = installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    const name = screen.getByLabelText('View name');
+    await user.clear(name);
+    await user.type(name, 'Papers edited{Enter}');
+    await screen.findByTestId('view-edited');
+    (api as unknown as { markConflict: (id: string) => void }).markConflict(view.id);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    const conflict = await screen.findByTestId('view-conflict');
+    expect(api.views[0].name).toBe('Papers');
+    await user.click(within(conflict).getByRole('button', { name: 'Save as new' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Save as new' }));
+    await waitFor(() => expect(api.views).toHaveLength(2));
+    expect(api.views[1].name).toBe('Papers edited');
+    expect(api.views[0].name).toBe('Papers');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`collection=view&id=${api.views[1].id}`));
+  });
+
+  it('reloads from disk after a conflict', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Papers' });
+    const api = installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.click(screen.getByTestId('disk-folder-view-gallery'));
+    await screen.findByTestId('view-edited');
+    api.views[0] = { ...api.views[0], name: 'Edited elsewhere', revision: 'rev-disk' };
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByTestId('view-conflict');
+    await user.click(screen.getByRole('button', { name: 'Reload from disk' }));
+    await waitFor(() => expect(screen.getByLabelText('View name')).toHaveValue('Edited elsewhere'));
+    expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('view-conflict')).not.toBeInTheDocument();
+  });
+
+  it('duplicates, removes with confirmation, and undoes the removal', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    installActivityApi();
+    const view = savedView({ name: 'Papers' });
+    const api = installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.views).toHaveLength(2));
+    const copy = api.views[1];
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`collection=view&id=${copy.id}`));
+    expect(await screen.findByLabelText('View name')).toHaveValue('Papers copy');
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(within(screen.getByRole('group', { name: 'Confirm removing this view' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith(copy.id));
+    await waitFor(() => expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' }));
+    expect(useSavedViewsStore.getState().has(copy.id)).toBe(false);
+    expect(toast).toHaveBeenCalledWith('Removed “Papers copy”', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) }));
+    const options = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as { action: { onClick: () => void } };
+    options.action.onClick();
+    await waitFor(() => expect(api.restore).toHaveBeenCalled());
+    await waitFor(() => expect(useSavedViewsStore.getState().has(copy.id)).toBe(true));
   });
 });
