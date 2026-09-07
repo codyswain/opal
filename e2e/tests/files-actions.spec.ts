@@ -40,11 +40,11 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
   // revision check holds through IPC.
   const boundary = await page.evaluate(async () => {
     const query = {
-      version: 1,
-      scope: { kind: 'folders', folders: ['/etc'], includeDescendants: true },
-      filters: [],
-      sort: { field: 'name', direction: 'asc' },
-    } as const;
+      version: 1 as const,
+      scope: { kind: 'folders' as const, folders: ['/etc'], includeDescendants: true },
+      filters: [] as never[],
+      sort: { field: 'name' as const, direction: 'asc' as const },
+    };
     const created = await window.viewsAPI.create({ name: 'Boundary check', layout: 'list', query });
     const stale = created.success
       ? await window.viewsAPI.save(created.data.id, { name: 'Changed', layout: 'list', query }, 'not-the-revision')
