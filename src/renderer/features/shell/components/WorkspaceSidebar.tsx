@@ -3,6 +3,7 @@ import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
   browseFiles,
+  directoryCollection,
   serializeFilesLocation,
 } from '@/renderer/features/disk-explorer/navigation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -45,7 +46,7 @@ export function WorkspaceSidebar({
         pathname: FILES_ROUTE_PATH,
         search: serializeFilesLocation({
           mode: 'browse',
-          directory: currentDirectory,
+          collection: directoryCollection(currentDirectory),
         }),
       }
     : FILES_ROUTE_PATH;

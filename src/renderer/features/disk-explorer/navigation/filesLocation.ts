@@ -10,14 +10,51 @@ export const FILES_ROUTE_PATH = '/files';
 
 export type FilesHistoryMutation = 'push' | 'replace' | 'none';
 
+/**
+ * The collection a browse surface shows. A directory lists its children; the
+ * built-in Recent collection lists personal activity. Saved views join this
+ * union later. A focus location remembers the collection it was opened from,
+ * so Return and Back land on the originating collection, never a substitute.
+ */
+export type FilesCollection =
+  | { kind: 'directory'; directory: string }
+  | { kind: 'recent' };
+
+export const RECENT_COLLECTION: FilesCollection = { kind: 'recent' };
+
+export function directoryCollection(directory: string): FilesCollection {
+  return { kind: 'directory', directory: normalizeFsPath(directory) };
+}
+
+export function collectionDirectory(collection: FilesCollection): string | null {
+  return collection.kind === 'directory' ? collection.directory : null;
+}
+
+export function locationDirectory(location: FilesLocation): string | null {
+  return collectionDirectory(location.collection);
+}
+
+export function collectionKey(collection: FilesCollection): string {
+  return collection.kind === 'directory'
+    ? `directory:${normalizeFsPath(collection.directory)}`
+    : collection.kind;
+}
+
+export function sameCollection(
+  a: FilesCollection | null | undefined,
+  b: FilesCollection | null | undefined
+): boolean {
+  return !!a && !!b && collectionKey(a) === collectionKey(b);
+}
+
 export interface FilesBrowseLocation {
   mode: 'browse';
-  directory: string;
+  collection: FilesCollection;
 }
 
 export interface FilesFocusLocation {
   mode: 'focus';
-  directory: string;
+  collection: FilesCollection;
   file: string;
 }
 
@@ -43,33 +80,51 @@ function isWithinOneRoot(
   );
 }
 
+function normalizeCollection(
+  candidate: FilesCollection,
+  roots: readonly string[]
+): FilesCollection | null {
+  if (candidate.kind === 'recent') return RECENT_COLLECTION;
+  const directory = normalizeFsPath(candidate.directory);
+  if (!isAbsoluteFsPath(directory) || !isWithinOneRoot([directory], roots)) {
+    return null;
+  }
+  return { kind: 'directory', directory };
+}
+
 export function normalizeFilesLocation(
   candidate: FilesLocation | null,
   roots: readonly string[]
 ): FilesLocation | null {
   if (!candidate || roots.length === 0) return null;
 
-  const directory = normalizeFsPath(candidate.directory);
-  if (
-    !isAbsoluteFsPath(directory) ||
-    !isWithinOneRoot([directory], roots)
-  ) {
-    return null;
-  }
+  const collection = normalizeCollection(candidate.collection, roots);
+  if (!collection) return null;
 
   if (candidate.mode === 'browse') {
-    return { mode: 'browse', directory };
+    return { mode: 'browse', collection };
   }
 
   const file = normalizeFsPath(candidate.file);
-  if (
-    !isAbsoluteFsPath(file) ||
-    file === directory ||
-    !isWithinOneRoot([directory, file], roots)
-  ) {
+  if (!isAbsoluteFsPath(file)) return null;
+  const directory = collectionDirectory(collection);
+  if (directory) {
+    if (file === directory || !isWithinOneRoot([directory, file], roots)) {
+      return null;
+    }
+  } else if (!isWithinOneRoot([file], roots)) {
     return null;
   }
-  return { mode: 'focus', directory, file };
+  return { mode: 'focus', collection, file };
+}
+
+function parseCollection(params: URLSearchParams): FilesCollection | null {
+  const collection = params.get('collection');
+  if (collection !== null) {
+    return collection === 'recent' ? RECENT_COLLECTION : null;
+  }
+  const directory = params.get('dir');
+  return directory ? { kind: 'directory', directory } : null;
 }
 
 export function parseFilesLocation(
@@ -80,22 +135,27 @@ export function parseFilesLocation(
     search.startsWith('?') ? search.slice(1) : search
   );
   const mode = params.get('mode');
-  const directory = params.get('dir');
-  if (!directory || (mode !== 'browse' && mode !== 'focus')) return null;
+  if (mode !== 'browse' && mode !== 'focus') return null;
+  const collection = parseCollection(params);
+  if (!collection) return null;
 
   if (mode === 'browse') {
-    return normalizeFilesLocation({ mode, directory }, roots);
+    return normalizeFilesLocation({ mode, collection }, roots);
   }
 
   const file = params.get('file');
   if (!file) return null;
-  return normalizeFilesLocation({ mode, directory, file }, roots);
+  return normalizeFilesLocation({ mode, collection, file }, roots);
 }
 
 export function serializeFilesLocation(location: FilesLocation): string {
   const params = new URLSearchParams();
   params.set('mode', location.mode);
-  params.set('dir', normalizeFsPath(location.directory));
+  if (location.collection.kind === 'directory') {
+    params.set('dir', normalizeFsPath(location.collection.directory));
+  } else {
+    params.set('collection', location.collection.kind);
+  }
   if (location.mode === 'focus') {
     params.set('file', normalizeFsPath(location.file));
   }
@@ -106,12 +166,33 @@ export function filesLocationKey(location: FilesLocation): string {
   return serializeFilesLocation(location);
 }
 
+export function browseCollection(
+  collection: FilesCollection,
+  history: FilesHistoryMutation = 'push'
+): FilesNavigationIntent {
+  return { location: { mode: 'browse', collection }, history };
+}
+
 export function browseFiles(
   directory: string,
   history: FilesHistoryMutation = 'push'
 ): FilesNavigationIntent {
+  return browseCollection(directoryCollection(directory), history);
+}
+
+export function browseRecent(
+  history: FilesHistoryMutation = 'push'
+): FilesNavigationIntent {
+  return browseCollection(RECENT_COLLECTION, history);
+}
+
+export function focusInCollection(
+  collection: FilesCollection,
+  file: string,
+  history: FilesHistoryMutation = 'push'
+): FilesNavigationIntent {
   return {
-    location: { mode: 'browse', directory: normalizeFsPath(directory) },
+    location: { mode: 'focus', collection, file: normalizeFsPath(file) },
     history,
   };
 }
@@ -121,14 +202,7 @@ export function focusFile(
   file: string,
   history: FilesHistoryMutation = 'push'
 ): FilesNavigationIntent {
-  return {
-    location: {
-      mode: 'focus',
-      directory: normalizeFsPath(directory),
-      file: normalizeFsPath(file),
-    },
-    history,
-  };
+  return focusInCollection(directoryCollection(directory), file, history);
 }
 
 export function toFilesRouterUpdate(
@@ -157,7 +231,7 @@ export function resolveFilesLocation(
     const fallback = roots[0] ? normalizeFsPath(roots[0]) : null;
     return fallback
       ? {
-          location: { mode: 'browse', directory: fallback },
+          location: { mode: 'browse', collection: directoryCollection(fallback) },
           history: 'replace',
         }
       : null;
@@ -171,22 +245,33 @@ export function resolveFilesLocation(
   };
 }
 
+function remapCollection(
+  collection: FilesCollection,
+  oldPath: string,
+  newPath: string
+): FilesCollection {
+  return collection.kind === 'directory'
+    ? {
+        kind: 'directory',
+        directory: remapFsPath(collection.directory, oldPath, newPath),
+      }
+    : collection;
+}
+
 export function remapFilesLocation(
   location: FilesLocation,
   oldPath: string,
   newPath: string
 ): FilesNavigationIntent {
+  const collection = remapCollection(location.collection, oldPath, newPath);
   const remapped: FilesLocation =
     location.mode === 'focus'
       ? {
           mode: 'focus',
-          directory: remapFsPath(location.directory, oldPath, newPath),
+          collection,
           file: remapFsPath(location.file, oldPath, newPath),
         }
-      : {
-          mode: 'browse',
-          directory: remapFsPath(location.directory, oldPath, newPath),
-        };
+      : { mode: 'browse', collection };
 
   return {
     location: remapped,
@@ -202,24 +287,18 @@ export function filesLocationFromState(input: {
   openedPath: string | null;
 }): FilesLocation | null {
   if (!input.currentDirectory) return null;
+  const collection = directoryCollection(input.currentDirectory);
   return input.openedPath
-    ? {
-        mode: 'focus',
-        directory: normalizeFsPath(input.currentDirectory),
-        file: normalizeFsPath(input.openedPath),
-      }
-    : {
-        mode: 'browse',
-        directory: normalizeFsPath(input.currentDirectory),
-      };
+    ? { mode: 'focus', collection, file: normalizeFsPath(input.openedPath) }
+    : { mode: 'browse', collection };
 }
 
 export function stateFromFilesLocation(location: FilesLocation): {
-  currentDirectory: string;
+  currentDirectory: string | null;
   openedPath: string | null;
 } {
   return {
-    currentDirectory: location.directory,
+    currentDirectory: locationDirectory(location),
     openedPath: location.mode === 'focus' ? location.file : null,
   };
 }

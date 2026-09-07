@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   FILES_ARIA_CONTRACT,
+  RECENT_COLLECTION,
   browseFiles,
+  collectionKey,
+  directoryCollection,
   filesLocationKey,
+  locationDirectory,
   focusFile,
   parseFilesLocation,
   remapFilesLocation,
   resolveFilesInteraction,
   resolveFilesLocation,
+  sameCollection,
   serializeFilesLocation,
   stateFromFilesLocation,
   toFilesRouterUpdate,
@@ -26,8 +31,8 @@ const FILE = '/Vault/Notes/Today #1%.md';
 
 describe('files router locations', () => {
   it('round-trips browse and focus paths with reserved characters', () => {
-    const browse = { mode: 'browse' as const, directory: NOTES };
-    const focus = { mode: 'focus' as const, directory: NOTES, file: FILE };
+    const browse = { mode: 'browse' as const, collection: directoryCollection(NOTES)};
+    const focus = { mode: 'focus' as const, collection: directoryCollection(NOTES), file: FILE };
 
     expect(parseFilesLocation(serializeFilesLocation(browse), [ROOT])).toEqual(
       browse
@@ -44,12 +49,12 @@ describe('files router locations', () => {
     );
     expect(parsed).toEqual({
       mode: 'browse',
-      directory: 'C:/Vault/Notes',
+      collection: directoryCollection('C:/Vault/Notes'),
     });
     expect(
-      filesLocationKey({ mode: 'browse', directory: 'C:\\Vault\\Notes\\' })
+      filesLocationKey({ mode: 'browse', collection: directoryCollection('C:\\Vault\\Notes\\')})
     ).toBe(
-      filesLocationKey({ mode: 'browse', directory: 'C:/Vault/Notes' })
+      filesLocationKey({ mode: 'browse', collection: directoryCollection('C:/Vault/Notes')})
     );
   });
 
@@ -70,7 +75,7 @@ describe('files router locations', () => {
   it('replaces an invalid location with the first open root', () => {
     expect(resolveFilesLocation('?mode=browse&dir=%2FOutside', [ROOT])).toEqual(
       {
-        location: { mode: 'browse', directory: ROOT },
+        location: { mode: 'browse', collection: directoryCollection(ROOT)},
         history: 'replace',
       }
     );
@@ -83,12 +88,12 @@ describe('files router locations', () => {
         ROOT,
       ])
     ).toEqual({
-      location: { mode: 'browse', directory: NOTES },
+      location: { mode: 'browse', collection: directoryCollection(NOTES)},
       history: 'replace',
     });
     expect(
       resolveFilesLocation(
-        serializeFilesLocation({ mode: 'browse', directory: NOTES }),
+        serializeFilesLocation({ mode: 'browse', collection: directoryCollection(NOTES)}),
         [ROOT]
       )?.history
     ).toBe('none');
@@ -109,7 +114,7 @@ describe('files router locations', () => {
   });
 
   it('remaps the active location with replace semantics', () => {
-    const current = { mode: 'focus' as const, directory: NOTES, file: FILE };
+    const current = { mode: 'focus' as const, collection: directoryCollection(NOTES), file: FILE };
     const intent = remapFilesLocation(
       current,
       '/Vault/Notes',
@@ -119,7 +124,7 @@ describe('files router locations', () => {
     expect(intent).toEqual({
       location: {
         mode: 'focus',
-        directory: '/Vault/Writing',
+        collection: directoryCollection('/Vault/Writing'),
         file: '/Vault/Writing/Today #1%.md',
       },
       history: 'replace',
@@ -196,7 +201,7 @@ describe('files interaction contract', () => {
 });
 
 describe('location snapshots', () => {
-  const browse = { mode: 'browse' as const, directory: NOTES };
+  const browse = { mode: 'browse' as const, collection: directoryCollection(NOTES)};
   const snapshot = {
     selectedPaths: [FILE],
     focusedPath: FILE,
@@ -236,9 +241,9 @@ describe('location snapshots', () => {
 
   it('caps snapshots with least-recently-used eviction', () => {
     const store = createFilesLocationSnapshotStore(2);
-    const one = { mode: 'browse' as const, directory: '/Vault/One' };
-    const two = { mode: 'browse' as const, directory: '/Vault/Two' };
-    const three = { mode: 'browse' as const, directory: '/Vault/Three' };
+    const one = { mode: 'browse' as const, collection: directoryCollection('/Vault/One')};
+    const two = { mode: 'browse' as const, collection: directoryCollection('/Vault/Two')};
+    const three = { mode: 'browse' as const, collection: directoryCollection('/Vault/Three')};
     store.capture(one, snapshot);
     store.capture(two, snapshot);
     store.read(one);
@@ -256,7 +261,7 @@ describe('location snapshots', () => {
 
     expect(store.read(browse)).toBeNull();
     expect(
-      store.read({ mode: 'browse', directory: '/Vault/Writing' })
+      store.read({ mode: 'browse', collection: directoryCollection('/Vault/Writing')})
     ).toEqual({
       selectedPaths: ['/Vault/Writing/Today #1%.md'],
       focusedPath: '/Vault/Writing/Today #1%.md',
@@ -267,7 +272,7 @@ describe('location snapshots', () => {
   it('purges invalid locations and only stale paths in surviving snapshots', () => {
     const store = createFilesLocationSnapshotStore();
     store.capture(browse, snapshot);
-    const rootBrowse = { mode: 'browse' as const, directory: ROOT };
+    const rootBrowse = { mode: 'browse' as const, collection: directoryCollection(ROOT)};
     store.capture(rootBrowse, {
       selectedPaths: [FILE, '/Vault/keep.md'],
       focusedPath: FILE,
@@ -336,5 +341,48 @@ describe('collection focus fallback', () => {
       focusedPath: null,
       selectedPaths: [],
     });
+  });
+});
+
+describe('collections', () => {
+  const roots = ['/Vault'];
+  it('keeps directory URLs byte-for-byte stable', () => {
+    expect(serializeFilesLocation({ mode: 'browse', collection: { kind: 'directory', directory: '/Vault/A' } })).toBe('?mode=browse&dir=%2FVault%2FA');
+    expect(serializeFilesLocation({ mode: 'focus', collection: { kind: 'directory', directory: '/Vault' }, file: '/Vault/a.md' })).toBe('?mode=focus&dir=%2FVault&file=%2FVault%2Fa.md');
+  });
+  it('round-trips recent browse and focus locations', () => {
+    const browse = { mode: 'browse' as const, collection: RECENT_COLLECTION };
+    expect(serializeFilesLocation(browse)).toBe('?mode=browse&collection=recent');
+    expect(parseFilesLocation('?mode=browse&collection=recent', roots)).toEqual(browse);
+    const focus = { mode: 'focus' as const, collection: RECENT_COLLECTION, file: '/Vault/a.md' };
+    expect(parseFilesLocation(serializeFilesLocation(focus), roots)).toEqual(focus);
+    expect(parseFilesLocation('?mode=focus&collection=recent&file=%2FElsewhere%2Fa.md', roots)).toBeNull();
+    expect(parseFilesLocation('?mode=browse&collection=unknown', roots)).toBeNull();
+    expect(parseFilesLocation('?mode=browse&collection=recent', [])).toBeNull();
+  });
+  it('remaps only paths and leaves the recent collection alone', () => {
+    const focus = { mode: 'focus' as const, collection: RECENT_COLLECTION, file: '/Vault/Old/a.md' };
+    expect(remapFilesLocation(focus, '/Vault/Old', '/Vault/New')).toEqual({ location: { ...focus, file: '/Vault/New/a.md' }, history: 'replace' });
+    expect(remapFilesLocation({ mode: 'browse', collection: RECENT_COLLECTION }, '/Vault/Old', '/Vault/New').history).toBe('none');
+  });
+  it('exposes directory helpers', () => {
+    expect(locationDirectory({ mode: 'browse', collection: RECENT_COLLECTION })).toBeNull();
+    expect(locationDirectory(browseFiles('/Vault/A').location)).toBe('/Vault/A');
+    expect(collectionKey(RECENT_COLLECTION)).toBe('recent');
+    expect(sameCollection(directoryCollection('/Vault/A/'), directoryCollection('/Vault/A'))).toBe(true);
+    expect(sameCollection(RECENT_COLLECTION, null)).toBe(false);
+  });
+  it('snapshots scope paths to directory collections only and survive root retention', () => {
+    const store = createFilesLocationSnapshotStore();
+    const recent = { mode: 'browse' as const, collection: RECENT_COLLECTION };
+    store.capture(recent, { selectedPaths: ['/Vault/a.md', '/Other/b.md'], focusedPath: '/Vault/a.md', scroll: { view: 'details', offset: 40 } });
+    expect(store.read(recent)?.selectedPaths).toEqual(['/Vault/a.md', '/Other/b.md']);
+    store.retainRoots(['/Vault']);
+    expect(store.read(recent)).toEqual({ selectedPaths: ['/Vault/a.md'], focusedPath: '/Vault/a.md', scroll: { view: 'details', offset: 40 } });
+    store.removeSubtrees(['/Vault/a.md']);
+    expect(store.read(recent)?.selectedPaths).toEqual([]);
+    store.capture({ mode: 'focus', collection: RECENT_COLLECTION, file: '/Vault/gone.md' }, { selectedPaths: [], focusedPath: null, scroll: null });
+    store.removeSubtrees(['/Vault/gone.md']);
+    expect(store.size()).toBe(1);
   });
 });

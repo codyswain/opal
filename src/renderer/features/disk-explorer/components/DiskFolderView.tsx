@@ -13,6 +13,7 @@ import { useGridNavigation } from '../hooks/useGridNavigation';
 import { useElementSize } from '../hooks/useElementSize';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
+import { directoryCollection } from '../navigation/filesLocation';
 import { EmptyState } from './EmptyState';
 import { GallerySkeleton } from './Skeleton';
 
@@ -35,7 +36,7 @@ const TILE = {
 
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
   const navigation = useFilesNavigation();
-  const [snapshot] = useState(() => filesLocationSnapshots.read({mode: 'browse', directory: dirPath}));
+  const [snapshot] = useState(() => filesLocationSnapshots.read({mode: 'browse', collection: directoryCollection(dirPath)}));
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
   const selectedPath = useDiskStore((state) => state.selectedPath);
@@ -101,7 +102,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
     if (activeMode === 'gallery') gridRef.current?.scrollToItem({rowIndex: Math.floor(index / columns), columnIndex: index % columns});
     else listRef.current?.scrollToItem(index);
   }, [selectedPath, visibleEntries, activeMode, columns]);
-  const saveScroll = (offset: number) => filesLocationSnapshots.patch({mode: 'browse', directory: dirPath}, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
+  const saveScroll = (offset: number) => filesLocationSnapshots.patch({mode: 'browse', collection: directoryCollection(dirPath)}, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
   const activate = (entry: DiskEntry) => entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path);
 
   const itemData: CollectionItemData = { entries: visibleEntries, selectedPaths, columns, select: handleClick, activate };
