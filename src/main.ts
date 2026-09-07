@@ -31,6 +31,7 @@ import DatabaseManager from "@/main/database/db";
 import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
+import { isAllowedNavigation } from "@/main/window/navigationGuard";
 import { AppMenu } from "@/main/menu/AppMenu";
 import {
   resolveBounds,
@@ -230,6 +231,26 @@ const createWindow = () => {
   };
 
   loadPage();
+
+  // A dropped file or an injected link must never replace the app document.
+  const rendererIndex =
+    typeof MAIN_WINDOW_VITE_NAME !== "undefined"
+      ? path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+      : path.join(__dirname, "../renderer/main_window/index.html");
+  const guardOptions = {
+    devServerUrl:
+      typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined"
+        ? MAIN_WINDOW_VITE_DEV_SERVER_URL
+        : null,
+    indexFile: rendererIndex,
+  };
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedNavigation(url, guardOptions)) {
+      log.warn(`Blocked navigation away from the app: ${url}`);
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   // Open dev tools if in development mode
   if (isDevelopment || forceDevTools) {
