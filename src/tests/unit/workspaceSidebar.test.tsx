@@ -13,6 +13,7 @@ import {
 import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
+import { installActivityApi } from '@/tests/helpers/activityApi';
 
 const ROOT = '/Vault';
 const DESIGN = '/Vault/Design';
@@ -71,6 +72,7 @@ function renderSidebar(withFiles = false) {
 
 beforeEach(() => {
   window.localStorage.clear();
+  installActivityApi();
   installDiskApi({
     listRoots: vi.fn(async () => ({
       success: true as const,
@@ -104,6 +106,7 @@ beforeEach(() => {
     listings: {},
     expanded: {},
     currentDirectory: null,
+    currentCollection: null,
     focusedPath: null,
     selectedPath: null,
     selectedPaths: [],
@@ -164,5 +167,34 @@ describe('WorkspaceSidebar', () => {
     await waitFor(() => expect(design).toHaveFocus());
     expect(root).toHaveAttribute('tabindex', '-1');
     expect(design).toHaveAttribute('tabindex', '0');
+  });
+
+  it('offers Recent and highlights it instead of Files while browsing Recent', async () => {
+    const user = userEvent.setup();
+    renderSidebar(true);
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentDirectory).toBe(ROOT)
+    );
+    const files = screen.getByRole('link', { name: 'Files' });
+    const recent = screen.getByRole('link', { name: 'Recent' });
+    expect(files).toHaveClass('bg-surface-selected');
+    expect(recent).not.toHaveClass('bg-surface-selected');
+
+    await user.click(recent);
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' })
+    );
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/files?mode=browse&collection=recent'
+    );
+    expect(recent).toHaveClass('bg-surface-selected');
+    expect(files).not.toHaveClass('bg-surface-selected');
+    expect(window.activityAPI.record).not.toHaveBeenCalled();
+
+    await user.click(files);
+    await waitFor(() =>
+      expect(useDiskStore.getState().currentDirectory).toBe(ROOT)
+    );
+    expect(files).toHaveClass('bg-surface-selected');
   });
 });

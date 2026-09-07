@@ -1,7 +1,8 @@
-import { FileText, Files, FolderPlus, Settings } from 'lucide-react';
+import { Clock, FileText, Files, FolderPlus, Settings } from 'lucide-react';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import {
   FILES_ROUTE_PATH,
+  RECENT_COLLECTION,
   browseFiles,
   directoryCollection,
   serializeFilesLocation,
@@ -38,9 +39,19 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const roots = useDiskStore((state) => state.roots);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
+  const currentCollection = useDiskStore((state) => state.currentCollection);
   const openFolder = useDiskStore((state) => state.openFolder);
-  const { navigateFiles } = useShell();
+  const { navigateFiles, location } = useShell();
   const currentRoot = rootForDirectory(roots, currentDirectory);
+  const onFiles = location.pathname === FILES_ROUTE_PATH;
+  const isRecent = currentCollection?.kind === 'recent';
+  const recentDestination = {
+    pathname: FILES_ROUTE_PATH,
+    search: serializeFilesLocation({
+      mode: 'browse',
+      collection: RECENT_COLLECTION,
+    }),
+  };
   const filesDestination = currentDirectory
     ? {
         pathname: FILES_ROUTE_PATH,
@@ -90,6 +101,14 @@ export function WorkspaceSidebar({
             to={filesDestination}
             icon={Files}
             label="Files"
+            active={onFiles && !isRecent}
+            onActivate={onNavigate}
+          />
+          <SidebarItem
+            to={recentDestination}
+            icon={Clock}
+            label="Recent"
+            active={onFiles && isRecent}
             onActivate={onNavigate}
           />
         </SidebarSection>
