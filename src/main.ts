@@ -48,6 +48,9 @@ import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
 import { activityStorePath } from "@/main/library/libraryPaths";
+import { CollectionIndex } from "@/main/collections/CollectionIndex";
+import { CollectionQueryService } from "@/main/collections/CollectionQueryService";
+import { CollectionHandlers } from "@/main/collections/CollectionHandlers";
 import {
   OPAL_FILE_SCHEME,
   OPAL_THUMB_SCHEME,
@@ -329,14 +332,35 @@ const rootRegistry = new RootRegistry({
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
 const activityStore = new ActivityStore({ storePath: activityStorePath(userDataDir) });
+// Collections re-evaluate after index, root or activity changes; one coalesced
+// event covers all three so the renderer never reloads twice for one cause.
+let collectionsChangedTimer: NodeJS.Timeout | null = null;
+const notifyCollectionsChanged = () => {
+  if (collectionsChangedTimer) return;
+  collectionsChangedTimer = setTimeout(() => {
+    collectionsChangedTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("collections:changed", {});
+  }, 150);
+};
+const collectionIndex = new CollectionIndex({
+  registry: rootRegistry,
+  onChanged: notifyCollectionsChanged,
+});
 const activityService = new ActivityService({
   registry: rootRegistry,
   store: activityStore,
   statEntry: (target) => diskReader.statEntry(target),
   onChanged: () => {
+    notifyCollectionsChanged();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("activity:changed", {});
   },
+});
+const collectionQueryService = new CollectionQueryService({
+  registry: rootRegistry,
+  index: collectionIndex,
+  activity: activityStore,
 });
 const metadataService = new MetadataService({
   registry: rootRegistry,
@@ -344,6 +368,7 @@ const metadataService = new MetadataService({
 });
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
+    collectionIndex.invalidateDirectories(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -378,6 +403,10 @@ const diskHandlers = new DiskHandlers({
   },
   watcher: diskWatcher,
   writer: fileWriter,
+  onRootsChanged: () => {
+    collectionIndex.invalidateAll();
+    notifyCollectionsChanged();
+  },
 });
 const metadataHandlers = new MetadataHandlers({
   ipc: ipcMain,
@@ -386,6 +415,10 @@ const metadataHandlers = new MetadataHandlers({
 const activityHandlers = new ActivityHandlers({
   ipc: ipcMain,
   service: activityService,
+});
+const collectionHandlers = new CollectionHandlers({
+  ipc: ipcMain,
+  service: collectionQueryService,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -419,6 +452,7 @@ app.whenReady().then(async () => {
     diskHandlers.registerAll();
     metadataHandlers.registerAll();
     activityHandlers.registerAll();
+    collectionHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await registerDatabaseIPCHandlers();

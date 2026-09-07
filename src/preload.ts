@@ -180,3 +180,13 @@ contextBridge.exposeInMainWorld("activityAPI", {
     return () => ipcRenderer.removeListener("activity:changed", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("collectionsAPI", {
+  query: (query: unknown, page?: { offset?: number; limit?: number }) =>
+    ipcRenderer.invoke("collections:query", query, page ?? {}),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("collections:changed", listener);
+    return () => ipcRenderer.removeListener("collections:changed", listener);
+  },
+});

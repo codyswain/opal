@@ -27,6 +27,8 @@ export interface DiskHandlerDependencies {
     unwatch: (rootPath: string) => Promise<void>;
   };
   writer: FileWriter;
+  /** Called after the opened-root list changes so dependent indexes can rebuild. */
+  onRootsChanged?: () => void;
 }
 
 export class DiskHandlers {
@@ -61,6 +63,7 @@ export class DiskHandlers {
             return { success: true, data: { root: null } };
           }
           const root = await this.deps.registry.add(result.filePaths[0]);
+          this.deps.onRootsChanged?.();
           try {
             await this.deps.watcher.watch(root);
           } catch (error) {
@@ -95,6 +98,7 @@ export class DiskHandlers {
       async (_, rootPath: string): Promise<IPCResponse> => {
         try {
           await this.deps.registry.remove(rootPath);
+          this.deps.onRootsChanged?.();
           await this.deps.watcher.unwatch(rootPath);
           return { success: true };
         } catch (error) {

@@ -1,0 +1,71 @@
+import { validateCollectionPage, validateCollectionQuery } from '@/common/collectionQuery';
+import type { RootRegistry } from '@/main/fs/RootRegistry';
+import type { ActivityStore } from '@/main/activity/ActivityStore';
+import type { CollectionQueryResult } from '@/types/collectionQuery';
+import type { CollectionIndex } from './CollectionIndex';
+import { evaluateCollectionQuery } from './evaluateQuery';
+
+export interface CollectionQueryServiceDependencies {
+  registry: RootRegistry;
+  index: CollectionIndex;
+  activity: ActivityStore;
+  now?: () => number;
+}
+
+/**
+ * Validates a query, resolves its scope against the opened roots, joins the
+ * in-memory activity store and returns one bounded page. A scoped folder that
+ * is no longer inside an opened root is reported, never replaced.
+ */
+export class CollectionQueryService {
+  constructor(private deps: CollectionQueryServiceDependencies) {}
+
+  async query(rawQuery: unknown, rawPage?: unknown): Promise<CollectionQueryResult> {
+    const query = validateCollectionQuery(rawQuery);
+    const page = validateCollectionPage(rawPage);
+    const allowedRoots = this.deps.registry.list();
+    const unavailableScopes: string[] = [];
+    if (query.scope.kind === 'folders') {
+      for (const folder of query.scope.folders) {
+        try {
+          await this.deps.registry.assertAllowed(folder);
+        } catch {
+          unavailableScopes.push(folder);
+        }
+      }
+    }
+    const indexState = this.deps.index.state() === 'ready' ? 'ready' : 'building';
+    if (unavailableScopes.length > 0) {
+      return {
+        rows: [], total: 0, offset: page.offset, limit: page.limit, incomplete: false, warnings: [],
+        indexState, unavailableScopes, generation: 0,
+      };
+    }
+    const snapshot = await this.deps.index.get();
+    const store = this.deps.activity;
+    const evaluation = evaluateCollectionQuery({
+      items: snapshot.items,
+      activity: (target) => store.get(target),
+      touchedOf: (record) => ({ at: store.touchedAt(record), kind: store.touchedKind(record) }),
+      allowedRoots,
+      query,
+      now: (this.deps.now ?? Date.now)(),
+    });
+    const warnings = [...snapshot.warnings];
+    if (evaluation.excludedUnknown > 0) {
+      const count = evaluation.excludedUnknown;
+      warnings.push(`${count} item${count === 1 ? '' : 's'} with unreadable metadata ${count === 1 ? 'was' : 'were'} left out because a filter needs it.`);
+    }
+    return {
+      rows: evaluation.rows.slice(page.offset, page.offset + page.limit),
+      total: evaluation.rows.length,
+      offset: page.offset,
+      limit: page.limit,
+      incomplete: evaluation.excludedUnknown > 0 || snapshot.warnings.length > 0,
+      warnings,
+      indexState: 'ready',
+      unavailableScopes: [],
+      generation: snapshot.generation,
+    };
+  }
+}
