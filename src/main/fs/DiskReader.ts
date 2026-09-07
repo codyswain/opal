@@ -135,8 +135,10 @@ export class DiskReader {
   }
 }
 
+const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
 /** Directories first, then case-insensitive name order — Finder's convention. */
 function compareEntries(a: DiskEntry, b: DiskEntry): number {
   if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  return collator.compare(a.name, b.name);
 }

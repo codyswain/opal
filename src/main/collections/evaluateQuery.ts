@@ -21,6 +21,16 @@ export interface Evaluation {
 
 type Verdict = true | false | 'unknown';
 
+// One collator for the whole sort: localeCompare with options rebuilds the
+// collator on every comparison, which dominated a 10,000-row name sort.
+const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
+interface SortableRow {
+  row: CollectionRow;
+  name: string;
+  path: string;
+}
+
 function activityStamp(row: CollectionRow, field: 'touched' | 'opened' | 'modified'): number | null {
   if (field === 'touched') return row.touchedAt;
   if (field === 'opened') return row.openedAt;
@@ -76,16 +86,15 @@ function inScope(item: IndexedItem, query: CollectionQuery, allowedRoots: readon
   return folders.includes(path.dirname(item.path));
 }
 
-function compareRows(query: CollectionQuery): (a: CollectionRow, b: CollectionRow) => number {
+function compareRows(query: CollectionQuery): (a: SortableRow, b: SortableRow) => number {
   const sign = query.sort.direction === 'asc' ? 1 : -1;
-  const byName = (a: CollectionRow, b: CollectionRow) =>
-    a.entry.name.localeCompare(b.entry.name, undefined, { sensitivity: 'base' }) ||
-    (a.entry.path < b.entry.path ? -1 : a.entry.path > b.entry.path ? 1 : 0);
+  const byName = (a: SortableRow, b: SortableRow) =>
+    collator.compare(a.name, b.name) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (query.sort.field === 'name') return (a, b) => sign * byName(a, b);
   const field = query.sort.field;
   return (a, b) => {
-    const left = activityStamp(a, field);
-    const right = activityStamp(b, field);
+    const left = activityStamp(a.row, field);
+    const right = activityStamp(b.row, field);
     // Missing timestamps sort last in both directions; ties fall back to name.
     if (left === null && right === null) return byName(a, b);
     if (left === null) return 1;
@@ -96,7 +105,7 @@ function compareRows(query: CollectionQuery): (a: CollectionRow, b: CollectionRo
 
 export function evaluateCollectionQuery(input: EvaluationInput): Evaluation {
   const { query, now } = input;
-  const rows: CollectionRow[] = [];
+  const rows: SortableRow[] = [];
   let excludedUnknown = 0;
   for (const item of input.items) {
     if (!inScope(item, query, input.allowedRoots)) continue;
@@ -116,9 +125,9 @@ export function evaluateCollectionQuery(input: EvaluationInput): Evaluation {
       if (result === false) { verdict = false; break; }
       if (result === 'unknown') verdict = 'unknown';
     }
-    if (verdict === true) rows.push(row);
+    if (verdict === true) rows.push({ row, name: item.name, path: item.path });
     else if (verdict === 'unknown') excludedUnknown++;
   }
   rows.sort(compareRows(query));
-  return { rows, excludedUnknown };
+  return { rows: rows.map((sortable) => sortable.row), excludedUnknown };
 }

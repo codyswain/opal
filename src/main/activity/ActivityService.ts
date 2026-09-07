@@ -14,6 +14,8 @@ import {
 import type { ActivityStore } from './ActivityStore';
 
 /** Main-side recording after successful mutations. Methods never throw. */
+const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
 export interface ActivityRecorder {
   noteOrganized(target: string): Promise<void>;
   noteMoved(oldPath: string, newPath: string): Promise<void>;
@@ -82,7 +84,7 @@ export class ActivityService implements ActivityRecorder {
     const store = this.deps.store;
     const records = store.list().sort((left, right) =>
       store.touchedAt(right) - store.touchedAt(left) ||
-      path.basename(left.path).localeCompare(path.basename(right.path), undefined, { sensitivity: 'base' }) ||
+      collator.compare(path.basename(left.path), path.basename(right.path)) ||
       (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
     const items: RecentItem[] = [];
     let index = 0;
