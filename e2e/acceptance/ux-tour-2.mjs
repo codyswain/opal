@@ -57,7 +57,7 @@ try {
   await page.getByTestId('disk-folder-view-gallery').click();
   await shot(page, '20-gallery');
   await page.getByTestId('disk-folder-view-list').click().catch(() => {});
-  await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).click();
+  await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).click({ modifiers: ['Meta'] });
   await page.getByRole('button', { name: 'Preview' }).click();
   await shot(page, '21-preview-pane');
   await page.evaluate(() => { localStorage.setItem('opal.isRightSidebarOpen', JSON.stringify({ version: 1, value: true })); });
@@ -65,7 +65,7 @@ try {
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate((v) => { window.location.hash = `#/files?mode=browse&dir=${encodeURIComponent(v + '/Reading')}`; }, vault);
   await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).waitFor();
-  await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).click();
+  await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).click({ modifiers: ['Meta'] });
   await shot(page, '22-inspector');
   await page.keyboard.press('Meta+k');
   await page.getByTestId('command-palette').waitFor();

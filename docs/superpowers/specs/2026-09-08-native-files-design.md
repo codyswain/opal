@@ -39,3 +39,13 @@ is just a named toolbar state.
 ## Out of scope
 
 Board layouts, column configuration, shared/multi-user views, and content search in the toolbar.
+
+## Delivered (2026-09-08)
+
+Commits `a5aa3df` (interaction and context menus), `df6fb88` and `d402a0c` (the toolbar).
+
+- Single click opens; ⌘/⇧-click select; right-click menus on rows and empty space with Rename, Move to…, Reveal, Copy path, Move to Trash (bulk over a selection); preview tabs pinned by editing, the tab, or Open.
+- `ListToolbar` wears every folder and view: New · Filter + chips … layout · Display · Views · Preview. A folder's chips run a collection query scoped to the folder in place; Views saves that state with a suggested name; Display holds sort (incl. size and kind), density, Include subfolders and a view's scope.
+- Layout lives only in the toolbar; the status bar keeps counts. A filtered folder with no direct matches offers "Search subfolders too".
+
+Evidence: 941 unit and contract tests in 96 files, 0 type errors, 0 lint errors, 8 Electron tests; both screenshot tours clean in light and dark. The previous quick-filter box and "Filter this folder" button are gone; Cmd+F adds a Name chip.
