@@ -2,7 +2,7 @@ import type { FileKind } from '@/common/fileKind';
 import type { DiskEntry } from './disk';
 import type { ActivityKind } from './activity';
 
-export type CollectionSortField = 'touched' | 'opened' | 'modified' | 'name';
+export type CollectionSortField = 'touched' | 'opened' | 'modified' | 'name' | 'size' | 'kind';
 export type SortDirection = 'asc' | 'desc';
 
 export interface CollectionSort {

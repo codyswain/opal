@@ -36,7 +36,11 @@ try {
   await page.evaluate(() => { window.location.hash = '#/files'; });
   await page.getByTestId(`disk-folder-entry-${vault}/inbox.md`).waitFor();
   await shot('01-files-root');
-  await page.getByTestId(`disk-folder-entry-${vault}/Projects`).dblclick().catch(() => {});
+  await page.getByTestId(`disk-folder-entry-${vault}/inbox.md`).click({ button: 'right' });
+  await page.getByRole('menu').waitFor();
+  await shot('02-row-menu');
+  await page.keyboard.press('Escape');
+  await page.getByTestId(`disk-folder-entry-${vault}/Projects`).click();
   await page.waitForTimeout(300);
   await shot('02-files-projects');
   await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);

@@ -53,6 +53,19 @@ const rows = () => [
   collectionRow({ entry: { path: NOTE, name: 'notes.md', kind: 'markdown', size: 12 } }),
 ];
 
+async function addFilter(user: ReturnType<typeof userEvent.setup>, field: string) {
+  await user.click(screen.getByTestId('filter-menu'));
+  await user.click(await screen.findByTestId(`add-filter-${field}`));
+}
+async function openDisplay(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('display-menu'));
+  return screen.findByTestId('display-popover');
+}
+async function openViews(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('views-menu'));
+  return screen.findByTestId('views-popover');
+}
+
 function lastQuery(api: ReturnType<typeof installCollectionsApi>): CollectionQuery {
   const calls = (api.query as ReturnType<typeof vi.fn>).mock.calls;
   return calls[calls.length - 1][0] as CollectionQuery;
@@ -84,15 +97,16 @@ describe('QueryView', () => {
   it('loads the draft once, shows rows with folder and detail, and marks the scope', async () => {
     const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
     const id = useViewDraftsStore.getState().create({ scope: folderScope('/Vault/Papers'), origin: '/Vault/Papers' });
+    const user = userEvent.setup();
     renderQuery(id);
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
     expect(api.query).toHaveBeenCalledTimes(1);
     expect(lastQuery(api).scope).toEqual({ kind: 'folders', folders: ['/Vault/Papers'], includeDescendants: true });
     expect(within(row).getByText('Papers')).toBeInTheDocument();
     expect(within(row).getByText('2 KB')).toBeInTheDocument();
-    expect(screen.getByText('Match all filters')).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Scope folders' })).getByText('Papers')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Include subfolders' })).toHaveAttribute('aria-checked', 'true');
+    const display = await openDisplay(user);
+    expect(within(within(display).getByRole('list', { name: 'Scope folders' })).getByText('Papers')).toBeInTheDocument();
+    expect(within(display).getByRole('switch', { name: 'Include subfolders' })).toHaveAttribute('aria-checked', 'true');
     expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'query', id });
     expect(window.activityAPI.record).not.toHaveBeenCalled();
   });
@@ -103,20 +117,21 @@ describe('QueryView', () => {
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'kind');
+    await addFilter(user, 'kind');
     const kindChip = screen.getByTestId('query-chip-kind');
     await user.click(within(kindChip).getByRole('button', { name: 'PDF' }));
     await user.click(within(kindChip).getByRole('button', { name: 'Image' }));
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'tags');
+    await addFilter(user, 'tags');
     await user.type(screen.getByLabelText('Tags value'), 'research, reference');
     await waitFor(() => expect(lastQuery(api).filters).toEqual([
       { field: 'kind', op: 'in', values: ['pdf', 'image'] },
       { field: 'tags', op: 'has-any', values: ['research', 'reference'] },
     ]));
     expect(useViewDraftsStore.getState().get(id)?.query.filters).toHaveLength(2);
-    await user.selectOptions(screen.getByLabelText('Sort by'), 'touched');
+    const display = await openDisplay(user);
+    await user.selectOptions(within(display).getByLabelText('Sort by'), 'touched');
     await waitFor(() => expect(lastQuery(api).sort).toEqual({ field: 'touched', direction: 'asc' }));
-    await user.click(screen.getByRole('button', { name: 'Sort descending' }));
+    await user.click(within(display).getByRole('button', { name: 'Sort descending' }));
     await waitFor(() => expect(lastQuery(api).sort.direction).toBe('desc'));
     expect(await screen.findByText('Opened 1 minute ago')).toBeInTheDocument();
     expect(screen.getAllByText('Never touched').length).toBeGreaterThan(0);
@@ -129,7 +144,7 @@ describe('QueryView', () => {
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
     fireEvent.click(screen.getByTestId(`disk-folder-entry-${PDF}`), { metaKey: true });
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'name');
+    await addFilter(user, 'name');
     const input = screen.getByLabelText('Name value');
     await user.type(input, 'atl{Enter}');
     expect(useDiskStore.getState().pendingAction).toBeNull();
@@ -152,7 +167,7 @@ describe('QueryView', () => {
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
     expect(within(row).getByTestId('row-tag')).toHaveTextContent('research');
     expect(within(screen.getByTestId(`disk-folder-entry-${NOTE}`)).queryByTestId('row-tag')).toBeNull();
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'tags');
+    await addFilter(user, 'tags');
     const input = screen.getByLabelText('Tags value');
     const listId = input.getAttribute('list');
     expect(listId).toBeTruthy();
@@ -182,7 +197,8 @@ describe('QueryView', () => {
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.click(screen.getByRole('button', { name: 'Choose folder…' }));
+    const display = await openDisplay(user);
+    await user.click(within(display).getByRole('button', { name: 'Choose folder…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose a folder' });
     await user.click(within(dialog).getByRole('button', { name: 'Vault' }));
     expect(await within(dialog).findByRole('button', { name: 'Papers' })).toBeInTheDocument();
@@ -191,7 +207,7 @@ describe('QueryView', () => {
     await within(dialog).findByText('No subfolders.');
     expect(within(dialog).getByTestId('folder-picker-path')).toHaveTextContent('Vault › Papers');
     await user.click(within(dialog).getByRole('button', { name: 'Choose Papers' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a folder' })).toBeNull());
     await waitFor(() => expect(lastQuery(api).scope).toEqual({ kind: 'folders', folders: ['/Vault/Projects', '/Vault/Papers'], includeDescendants: true }));
     await user.click(screen.getByRole('button', { name: 'Remove Projects from scope' }));
     await user.click(screen.getByRole('button', { name: 'Remove Papers from scope' }));
@@ -261,7 +277,7 @@ describe('QueryView', () => {
     await user.click(screen.getByRole('button', { name: 'Load more (2 of 3)' }));
     await screen.findByTestId(`disk-folder-entry-${NOTE}`);
     expect(api.query).toHaveBeenLastCalledWith(expect.anything(), { offset: 2, limit: 200 });
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'description');
+    await addFilter(user, 'description');
     expect(await screen.findByText('No items match these filters')).toBeInTheDocument();
     await user.click(within(screen.getByTestId('disk-folder-empty')).getByRole('button', { name: 'Clear filters' }));
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
@@ -358,12 +374,13 @@ describe('saved views', () => {
     expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument();
     await user.click(screen.getByTestId('disk-folder-view-gallery'));
     expect(await screen.findByTestId('view-edited')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    await user.click(within(await openViews(user)).getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
     expect(screen.getByTestId('disk-folder-view-list')).toHaveAttribute('aria-pressed', 'true');
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'description');
+    await user.keyboard('{Escape}');
+    await addFilter(user, 'description');
     await screen.findByTestId('view-edited');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(await openViews(user)).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(api.save).toHaveBeenCalledWith(view.id, { name: 'Papers', layout: 'list', query: { ...emptyQuery(), filters: [{ field: 'description', op: 'is-empty' }] } }, view.revision));
     await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
     expect(useViewDraftsStore.getState().get(view.id)?.saved?.revision).toBe(api.views[0].revision);
@@ -381,7 +398,7 @@ describe('saved views', () => {
     await user.type(name, 'Papers edited{Enter}');
     await screen.findByTestId('view-edited');
     (api as unknown as { markConflict: (id: string) => void }).markConflict(view.id);
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(await openViews(user)).getByRole('button', { name: 'Save changes' }));
     const conflict = await screen.findByTestId('view-conflict');
     expect(api.views[0].name).toBe('Papers');
     await user.click(within(conflict).getByRole('button', { name: 'Save as new' }));
@@ -403,7 +420,7 @@ describe('saved views', () => {
     await user.click(screen.getByTestId('disk-folder-view-gallery'));
     await screen.findByTestId('view-edited');
     api.views[0] = { ...api.views[0], name: 'Edited elsewhere', revision: 'rev-disk' };
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(await openViews(user)).getByRole('button', { name: 'Save changes' }));
     await screen.findByTestId('view-conflict');
     await user.click(screen.getByRole('button', { name: 'Reload from disk' }));
     await waitFor(() => expect(screen.getByLabelText('View name')).toHaveValue('Edited elsewhere'));
@@ -411,7 +428,7 @@ describe('saved views', () => {
     expect(screen.queryByTestId('view-conflict')).not.toBeInTheDocument();
   });
 
-  it('duplicates, removes with confirmation, and undoes the removal', async () => {
+  it('removes a view from the Views menu and undoes the removal', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
     installActivityApi();
     const view = savedView({ name: 'Papers' });
@@ -419,21 +436,34 @@ describe('saved views', () => {
     const user = userEvent.setup();
     renderView(view.id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.click(screen.getByRole('button', { name: 'Duplicate' }));
-    await waitFor(() => expect(api.views).toHaveLength(2));
-    const copy = api.views[1];
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`collection=view&id=${copy.id}`));
-    expect(await screen.findByLabelText('View name')).toHaveValue('Papers copy');
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
-    await user.click(within(screen.getByRole('group', { name: 'Confirm removing this view' })).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(api.remove).toHaveBeenCalledWith(copy.id));
+    const views = await openViews(user);
+    expect(within(views).getByRole('option', { name: 'Papers' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(within(views).getByRole('button', { name: 'Remove view Papers' }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith(view.id));
     await waitFor(() => expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' }));
-    expect(useSavedViewsStore.getState().has(copy.id)).toBe(false);
-    expect(toast).toHaveBeenCalledWith('Removed “Papers copy”', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) }));
+    expect(useSavedViewsStore.getState().has(view.id)).toBe(false);
+    expect(toast).toHaveBeenCalledWith('Removed “Papers”', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) }));
     const options = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as { action: { onClick: () => void } };
     options.action.onClick();
     await waitFor(() => expect(api.restore).toHaveBeenCalled());
-    await waitFor(() => expect(useSavedViewsStore.getState().has(copy.id)).toBe(true));
+    await waitFor(() => expect(useSavedViewsStore.getState().has(view.id)).toBe(true));
+  });
+
+  it('saves the current definition as a new view from the Views menu', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult(rows()) })) });
+    const view = savedView({ name: 'Papers' });
+    const api = installViewsApi([view]);
+    const user = userEvent.setup();
+    renderView(view.id);
+    await screen.findByTestId(`disk-folder-entry-${PDF}`);
+    const views = await openViews(user);
+    await user.click(within(views).getByTestId('views-save-current'));
+    const input = await within(views).findByLabelText('View name');
+    await user.clear(input);
+    await user.type(input, 'Papers again{Enter}');
+    await waitFor(() => expect(api.views).toHaveLength(2));
+    expect(api.views[1].name).toBe('Papers again');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`collection=view&id=${api.views[1].id}`));
   });
 });
 
@@ -445,10 +475,10 @@ describe('review fixes', () => {
     const user = userEvent.setup();
     renderView(view.id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'description');
+    await addFilter(user, 'description');
     await screen.findByTestId('view-edited');
     await waitFor(() => expect(lastQuery(api).filters).toHaveLength(2));
-    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    await user.click(within(await openViews(user)).getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(screen.queryByTestId('query-chip-description')).not.toBeInTheDocument());
     expect(screen.getByTestId('query-chip-kind')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId('view-edited')).not.toBeInTheDocument());
@@ -476,7 +506,7 @@ describe('review fixes', () => {
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.selectOptions(screen.getByLabelText('Add filter'), 'name');
+    await addFilter(user, 'name');
     const input = screen.getByLabelText('Name value');
     await user.click(input);
     await user.paste('x'.repeat(300));

@@ -220,7 +220,6 @@ describe('DiskExplorer', () => {
   });
 
   it('keeps Enter and Delete working after clicking a list row', async () => {
-    const user = userEvent.setup();
     useDiskStore.setState({
       listings: {
         [ROOT]: [entry({ path: `${ROOT}/note.md`, name: 'note.md', kind: 'markdown' })],
@@ -254,11 +253,14 @@ describe('DiskExplorer', () => {
     render(<DiskExplorer />);
     await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
 
-    const newFolderButton = screen.getByTestId('toolbar-new-folder');
-    newFolderButton.focus();
-    expect(newFolderButton).toHaveFocus();
+    const newButton = screen.getByTestId('toolbar-new');
+    newButton.focus();
+    expect(newButton).toHaveFocus();
 
+    // Enter on the New button opens its menu rather than renaming the selection.
     await user.keyboard('{Enter}');
+    expect(useDiskStore.getState().pendingAction?.kind).not.toBe('rename');
+    await user.click(await screen.findByTestId('toolbar-new-folder'));
 
     expect(useDiskStore.getState().pendingAction).toEqual({
       kind: 'new-folder',
@@ -292,7 +294,7 @@ describe('DiskExplorer', () => {
     render(<DiskExplorer />);
     await user.click(screen.getByTestId('disk-tree-item-/Vault/note.md'));
 
-    const newFolderButton = screen.getByTestId('toolbar-new-folder');
+    const newFolderButton = screen.getByTestId('toolbar-new');
     newFolderButton.focus();
     fireEvent.keyDown(newFolderButton, { key: 'Delete' });
     expect(useDiskStore.getState().pendingDelete).toBeNull();

@@ -38,7 +38,8 @@ describe('Toolbar new note', () => {
     const api = installMarkdownApi();
     const user = userEvent.setup();
     render(<Toolbar dirPath="/Vault/Notes" />);
-    await user.click(screen.getByTestId('toolbar-new-note'));
+    await user.click(screen.getByTestId('toolbar-new'));
+    await user.click(await screen.findByTestId('toolbar-new-note'));
     await waitFor(() => expect(api.create).toHaveBeenCalledWith('/Vault/Notes'));
     await waitFor(() => expect(useTabsStore.getState().openedPath).toBe('/Vault/Notes/Untitled.md'));
     expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault/Notes');

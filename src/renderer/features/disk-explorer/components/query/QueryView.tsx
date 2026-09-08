@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FolderOpen, RotateCw, SearchX, SlidersHorizontal, X } from 'lucide-react';
-import { filesLocationSnapshots } from '../../navigation/filesLocationSnapshots';
 import { toast } from 'sonner';
 import { activityReason, formatRelativeTime } from '@/common/relativeTime';
 import { formatBytes } from '@/common/formatBytes';
@@ -8,33 +7,30 @@ import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
 import { sameQuery, suggestViewName } from '@/common/collectionQuery';
 import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
+import type { SavedView, SavedViewDefinition } from '@/types/savedView';
 import { Button } from '@/renderer/shared/ui';
+import { filesLocationSnapshots } from '../../navigation/filesLocationSnapshots';
 import { useDiskStore } from '../../store/diskStore';
 import { isDraftEdited, useViewDraftsStore } from '../../store/viewDraftsStore';
 import { useSavedViewsStore } from '../../store/savedViewsStore';
-import { EMPTY_RESULT, useCollectionQueryStore } from '../../store/collectionQueryStore';
 import { RECENT_COLLECTION, directoryCollection, queryCollection, viewCollection } from '../../navigation/filesLocation';
 import { useFilesNavigation } from '../../navigation/FilesNavigationContext';
-import type { SavedViewDefinition } from '@/types/savedView';
 import { CollectionView, type CollectionRowDecoration } from '../CollectionView';
 import { EmptyState } from '../EmptyState';
 import { GallerySkeleton } from '../Skeleton';
-import { CHIP_TEXT_INPUT, FilterChips } from './FilterChips';
-import { useTagSuggestions } from './useTagSuggestions';
-import { newChip } from './editableFilters';
-import { ScopeControl } from './ScopeControl';
-import { SortControl } from './SortControl';
-import { chipFromFilter, filtersFromChips, type EditableChip } from './editableFilters';
+import { DisplayPopover } from './DisplayPopover';
+import { CHIP_TEXT_INPUT } from './FilterChips';
+import { ListToolbar } from './ListToolbar';
 import { NameViewDialog } from './NameViewDialog';
-import { ViewActions, type ViewPendingAction } from './ViewActions';
+import { ScopeControl } from './ScopeControl';
+import { ViewsPopover } from './ViewsPopover';
+import { chipFromFilter, filtersFromChips, newChip, type EditableChip } from './editableFilters';
+import { useCollectionResult } from './useCollectionResult';
+import { useTagSuggestions } from './useTagSuggestions';
+
+export { TIME_REFRESH_MS } from './useCollectionResult';
 
 const UNDO_WINDOW_MS = 10_000;
-/** Relative-time filters drift; re-evaluate at least once a minute while visible. */
-export const TIME_REFRESH_MS = 60_000;
-
-function hasRelativeTimeFilter(query: CollectionQuery): boolean {
-  return query.filters.some((filter) => filter.op === 'within');
-}
 
 interface QueryViewProps {
   id: string;
@@ -63,27 +59,26 @@ function detailFor(row: CollectionRow, query: CollectionQuery, now: number): str
   }
 }
 
+/** A draft or saved view: the same toolbar a folder wears, over a definition that can be saved. */
 export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const navigation = useFilesNavigation();
   const draft = useViewDraftsStore((state) => state.drafts[id] ?? null);
   const updateDraft = useViewDraftsStore((state) => state.update);
-  const [pending, setPending] = useState<ViewPendingAction>(null);
+  const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [nameDialog, setNameDialog] = useState<'save-view' | 'save-new' | null>(null);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [nameInput, setNameInput] = useState(draft?.name ?? '');
   useEffect(() => { setNameInput(draft?.name ?? ''); }, [draft?.name]);
-  const result = useCollectionQueryStore((state) => state.results[id] ?? EMPTY_RESULT);
-  const load = useCollectionQueryStore((state) => state.load);
   const roots = useDiskStore((state) => state.roots);
+  const density = useDiskStore((state) => state.density);
+  const setDensity = useDiskStore((state) => state.setDensity);
   const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const now = useNow();
   const tagSuggestions = useTagSuggestions();
   const header = useRef<HTMLDivElement>(null);
   const [chips, setChips] = useState<EditableChip[]>(() => (draft ? draft.query.filters.map(chipFromFilter) : []));
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const lastLoaded = useRef<CollectionQuery | null>(draft?.query ?? null);
   // The filters the current chips were last derived from or pushed into. A
   // draft whose filters differ from this came from outside the chips (Reset,
   // Reload from disk, a save) and must rebuild the chips instead.
@@ -109,37 +104,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   };
 
   // FilesRoute performs the first load; later draft edits reload with the debounce.
-  useEffect(() => {
-    if (!draft) return;
-    if (lastLoaded.current && sameQuery(lastLoaded.current, draft.query)) return;
-    lastLoaded.current = draft.query;
-    void load(id, draft.query);
-  }, [draft, id, load]);
-
-  useEffect(() => {
-    const api = window.collectionsAPI;
-    if (!api?.onChanged || !draft) return undefined;
-    return api.onChanged(() => {
-      const current = useViewDraftsStore.getState().drafts[id];
-      if (current) void load(id, current.query, { immediate: true });
-    });
-  }, [draft, id, load]);
-
-  // "Past 7 days" is a rolling window: refresh on focus and once a minute.
-  const relativeTime = draft ? hasRelativeTimeFilter(draft.query) : false;
-  useEffect(() => {
-    if (!relativeTime) return undefined;
-    const refresh = () => {
-      const current = useViewDraftsStore.getState().drafts[id];
-      if (current) void load(id, current.query, { immediate: true });
-    };
-    const timer = setInterval(refresh, TIME_REFRESH_MS);
-    window.addEventListener('focus', refresh);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('focus', refresh);
-    };
-  }, [relativeTime, id, load]);
+  const { result, byPath, entries, reload, loadMore } = useCollectionResult(id, draft?.query ?? null, { initialLoaded: true });
 
   // Cmd+F filters the view: focus the first text chip, or start a Name chip.
   useEffect(() => {
@@ -155,8 +120,6 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const byPath = useMemo(() => new Map(result.rows.map((row) => [row.entry.path, row])), [result.rows]);
-  const entries = useMemo(() => result.rows.map((row) => row.entry), [result.rows]);
   const decorate = useMemo(
     () => (entry: DiskEntry): CollectionRowDecoration | null => {
       const row = byPath.get(entry.path);
@@ -173,15 +136,14 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const createView = async (name: string, kind: 'save-view' | 'save-new') => {
     const definition = definitionOf();
     if (!definition) return;
-    setPending('save-new');
+    setBusy(true);
     setActionError(null);
     const response = await window.viewsAPI.create({ ...definition, name });
-    setPending(null);
-    if (!response.success) { setActionError(response.error); return; }
+    setBusy(false);
+    if (!response.success) { setActionError(response.error); toast.error(response.error); return; }
     setNameDialog(null);
     await useSavedViewsStore.getState().load();
-    const drafts = useViewDraftsStore.getState();
-    drafts.openSaved(response.data);
+    useViewDraftsStore.getState().openSaved(response.data);
     setConflict(false);
     navigation.navigateCollection(viewCollection(response.data.id));
     // The transient draft is dropped only after the router has applied the
@@ -201,10 +163,10 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   const saveChanges = async () => {
     const definition = definitionOf();
     if (!definition || !draft?.saved) return;
-    setPending('save');
+    setBusy(true);
     setActionError(null);
     const response = await window.viewsAPI.save(id, definition, draft.saved.revision);
-    setPending(null);
+    setBusy(false);
     if (!response.success) {
       if (response.conflict) setConflict(true);
       else setActionError(response.error);
@@ -216,39 +178,36 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
   };
 
   const reloadFromDisk = async () => {
-    setPending('reload');
+    setBusy(true);
     await useSavedViewsStore.getState().load();
     const view = useSavedViewsStore.getState().views[id];
-    setPending(null);
+    setBusy(false);
     if (!view) { setActionError('This view no longer exists on disk.'); return; }
     useViewDraftsStore.getState().adoptBaseline(id, view);
     setConflict(false);
   };
 
-  const duplicateView = async () => {
-    setPending('duplicate');
-    setActionError(null);
-    const response = await window.viewsAPI.duplicate(id);
-    setPending(null);
-    if (!response.success) { setActionError(response.error); return; }
-    await useSavedViewsStore.getState().load();
-    useViewDraftsStore.getState().openSaved(response.data);
-    navigation.navigateCollection(viewCollection(response.data.id));
+  const openView = (saved: SavedView) => {
+    useViewDraftsStore.getState().openSaved(saved);
+    navigation.navigateCollection(viewCollection(saved.id));
   };
 
-  const removeView = async () => {
-    setPending('remove');
-    setActionError(null);
-    const response = await window.viewsAPI.remove(id);
-    setPending(null);
-    setConfirmingRemove(false);
-    if (!response.success) { setActionError(response.error); return; }
-    const removedName = draft?.name ?? 'View';
-    useViewDraftsStore.getState().remove(id);
+  const renameView = async (saved: SavedView, name: string) => {
+    if (saved.id === id) { updateDraft(id, { name }); return; }
+    const response = await window.viewsAPI.save(saved.id, { name, query: saved.query, layout: saved.layout }, saved.revision);
+    if (!response.success) { toast.error(response.error); return; }
     await useSavedViewsStore.getState().load();
-    navigation.navigateCollection(RECENT_COLLECTION);
+  };
+
+  const removeView = async (saved: SavedView) => {
+    setActionError(null);
+    const response = await window.viewsAPI.remove(saved.id);
+    if (!response.success) { setActionError(response.error); toast.error(response.error); return; }
+    useViewDraftsStore.getState().remove(saved.id);
+    await useSavedViewsStore.getState().load();
+    if (saved.id === id) navigation.navigateCollection(RECENT_COLLECTION);
     const { undoToken } = response.data;
-    toast(`Removed “${removedName}”`, {
+    toast(`Removed “${saved.name}”`, {
       duration: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',
@@ -279,69 +238,89 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
     return <div role="alert" className="p-4 text-sm text-destructive">This view is no longer available.</div>;
   }
   const edited = isDraftEdited(draft);
-
   const warnings = result.warnings.filter((warning) => !dismissed.includes(warning));
   const hasFilters = draft.query.filters.length > 0 || chips.length > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div ref={header} data-disk-shortcuts-ignore="true" data-testid="query-header" className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <SlidersHorizontal aria-hidden className="h-4 w-4 text-muted-foreground" />
-          <input
-            aria-label="View name"
-            value={nameInput}
-            onChange={(event) => setNameInput(event.target.value)}
-            onBlur={() => updateDraft(id, { name: nameInput })}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); updateDraft(id, { name: nameInput }); }
-              if (event.key === 'Escape') setNameInput(draft.name);
-            }}
-            className="min-w-0 max-w-64 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none hover:border-border focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <ViewActions
-            draft={draft}
-            edited={edited}
-            pending={pending}
-            confirmingRemove={confirmingRemove}
-            onSaveView={() => setNameDialog('save-view')}
-            onDiscard={discardDraft}
-            onSaveChanges={() => void saveChanges()}
-            onSaveAsNew={() => setNameDialog('save-new')}
-            onReset={() => { useViewDraftsStore.getState().reset(id); setConflict(false); }}
-            onDuplicate={() => void duplicateView()}
-            onRemove={() => setConfirmingRemove(true)}
-            onConfirmRemove={() => void removeView()}
-            onCancelRemove={() => setConfirmingRemove(false)}
-          />
-          <div className="min-w-0 flex-1" />
-          <Button size="compact" variant="ghost" disabled={!selectedTarget} onClick={showInFolder}>
-            Show in folder
-          </Button>
-          <SortControl sort={draft.query.sort} onChange={(sort) => updateDraft(id, { query: { ...draft.query, sort } })} />
-          {trailing}
-        </div>
-        {selectionMissing ? (
-          <p role="status" data-testid="query-selection-missing" className="text-xs text-muted-foreground">
-            The selected item no longer matches these filters. Its preview stays open until you select something else.
-          </p>
-        ) : null}
-        {conflict ? (
-          <div role="alert" data-testid="view-conflict" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs">
-            <span className="flex-1">This view changed on disk since you opened it. Reload it to take the disk version, or keep your edits as a new view.</span>
-            <Button size="compact" variant="outline" disabled={pending !== null} onClick={() => void reloadFromDisk()}>Reload from disk</Button>
-            <Button size="compact" disabled={pending !== null} onClick={() => setNameDialog('save-new')}>Save as new</Button>
+      <ListToolbar
+        headerRef={header}
+        leading={(
+          <div className="flex min-w-0 items-center gap-1" data-testid="query-header">
+            <SlidersHorizontal aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              aria-label="View name"
+              value={nameInput}
+              onChange={(event) => setNameInput(event.target.value)}
+              onBlur={() => updateDraft(id, { name: nameInput })}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') { event.preventDefault(); updateDraft(id, { name: nameInput }); }
+                if (event.key === 'Escape') setNameInput(draft.name);
+              }}
+              className="h-7 min-w-0 max-w-56 rounded-md border border-transparent bg-transparent px-1.5 text-sm font-medium outline-none hover:border-border-subtle focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {!draft.saved ? (
+              <>
+                <Button size="compact" disabled={busy} onClick={() => setNameDialog('save-view')}>{busy ? 'Saving…' : 'Save view'}</Button>
+                <Button size="compact" variant="ghost" disabled={busy} onClick={discardDraft}>Discard</Button>
+              </>
+            ) : edited ? (
+              <span data-testid="view-edited" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-2xs font-medium text-amber-700 dark:text-amber-300">Edited</span>
+            ) : null}
           </div>
-        ) : null}
-        {actionError ? <p role="alert" className="text-xs text-destructive">{actionError}</p> : null}
-        <ScopeControl
-          scope={draft.query.scope}
-          roots={roots}
-          origin={draft.origin}
-          onChange={(scope) => updateDraft(id, { query: { ...draft.query, scope } })}
-        />
-        <FilterChips chips={chips} onChange={setChipsFromUser} tagSuggestions={tagSuggestions} />
-      </div>
+        )}
+        chips={chips}
+        onChipsChange={setChipsFromUser}
+        tagSuggestions={tagSuggestions}
+        layout={draft.layout}
+        onLayout={(layout) => updateDraft(id, { layout })}
+        actions={(
+          <>
+            <Button size="compact" variant="ghost" disabled={!selectedTarget} onClick={showInFolder}>Show in folder</Button>
+            <DisplayPopover
+              sort={draft.query.sort}
+              onSort={(sort) => updateDraft(id, { query: { ...draft.query, sort } })}
+              density={density}
+              onDensity={setDensity}
+            >
+              <div className="mt-2 border-t border-border-subtle pt-2">
+                <p className="mb-1.5 text-xs text-foreground-secondary">Scope</p>
+                <ScopeControl
+                  scope={draft.query.scope}
+                  roots={roots}
+                  origin={draft.origin}
+                  onChange={(scope) => updateDraft(id, { query: { ...draft.query, scope } })}
+                />
+              </div>
+            </DisplayPopover>
+            <ViewsPopover
+              currentId={draft.saved ? id : null}
+              edited={edited}
+              suggestedName={draft.name === 'Untitled view' ? suggestViewName(draft.query) : draft.name}
+              onSaveAs={(name) => createView(name, draft.saved ? 'save-new' : 'save-view')}
+              onSaveChanges={() => void saveChanges()}
+              onReset={() => { useViewDraftsStore.getState().reset(id); setConflict(false); }}
+              onOpen={openView}
+              onRename={renameView}
+              onRemove={removeView}
+            />
+            {trailing}
+          </>
+        )}
+      />
+      {selectionMissing ? (
+        <p role="status" data-testid="query-selection-missing" className="border-b border-border-subtle px-3 py-1.5 text-xs text-muted-foreground">
+          The selected item no longer matches these filters. Its preview stays open until you select something else.
+        </p>
+      ) : null}
+      {conflict ? (
+        <div role="alert" data-testid="view-conflict" className="flex flex-wrap items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs">
+          <span className="flex-1">This view changed on disk since you opened it. Reload it to take the disk version, or keep your edits as a new view.</span>
+          <Button size="compact" variant="outline" disabled={busy} onClick={() => void reloadFromDisk()}>Reload from disk</Button>
+          <Button size="compact" disabled={busy} onClick={() => setNameDialog('save-new')}>Save as new</Button>
+        </div>
+      ) : null}
+      {actionError ? <p role="alert" className="border-b border-border-subtle px-3 py-1.5 text-xs text-destructive">{actionError}</p> : null}
 
       {result.unavailableScopes.length > 0 ? (
         <div role="alert" data-testid="query-unavailable" className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs">
@@ -370,7 +349,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
       {result.error && result.rows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
           <p role="alert" className="text-sm text-destructive">{result.error}</p>
-          <Button variant="outline" onClick={() => void load(id, draft.query, { immediate: true })}>
+          <Button variant="outline" onClick={reload}>
             <RotateCw aria-hidden className="h-4 w-4" />
             Retry
           </Button>
@@ -407,7 +386,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
           </div>
           {entries.length < result.total ? (
             <div className="flex shrink-0 items-center justify-center border-t border-border/60 py-2">
-              <Button size="compact" variant="outline" disabled={result.loading} onClick={() => void load(id, draft.query, { append: true })}>
+              <Button size="compact" variant="outline" disabled={result.loading} onClick={loadMore}>
                 {result.loading ? 'Loading…' : `Load more (${entries.length} of ${result.total})`}
               </Button>
             </div>
@@ -420,7 +399,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
         description={nameDialog === 'save-new' ? 'Your edits become a separate view; the original keeps its saved definition.' : 'Name this collection to reopen it from the sidebar.'}
         initialName={draft.name === 'Untitled view' ? suggestViewName(draft.query) : draft.name}
         submitLabel={nameDialog === 'save-new' ? 'Save as new' : 'Save view'}
-        busy={pending === 'save-new'}
+        busy={busy}
         error={actionError}
         onOpenChange={(open) => { if (!open) setNameDialog(null); }}
         onSubmit={(name) => void createView(name, nameDialog ?? 'save-view')}

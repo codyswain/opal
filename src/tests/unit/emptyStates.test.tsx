@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { DiskFolderView } from '@/renderer/features/disk-explorer/components/DiskFolderView';
-import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import type { DirectoryListing, DiskResult } from '@/types/disk';
 
@@ -68,11 +67,14 @@ describe('density', () => {
     expect(useDiskStore.getState().density).toBe('compact');
   });
 
-  it('toggles density from the toolbar', async () => {
+  it('switches density from the Display popover', async () => {
     const user = userEvent.setup();
-    render(<Toolbar dirPath={DIR} />);
+    installDiskApi();
+    useDiskStore.setState({ listings: { [DIR]: [] } });
+    render(<DiskFolderView dirPath={DIR} />);
 
-    await user.click(screen.getByTestId('toolbar-density'));
+    await user.click(screen.getByTestId('display-menu'));
+    await user.click(await screen.findByRole('radio', { name: 'Compact' }));
 
     expect(useDiskStore.getState().density).toBe('compact');
   });

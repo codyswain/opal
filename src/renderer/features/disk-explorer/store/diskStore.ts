@@ -3,7 +3,8 @@ import {
   isFsPathAtOrBelow,
   normalizeFsPath,
 } from '@/common/fsPaths';
-import type { SortDirection, SortField } from '@/common/sortEntries';
+import type { SortDirection } from '@/common/sortEntries';
+import type { CollectionSortField as SortField } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import {
   pathMutationCoordinator,

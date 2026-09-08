@@ -1,10 +1,10 @@
 import React, { useId } from 'react';
 import { X } from 'lucide-react';
-import { DURATION_PRESETS, FIELD_LABELS, FILE_KINDS, KIND_LABELS, MAX_FILTERS } from '@/common/collectionQuery';
+import { DURATION_PRESETS, FIELD_LABELS, FILE_KINDS, KIND_LABELS } from '@/common/collectionQuery';
 import type { FileKind } from '@/common/fileKind';
-import type { CollectionFilterField, TagCount } from '@/types/collectionQuery';
-import { Button, Chip } from '@/renderer/shared/ui';
-import { CUSTOM_PRESET_PREFIX, OPERATORS, newChip, presetDuration, type EditableChip } from './editableFilters';
+import type { TagCount } from '@/types/collectionQuery';
+import { Chip } from '@/renderer/shared/ui';
+import { CUSTOM_PRESET_PREFIX, OPERATORS, presetDuration, type EditableChip } from './editableFilters';
 
 interface FilterChipsProps {
   chips: EditableChip[];
@@ -14,19 +14,18 @@ interface FilterChipsProps {
 
 export const CHIP_TEXT_INPUT = 'data-chip-text';
 
-const FIELD_ORDER: CollectionFilterField[] = ['name', 'kind', 'tags', 'description', 'touched', 'opened', 'modified'];
-
 const inputStyles = 'rounded-md border border-border bg-background px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+/** The applied filters, each editable in place. Adding and clearing live in FilterMenu. */
 export const FilterChips: React.FC<FilterChipsProps> = ({ chips, onChange, tagSuggestions = [] }) => {
   const listId = useId();
   const replace = (key: string, patch: Partial<EditableChip>) =>
     onChange(chips.map((chip) => (chip.key === key ? { ...chip, ...patch } : chip)));
   const remove = (key: string) => onChange(chips.filter((chip) => chip.key !== key));
+  if (chips.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="query-filters">
-      <span className="text-2xs uppercase tracking-wide text-muted-foreground">Match all filters</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="query-filters">
       {tagSuggestions.length > 0 ? (
         <datalist id={listId}>
           {tagSuggestions.map((suggestion) => (
@@ -37,25 +36,6 @@ export const FilterChips: React.FC<FilterChipsProps> = ({ chips, onChange, tagSu
       {chips.map((chip) => (
         <ChipEditor key={chip.key} chip={chip} tagListId={tagSuggestions.length > 0 ? listId : undefined} onChange={(patch) => replace(chip.key, patch)} onRemove={() => remove(chip.key)} />
       ))}
-      <select
-        aria-label="Add filter"
-        value=""
-        disabled={chips.length >= MAX_FILTERS}
-        title={chips.length >= MAX_FILTERS ? `At most ${MAX_FILTERS} filters` : undefined}
-        onChange={(event) => {
-          const field = event.target.value as CollectionFilterField;
-          if (field && chips.length < MAX_FILTERS) onChange([...chips, newChip(field)]);
-        }}
-        className={inputStyles}
-      >
-        <option value="">Add filter…</option>
-        {FIELD_ORDER.map((field) => (
-          <option key={field} value={field}>{FIELD_LABELS[field]}</option>
-        ))}
-      </select>
-      {chips.length > 0 ? (
-        <Button size="compact" variant="ghost" onClick={() => onChange([])}>Clear filters</Button>
-      ) : null}
     </div>
   );
 };
@@ -78,7 +58,7 @@ const ChipEditor: React.FC<ChipEditorProps> = ({ chip, tagListId, onChange, onRe
       role="group"
       aria-label={`${label} filter`}
       data-testid={`query-chip-${chip.field}`}
-      className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-1"
+      className="flex h-7 items-center gap-1 rounded-md border border-border-subtle bg-surface pl-2 pr-1"
     >
       <span className="text-xs font-medium">{label}</span>
       <select

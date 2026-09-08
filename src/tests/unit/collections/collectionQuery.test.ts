@@ -84,7 +84,7 @@ describe('validateCollectionQuery', () => {
 
   it('rejects wrong versions, sorts and shapes', () => {
     expect(() => validateCollectionQuery({ ...(base() as object), version: 2 })).toThrow(/version/i);
-    expect(() => validateCollectionQuery({ ...(base() as object), sort: { field: 'size', direction: 'asc' } })).toThrow(/sort/i);
+    expect(() => validateCollectionQuery({ ...(base() as object), sort: { field: 'colour', direction: 'asc' } })).toThrow(/sort/i);
     expect(() => validateCollectionQuery({ ...(base() as object), sort: { field: 'name', direction: 'up' } })).toThrow(/direction/i);
     expect(() => validateCollectionQuery(null)).toThrow(CollectionQueryError);
     expect(() => validateCollectionQuery('query')).toThrow(CollectionQueryError);

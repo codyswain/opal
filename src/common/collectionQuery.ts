@@ -6,6 +6,7 @@ import type {
   CollectionQuery,
   CollectionScope,
   CollectionSort,
+  CollectionSortField,
 } from '@/types/collectionQuery';
 import { COLLECTION_PAGE_DEFAULT, COLLECTION_PAGE_MAX } from '@/types/collectionQuery';
 
@@ -50,7 +51,13 @@ export const KIND_LABELS: Record<FileKind, string> = {
   other: 'Other',
 };
 
-const SORT_FIELDS = new Set(['touched', 'opened', 'modified', 'name']);
+const SORT_FIELDS = new Set(['touched', 'opened', 'modified', 'name', 'size', 'kind']);
+
+export const SORT_LABELS: Record<CollectionSortField, string> = {
+  name: 'Name', modified: 'Modified', size: 'Size', kind: 'Kind', touched: 'Last touched', opened: 'Last opened',
+};
+/** Sort fields a plain folder listing can order by itself; the rest need activity data. */
+export const LISTING_SORT_FIELDS: readonly CollectionSortField[] = ['name', 'modified', 'size', 'kind'];
 
 function fail(message: string): never {
   throw new CollectionQueryError(message);

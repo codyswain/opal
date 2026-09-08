@@ -7,7 +7,8 @@ import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
 import { FolderPlus, X, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
-import { sortEntries } from '@/common/sortEntries';
+import { sortEntries, type SortField } from '@/common/sortEntries';
+import { LISTING_SORT_FIELDS } from '@/common/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
@@ -19,14 +20,13 @@ import { QueryView } from './query/QueryView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { MarkdownEditor } from './editor/MarkdownEditor';
-import { Breadcrumb } from './Breadcrumb';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
 import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
-import { Toolbar } from './Toolbar';
 import { TabStrip } from './TabStrip';
 import { WelcomePanel } from './WelcomePanel';
+import { Breadcrumb } from './Breadcrumb';
 import { FileKindIcon } from './fileKindIcon';
 import { useTabsStore } from '../store/tabsStore';
 import {
@@ -79,6 +79,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
   const openedPath = useTabsStore((state) => state.openedPath);
   const activeDirectory = currentDirectory;
+  const folderRows = useCollectionQueryStore((state) => (activeDirectory ? state.results[`folder:${activeDirectory}`]?.query ? state.results[`folder:${activeDirectory}`].rows : null : null));
   const isRecent = currentCollection?.kind === 'recent';
   const visibleEntries = useMemo(() => {
     if (queryId) return queryRows.map((row) => row.entry);
@@ -87,12 +88,15 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       return filterEntries(recentItems.map((item) => item.entry), filter);
     }
     if (!activeDirectory) return [];
+    // A filtered folder shows collection rows, not the raw listing.
+    if (folderRows) return folderRows.map((row) => row.entry);
+    if (!LISTING_SORT_FIELDS.includes(sort.field)) return [];
     return sortEntries(
       filterEntries(listings[activeDirectory] ?? [], filter),
-      sort.field,
+      sort.field as SortField,
       sort.direction
     );
-  }, [activeDirectory, filter, isRecent, listings, queryId, queryRows, recentItems, sort.direction, sort.field]);
+  }, [activeDirectory, filter, folderRows, isRecent, listings, queryId, queryRows, recentItems, sort.direction, sort.field]);
 
   // The selected entry object, found in whichever cached listing contains it,
   // or among Recent rows. The tree can only surface a path it has already
@@ -485,28 +489,24 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               </div>
             </div>
           ) : isRecent || queryId ? null : activeDirectory ? (
-            <>
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
-                <Breadcrumb dirPath={activeDirectory} />
-                <Toolbar dirPath={activeDirectory} />
-                <button
-                  type="button"
-                  aria-pressed={isPreviewPaneOpen}
-                  aria-controls={previewPaneId}
-                  data-disk-shortcuts-ignore="true"
-                  onClick={togglePreviewPane}
-                  className="mr-3 shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
-                >
-                  Preview
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <DiskFolderView
-                  key={activeDirectory}
-                  dirPath={activeDirectory}
-                />
-              </div>
-            </>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <DiskFolderView
+                key={activeDirectory}
+                dirPath={activeDirectory}
+                trailing={(
+                  <button
+                    type="button"
+                    aria-pressed={isPreviewPaneOpen}
+                    aria-controls={previewPaneId}
+                    data-disk-shortcuts-ignore="true"
+                    onClick={togglePreviewPane}
+                    className="flex h-7 shrink-0 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                  >
+                    Preview
+                  </button>
+                )}
+              />
+            </div>
           ) : (
             <WelcomePanel />
           )}

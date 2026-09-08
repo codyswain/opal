@@ -91,6 +91,8 @@ function compareRows(query: CollectionQuery): (a: SortableRow, b: SortableRow) =
   const byName = (a: SortableRow, b: SortableRow) =>
     collator.compare(a.name, b.name) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (query.sort.field === 'name') return (a, b) => sign * byName(a, b);
+  if (query.sort.field === 'size') return (a, b) => sign * (a.row.entry.size - b.row.entry.size) || byName(a, b);
+  if (query.sort.field === 'kind') return (a, b) => sign * a.row.entry.kind.localeCompare(b.row.entry.kind) || byName(a, b);
   const field = query.sort.field;
   return (a, b) => {
     const left = activityStamp(a.row, field);
