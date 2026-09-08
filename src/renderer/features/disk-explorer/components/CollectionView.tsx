@@ -46,6 +46,8 @@ export interface CollectionViewProps {
   /** Controlled layout, for collections whose layout is part of their definition. */
   mode?: CollectionViewMode;
   onModeChange?: (mode: CollectionViewMode) => void;
+  /** Whether the status bar carries layout toggles; off when a toolbar above already does. */
+  layoutControls?: boolean;
 }
 
 const ICONS: Record<FileKind, React.ComponentType<{ className?: string; strokeWidth?: string | number }>> = {
@@ -66,7 +68,7 @@ const TILE = {
  */
 export const CollectionView: React.FC<CollectionViewProps> = ({
   location, entries, suggestedMode, filter, onClearFilter, emptyState, decorate, countLabel,
-  mode: controlledMode, onModeChange,
+  mode: controlledMode, onModeChange, layoutControls = true,
 }) => {
   const navigation = useFilesNavigation();
   const [snapshot] = useState(() => filesLocationSnapshots.read(location));
@@ -278,10 +280,12 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
           {countLabel ?? `${entries.length} ${entries.length === 1 ? 'item' : 'items'}`}
           {selectedPaths.length > 1 ? ` · ${selectedPaths.length} selected` : ''}
         </span>
-        <div className="flex items-center gap-0.5" role="group" aria-label="Layout">
-          <ModeButton mode="list" active={activeMode === 'list'} onSelect={setMode} label="List view" Icon={ListIcon} />
-          <ModeButton mode="gallery" active={activeMode === 'gallery'} onSelect={setMode} label="Gallery view" Icon={LayoutGrid} />
-        </div>
+        {layoutControls ? (
+          <div className="flex items-center gap-0.5" role="group" aria-label="Layout">
+            <ModeButton mode="list" active={activeMode === 'list'} onSelect={setMode} label="List view" Icon={ListIcon} />
+            <ModeButton mode="gallery" active={activeMode === 'gallery'} onSelect={setMode} label="Gallery view" Icon={LayoutGrid} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

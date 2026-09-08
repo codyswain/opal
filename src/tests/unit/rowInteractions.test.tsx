@@ -130,4 +130,16 @@ describe('row interactions', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'New folder' }));
     expect(useDiskStore.getState().pendingAction).toEqual({ kind: 'new-folder', target: DIR });
   });
+
+  it('offers to search subfolders when a filtered folder has no direct matches', async () => {
+    const { installCollectionsApi, collectionResult } = await import('@/tests/helpers/collectionsApi');
+    const api = installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    const user = userEvent.setup();
+    render(<DiskFolderView dirPath={DIR} />);
+    await screen.findByTestId(`disk-folder-entry-${NOTE}`);
+    await user.click(screen.getByTestId('filter-menu'));
+    await user.click(await screen.findByTestId('add-filter-description'));
+    await user.click(await screen.findByRole('button', { name: 'Search subfolders too' }));
+    await waitFor(() => expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({ scope: { kind: 'folders', folders: [DIR], includeDescendants: true } }));
+  });
 });

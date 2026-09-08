@@ -1,7 +1,6 @@
 import React from 'react';
 import { LayoutGrid, List as ListIcon } from 'lucide-react';
 import type { TagCount } from '@/types/collectionQuery';
-import { SegmentedControl } from '@/renderer/shared/ui';
 import type { CollectionViewMode } from '../CollectionView';
 import { FilterChips } from './FilterChips';
 import { FilterMenu } from './FilterMenu';
@@ -32,15 +31,25 @@ export const ListToolbar: React.FC<ListToolbarProps> = ({ leading, chips, onChip
     <FilterMenu chips={chips} onChange={onChipsChange} />
     <FilterChips chips={chips} onChange={onChipsChange} tagSuggestions={tagSuggestions} />
     <div className="ml-auto flex shrink-0 items-center gap-1">
-      <SegmentedControl
-        label="Layout"
-        value={layout}
-        onValueChange={(value) => onLayout(value as CollectionViewMode)}
-        options={[
-          { value: 'list', label: 'List', icon: <ListIcon aria-hidden className="h-3.5 w-3.5" /> },
-          { value: 'gallery', label: 'Gallery', icon: <LayoutGrid aria-hidden className="h-3.5 w-3.5" /> },
-        ]}
-      />
+      <div role="group" aria-label="Layout" className="flex h-7 items-center rounded-md bg-surface-hover p-0.5">
+        {([['list', 'List', ListIcon], ['gallery', 'Gallery', LayoutGrid]] as const).map(([value, label, Icon]) => (
+          <button
+            key={value}
+            type="button"
+            aria-label={`${label} view`}
+            aria-pressed={layout === value}
+            title={label}
+            data-testid={`disk-folder-view-${value}`}
+            data-disk-shortcuts-ignore="true"
+            onClick={() => onLayout(value)}
+            className={`flex h-6 items-center gap-1 rounded px-2 text-xs transition-colors duration-100 ${
+              layout === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Icon aria-hidden className="h-3.5 w-3.5" />
+          </button>
+        ))}
+      </div>
       {actions}
     </div>
   </div>

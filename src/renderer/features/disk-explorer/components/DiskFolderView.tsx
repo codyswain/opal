@@ -204,8 +204,15 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailin
     <EmptyState
       Icon={SearchX}
       title="No items match these filters"
-      description="Loosen a filter or clear them to see everything here."
-      action={<Button size="compact" variant="outline" onClick={() => setChips(dirPath, [])}>Clear filters</Button>}
+      description={view.includeDescendants ? 'Loosen a filter or clear them to see everything here.' : 'Only this folder was searched. Loosen a filter, or search its subfolders too.'}
+      action={(
+        <span className="flex items-center gap-2">
+          {!view.includeDescendants ? (
+            <Button size="compact" onClick={() => setIncludeDescendants(dirPath, true)}>Search subfolders too</Button>
+          ) : null}
+          <Button size="compact" variant="outline" onClick={() => setChips(dirPath, [])}>Clear filters</Button>
+        </span>
+      )}
     />
   ) : (
     <EmptyState Icon={FolderOpen} title="This folder is empty" description="Add files here or open a different folder to keep browsing." />
@@ -240,6 +247,7 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailin
               location={location}
               mode={layout}
               onModeChange={(next) => setLayout(dirPath, next)}
+              layoutControls={false}
               entries={visibleEntries}
               suggestedMode={suggestedMode}
               filter={queryMode ? '' : filter}

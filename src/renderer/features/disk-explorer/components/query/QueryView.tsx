@@ -257,7 +257,8 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
                 if (event.key === 'Enter') { event.preventDefault(); updateDraft(id, { name: nameInput }); }
                 if (event.key === 'Escape') setNameInput(draft.name);
               }}
-              className="h-7 min-w-0 max-w-56 rounded-md border border-transparent bg-transparent px-1.5 text-sm font-medium outline-none hover:border-border-subtle focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ width: `${Math.min(48, Math.max(10, nameInput.length + 2))}ch` }}
+              className="h-7 min-w-0 rounded-md border border-transparent bg-transparent px-1.5 text-sm font-medium outline-none hover:border-border-subtle focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring"
             />
             {!draft.saved ? (
               <>
@@ -366,6 +367,7 @@ export const QueryView: React.FC<QueryViewProps> = ({ id, trailing }) => {
               location={{ mode: 'browse', collection: draft.saved ? viewCollection(id) : queryCollection(id) }}
               mode={draft.layout}
               onModeChange={(layout) => updateDraft(id, { layout })}
+              layoutControls={false}
               entries={entries}
               suggestedMode="list"
               filter=""
