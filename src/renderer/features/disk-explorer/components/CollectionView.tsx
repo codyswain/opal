@@ -1,6 +1,13 @@
 import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, SearchX } from 'lucide-react';
+import { toast } from 'sonner';
+import { basenameFsPath } from '@/common/fsPaths';
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger,
+} from '@/renderer/shared/ui';
+import { collectionDirectory } from '../navigation/filesLocation';
+import { FolderPickerDialog } from './query/FolderPickerDialog';
 import { FixedSizeGrid, FixedSizeList, type GridChildComponentProps, type ListChildComponentProps } from 'react-window';
 import { formatBytes } from '@/common/formatBytes';
 import type { DiskEntry, FileKind } from '@/types/disk';
@@ -86,12 +93,58 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
     : 1;
   const { onKeyDown } = useGridNavigation({ entries, columns });
 
+  const roots = useDiskStore((state) => state.roots);
+  const [moving, setMoving] = useState<string[] | null>(null);
+  const directory = collectionDirectory(location.collection);
+
+  // A plain click selects and opens (files take the preview slot, folders open
+  // in place); a modified click only changes the selection, as in Finder.
   const handleClick = useCallback((event: React.MouseEvent, target: DiskEntry) => {
     const store = useDiskStore.getState();
-    if (event.shiftKey) store.selectRange(entries, target.path);
-    else if (event.metaKey || event.ctrlKey) store.toggleSelected(target.path);
-    else store.select(target.path);
-  }, [entries]);
+    if (event.shiftKey) { store.selectRange(entries, target.path); return; }
+    if (event.metaKey || event.ctrlKey) { store.toggleSelected(target.path); return; }
+    store.select(target.path);
+    if (target.isDirectory) navigation.navigateDirectory(target.path);
+    else navigation.previewFile(target.path);
+  }, [entries, navigation]);
+
+  /** Right-clicking a row outside the selection moves the selection onto it. */
+  const handleContextMenu = useCallback((target: DiskEntry) => {
+    const store = useDiskStore.getState();
+    if (!store.selectedPaths.includes(target.path)) store.select(target.path);
+  }, []);
+
+  const targetsFor = useCallback((entry: DiskEntry): string[] => {
+    const { selectedPaths } = useDiskStore.getState();
+    return selectedPaths.includes(entry.path) && selectedPaths.length > 1 ? [...selectedPaths] : [entry.path];
+  }, []);
+
+  const moveTo = async (destination: string) => {
+    const sources = moving ?? [];
+    setMoving(null);
+    for (const source of sources) {
+      const parent = source.slice(0, source.lastIndexOf('/'));
+      if (parent === destination || source === destination || destination.startsWith(`${source}/`)) continue;
+      const result = await window.diskAPI.move(source, destination);
+      if (!result.success) { toast.error(result.error); return; }
+      pathMutationCoordinator.applyAppMutation({ kind: 'move', oldPath: source, newPath: result.data.path });
+    }
+    if (sources.length > 0) toast(`Moved ${sources.length === 1 ? basenameFsPath(sources[0]) : `${sources.length} items`} to ${basenameFsPath(destination)}`);
+  };
+
+  const rowActions = useMemo((): RowActions => ({
+    open: (entry) => (entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path)),
+    // Dialogs open after the menu has closed; opening one while the menu still
+    // holds focus makes the two fight over it.
+    quickLook: (entry) => { const store = useDiskStore.getState(); store.select(entry.path); store.setQuickPreviewPath(entry.path); setTimeout(() => store.openQuickLook(), 0); },
+    rename: (entry) => useDiskStore.getState().beginRename(entry.path),
+    move: (entry) => { const targets = targetsFor(entry); setTimeout(() => setMoving(targets), 0); },
+    reveal: (entry) => { void window.diskAPI.reveal(entry.path).then((result) => { if (!result.success) toast.error(result.error); }); },
+    openExternal: (entry) => { void window.diskAPI.openExternal(entry.path).then((result) => { if (!result.success) toast.error(result.error); }); },
+    copyPath: (entry) => { void navigator.clipboard?.writeText(targetsFor(entry).join('\n')); },
+    trash: (entry) => { const store = useDiskStore.getState(); if (!store.selectedPaths.includes(entry.path)) store.select(entry.path); store.beginDelete(entry.path); },
+    countFor: (entry) => targetsFor(entry).length,
+  }), [navigation, targetsFor]);
 
   const lastSelection = useRef(selectedPath);
   useEffect(() => {
@@ -104,15 +157,29 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
     else listRef.current?.scrollToItem(index);
   }, [selectedPath, entries, activeMode, columns]);
   const saveScroll = (offset: number) => filesLocationSnapshots.patch(location, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
+  // Double-click pins: a previewed file stays open, a folder simply opens.
   const activate = useCallback(
     (entry: DiskEntry) => entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path),
     [navigation]
   );
 
   const itemData: CollectionItemData = useMemo(
-    () => ({ entries, selectedPaths, columns, select: handleClick, activate, decorate }),
-    [entries, selectedPaths, columns, handleClick, activate, decorate]
+    () => ({ entries, selectedPaths, columns, select: handleClick, activate, decorate, contextMenu: handleContextMenu, actions: rowActions }),
+    [entries, selectedPaths, columns, handleClick, activate, decorate, handleContextMenu, rowActions]
   );
+
+  const surfaceMenu = directory ? (
+    <ContextMenuContent data-testid="collection-surface-menu">
+      <ContextMenuItem onSelect={() => useDiskStore.getState().beginNewFolder(directory)}>New folder</ContextMenuItem>
+      <ContextMenuItem onSelect={() => { void window.markdownAPI.create(directory).then((result) => {
+        if (!result.success) { toast.error(result.error); return; }
+        void useDiskStore.getState().loadDirectory(directory, { force: true });
+        navigation.openFile(result.data.path);
+      }); }}>New note</ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={() => { void window.diskAPI.reveal(directory); }}>Reveal folder in Finder</ContextMenuItem>
+    </ContextMenuContent>
+  ) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -143,6 +210,8 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
           )}
         </div>
       ) : activeMode === 'gallery' ? (
+        <ContextMenu>
+        <ContextMenuTrigger asChild disabled={!surfaceMenu}>
         <div
           ref={viewportRef}
           tabIndex={0}
@@ -169,7 +238,12 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
             {VirtualGalleryItem}
           </FixedSizeGrid>
         </div>
+        </ContextMenuTrigger>
+        {surfaceMenu}
+        </ContextMenu>
       ) : (
+        <ContextMenu>
+        <ContextMenuTrigger asChild disabled={!surfaceMenu}>
         <div
           ref={viewportRef}
           tabIndex={0}
@@ -191,7 +265,12 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
             {VirtualListItem}
           </FixedSizeList>
         </div>
+        </ContextMenuTrigger>
+        {surfaceMenu}
+        </ContextMenu>
       )}
+
+      <FolderPickerDialog open={moving !== null} roots={roots} onOpenChange={(open) => { if (!open) setMoving(null); }} onChoose={(folder) => void moveTo(folder)} />
 
       {/* A Finder-style status bar: counts on the left, layout on the right. */}
       <div className="flex h-8 shrink-0 items-center justify-between border-t border-border-subtle bg-surface px-3" data-testid="collection-status">
@@ -208,6 +287,19 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
   );
 };
 
+interface RowActions {
+  open: (entry: DiskEntry) => void;
+  quickLook: (entry: DiskEntry) => void;
+  rename: (entry: DiskEntry) => void;
+  move: (entry: DiskEntry) => void;
+  reveal: (entry: DiskEntry) => void;
+  openExternal: (entry: DiskEntry) => void;
+  copyPath: (entry: DiskEntry) => void;
+  trash: (entry: DiskEntry) => void;
+  /** How many items an action on this row would touch (the selection, when it includes the row). */
+  countFor: (entry: DiskEntry) => number;
+}
+
 interface CollectionItemData {
   entries: DiskEntry[];
   selectedPaths: string[];
@@ -215,7 +307,30 @@ interface CollectionItemData {
   select: (event: React.MouseEvent<HTMLButtonElement>, entry: DiskEntry) => void;
   activate: (entry: DiskEntry) => void;
   decorate?: (entry: DiskEntry) => CollectionRowDecoration | null;
+  contextMenu: (entry: DiskEntry) => void;
+  actions: RowActions;
 }
+
+/** The row menu: the same verbs the keyboard has, plus Move to… and Copy path. */
+const RowMenu: React.FC<{ entry: DiskEntry; actions: RowActions }> = ({ entry, actions }) => {
+  const count = actions.countFor(entry);
+  const plural = count > 1 ? `${count} items` : null;
+  return (
+    <ContextMenuContent data-testid={`row-menu-${entry.path}`}>
+      <ContextMenuItem onSelect={() => actions.open(entry)}>{entry.isDirectory ? 'Open folder' : 'Open'}<ContextMenuShortcut>⌘↓</ContextMenuShortcut></ContextMenuItem>
+      {!entry.isDirectory ? <ContextMenuItem onSelect={() => actions.quickLook(entry)}>Quick Look<ContextMenuShortcut>Space</ContextMenuShortcut></ContextMenuItem> : null}
+      <ContextMenuSeparator />
+      <ContextMenuItem disabled={count > 1} onSelect={() => actions.rename(entry)}>Rename…<ContextMenuShortcut>↩</ContextMenuShortcut></ContextMenuItem>
+      <ContextMenuItem onSelect={() => actions.move(entry)}>{plural ? `Move ${plural} to…` : 'Move to…'}</ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={() => actions.reveal(entry)}>Reveal in Finder</ContextMenuItem>
+      {!entry.isDirectory ? <ContextMenuItem onSelect={() => actions.openExternal(entry)}>Open in default app</ContextMenuItem> : null}
+      <ContextMenuItem onSelect={() => actions.copyPath(entry)}>{plural ? 'Copy paths' : 'Copy path'}</ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem tone="destructive" onSelect={() => actions.trash(entry)}>{plural ? `Move ${plural} to Trash` : 'Move to Trash'}<ContextMenuShortcut>⌘⌫</ContextMenuShortcut></ContextMenuItem>
+    </ContextMenuContent>
+  );
+};
 
 // react-window renders its child as a component type. These definitions must
 // stay stable across selection updates so the browser retains the same pointer
@@ -225,9 +340,14 @@ function VirtualGalleryItem({ columnIndex, rowIndex, style, data }: GridChildCom
   if (!entry) return null;
   return (
     <div style={style} className="p-2">
-      <GalleryTile entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
-        decoration={data.decorate?.(entry) ?? null}
-        onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+      <ContextMenu>
+        <ContextMenuTrigger asChild onContextMenu={(event) => { event.stopPropagation(); data.contextMenu(entry); }}>
+          <GalleryTile entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
+            decoration={data.decorate?.(entry) ?? null}
+            onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+        </ContextMenuTrigger>
+        <RowMenu entry={entry} actions={data.actions} />
+      </ContextMenu>
     </div>
   );
 }
@@ -236,9 +356,14 @@ function VirtualListItem({ index, style, data }: ListChildComponentProps<Collect
   const entry = data.entries[index];
   return (
     <div style={style}>
-      <ListRow entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
-        decoration={data.decorate?.(entry) ?? null}
-        onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+      <ContextMenu>
+        <ContextMenuTrigger asChild onContextMenu={(event) => { event.stopPropagation(); data.contextMenu(entry); }}>
+          <ListRow entry={entry} isSelected={data.selectedPaths.includes(entry.path)}
+            decoration={data.decorate?.(entry) ?? null}
+            onSelect={event => data.select(event, entry)} onOpen={() => data.activate(entry)} />
+        </ContextMenuTrigger>
+        <RowMenu entry={entry} actions={data.actions} />
+      </ContextMenu>
     </div>
   );
 }
@@ -278,7 +403,7 @@ const TILE_TINTS: Record<FileKind, string> = {
   pdf: 'text-rose-500', video: 'text-fuchsia-500', audio: 'text-emerald-500', other: 'text-slate-400',
 };
 
-const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSelect, onOpen }) => {
+const GalleryTile = forwardRef<HTMLButtonElement, EntryProps & Omit<React.HTMLAttributes<HTMLButtonElement>, "onSelect">>(function GalleryTile({ entry, isSelected, decoration, onSelect, onOpen, ...rest }, ref) {
   const Icon = ICONS[entry.kind];
   const [thumbFailed, setThumbFailed] = useState(false);
   const { dragProps, isDropTarget } = useDropTarget(entry);
@@ -295,6 +420,8 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSe
 
   return (
     <button
+      ref={ref}
+      {...rest}
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
@@ -334,14 +461,16 @@ const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSe
       <span className="truncate px-1 text-2xs text-muted-foreground">{meta}</span>
     </button>
   );
-};
+});
 
-const ListRow: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSelect, onOpen }) => {
+const ListRow = forwardRef<HTMLButtonElement, EntryProps & Omit<React.HTMLAttributes<HTMLButtonElement>, "onSelect">>(function ListRow({ entry, isSelected, decoration, onSelect, onOpen, ...rest }, ref) {
   const Icon = ICONS[entry.kind];
   const { dragProps, isDropTarget } = useDropTarget(entry);
 
   return (
     <button
+      ref={ref}
+      {...rest}
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
@@ -371,7 +500,7 @@ const ListRow: React.FC<EntryProps> = ({ entry, isSelected, decoration, onSelect
       </span>
     </button>
   );
-};
+});
 
 function useDropTarget(entry: DiskEntry) {
   const [isDropTarget, setIsDropTarget] = useState(false);

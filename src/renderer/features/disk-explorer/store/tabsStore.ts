@@ -21,8 +21,10 @@ export interface TabsState {
   /** @deprecated Task 7: active tab may still point at a preview adapter. */
   activePath: string | null;
   /**
-   * The single italic "preview" tab, replaced by the next single-click.
-   * Finder and VS Code both work this way: browsing must not litter the strip.
+   * The single italic "preview" tab, replaced by the next single click. It is
+   * shown like any other tab; double-clicking, opening explicitly or editing
+   * pins it. Cursor and VS Code both work this way: browsing must not litter
+   * the strip.
    */
   previewPath: string | null;
   /** Most recently closed first; Cmd+Shift+T reopens the head. Session only. */
@@ -32,7 +34,7 @@ export interface TabsState {
 export interface TabsActions {
   /** Canonical explicit open action. Real opened files are the only target model. */
   openFile: (path: string) => void;
-  /** @deprecated Task 7: temporary selection-driven preview-tab adapter. */
+  /** Opens a file in the preview slot, replacing whatever previewed before. */
   openPreview: (path: string) => void;
   /** @deprecated Task 7: use openFile. */
   openPinned: (path: string) => void;
@@ -99,23 +101,16 @@ function openFileState(
   };
 }
 
-/** A preview tab is not an explicitly opened file. Task 7 removes that case. */
+/** The file the focus surface shows, preview or pinned. */
 export function selectOpenedPath(state: TabsState): string | null {
-  return state.openedPath &&
-    state.openedPath !== state.previewPath &&
-    state.openPaths.includes(state.openedPath)
-    ? state.openedPath
-    : null;
+  return state.openedPath && state.openPaths.includes(state.openedPath) ? state.openedPath : null;
 }
 
 function activationState(
-  state: TabsState,
+  _state: TabsState,
   path: string
 ): Pick<TabsState, 'activePath' | 'openedPath'> {
-  return {
-    activePath: path,
-    openedPath: path === state.previewPath ? state.openedPath : path,
-  };
+  return { activePath: path, openedPath: path };
 }
 
 function nearestRealPath(
@@ -170,7 +165,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
     set((state) => {
       const normalizedPath = normalizeFsPath(path);
       if (state.openPaths.includes(normalizedPath)) {
-        return { activePath: normalizedPath };
+        return { activePath: normalizedPath, openedPath: normalizedPath };
       }
 
       // Swap the outgoing preview in place so the tab does not jump position.
@@ -183,6 +178,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
       const next = {
         openPaths,
         activePath: normalizedPath,
+        openedPath: normalizedPath,
         previewPath: normalizedPath,
       };
       persist({ ...state, ...next });
@@ -194,11 +190,7 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
   pin: (path) =>
     set((state) => {
       if (state.previewPath !== path) return {};
-      const next: Pick<TabsState, 'previewPath' | 'openedPath'> = {
-        previewPath: null,
-        openedPath:
-          state.activePath === path ? path : state.openedPath,
-      };
+      const next: Pick<TabsState, 'previewPath'> = { previewPath: null };
       persist({ ...state, ...next });
       return next;
     }),

@@ -142,7 +142,7 @@ describe('DiskExplorer', () => {
     expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
-    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
     fireEvent.keyDown(window, { code: 'Space' });
 
     expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
@@ -154,7 +154,7 @@ describe('DiskExplorer', () => {
     render(<DiskExplorer />);
 
     await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
-    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
     fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
 
     expect(useTabsStore.getState().openedPath).toBe(`${PHOTOS}/a.jpg`);
@@ -174,7 +174,7 @@ describe('DiskExplorer', () => {
     render(<DiskExplorer />);
 
     await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
-    await user.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'));
+    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
     fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
     expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
 
@@ -206,7 +206,7 @@ describe('DiskExplorer', () => {
 
     await user.click(screen.getByTestId('disk-tree-item-/Vault/Photos'));
     const tile = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
-    await user.click(tile);
+    fireEvent.click(tile, { metaKey: true });
 
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(useDiskStore.getState().pendingAction).toEqual({
@@ -229,7 +229,7 @@ describe('DiskExplorer', () => {
 
     render(<DiskExplorer />);
     const row = screen.getByTestId('disk-folder-entry-/Vault/note.md');
-    await user.click(row);
+    fireEvent.click(row, { metaKey: true });
     expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
 
     fireEvent.keyDown(window, { key: 'Enter' });

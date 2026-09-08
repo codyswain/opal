@@ -8,6 +8,8 @@ export interface FilesNavigationActions {
   /** Browse Recent or a query collection; records no activity. */
   navigateCollection(collection: FilesCollection): void;
   openFile(path: string): void;
+  /** Single-click open: the file takes the preview slot until it is pinned. */
+  previewFile(path: string): void;
   returnToFolder(): void;
   closeFile(path: string): void;
 }
@@ -23,6 +25,9 @@ const localActions: FilesNavigationActions = {
   },
   openFile(path) {
     useTabsStore.getState().openFile(path);
+  },
+  previewFile(path) {
+    useTabsStore.getState().openPreview(path);
   },
   returnToFolder() {
     useTabsStore.setState({ openedPath: null, activePath: null });

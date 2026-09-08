@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
@@ -128,7 +128,7 @@ describe('QueryView', () => {
     const user = userEvent.setup();
     renderQuery(id);
     await screen.findByTestId(`disk-folder-entry-${PDF}`);
-    await user.click(screen.getByTestId(`disk-folder-entry-${PDF}`));
+    fireEvent.click(screen.getByTestId(`disk-folder-entry-${PDF}`), { metaKey: true });
     await user.selectOptions(screen.getByLabelText('Add filter'), 'name');
     const input = screen.getByLabelText('Name value');
     await user.type(input, 'atl{Enter}');
@@ -501,7 +501,7 @@ describe('view polish', () => {
     const user = userEvent.setup();
     renderQuery(id);
     expect(await screen.findByRole('button', { name: 'Show in folder' })).toBeDisabled();
-    await user.click(screen.getByTestId(`disk-folder-entry-${PDF}`));
+    fireEvent.click(screen.getByTestId(`disk-folder-entry-${PDF}`), { metaKey: true });
     await user.click(screen.getByRole('button', { name: 'Show in folder' }));
     await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe('/Vault/Papers'));
     await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([PDF]));
@@ -537,7 +537,7 @@ describe('view polish', () => {
     const id = useViewDraftsStore.getState().create();
     const user = userEvent.setup();
     renderQuery(id);
-    await user.click(await screen.findByTestId(`disk-folder-entry-${PDF}`));
+    fireEvent.click(await screen.findByTestId(`disk-folder-entry-${PDF}`), { metaKey: true });
     expect(screen.getByTestId('detail-title')).toHaveTextContent('atlas.pdf');
     act(() => changed?.());
     await waitFor(() => expect(screen.queryByTestId(`disk-folder-entry-${PDF}`)).not.toBeInTheDocument());

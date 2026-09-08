@@ -26,6 +26,7 @@ import { useViewDraftsStore } from '../store/viewDraftsStore';
 import { useSavedViewsStore } from '../store/savedViewsStore';
 import { useCollectionQueryStore } from '../store/collectionQueryStore';
 import { useTabsStore } from '../store/tabsStore';
+import { useDocumentStatusStore } from '../store/documentStatusStore';
 import { DiskExplorer } from './DiskExplorer';
 
 /** Router owns navigation; snapshots own only the collection's transient state. */
@@ -81,6 +82,12 @@ export function FilesRoute() {
     [capture, navigate]
   );
 
+  const previewIntent = React.useRef<string | null>(null);
+  // Editing a previewed file keeps it, as in every editor with preview tabs.
+  React.useEffect(() => useDocumentStatusStore.subscribe((state) => {
+    const preview = useTabsStore.getState().previewPath;
+    if (preview && (state.statuses[preview] === 'dirty' || state.statuses[preview] === 'saving')) useTabsStore.getState().pin(preview);
+  }), []);
   React.useEffect(() => {
     useTabsStore.getState().hydrate();
     void useDiskStore.getState().loadRoots();
@@ -115,8 +122,12 @@ export function FilesRoute() {
     const state = useDiskStore.getState();
     const directory = collectionDirectory(next.collection);
     state.navigateToCollection(next.collection);
-    if (next.mode === 'focus') useTabsStore.getState().openFile(next.file);
-    else useTabsStore.setState({ openedPath: null, activePath: null });
+    if (next.mode === 'focus') {
+      // A single click asked for the preview slot; anything else (restore, Back, explicit open) pins.
+      if (previewIntent.current === next.file) useTabsStore.getState().openPreview(next.file);
+      else useTabsStore.getState().openFile(next.file);
+      previewIntent.current = null;
+    } else useTabsStore.setState({ openedPath: null, activePath: null });
     let cancelled = false;
     // Null means the directory could not be listed; Recent and query
     // collections always resolve to a (possibly empty) list and report their
@@ -307,6 +318,17 @@ export function FilesRoute() {
       openFile: (file) => {
         const collection = collectionForFile(file, currentCollection());
         if (!collection) return;
+        previewIntent.current = null;
+        // Pin now: when the file is already showing, the URL does not change
+        // and the apply effect would never run.
+        useTabsStore.getState().openFile(file);
+        recordOpened(file);
+        go({ mode: 'focus', collection, file });
+      },
+      previewFile: (file) => {
+        const collection = collectionForFile(file, currentCollection());
+        if (!collection) return;
+        previewIntent.current = file;
         recordOpened(file);
         go({ mode: 'focus', collection, file });
       },

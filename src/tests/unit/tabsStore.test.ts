@@ -31,30 +31,32 @@ describe('explicitly opened files', () => {
     expect(selectOpenedPath(state())).toBe(A);
   });
 
-  it('does not expose a temporary preview as opened content', () => {
+  it('shows a preview like any other tab', () => {
     state().openPreview(A);
 
-    expect(state().openedPath).toBeNull();
-    expect(selectOpenedPath(state())).toBeNull();
-  });
-
-  it('keeps explicitly opened content independent from preview selection', () => {
-    state().openFile(A);
-    state().openPreview(B);
-
-    expect(state().activePath).toBe(B);
     expect(state().openedPath).toBe(A);
+    expect(state().previewPath).toBe(A);
     expect(selectOpenedPath(state())).toBe(A);
   });
 
-  it('does not let the preview adapter replace Focus with an existing tab', () => {
+  it('previewing another file moves focus onto it and swaps the preview slot', () => {
+    state().openFile(A);
+    state().openPreview(B);
+    state().openPreview(C);
+
+    expect(state().openPaths).toEqual([A, C]);
+    expect(state().activePath).toBe(C);
+    expect(state().openedPath).toBe(C);
+  });
+
+  it('previewing a pinned tab activates it without touching the preview slot', () => {
     state().openFile(A);
     state().openFile(B);
     state().openPreview(A);
 
     expect(state().activePath).toBe(A);
-    expect(state().openedPath).toBe(B);
-    expect(selectOpenedPath(state())).toBe(B);
+    expect(state().openedPath).toBe(A);
+    expect(state().previewPath).toBeNull();
   });
 });
 

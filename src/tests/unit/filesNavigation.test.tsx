@@ -95,7 +95,8 @@ beforeEach(() => {
 });
 it('selects folders without navigating and supports multiple folder selection', async () => {
   await setup();
-  fireEvent.click(item(FOLDER));
+  // A plain click opens a folder; ⌘-click only selects it, as in Finder.
+  fireEvent.click(item(FOLDER), { metaKey: true });
   expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
   expect(item(NOTE)).toBeVisible();
   fireEvent.click(item('/Vault/Other'), { ctrlKey: true });
@@ -107,7 +108,7 @@ it('selects folders without navigating and supports multiple folder selection', 
 });
 it('shows the selected file in an explicitly opened preview without a tab or route change', async () => {
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   expect(screen.getByTestId('detail-title')).toHaveTextContent('brief.md');
   expect(useTabsStore.getState().openPaths).toEqual([]);
@@ -115,7 +116,7 @@ it('shows the selected file in an explicitly opened preview without a tab or rou
 });
 it('opens a folder explicitly and Back restores its selection', async () => {
   await setup();
-  fireEvent.click(item(FOLDER));
+  fireEvent.click(item(FOLDER), { metaKey: true });
   fireEvent.doubleClick(item(FOLDER));
   await waitFor(() =>
     expect(useDiskStore.getState().currentDirectory).toBe(FOLDER)
@@ -132,7 +133,7 @@ it('opens a folder explicitly and Back restores its selection', async () => {
 });
 it('explicit file open occupies the main surface and return restores browse selection', async () => {
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
   expect(screen.queryByTestId('disk-folder-list')).toBeNull();
@@ -144,7 +145,7 @@ it('explicit file open occupies the main surface and return restores browse sele
 });
 it('Cmd+Down opens while Space previews and Return renames', async () => {
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.keyDown(item(NOTE), { key: ' ', code: 'Space' });
   expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
   expect(useTabsStore.getState().openPaths).toEqual([]);
@@ -274,7 +275,7 @@ it('ignores late focused-file stat responses and never falls back to a selected 
       : Promise.resolve({ success: false as const, error: 'Missing' })
   );
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   act(() => useTabsStore.getState().openFile('/Vault/a.txt'));
   fireEvent.click(screen.getByTestId('tab-/Vault/a.txt'));
   await screen.findByTestId('files-focus');
@@ -323,7 +324,7 @@ it('closed roots clear the live focused surface', async () => {
 });
 it('shortcuts respect independent controls, contenteditable and handled events', async () => {
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   for (const target of [
     screen.getByText('Back'),
     Object.assign(document.createElement('div'), { contentEditable: 'true' }),
@@ -413,13 +414,13 @@ it('finishes initial loading when URL canonicalization happens during a delayed 
 });
 it('Quick Preview is modeless and leaves the collection available', async () => {
   await setup();
-  fireEvent.click(item(NOTE));
+  fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.keyDown(item(NOTE), { key: ' ', code: 'Space' });
   expect(screen.getByRole('dialog', { name: 'brief.md' })).toHaveAttribute(
     'aria-modal',
     'false'
   );
-  fireEvent.click(item(FOLDER));
+  fireEvent.click(item(FOLDER), { metaKey: true });
   expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
 });
 it('activates tabs in another allowed root using that file’s folder', async () => {
@@ -444,7 +445,9 @@ it.each(['list', 'gallery'])(
     await setup();
     await user.click(screen.getByTestId('disk-folder-view-' + mode));
     const row = item(FOLDER);
+    await user.keyboard('{Meta>}');
     await user.click(row);
+    await user.keyboard('{/Meta}');
     expect(item(FOLDER)).toBe(row);
     expect(row).toHaveFocus();
   }
@@ -460,7 +463,6 @@ it.each([
     const user = userEvent.setup();
     await setup();
     await user.click(screen.getByTestId('disk-folder-view-' + mode));
-    await user.click(item(path));
     await user.dblClick(item(path));
     if (path === FOLDER) await screen.findByTestId('disk-folder-empty');
     else await screen.findByTestId('files-focus');
@@ -491,7 +493,7 @@ it.each(['list', 'gallery'])(
     await setup();
     fireEvent.click(screen.getByTestId('disk-folder-view-' + mode));
     const handlesBeforeSelection = screen.queryAllByRole('separator').length;
-    fireEvent.click(item(NOTE));
+    fireEvent.click(item(NOTE), { metaKey: true });
     expect(screen.queryAllByRole('separator')).toHaveLength(
       handlesBeforeSelection
     );

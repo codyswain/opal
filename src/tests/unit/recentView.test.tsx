@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
@@ -105,13 +105,14 @@ describe('RecentView', () => {
     const user = userEvent.setup();
     renderAt('?mode=browse&collection=recent');
     const row = await screen.findByTestId(`disk-folder-entry-${NOTE}`);
+    // One click is enough to open; the result takes the preview slot.
     await user.click(row);
-    await user.dblClick(row);
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
         `?mode=focus&collection=recent&file=${encodeURIComponent(NOTE)}`
       )
     );
+    expect(useTabsStore.getState().previewPath).toBe(NOTE);
     expect(window.activityAPI.record).toHaveBeenCalledTimes(1);
     expect(window.activityAPI.record).toHaveBeenCalledWith(NOTE, 'opened');
     await user.click(await screen.findByRole('button', { name: /^Return to folder/ }));
@@ -128,8 +129,10 @@ describe('RecentView', () => {
     renderAt('?mode=browse&collection=recent');
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
     await user.click(row);
-    await user.dblClick(row);
     await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(PDF));
+    // The list is replaced by the file, so a list double-click cannot pin;
+    // the tab, editing, or an explicit Open do that.
+    expect(useTabsStore.getState().previewPath).toBe(PDF);
     await user.click(screen.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' }));
     await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([PDF]));
@@ -140,7 +143,7 @@ describe('RecentView', () => {
     const user = userEvent.setup();
     renderAt('?mode=browse&collection=recent');
     expect(await screen.findByRole('button', { name: 'Show in folder' })).toBeDisabled();
-    await user.click(screen.getByTestId(`disk-folder-entry-${NOTE}`));
+    fireEvent.click(screen.getByTestId(`disk-folder-entry-${NOTE}`), { metaKey: true });
     await user.click(screen.getByRole('button', { name: 'Show in folder' }));
     await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(NOTES));
     await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([NOTE]));
