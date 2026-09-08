@@ -1,9 +1,5 @@
 import React, { useEffect } from "react";
-import {
-  HashRouter as Router,
-  Navigate,
-  useRoutes,
-} from "react-router-dom";
+import { HashRouter as Router, Navigate, useRoutes } from "react-router-dom";
 import "@/renderer/styles/index.css";
 
 import { ThemeProvider } from "@/renderer/features/theme";
@@ -16,6 +12,9 @@ import { FilesRoute } from "@/renderer/features/disk-explorer";
 import { ChatRoute } from "@/renderer/features/chat";
 import { TodayRoute } from "@/renderer/features/today/TodayRoute";
 import { JournalDraftGuard } from "@/renderer/features/today/JournalDraftGuard";
+import { PrivacyBoundary } from "@/renderer/features/privacy/PrivacyBoundary";
+import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
+import { COMMAND_IDS } from "@/common/commandIds";
 import {
   AppShell,
   ShellProvider,
@@ -29,7 +28,10 @@ const FILES_ROUTE: ShellRouteDescriptor = {
   header: { title: "Files" },
 };
 
-const TODAY_ROUTE: ShellRouteDescriptor = { id: "today", header: { title: "Today" } };
+const TODAY_ROUTE: ShellRouteDescriptor = {
+  id: "today",
+  header: { title: "Today" },
+};
 
 const CHAT_ROUTE: ShellRouteDescriptor = {
   id: "chat",
@@ -86,6 +88,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
+      if (
+        usePrivacyStore.getState().shielded &&
+        commandId !== COMMAND_IDS.togglePrivacy
+      )
+        return;
       try {
         commandRegistry.executeCommand(commandId);
       } catch (error) {
@@ -102,18 +109,17 @@ const App: React.FC = () => {
     <Router>
       <ThemeProvider>
         <TooltipProvider>
-          <Toaster />
-          <ShellProvider
-            routes={APP_ROUTES}
-            fallbackRoute={FALLBACK_ROUTE}
-          >
-            <AppCommands />
-            <JournalDraftGuard />
-            <CommandPalette />
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-          </ShellProvider>
+          <PrivacyBoundary>
+            <Toaster />
+            <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
+              <AppCommands />
+              <JournalDraftGuard />
+              <CommandPalette />
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </ShellProvider>
+          </PrivacyBoundary>
         </TooltipProvider>
       </ThemeProvider>
     </Router>

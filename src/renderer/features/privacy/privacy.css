@@ -1,0 +1,71 @@
+/* Radix menus, tooltips and toasts can be siblings of the application root. */
+body[data-opal-shield="true"] > *:not([data-opal-privacy-shield]) {
+  display: none !important;
+}
+.opal-privacy-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--canvas));
+  color: hsl(var(--text-primary));
+}
+.opal-privacy-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 44px;
+}
+.opal-privacy-message {
+  text-align: center;
+  max-width: 440px;
+  padding: 32px;
+}
+.opal-privacy-emblem {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: 50%;
+  margin: 0 auto 24px;
+  color: hsl(var(--text-secondary));
+}
+.opal-privacy-wordmark {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: hsl(var(--text-tertiary));
+  margin-bottom: 18px;
+}
+.opal-privacy-message h1 {
+  font:
+    400 32px/1.2 Georgia,
+    serif;
+  letter-spacing: -0.035em;
+  margin-bottom: 14px;
+}
+.opal-privacy-message > p:not(.opal-privacy-wordmark) {
+  color: hsl(var(--text-secondary));
+  font-size: 13px;
+  line-height: 1.7;
+}
+.opal-privacy-message button {
+  display: block;
+  border: 1px solid hsl(var(--border-default));
+  background: hsl(var(--surface));
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 30px auto 16px;
+}
+.opal-privacy-message button:hover {
+  background: hsl(var(--surface-hover));
+}
+.opal-privacy-message button:focus-visible {
+  outline: 2px solid hsl(var(--focus));
+  outline-offset: 4px;
+}
+.opal-privacy-shortcut {
+  color: hsl(var(--text-tertiary));
+  font-size: 10px;
+}

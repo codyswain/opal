@@ -5,8 +5,8 @@ import {
   FolderPlus,
   Gem,
   PanelLeftClose,
-} from 'lucide-react';
-import { basenameFsPath } from '@/common/fsPaths';
+} from "lucide-react";
+import { basenameFsPath } from "@/common/fsPaths";
 import {
   IconButton,
   Menu,
@@ -15,7 +15,7 @@ import {
   MenuLabel,
   MenuSeparator,
   MenuTrigger,
-} from '@/renderer/shared/ui';
+} from "@/renderer/shared/ui";
 
 interface WorkspaceHeaderProps {
   roots: readonly string[];
@@ -43,11 +43,11 @@ export function WorkspaceHeader({
             aria-label={
               rootName
                 ? `Choose workspace folder, current ${rootName}`
-                : 'Choose workspace folder'
+                : "Choose workspace folder"
             }
             className="no-drag flex h-control min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left outline-none transition-colors duration-hover ease-standard hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-focus"
           >
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-gradient-primary text-white">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-surface-selected text-foreground">
               <Gem aria-hidden className="h-3 w-3" />
             </span>
             <span className="min-w-0 flex-1 truncate font-medium text-foreground">

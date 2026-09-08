@@ -1,3 +1,5 @@
+import { VaultService } from "@/main/vault/VaultService";
+import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import {
   app,
   BrowserWindow,
@@ -49,7 +51,11 @@ import { OpenAI } from "openai";
 import { CredentialAccount } from "@/types/credentials";
 import { LibraryTextIndex } from "@/main/chat/LibraryTextIndex";
 import { OpenAIEmbeddingProvider } from "@/main/chat/EmbeddingProvider";
-import { ChatError, ChatService, openAICompletionClient } from "@/main/chat/ChatService";
+import {
+  ChatError,
+  ChatService,
+  openAICompletionClient,
+} from "@/main/chat/ChatService";
 import { ChatHandlers } from "@/main/chat/ChatHandlers";
 import { ViewRepository } from "@/main/views/ViewRepository";
 import { ViewHandlers } from "@/main/views/ViewHandlers";
@@ -106,7 +112,7 @@ app.setName("Opal");
 
 const createWindow = () => {
   log.info(
-    `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`
+    `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`,
   );
 
   const displays = screen.getAllDisplays().map((display) => display.workArea);
@@ -157,7 +163,10 @@ const createWindow = () => {
       // after a restart restores a useful size rather than a full-screen one.
       const { x, y, width, height } = mainWindow.getNormalBounds();
       void windowStateStore.save({
-        x, y, width, height,
+        x,
+        y,
+        width,
+        height,
         isMaximized: mainWindow.isMaximized(),
       });
     }, 400);
@@ -173,7 +182,10 @@ const createWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { x, y, width, height } = mainWindow.getNormalBounds();
     void windowStateStore.save({
-      x, y, width, height,
+      x,
+      y,
+      width,
+      height,
       isMaximized: mainWindow.isMaximized(),
     });
   });
@@ -186,7 +198,7 @@ const createWindow = () => {
           "Content-Security-Policy": [CSP],
         },
       });
-    }
+    },
   );
 
   const loadPage = () => {
@@ -213,11 +225,11 @@ const createWindow = () => {
         } catch (pathErr) {
           // Fallback approach if the above fails
           log.warn(
-            `Error with standard path, trying fallback: ${pathErr.message}`
+            `Error with standard path, trying fallback: ${pathErr.message}`,
           );
           const fallbackPath = path.join(
             __dirname,
-            "../renderer/main_window/index.html"
+            "../renderer/main_window/index.html",
           );
           log.info(`Loading fallback file: ${fallbackPath}`);
           mainWindow.loadFile(fallbackPath);
@@ -227,7 +239,7 @@ const createWindow = () => {
       log.error(`Failed to load page: ${err.message}`);
       dialog.showErrorBox(
         "Loading Error",
-        `Failed to load application: ${err.message}`
+        `Failed to load application: ${err.message}`,
       );
     }
   };
@@ -261,7 +273,7 @@ const createWindow = () => {
       "Opening DevTools - development mode:",
       isDevelopment,
       "forceDevTools:",
-      forceDevTools
+      forceDevTools,
     );
   }
 
@@ -273,7 +285,7 @@ const createWindow = () => {
     "did-fail-load",
     (_, errorCode, errorDescription) => {
       log.error(`Failed to load page: ${errorCode} - ${errorDescription}`);
-    }
+    },
   );
 
   mainWindow.on("closed", () => {
@@ -322,7 +334,8 @@ const credentialHandlers = new CredentialHandlers({
 // OPAL_TEST_USER_DATA_DIR lets the E2E suite point every store at a temp
 // directory. Without it, tests would write into the real app's user data and
 // corrupt the user's actual list of opened folders.
-const userDataDir = process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData");
+const userDataDir =
+  process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData");
 const windowStateStore = new WindowStateStore({
   storePath: path.join(userDataDir, "window-state.json"),
 });
@@ -331,7 +344,10 @@ const appMenu = new AppMenu({
   menu: Menu,
   appName: app.getName(),
   send: (commandId) => {
-    BrowserWindow.getFocusedWindow()?.webContents.send("menu:invoke", commandId);
+    BrowserWindow.getFocusedWindow()?.webContents.send(
+      "menu:invoke",
+      commandId,
+    );
   },
 });
 
@@ -349,7 +365,9 @@ const rootRegistry = new RootRegistry({
   storePath: path.join(userDataDir, "disk-roots.json"),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
-const activityStore = new ActivityStore({ storePath: activityStorePath(userDataDir) });
+const activityStore = new ActivityStore({
+  storePath: activityStorePath(userDataDir),
+});
 // Collections re-evaluate after index, root or activity changes; one coalesced
 // event covers all three so the renderer never reloads twice for one cause.
 let collectionsChangedTimer: NodeJS.Timeout | null = null;
@@ -386,8 +404,11 @@ const viewRepository = new ViewRepository({
 // conversations, both under the library directory. The OpenAI key is read
 // from the keychain at call time so Settings changes apply immediately.
 const openAIClient = async () => {
-  const key = await CredentialManager.getInstance().getCredential(CredentialAccount.OPENAI);
-  if (!key) throw new ChatError("Add your OpenAI API key in Settings to use Chat.");
+  const key = await CredentialManager.getInstance().getCredential(
+    CredentialAccount.OPENAI,
+  );
+  if (!key)
+    throw new ChatError("Add your OpenAI API key in Settings to use Chat.");
   return new OpenAI({ apiKey: key });
 };
 const libraryTextIndex = new LibraryTextIndex({
@@ -404,7 +425,10 @@ const chatService = new ChatService({
   index: libraryTextIndex,
   clients: async () => {
     const client = await openAIClient();
-    return { embeddings: new OpenAIEmbeddingProvider(client), completions: openAICompletionClient(client) };
+    return {
+      embeddings: new OpenAIEmbeddingProvider(client),
+      completions: openAICompletionClient(client),
+    };
   },
 });
 const collectionQueryService = new CollectionQueryService({
@@ -429,6 +453,16 @@ const markdownDocuments = new MarkdownDocumentService({
   registry: rootRegistry,
   metadata: metadataService,
   activity: activityService,
+});
+const vaultService = new VaultService({
+  registry: rootRegistry,
+  reader: diskReader,
+  markdown: markdownDocuments,
+  draftDirectory: path.join(userDataDir, "journal-drafts"),
+});
+const vaultHandlers = new VaultHandlers({
+  ipc: ipcMain,
+  service: vaultService,
 });
 const fileWriter = new FileWriter({
   registry: rootRegistry,
@@ -508,7 +542,7 @@ app.whenReady().then(async () => {
     } catch (error) {
       log.error(
         "Failed to watch the views directory; external view edits will not refresh until restart",
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
     for (const root of rootRegistry.list()) {
@@ -517,7 +551,7 @@ app.whenReady().then(async () => {
       } catch (error) {
         log.error(
           `Failed to start disk watcher for ${root}; continuing without live updates for that root`,
-          error instanceof Error ? error : undefined
+          error instanceof Error ? error : undefined,
         );
       }
     }
@@ -529,6 +563,7 @@ app.whenReady().then(async () => {
     collectionHandlers.registerAll();
     viewHandlers.registerAll();
     markdownHandlers.registerAll();
+    vaultHandlers.registerAll();
     chatHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
@@ -541,7 +576,7 @@ app.whenReady().then(async () => {
     log.error(`Error during app setup: ${error}`);
     dialog.showErrorBox(
       "Initialization Error",
-      `Failed to initialize the application: ${error.message}`
+      `Failed to initialize the application: ${error.message}`,
     );
   }
 });
