@@ -14,6 +14,8 @@ import { AppCommands, CommandPalette } from "@/renderer/features/commands";
 import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
 import { FilesRoute } from "@/renderer/features/disk-explorer";
 import { ChatRoute } from "@/renderer/features/chat";
+import { TodayRoute } from "@/renderer/features/today/TodayRoute";
+import { JournalDraftGuard } from "@/renderer/features/today/JournalDraftGuard";
 import {
   AppShell,
   ShellProvider,
@@ -26,6 +28,8 @@ const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
   header: { title: "Files" },
 };
+
+const TODAY_ROUTE: ShellRouteDescriptor = { id: "today", header: { title: "Today" } };
 
 const CHAT_ROUTE: ShellRouteDescriptor = {
   id: "chat",
@@ -45,9 +49,10 @@ const FALLBACK_ROUTE: ShellRouteDescriptor = {
 const APP_ROUTES: ShellRouteObject[] = [
   {
     path: "/",
-    element: <Navigate to="/files" replace />,
-    handle: { shell: FILES_ROUTE },
+    element: <Navigate to="/today" replace />,
+    handle: { shell: TODAY_ROUTE },
   },
+  { path: "/today", element: <TodayRoute />, handle: { shell: TODAY_ROUTE } },
   {
     path: "/files",
     element: <FilesRoute />,
@@ -69,8 +74,8 @@ const APP_ROUTES: ShellRouteObject[] = [
   },
   {
     path: "*",
-    element: <Navigate to="/files" replace />,
-    handle: { shell: FILES_ROUTE },
+    element: <Navigate to="/today" replace />,
+    handle: { shell: TODAY_ROUTE },
   },
 ];
 
@@ -103,6 +108,7 @@ const App: React.FC = () => {
             fallbackRoute={FALLBACK_ROUTE}
           >
             <AppCommands />
+            <JournalDraftGuard />
             <CommandPalette />
             <AppShell>
               <AppRoutes />
