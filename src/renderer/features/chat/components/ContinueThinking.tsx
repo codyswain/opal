@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowUpRight, MessageSquare } from 'lucide-react';
+import { ArrowUpRight, MessageSquare, Pin } from 'lucide-react';
 import type { ConversationSummary } from '@/types/chat';
 import { useShell } from '@/renderer/features/shell';
 import { useChatStore } from '../store/chatStore';
@@ -14,7 +14,7 @@ export function ContinueThinking() {
     let current = true;
     if (!window.chatAPI?.list) return;
     void window.chatAPI.list().then((response) => {
-      if (current && response.success) setThreads(response.data.filter((item) => !item.archivedAt).slice(0, 3));
+      if (current && response.success) setThreads(response.data.filter((item) => !item.archivedAt).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt).slice(0, 3));
     }).catch(() => undefined);
     return () => { current = false; };
   }, []);
@@ -27,7 +27,7 @@ export function ContinueThinking() {
         if (useChatStore.getState().active?.id === thread.id) navigateTo('/chat');
         else setError(true);
       } catch { setError(true); }
-    })()}><MessageSquare size={14} /><span><strong>{thread.title}</strong><small>{formatRelativeTime(thread.updatedAt, Date.now())}</small></span><ArrowUpRight size={13} /></button>)}</div>
+    })()}>{thread.pinnedAt != null ? <Pin size={14} aria-label="Pinned" /> : <MessageSquare size={14} />}<span><strong>{thread.title}</strong><small>{formatRelativeTime(thread.updatedAt, Date.now())}</small></span><ArrowUpRight size={13} /></button>)}</div>
     {error && <p role="alert">This thread could not be opened. Try again in Threads.</p>}
   </section>;
 }

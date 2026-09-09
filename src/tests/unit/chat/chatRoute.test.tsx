@@ -37,10 +37,29 @@ beforeEach(() => {
 });
 
 describe('ChatRoute', () => {
+  it('hides the list without losing a draft and remembers the preference', async () => {
+    const api = installChatApi();
+    const user = userEvent.setup();
+    const view = renderChat();
+    const composer = screen.getByLabelText('Ask about your library');
+    await waitFor(() => expect(composer).toBeEnabled());
+    await user.type(composer, 'A thought to keep');
+    await user.click(screen.getByRole('button', { name: 'Hide thread list' }));
+    expect(screen.queryByRole('complementary', { name: 'Threads' })).not.toBeInTheDocument();
+    expect(composer).toHaveValue('A thought to keep');
+    view.unmount();
+    renderChat();
+    expect(screen.getByRole('button', { name: 'Show thread list' })).toHaveAttribute('aria-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: 'Show thread list' }));
+    expect(screen.getByRole('complementary', { name: 'Threads' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Ask about your library')).toHaveValue('A thought to keep');
+    expect(api.ask).not.toHaveBeenCalled();
+  });
   it('explains an unindexed library, indexes on request, and points to Settings when the key is missing', async () => {
     const api = installChatApi();
     const user = userEvent.setup();
     renderChat();
+    await user.click(screen.getByRole('button', { name: 'Library context' }));
     expect(await screen.findByText(/not indexed yet/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Index library' }));
     await waitFor(() => expect(api.indexUpdate).toHaveBeenCalled());
@@ -57,10 +76,11 @@ describe('ChatRoute', () => {
     await waitFor(() => expect(within(bar).getByRole('status')).toHaveTextContent('Embedding passages 20 of 80 · atlas.pdf'));
     expect(screen.getByRole('progressbar', { name: 'Indexing progress' })).toHaveAttribute('aria-valuenow', '25');
     expect(screen.queryByRole('button', { name: /Index library|Update index/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Library context' }));
     await user.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(api.indexCancel).toHaveBeenCalled());
     api.setStatus({ ready: true, files: 12, chunks: 40, cancelled: true, staleFiles: 60, skipped: [{ path: '/Vault/Papers/scan.pdf', reason: 'no text layer (scanned document?)' }] });
-    expect(await screen.findByText(/stopped early/)).toBeInTheDocument();
+    expect(await screen.findByText(/Indexing stopped early/)).toBeInTheDocument();
     expect(screen.getByText(/60 changes since/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '1 file skipped' }));
     expect(await screen.findByText('no text layer (scanned document?)')).toBeInTheDocument();
@@ -75,7 +95,7 @@ describe('ChatRoute', () => {
     });
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/2 files, 5 passages/);
+    await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toBeEnabled());
     const composer = screen.getByLabelText('Ask about your library');
     await user.type(composer, 'What maps the mountains?{Enter}');
     expect(await screen.findByTestId('chat-message-user')).toHaveTextContent('What maps the mountains?');
@@ -177,7 +197,7 @@ it('preserves a draft written before any conversation exists when a task arrives
   const api = installChatApi();
   const user = userEvent.setup();
   const view = renderChat();
-  await screen.findByText(/not indexed yet/);
+  await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toBeEnabled());
   await user.type(screen.getByLabelText('Ask about your library'), 'An unsaved thought');
   view.unmount();
   useChatHandoffStore.getState().prepare({ title: 'New task', date: '2026-09-08' });

@@ -88,6 +88,7 @@ function summarize(conversation: Conversation): ConversationSummary {
     title: conversation.title,
     context: conversation.context,
     archivedAt: conversation.archivedAt,
+    pinnedAt: conversation.pinnedAt,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
@@ -107,7 +108,7 @@ export class ChatService {
   constructor(private deps: ChatServiceDependencies) { this.repository = new ChatRepository(deps.directory); }
 
   async list(): Promise<ConversationSummary[]> {
-    return (await this.repository.list()).map(summarize).sort((left, right) => right.updatedAt - left.updatedAt);
+    return (await this.repository.list()).map(summarize).sort((left, right) => Number(right.pinnedAt != null) - Number(left.pinnedAt != null) || right.updatedAt - left.updatedAt);
   }
   async get(id: unknown): Promise<Conversation | null> { return this.repository.read(validId(id)); }
   create(options: unknown = {}): Promise<Conversation> {
@@ -121,13 +122,18 @@ export class ChatService {
   }
   update(id: unknown, patch: unknown): Promise<Conversation> {
     return this.serialize(async () => {
-      const data = record(patch, ['title', 'archived']);
+      const data = record(patch, ['title', 'archived', 'pinned']);
       const conversation = await this.required(id);
       if (data.title !== undefined) { conversation.title = textValue(data.title, 200).trim(); conversation.titleIsManual = true; }
       if (data.archived !== undefined) {
         if (typeof data.archived !== 'boolean') throw new ChatError('Invalid archive state.');
         if (data.archived) conversation.archivedAt = (this.deps.now ?? Date.now)();
         else delete conversation.archivedAt;
+      }
+      if (data.pinned !== undefined) {
+        if (typeof data.pinned !== 'boolean') throw new ChatError('Invalid pin state.');
+        if (data.pinned) conversation.pinnedAt ??= (this.deps.now ?? Date.now)();
+        else delete conversation.pinnedAt;
       }
       conversation.updatedAt = (this.deps.now ?? Date.now)();
       await this.repository.write(conversation);

@@ -27,3 +27,12 @@ lose the newest edit; the saved indicator is the durability boundary.
 AI receives messages only on Send. Resuming a thread does not transmit content.
 The current model context remains the most recent nine messages plus retrieved
 sources; persistent history is not a claim of unlimited model memory.
+
+Pinned threads stay above other threads in the list and in Today’s continuation
+section. Pinning is stored with the conversation and survives app restarts;
+archiving keeps the pin for when the thread is restored.
+
+The thread list can be hidden, and its visibility is remembered on this Mac.
+Small windows begin with the list hidden. The composer grows with the draft and
+can expand into a writing room. Library indexing details and explicit controls
+are available from Library context. Opening that control does not index files.

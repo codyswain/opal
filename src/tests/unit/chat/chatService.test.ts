@@ -91,12 +91,33 @@ describe('ChatService', () => {
     await service.update(conversation.id, { title: 'My research', archived: true });
     const drafts = { drafts: { [conversation.id]: 'Unsent thought', new: 'Scratch thought' }, pending: [context] };
     await service.saveDraftState(drafts);
-    const reloaded = new ChatService({ directory: path.join(tmp, 'library', 'chat'), index, clients: async () => { throw new Error('Must not call AI'); } });
+    const reloaded = new ChatService({ directory: path.join(tmp, 'library', 'chat'), index, now: () => now++, clients: async () => { throw new Error('Must not call AI'); } });
     expect(await reloaded.getDraftState()).toEqual(drafts);
     expect(await reloaded.get(conversation.id)).toMatchObject({ title: 'My research', context, archivedAt: expect.any(Number) });
     expect(await reloaded.list()).toHaveLength(1);
     await reloaded.update(conversation.id, { archived: false });
     expect((await reloaded.get(conversation.id))?.archivedAt).toBeUndefined();
+  });
+
+  it('persists pins independently of archives and sorts pins before newer threads', async () => {
+    noKey = true;
+    const first = await service.create({ title: 'First' });
+    const second = await service.create({ title: 'Second' });
+    const pinned = await service.update(first.id, { pinned: true });
+    expect(pinned.pinnedAt).toEqual(expect.any(Number));
+    expect((await service.update(first.id, { pinned: true })).pinnedAt).toBe(pinned.pinnedAt);
+    await service.update(second.id, { pinned: true });
+    const newest = await service.create({ title: 'Newest unpinned' });
+    expect((await service.list()).map((item) => item.id)).toEqual([second.id, first.id, newest.id]);
+    await service.update(first.id, { archived: true });
+    const reloaded = new ChatService({ directory: path.join(tmp, 'library', 'chat'), index, now: () => now++, clients: async () => { throw new Error('Must not call AI'); } });
+    expect(await reloaded.get(first.id)).toMatchObject({ pinnedAt: pinned.pinnedAt, archivedAt: expect.any(Number) });
+    expect((await reloaded.list())[0]).toMatchObject({ id: first.id, pinnedAt: pinned.pinnedAt });
+    const unpinned = await reloaded.update(first.id, { pinned: false });
+    expect(unpinned.pinnedAt).toBeUndefined();
+    expect(unpinned.archivedAt).toEqual(expect.any(Number));
+    expect((await reloaded.list()).map((item) => item.id)).toEqual([second.id, first.id, newest.id]);
+    await expect(reloaded.update(first.id, { pinned: 'yes' })).rejects.toThrow();
   });
 
   it('preserves metadata edited while an answer streams', async () => {
@@ -110,10 +131,10 @@ describe('ChatService', () => {
     expect((await service.get(conversation.id))?.title).toBe('New conversation');
     await expect(service.ask(conversation.id, 'Another', () => undefined)).rejects.toThrow(/already/);
     await expect(service.remove(conversation.id)).rejects.toThrow(/answer/);
-    await service.update(conversation.id, { title: 'Renamed during answer', archived: true });
+    await service.update(conversation.id, { title: 'Renamed during answer', archived: true, pinned: true });
     finish('Answer');
-    await answer;
-    expect(await service.get(conversation.id)).toMatchObject({ title: 'Renamed during answer', archivedAt: expect.any(Number), messages: [expect.objectContaining({ role: 'user' }), expect.objectContaining({ role: 'assistant' })] });
+    expect((await answer).conversation.pinnedAt).toEqual(expect.any(Number));
+    expect(await service.get(conversation.id)).toMatchObject({ title: 'Renamed during answer', pinnedAt: expect.any(Number), archivedAt: expect.any(Number), messages: [expect.objectContaining({ role: 'user' }), expect.objectContaining({ role: 'assistant' })] });
   });
 
   it('rejects invalid metadata and refuses to overwrite corrupt drafts', async () => {

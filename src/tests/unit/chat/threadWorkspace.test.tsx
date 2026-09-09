@@ -13,6 +13,13 @@ const conversations: ConversationSummary[] = [
 ];
 
 describe('Thread workspace', () => {
+  it('prioritizes pinned threads and lets you unpin them', async () => {
+    const onPin = vi.fn();
+    render(<TooltipProvider><ConversationList conversations={[conversations[0], { ...conversations[0], id: 'p', title: 'Keep close', pinnedAt: 1, updatedAt: 1 }]} activeId="a" onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} onPin={onPin} /></TooltipProvider>);
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Keep close');
+    await userEvent.click(screen.getByRole('button', { name: 'Unpin thread Keep close' }));
+    expect(onPin).toHaveBeenCalledWith('p', false);
+  });
   it('recovers an unsent new-thread draft alongside saved threads', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

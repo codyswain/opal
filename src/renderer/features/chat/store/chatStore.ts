@@ -18,7 +18,7 @@ export interface ChatActions {
   load: () => Promise<void>;
   select: (id: string) => Promise<void>;
   startConversation: (options?: { title?: string; context?: ThreadContext }) => Promise<string | null>;
-  updateConversation: (id: string, patch: { title?: string; archived?: boolean }) => Promise<boolean>;
+  updateConversation: (id: string, patch: { title?: string; archived?: boolean; pinned?: boolean }) => Promise<boolean>;
   removeConversation: (id: string) => Promise<void>;
   send: (question: string, threadId?: string) => Promise<boolean>;
   cancel: () => void;
@@ -100,7 +100,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => ({ active: state.active?.id === id ? updated : state.active,
         conversations: state.conversations.map((item) => item.id === id ? { id: updated.id, title: updated.title,
           createdAt: updated.createdAt, updatedAt: updated.updatedAt, messageCount: updated.messages.length,
-          archivedAt: updated.archivedAt, context: updated.context } : item), error: null }));
+          archivedAt: updated.archivedAt, pinnedAt: updated.pinnedAt, context: updated.context } : item), error: null }));
       return true;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Could not update the thread.' });

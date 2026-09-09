@@ -1,10 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Database, RefreshCw, Square } from 'lucide-react';
+import { ChevronDown, Database, RefreshCw, Square } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { basenameFsPath } from '@/common/fsPaths';
 import { Button, Popover, PopoverContent, PopoverTrigger } from '@/renderer/shared/ui';
 import type { IndexProgress, LibraryIndexStatus } from '@/types/chat';
+import './writingControls.css';
 
 interface IndexStatusBarProps {
   status: LibraryIndexStatus | null;
@@ -58,57 +59,48 @@ export const IndexStatusBar: React.FC<IndexStatusBarProps> = ({ status, error, o
   const progress = status?.indexing ? status.progress : null;
   const fraction = progress && progress.total > 0 ? Math.min(1, progress.done / progress.total) : null;
   return (
-    <div data-testid="chat-index-status" className="flex shrink-0 flex-col gap-1.5 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
-      <div className="flex flex-wrap items-center gap-2">
-        <Database aria-hidden className="h-4 w-4" />
-        {status?.indexing ? (
-          <span role="status" className="min-w-0 flex-1 truncate">{progress ? describeProgress(progress) : 'Indexing your library…'}</span>
-        ) : status?.ready ? (
-          <span role="status" className="flex flex-wrap items-center gap-x-1">
-            <span>
-              {count(status.files, 'file')}, {count(status.chunks, 'passage')}
-              {status.lastIndexedAt ? `, updated ${formatRelativeTime(status.lastIndexedAt, Date.now())}` : ''}
-            </span>
-            {status.cancelled ? <span>· stopped early</span> : null}
-            {status.staleFiles > 0 ? <span>· {count(status.staleFiles, 'change')} since</span> : null}
-            {status.skipped.length > 0 ? <><span>·</span><Skipped skipped={status.skipped} /></> : null}
-          </span>
-        ) : (
-          <span role="status">Your library is not indexed yet. Indexing sends the text of your Markdown, text and PDF files to OpenAI for embeddings.</span>
-        )}
-        {!status?.indexing ? <span className="flex-1" /> : null}
-        {needsKey(problem) ? (
-          <Link to="/settings" className="text-focus underline underline-offset-2">Add your OpenAI API key in Settings</Link>
-        ) : problem ? (
-          <span role="alert" className="text-destructive">{problem}</span>
-        ) : null}
-        {status?.indexing ? (
-          <Button size="compact" variant="outline" onClick={onCancel}>
-            <Square aria-hidden className="h-3 w-3" />
-            Stop
-          </Button>
-        ) : (
-          <Button size="compact" variant={status?.ready ? 'ghost' : 'default'} onClick={onUpdate}>
-            <RefreshCw aria-hidden className="h-3.5 w-3.5" />
-            {status?.ready ? 'Update index' : 'Index library'}
-          </Button>
-        )}
+    <div data-testid="chat-index-status" className="library-context-bar">
+      <div className="library-context-row">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" className="library-context-trigger">
+              <Database aria-hidden size={13} /><span>Library context</span><ChevronDown aria-hidden size={12} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="library-context-popover">
+            <h2>Think with your library</h2>
+            <p>Your notes can give this thread useful context. You choose when to connect or update them.</p>
+            {status?.ready ? (
+              <div className="library-context-detail">
+                <p>{count(status.files, 'file')}, {count(status.chunks, 'passage')}{status.lastIndexedAt ? `, updated ${formatRelativeTime(status.lastIndexedAt, Date.now())}` : ''}</p>
+                {status.cancelled && <p>Indexing stopped early. What finished is still available.</p>}
+                {status.staleFiles > 0 && <p>{count(status.staleFiles, 'change')} since the last update.</p>}
+                {status.skipped.length > 0 && <Skipped skipped={status.skipped} />}
+              </div>
+            ) : <p>Your library is not indexed yet.</p>}
+            <p className="library-sharing-note">Indexing sends the text of your Markdown, text and PDF files to OpenAI for embeddings.</p>
+            {needsKey(problem) && <Link to="/settings" className="text-focus underline underline-offset-2">Add your OpenAI API key in Settings</Link>}
+            <div className="library-context-controls">
+              {status?.indexing ? (
+                <Button size="compact" variant="outline" onClick={onCancel}><Square aria-hidden size={12} />Stop</Button>
+              ) : (
+                <Button size="compact" variant={status?.ready ? 'outline' : 'default'} onClick={onUpdate}>
+                  <RefreshCw aria-hidden size={13} />{status?.ready ? 'Update index' : 'Index library'}
+                </Button>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <span role="status" className="library-context-summary">
+          {status?.indexing ? (progress ? describeProgress(progress) : 'Indexing your library…') : status?.ready ? `${count(status.files, 'file')}${status.cancelled ? ' · stopped early' : status.staleFiles > 0 ? ' · update available' : ''}` : 'Not connected'}
+        </span>
       </div>
-      {status?.indexing ? (
-        <div
-          role="progressbar"
-          aria-label="Indexing progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
-          className="relative h-1 w-full overflow-hidden rounded-full bg-muted"
-        >
-          <div
-            className={fraction === null ? 'absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-focus' : 'h-full rounded-full bg-focus transition-[width] duration-300'}
-            style={fraction === null ? undefined : { width: `${fraction * 100}%` }}
-          />
+      {problem && <span role="alert" className="library-context-error">{problem}</span>}
+      {status?.indexing && (
+        <div role="progressbar" aria-label="Indexing progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)} className="library-context-progress">
+          <div className={fraction === null ? 'animate-pulse' : undefined} style={{ width: fraction === null ? '33%' : `${fraction * 100}%` }} />
         </div>
-      ) : null}
+      )}
     </div>
   );
 };

@@ -38,3 +38,22 @@
 .thread-context p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow: auto; margin-top: 8px; line-height: 1.6; color: hsl(var(--text-secondary)); }
 @media (max-width: 760px) { .thread-sidebar { width: 220px; } .thread-header { flex-shrink: 0; max-height: 40%; overflow: auto; padding: 18px; } }
 @media (hover: none) { .thread-archive-action { opacity: 1; } }
+
+#thread-list-panel { flex-shrink: 0; min-height: 0; }
+#thread-list-panel[hidden] { display: none; }
+.thread-workspace-tools { display: flex; align-items: center; gap: 9px; padding: 9px 22px 0; flex-shrink: 0; color: hsl(var(--text-tertiary)); font-size: 11px; }
+.thread-workspace-tools > span { flex: 1; }
+.thread-workspace-tools + .thread-header { padding-top: 10px; }
+.thread-pin-label { display: inline-flex; align-items: center; gap: 3px; }
+.thread-welcome { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; justify-content: safe center; padding: 28px; text-align: center; }
+.thread-welcome > p:first-of-type { font-size: clamp(20px, 2.4vw, 28px); font-weight: 450; letter-spacing: -.035em; }
+.thread-welcome > p:nth-of-type(2) { line-height: 1.75; margin-top: 10px; }
+.thread-answer { padding: 14px 8px; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.thread-answer pre { overflow-x: auto; }
+.thread-answer .prose { line-height: 1.8; }
+
+.thread-welcome > span { flex-shrink: 0; }
+.thread-welcome[data-draft=true] { padding: 16px 28px; }
+.thread-welcome[data-draft=true] > span { display: none; }
+section:has(> .writing-composer[data-expanded=true]) > .thread-welcome { visibility: hidden; }
+@media (max-height: 700px) { .thread-welcome { padding: 16px 24px; } .thread-welcome > span { display: none; } .thread-welcome > ul { margin-top: 16px; } }

@@ -29,8 +29,8 @@ export function installChatApi(options: {
     list: vi.fn(async () => ({
       success: true as const,
       data: [...conversations.values()]
-        .sort((left, right) => right.updatedAt - left.updatedAt)
-        .map((conversation) => ({ id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length })),
+        .sort((left, right) => Number(right.pinnedAt != null) - Number(left.pinnedAt != null) || right.updatedAt - left.updatedAt)
+        .map((conversation) => ({ id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, pinnedAt: conversation.pinnedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length })),
     })),
     get: vi.fn(async (id: string) => ({ success: true as const, data: conversations.get(id) ?? null })),
     create: vi.fn(async (options: CreateConversationOptions = {}) => {
@@ -45,6 +45,9 @@ export function installChatApi(options: {
       if (patch.title !== undefined) conversation.title = patch.title;
       if (patch.archived === true) conversation.archivedAt = Date.now();
       if (patch.archived === false) delete conversation.archivedAt;
+      if (patch.pinned === true) conversation.pinnedAt ??= Date.now();
+      if (patch.pinned === false) delete conversation.pinnedAt;
+      conversation.updatedAt = ++counter;
       return { success: true as const, data: conversation };
     }),
     getDraftState: vi.fn(async () => ({ success: true as const, data: draftState })),
@@ -71,7 +74,7 @@ export function installChatApi(options: {
         const message: ChatMessage = { id: `a${counter}`, role: 'assistant', content: text, createdAt: counter, sources: options.sources ?? [] };
         conversation.messages.push(message);
         conversation.updatedAt = counter;
-        return { success: true as const, data: { message, conversation: { id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length } } };
+        return { success: true as const, data: { message, conversation: { id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, pinnedAt: conversation.pinnedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length } } };
       })();
       return { result, cancel: vi.fn() };
     }),

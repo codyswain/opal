@@ -77,13 +77,14 @@ export interface ChatDraftState {
 }
 
 export interface CreateConversationOptions { title?: string; context?: ThreadContext }
-export interface ConversationPatch { title?: string; archived?: boolean }
+export interface ConversationPatch { title?: string; archived?: boolean; pinned?: boolean }
 
 export interface Conversation {
   id: string;
   title: string;
   context?: ThreadContext;
   archivedAt?: number;
+  pinnedAt?: number;
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
@@ -94,6 +95,7 @@ export interface ConversationSummary {
   title: string;
   context?: ThreadContext;
   archivedAt?: number;
+  pinnedAt?: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;

@@ -8,6 +8,7 @@ import type { ChatMessage, ChatSource } from '@/types/chat';
 interface MessageThreadProps {
   messages: ChatMessage[];
   streaming: string | null;
+  hasDraft?: boolean;
   onOpenSource: (source: ChatSource) => void;
   /** Fills the composer with a starter question. */
   onSuggest?: (question: string) => void;
@@ -38,19 +39,19 @@ export const SUGGESTED_QUESTIONS = [
   'What are the open to-dos across my notes?',
 ];
 
-export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource, onSuggest }) => {
+export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource, onSuggest, hasDraft = false }) => {
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }); }, [messages.length, streaming]);
 
   if (messages.length === 0 && streaming === null) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center overflow-auto p-6 text-center" data-testid="chat-empty">
+      <div className="thread-welcome" data-draft={hasDraft} data-testid="chat-empty">
         <span aria-hidden className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-focus/10 text-focus">
           <MessageSquareText className="h-6 w-6" />
         </span>
-        <p className="text-base font-medium text-foreground">A place to keep thinking</p>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">Work through an idea, make a decision, or ask about your library. Your conversation stays here to continue another day.</p>
-        {onSuggest ? (
+        <p className="text-base font-medium text-foreground">{hasDraft ? 'Pick up your thought' : 'A place to keep thinking'}</p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">{hasDraft ? 'Your draft is ready below. Take it wherever you want to go.' : 'A little room to untangle an idea, make a decision, or connect what you know.'}</p>
+        {onSuggest && !hasDraft ? (
           <ul className="mt-6 flex max-w-lg flex-wrap justify-center gap-2" aria-label="Suggested questions">
             {SUGGESTED_QUESTIONS.map((question) => (
               <li key={question}>
@@ -77,7 +78,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
             data-testid={`chat-message-${message.role}`}
             className={message.role === 'user'
               ? 'self-end rounded-2xl bg-surface-selected px-4 py-2 text-sm'
-              : 'rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm'}
+              : 'thread-answer'}
           >
             {message.role === 'assistant' ? (
               <>
@@ -96,7 +97,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
           </article>
         ))}
         {streaming !== null ? (
-          <article data-testid="chat-message-streaming" aria-live="polite" className="rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm">
+          <article data-testid="chat-message-streaming" aria-live="polite" className="thread-answer">
             {streaming ? (
               <div className="prose prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{streaming}</ReactMarkdown>

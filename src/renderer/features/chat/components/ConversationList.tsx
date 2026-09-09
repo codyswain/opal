@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Archive, ArchiveRestore, Plus, Search } from 'lucide-react';
+import { Archive, ArchiveRestore, Plus, Search, Pin, PinOff } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { Button, IconButton } from '@/renderer/shared/ui';
 import type { ConversationSummary } from '@/types/chat';
@@ -11,11 +11,12 @@ interface ConversationListProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onArchive: (id: string, archived: boolean) => void;
+  onPin?: (id: string, pinned: boolean) => void;
   busy?: boolean;
   drafts?: Record<string, string>;
 }
 
-export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onArchive, busy = false, drafts = {} }) => {
+export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onArchive, onPin, busy = false, drafts = {} }) => {
   const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState('');
   const query = search.trim().toLocaleLowerCase();
@@ -23,7 +24,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
     (conversation.archivedAt != null) === archived &&
     [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath]
       .some((value) => value?.toLocaleLowerCase().includes(query))
-  );
+  ).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt);
 
   const showScratch = !archived && Boolean(drafts.new?.trim()) &&
     (!query || 'unfinished thought'.includes(query) || drafts.new.toLocaleLowerCase().includes(query));
@@ -60,8 +61,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               <button type="button" aria-current={conversation.id === activeId ? 'true' : undefined} onClick={() => onSelect(conversation.id)} disabled={busy} className="thread-list-select">
                 <span className="thread-list-title">{conversation.title}</span>
                 {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
-                <span className="thread-list-meta"><span>{formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
+                <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
               </button>
+              {onPin && !archived && <IconButton label={`${conversation.pinnedAt != null ? 'Unpin' : 'Pin'} thread ${conversation.title}`} size="compact" onClick={() => onPin(conversation.id, conversation.pinnedAt == null)} disabled={busy} className="thread-archive-action">
+                {conversation.pinnedAt != null ? <PinOff aria-hidden size={14} /> : <Pin aria-hidden size={14} />}
+              </IconButton>}
               <IconButton label={`${archived ? 'Restore' : 'Archive'} thread ${conversation.title}`} size="compact" onClick={() => onArchive(conversation.id, !archived)} disabled={busy} className="thread-archive-action">
                 {archived ? <ArchiveRestore aria-hidden size={14} /> : <Archive aria-hidden size={14} />}
               </IconButton>

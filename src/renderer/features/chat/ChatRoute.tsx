@@ -1,4 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
+import { IconButton } from '@/renderer/shared/ui';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import { parentFsPath } from '@/common/fsPaths';
 import { focusFile } from '@/renderer/features/disk-explorer/navigation';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
@@ -15,6 +18,7 @@ import { useChatStore } from './store/chatStore';
 /** Chat over the library: conversations, a cited thread, and the index controls. */
 export const ChatRoute: React.FC = () => {
   const { navigateFiles, navigateTo } = useShell();
+  const [listVisible, setListVisible] = useState(() => readPref('threads.listVisible', window.innerWidth >= 1000));
   const submitting = useRef(false);
   const [preparingSend, setPreparingSend] = useState(false);
   const conversations = useChatStore((state) => state.conversations);
@@ -63,16 +67,26 @@ export const ChatRoute: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden" data-testid="chat-route">
+      <div id="thread-list-panel" hidden={!listVisible}>
       <ConversationList
         conversations={conversations}
         activeId={active?.id ?? null}
         onSelect={(id) => { setPrefill(null); void select(id); }}
         onNew={() => { setPrefill(null); void startConversation(); }}
         onArchive={(id, archived) => void updateConversation(id, { archived })}
+        onPin={(id, pinned) => void updateConversation(id, { pinned })}
         drafts={drafts}
         busy={sending || processing || preparingSend}
       />
+      </div>
       <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Chat">
+        <div className="thread-workspace-tools">
+          <IconButton label={listVisible ? 'Hide thread list' : 'Show thread list'} aria-expanded={listVisible} aria-controls="thread-list-panel" size="compact" onClick={() => { setListVisible(!listVisible); writePref('threads.listVisible', !listVisible); }}>
+            {listVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+          </IconButton>
+          <span>Thinking space</span>
+          {!listVisible && <IconButton label="New thread" size="compact" disabled={sending || processing || preparingSend} onClick={() => { setPrefill(null); void startConversation(); }}><Plus size={16} /></IconButton>}
+        </div>
         <ThreadHeader conversation={active} busy={sending || processing || preparingSend}
           onRename={(title) => active ? updateConversation(active.id, { title }) : Promise.resolve(false)}
           onOpenSource={(path) => openSource({ path, name: '', n: 1, excerpt: '', score: 0 })}
@@ -81,6 +95,7 @@ export const ChatRoute: React.FC = () => {
         <MessageThread
           messages={active?.messages ?? []}
           streaming={streaming}
+          hasDraft={Boolean(draft.trim())}
           onOpenSource={openSource}
           onSuggest={active?.archivedAt ? undefined : (question) => setPrefill((previous) => ({ text: question, seq: (previous?.seq ?? 0) + 1 }))}
         />
@@ -91,7 +106,7 @@ export const ChatRoute: React.FC = () => {
         {active?.archivedAt ? (
           <div className="px-6 py-4 text-sm text-muted-foreground">This thread is archived. Its history and draft are kept. <button className="underline" onClick={() => void updateConversation(active.id, { archived: false })}>Restore thread</button></div>
         ) : <>
-          <Composer preparing={processing || preparingSend || !hydrated} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending}
+          <Composer saveStatus={!hydrated ? 'Loading saved drafts…' : dirty ? 'Saving draft…' : draft ? 'Draft saved on this Mac' : 'Threads are saved on this Mac'} preparing={processing || preparingSend || !hydrated} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending}
             onSend={(question) => void (async () => {
               if (submitting.current) return;
               submitting.current = true;
@@ -111,7 +126,6 @@ export const ChatRoute: React.FC = () => {
               if (accepted && useChatHandoffStore.getState().drafts[id]?.trim() === question.trim()) setDraft(id, '');
               } finally { submitting.current = false; setPreparingSend(false); }
             })()} onCancel={cancel} prefill={prefill} />
-          <p className="px-6 pb-2 text-2xs text-muted-foreground" role="status" aria-label="Draft storage">{!hydrated ? 'Loading saved drafts…' : dirty ? 'Saving draft…' : draft ? 'Draft saved on this Mac' : 'Threads are saved on this Mac'}</p>
         </>}
       </section>
     </div>
