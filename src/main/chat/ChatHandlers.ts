@@ -18,6 +18,7 @@ export class ChatHandlers {
 
   registerAll(): void {
     const { ipc, service, index } = this.deps;
+    ipc.handle('chat:search-content', async (_, query: unknown, deep: unknown) => this.respond(() => index.searchContent(query, deep), 'Failed to search file contents'));
     ipc.handle('chat:list', async (): Promise<IPCResponse<ConversationSummary[]>> => this.respond(() => service.list(), 'Failed to load conversations'));
     ipc.handle('chat:get', async (_, id: unknown): Promise<IPCResponse<Conversation | null>> => this.respond(() => service.get(id), 'Failed to load the conversation'));
     ipc.handle('chat:create', async (_, options: unknown): Promise<IPCResponse<Conversation>> => this.respond(() => service.create(options), 'Failed to start a conversation'));

@@ -1,3 +1,4 @@
+import { matchingSnippet, searchCurrentText } from './contentSearch';
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
 import path from 'path';
@@ -10,11 +11,13 @@ import {
   CHAT_EMBED_BATCH,
   CHAT_INDEX_FILE_LIMIT,
   CHAT_INDEX_PDF_LIMIT,
+  type ContentSearchResult,
   type IndexHit,
   type IndexProgress,
   type LibraryIndexStatus,
   type TextChunk,
 } from '@/types/chat';
+import { readDatedNotes, type DateRequest, type DatedContext } from './datedNotes';
 import { chunkText } from './chunkText';
 import type { EmbeddingProvider } from './EmbeddingProvider';
 import { extractPdfText, isPdf, pageAt, type ExtractPdfOptions } from './pdfText';
@@ -171,6 +174,25 @@ export class LibraryTextIndex {
     this.cancelRequested = true;
     return this.indexing;
   }
+
+  async searchContent(query: unknown, deep: unknown = false): Promise<ContentSearchResult> {
+    if (typeof query !== 'string' || !query.trim() || query.length > 200 || typeof deep !== 'boolean') throw new Error('Invalid content search.');
+    if (deep) return searchCurrentText(this.deps.registry, query.trim());
+    await this.load();
+    const result: ContentSearchResult = { hits: [], incomplete: false };
+    const seen = new Set<string>();
+    for (const chunk of this.chunks.values()) {
+      if (seen.has(chunk.path) || !isIndexable(chunk.path, this.deps.registry.list())) continue;
+      const excerpt = matchingSnippet(chunk.text, query.trim());
+      if (!excerpt) continue;
+      if (result.hits.length >= 50) { result.incomplete = true; break; }
+      seen.add(chunk.path);
+      result.hits.push({ path: chunk.path, name: path.basename(chunk.path), excerpt });
+    }
+    return result;
+  }
+
+  readDated(request: DateRequest): Promise<DatedContext> { return readDatedNotes(this.deps.registry, request); }
 
   search(vector: Float32Array, k: number, floor: number): IndexHit[] {
     if (vector.length !== this.dimensions) return [];

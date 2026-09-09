@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile, symlink } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { IpcMain } from 'electron';
@@ -71,6 +71,77 @@ beforeEach(async () => {
 afterEach(async () => { await rm(tmp, { recursive: true, force: true }); });
 
 describe('ChatService', () => {
+  it('reads the actual last ten calendar days, including files created after indexing', async () => {
+    now = new Date(2026, 8, 9, 12).getTime();
+    await writeFile(path.join(root, '2023-10-14.md'), 'I collected data over the last 10 days.');
+    await index.update();
+    await writeFile(path.join(root, '2026-08-30.md'), 'Outside requested window.');
+    await writeFile(path.join(root, '2026-08-31.md'), 'First day: planting lavender.');
+    await writeFile(path.join(root, '2026-09-09.md'), 'Today: finished the garden.');
+    const conversation = await service.create();
+    await service.ask(conversation.id, 'okay tell me about the last 10 days', () => undefined);
+    const prompt = completions.prompts[0][0].content;
+    expect(prompt).toContain('2026-08-31 through 2026-09-09');
+    expect(prompt).toContain('planting lavender');
+    expect(prompt).toContain('finished the garden');
+    expect(prompt).not.toContain('2023-10-14');
+    expect(prompt).not.toContain('Outside requested window');
+    expect(prompt).toContain('8 days without readable dated notes');
+  });
+
+  it('uses the newest dated note for most recent, excludes future notes, and reports missing periods', async () => {
+    now = new Date(2026, 8, 9, 12).getTime();
+    await writeFile(path.join(root, '2026-09-08.md'), 'Newest actual entry.');
+    await writeFile(path.join(root, '2027-01-01.md'), 'Future planning.');
+    const conversation = await service.create();
+    await service.ask(conversation.id, 'What did I write about most recently?', () => undefined);
+    expect(completions.prompts[0][0].content).toContain('Newest actual entry');
+    expect(completions.prompts[0][0].content).not.toContain('Future planning');
+    await service.ask(conversation.id, 'What about today?', () => undefined);
+    expect(completions.prompts[1][0].content).toContain('No readable dated notes');
+    expect(completions.prompts[1][0].content).not.toContain('Newest actual entry');
+  });
+
+  it('groups passages from a file into one citation and never presents uncited files as sources', async () => {
+    await index.update();
+    vi.spyOn(index, 'search').mockReturnValue([
+      { path: path.join(root, 'atlas.md'), chunkIndex: 0, start: 0, text: 'First evidence', score: 1 },
+      { path: path.join(root, 'atlas.md'), chunkIndex: 1, start: 500, text: 'Second evidence', score: 0.9 },
+    ]);
+    completions.stream = async (messages) => { completions.prompts.push(messages); return 'An answer without citations.'; };
+    const conversation = await service.create();
+    const answer = await service.ask(conversation.id, 'Atlas?', () => undefined);
+    const prompt = completions.prompts[0][0].content;
+    expect(prompt).toContain('Second evidence');
+    expect(prompt).not.toContain('[2] atlas.md');
+    expect(answer.message.sources).toEqual([]);
+  });
+
+  it('finds literal body text locally and deep search reads files absent from the index', async () => {
+    await index.update();
+    const indexed = await index.searchContent('patience');
+    expect(indexed.hits.map((hit) => hit.name)).toEqual(['recipes.md']);
+    expect(indexed.hits[0].excerpt).toContain('patience');
+    await writeFile(path.join(root, 'new.md'), 'A hidden keyword: foxglove.');
+    expect((await index.searchContent('foxglove')).hits).toEqual([]);
+    expect((await index.searchContent('foxglove', true)).hits[0]).toMatchObject({ name: 'new.md', excerpt: 'A hidden keyword: foxglove.' });
+    expect(completions.prompts).toEqual([]);
+  });
+
+  it('keeps deep search and calendar retrieval inside opened non-hidden files', async () => {
+    now = new Date(2026, 8, 9, 12).getTime();
+    await mkdir(path.join(root, '.private'));
+    await writeFile(path.join(root, '.private', '2026-09-09.md'), 'excluded keyword');
+    const outside = path.join(tmp, '2026-09-09.md');
+    await writeFile(outside, 'excluded keyword');
+    await symlink(outside, path.join(root, '2026-09-09.md'));
+    expect((await index.searchContent('excluded', true)).hits).toEqual([]);
+    const conversation = await service.create();
+    await service.ask(conversation.id, 'What happened today?', () => undefined);
+    expect(completions.prompts[0][0].content).not.toContain('excluded keyword');
+    await expect(index.searchContent('', true)).rejects.toThrow();
+  });
+
   it('creates, lists, titles, persists and removes conversations', async () => {
     const conversation = await service.create();
     expect(conversation).toMatchObject({ title: 'New conversation', messages: [] });
@@ -195,7 +266,7 @@ describe('ChatHandlers', () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new ChatHandlers({ ipc, service, index }).registerAll();
-    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:update']);
+    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:search-content', 'chat:update']);
     const frames: unknown[] = [];
     const event = { sender: { isDestroyed: () => false, send: (_channel: string, payload: unknown) => frames.push(payload) } };
     const invoke = (channel: string, ...args: unknown[]) => {

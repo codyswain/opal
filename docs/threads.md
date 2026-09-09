@@ -36,3 +36,19 @@ The thread list can be hidden, and its visibility is remembered on this Mac.
 Small windows begin with the list hidden. The composer grows with the draft and
 can expand into a writing room. Library indexing details and explicit controls
 are available from Library context. Opening that control does not index files.
+
+Calendar questions (today, yesterday, last/past N days up to 366, last/past week,
+most recent) read current dated Markdown/text files from mounted roots. Day
+ranges include today and use the Mac’s local calendar. Filename dates are
+evidence of the note date, not file modification timestamps. The model receives
+coverage and missing-day information. Reads are bounded to 60 files and 3,000
+characters per file, with omissions disclosed in its context. Other date phrasing
+still uses semantic retrieval; this is not a general natural-language date parser.
+Only cited files appear below an answer; passages from one file share a citation.
+
+Quick search returns name matches first, then exact case-insensitive substrings
+from locally indexed contents. “Search current text files” scans current Markdown
+and text files without AI, including files absent from the index. It excludes
+hidden files and symlinks and observes mounted roots. Deep search is bounded to
+5,000 files, 25 MiB total, 1 MiB per file and 50 results; partial searches are
+labeled. PDFs remain available through indexed contents, not the deep text scan.

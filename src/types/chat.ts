@@ -117,3 +117,8 @@ export const CHAT_INDEX_FILE_LIMIT = 1024 * 1024;
 export const CHAT_INDEX_PDF_LIMIT = 25 * 1024 * 1024;
 /** Passages embedded per request, so a cancelled update loses at most one request's work. */
 export const CHAT_EMBED_BATCH = 64;
+
+export interface ContentSearchResult {
+  hits: { path: string; name: string; excerpt: string }[];
+  incomplete: boolean;
+}

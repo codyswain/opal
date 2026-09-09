@@ -49,6 +49,36 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('adds body matches with snippets and offers a deeper local search', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    const searchContent = vi.fn(async () => ({ success: true as const, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Plant foxglove in the garden.' }], incomplete: false } }));
+    window.chatAPI.searchContent = searchContent;
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'foxglove');
+    expect(await screen.findByText('Plant foxglove in the garden.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Search current text files' }));
+    await waitFor(() => expect(searchContent).toHaveBeenLastCalledWith('foxglove', true));
+    await user.click(screen.getByTestId(`palette-file-${PLAN}`));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`file=${encodeURIComponent(PLAN)}`));
+  });
+  it('discards a slow content response after the query changes', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    let finish!: (value: unknown) => void;
+    const searchContent = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; })).mockResolvedValue({ success: true, data: { hits: [], incomplete: false } });
+    window.chatAPI.searchContent = searchContent;
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    const input = await screen.findByRole('combobox');
+    await user.type(input, 'old');
+    await waitFor(() => expect(searchContent).toHaveBeenCalledWith('old', false));
+    await user.clear(input);
+    await user.type(input, 'new');
+    await act(async () => finish({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Obsolete result' }], incomplete: false } }));
+    expect(screen.queryByText('Obsolete result')).not.toBeInTheDocument();
+  });
   it('opens with Cmd+K, shows recent files and commands, and Escape closes it', async () => {
     const user = userEvent.setup();
     renderPalette();

@@ -1,3 +1,4 @@
+import { classifyFile } from '@/common/fileKind';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { CornerDownLeft, Search, Terminal } from 'lucide-react';
@@ -14,7 +15,7 @@ import { formatShortcut, rankCommands } from '../services/matchCommand';
 import { usePaletteStore } from '../store/paletteStore';
 
 type PaletteItem =
-  | { kind: 'file'; entry: DiskEntry; hint: string }
+  | { kind: 'file'; entry: DiskEntry; hint: string; excerpt?: string }
   | { kind: 'command'; command: Command };
 
 const FILE_LIMIT = 8;
@@ -54,6 +55,9 @@ export const CommandPalette: React.FC = () => {
   const commands = useCommandList();
   const [query, setQuery] = useState('');
   const [files, setFiles] = useState<PaletteItem[]>([]);
+  const [content, setContent] = useState<PaletteItem[]>([]);
+  const [deep, setDeep] = useState(false);
+  const [contentStatus, setContentStatus] = useState('');
   const [recent, setRecent] = useState<PaletteItem[]>([]);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -81,6 +85,7 @@ export const CommandPalette: React.FC = () => {
   useEffect(() => {
     if (!open || commandMode || !term) { setFiles([]); return; }
     const token = ++request.current;
+    setFiles([]);
     const timer = setTimeout(() => {
       void window.collectionsAPI.query(
         { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'contains', value: term.slice(0, 200) }], sort: { field: 'touched', direction: 'desc' } },
@@ -91,16 +96,34 @@ export const CommandPalette: React.FC = () => {
         setFiles(response.data.rows.map((row) => ({ kind: 'file', entry: row.entry, hint: locate(row.entry.path, roots) })));
       }).catch(() => { if (token === request.current) setFiles([]); });
     }, FILE_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => { request.current += 1; clearTimeout(timer); };
   }, [open, term, commandMode, roots]);
+
+  useEffect(() => { setDeep(false); }, [term, open]);
+  useEffect(() => {
+    let current = true;
+    setContent([]);
+    setContentStatus('');
+    if (!open || commandMode || term.length < 2) return;
+    setContentStatus(deep ? 'Searching current text files…' : 'Searching indexed contents…');
+    const timer = setTimeout(() => {
+      void window.chatAPI.searchContent(term.slice(0, 200), deep).then((response) => {
+        if (!current) return;
+        if (!response.success) { setContentStatus('Content search failed. Try again.'); return; }
+        setContent(response.data.hits.map((hit) => ({ kind: 'file', entry: { path: hit.path, name: hit.name, kind: classifyFile(hit.name), isDirectory: false, size: 0, mtimeMs: 0 }, hint: locate(hit.path, roots), excerpt: hit.excerpt })));
+        setContentStatus(`${deep ? 'Current Markdown and text files' : 'Indexed contents · may exclude new changes'}${response.data.incomplete ? ' · partial results (search limits or unreadable files)' : ''}`);
+      }).catch(() => { if (current) setContentStatus('Content search failed. Try again.'); });
+    }, 350);
+    return () => { current = false; clearTimeout(timer); };
+  }, [open, commandMode, term, deep, roots]);
 
   const sections = useMemo((): { title: string; items: PaletteItem[] }[] => {
     const matched = rankCommands(commands, term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
       .map((command): PaletteItem => ({ kind: 'command', command }));
     if (commandMode) return [{ title: 'Commands', items: matched }];
     if (!term) return [{ title: 'Recent', items: recent }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
-    return [{ title: 'Files', items: files }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
-  }, [commands, term, commandMode, recent, files]);
+    return [{ title: 'Files', items: files.map((item) => item.kind === 'file' ? (content.find((hit) => hit.kind === 'file' && hit.entry.path === item.entry.path) ?? item) : item) }, { title: deep ? 'Inside current text files' : 'Inside indexed files', items: content.filter((item) => item.kind === 'file' && !files.some((file) => file.kind === 'file' && file.entry.path === item.entry.path)) }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
+  }, [commands, term, commandMode, recent, files, content, deep]);
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 
   useEffect(() => { setActive(0); }, [term, commandMode]);
@@ -147,7 +170,7 @@ export const CommandPalette: React.FC = () => {
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search files, or type > for commands"
+              placeholder="Search names and contents, or > for commands"
               aria-label="Search files and commands"
               aria-activedescendant={flat[active] ? `palette-item-${active}` : undefined}
               role="combobox"
@@ -181,13 +204,14 @@ export const CommandPalette: React.FC = () => {
                       data-testid={item.kind === 'file' ? `palette-file-${item.entry.path}` : `palette-command-${item.command.id}`}
                       onMouseMove={() => setActive(index)}
                       onClick={() => run(item)}
-                      className={`flex h-9 cursor-default items-center gap-3 rounded-row px-2.5 text-sm ${selected ? 'bg-surface-active text-foreground' : 'text-foreground-secondary'}`}
+                      className={`flex min-h-9 py-2 cursor-default items-center gap-3 rounded-row px-2.5 text-sm ${selected ? 'bg-surface-active text-foreground' : 'text-foreground-secondary'}`}
                     >
                       {item.kind === 'file' ? (
                         <>
                           <FileKindIcon kind={item.entry.kind} className="h-4 w-4" />
                           <span className="min-w-0 flex-1 truncate">
                             <span className="text-foreground">{item.entry.name}</span>
+                            {item.excerpt && <span className="block truncate text-xs text-foreground-secondary">{item.excerpt}</span>}
                             {item.hint ? <span className="ml-2 text-2xs text-muted-foreground">{item.hint}</span> : null}
                           </span>
                         </>
@@ -207,6 +231,10 @@ export const CommandPalette: React.FC = () => {
               </div>
             ))}
           </div>
+          {!commandMode && term.length >= 2 && <div className="flex items-center justify-between gap-3 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
+            <span role="status">{contentStatus}</span>
+            <button type="button" className="shrink-0 text-focus hover:underline" disabled={deep} onKeyDown={(event) => event.stopPropagation()} onClick={() => setDeep(true)}>{deep ? 'Local search' : 'Search current text files'}</button>
+          </div>}
           <div className="flex items-center gap-4 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
             <span><kbd className="font-sans">↑↓</kbd> navigate</span>
             <span><kbd className="font-sans">↵</kbd> open</span>

@@ -152,6 +152,7 @@ contextBridge.exposeInMainWorld("chatAPI", {
   getDraftState: () => ipcRenderer.invoke("chat:drafts-get"),
   saveDraftState: (state: ChatDraftState) => ipcRenderer.invoke("chat:drafts-save", state),
   remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
+  searchContent: (query: string, deep?: boolean) => ipcRenderer.invoke("chat:search-content", query, deep),
   indexStatus: () => ipcRenderer.invoke("chat:index-status"),
   indexUpdate: () => ipcRenderer.invoke("chat:index-update"),
   indexCancel: () => ipcRenderer.invoke("chat:index-cancel"),

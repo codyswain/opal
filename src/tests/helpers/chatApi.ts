@@ -53,6 +53,7 @@ export function installChatApi(options: {
     getDraftState: vi.fn(async () => ({ success: true as const, data: draftState })),
     saveDraftState: vi.fn(async (state: ChatDraftState) => { draftState = structuredClone(state); return { success: true as const, data: undefined }; }),
     remove: vi.fn(async (id: string) => { conversations.delete(id); return { success: true as const, data: undefined }; }),
+    searchContent: vi.fn(async () => ({ success: true as const, data: { hits: [], incomplete: false } })),
     indexStatus: vi.fn(async () => ({ success: true as const, data: status })),
     indexUpdate: vi.fn(async () => { status = { ...status, ready: true, files: status.files || 2, chunks: status.chunks || 5, staleFiles: 0, lastIndexedAt: Date.now() }; return { success: true as const, data: status }; }),
     indexCancel: vi.fn(async () => { status = { ...status, indexing: false, progress: null, cancelled: true }; return { success: true as const, data: status }; }),
