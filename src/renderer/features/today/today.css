@@ -560,3 +560,301 @@
     animation: none !important;
   }
 }
+
+/* The workspace fills its window; writing and tasks share adjustable space. */
+.today-wrap {
+  max-width: none;
+  padding: 30px clamp(22px, 3vw, 48px) 48px;
+}
+.today-heading {
+  padding-bottom: 20px;
+}
+.today-eyebrow {
+  margin-bottom: 12px;
+}
+.today-heading h1 {
+  font-size: clamp(30px, 3vw, 40px);
+}
+.today-subtitle {
+  margin-top: 10px;
+}
+.today-toolbar {
+  margin-bottom: 26px;
+}
+.today-columns {
+  grid-template-columns: minmax(0, var(--journal-share)) minmax(
+      0,
+      var(--task-share)
+    );
+  gap: 32px;
+}
+.today-aside {
+  padding-left: 28px;
+}
+.today-section-heading h2 {
+  font-size: 17px;
+}
+.today-section-heading {
+  margin-bottom: 20px;
+}
+.today-count {
+  font-size: 12px;
+}
+.today-writing[hidden] {
+  display: none;
+}
+.tasks-first .today-main {
+  order: 2;
+}
+.tasks-first .today-aside {
+  order: 1;
+  border-left: 0;
+  padding-left: 0;
+  border-right: 1px solid hsl(var(--border));
+  padding-right: 28px;
+}
+.tasks-first .today-columns {
+  grid-template-columns: minmax(0, var(--task-share)) minmax(
+      0,
+      var(--journal-share)
+    );
+}
+.journal-is-hidden .today-columns {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+}
+.journal-is-hidden .today-main {
+  order: 2;
+}
+.journal-is-hidden .today-aside {
+  order: 1;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  column-gap: 40px;
+  align-items: start;
+}
+.journal-is-hidden .today-brief {
+  margin: 0;
+  padding: 0 0 0 28px;
+  border-top: 0;
+  border-left: 1px solid hsl(var(--border));
+}
+.journal-is-hidden .today-footer {
+  grid-column: 2;
+  margin: 20px 0 0;
+  padding-left: 28px;
+}
+.today-layout-settings {
+  position: relative;
+}
+.today-layout-settings > summary {
+  cursor: pointer;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.today-layout-options {
+  position: absolute;
+  z-index: 20;
+  width: 270px;
+  right: 0;
+  top: 34px;
+  padding: 18px;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  box-shadow: 0 12px 35px #0002;
+}
+.today-layout-options p {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+.today-layout-options label {
+  display: block;
+  font-size: 12px;
+}
+.today-layout-options label span {
+  float: right;
+  font-variant-numeric: tabular-nums;
+}
+.today-layout-options input {
+  display: block;
+  width: 100%;
+  margin: 14px 0;
+  accent-color: hsl(var(--foreground));
+}
+.today-layout-options small {
+  display: block;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.today-layout-options button {
+  width: 100%;
+  margin-top: 6px;
+}
+.today-layout-options button[aria-pressed="true"] {
+  background: hsl(var(--muted));
+  font-weight: 600;
+}
+.today-focus-list {
+  gap: 0;
+}
+.today-focus-list > li {
+  font-size: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.today-focus-list .today-focus-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.today-focus-list .today-focus-remove {
+  opacity: 0.55;
+}
+.today-focus-list .today-focus-remove:hover {
+  opacity: 1;
+}
+.today-focus-context {
+  font-size: 12px;
+}
+.today-intention {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 7px 10px;
+  gap: 8px;
+  margin-top: 18px;
+}
+.today-intention input {
+  font-size: 14px;
+}
+.today-intention button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  white-space: nowrap;
+}
+.today-page .today-queue-toggle {
+  font-size: 13px;
+  padding: 20px 0 12px;
+  color: hsl(var(--foreground));
+}
+.today-queue {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.today-queue-tools {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.today-queue-tools input {
+  min-width: 130px;
+  flex: 1;
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border));
+  border-radius: 7px;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+.today-queue-tools [role="group"] {
+  display: flex;
+  gap: 3px;
+}
+.today-queue-tools button[aria-pressed="true"] {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.today-queue h3 {
+  font-size: 11px;
+  margin: 22px 0 8px;
+}
+.today-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 14px 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.today-task-description {
+  flex: 1;
+  min-width: 0;
+}
+.today-task-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.today-task-row details {
+  border: 0;
+  padding: 4px 0 0;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.today-task-row details p {
+  font-size: 12px;
+}
+.today-page .today-task-add {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  border: 1px solid hsl(var(--border));
+  font-size: 11px;
+  margin-top: 1px;
+}
+.today-empty {
+  font-size: 13px;
+}
+.today-caption {
+  font-size: 11px;
+}
+.today-markdown {
+  font-size: 13px;
+}
+@media (max-width: 1050px) {
+  .today-columns {
+    gap: 22px;
+  }
+  .today-aside {
+    padding-left: 20px;
+  }
+  .today-task-row {
+    gap: 8px;
+  }
+  .today-page .today-task-add {
+    font-size: 10px;
+  }
+}
+@media (max-width: 820px) {
+  .today-columns,
+  .tasks-first .today-columns,
+  .journal-is-hidden .today-aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .today-aside,
+  .tasks-first .today-aside {
+    padding: 0;
+    border: 0;
+  }
+  .journal-is-hidden .today-brief {
+    margin-top: 24px;
+    padding: 24px 0 0;
+    border-left: 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+  .journal-is-hidden .today-footer {
+    grid-column: 1;
+    padding: 0;
+  }
+  .today-layout-options label,
+  .today-layout-options small {
+    display: none;
+  }
+}

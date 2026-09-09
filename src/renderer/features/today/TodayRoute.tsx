@@ -62,6 +62,16 @@ export function TodayRoute() {
     "true",
   );
   const hidden = privacy === "true";
+  const [widthPref, setWidth] = usePreference("opal.today.journal-width", "55");
+  const [orderPref, setOrder] = usePreference(
+    "opal.today.tasks-first",
+    "false",
+  );
+  const journalWidth = Math.max(35, Math.min(70, Number(widthPref) || 55));
+  const tasksFirst = orderPref === "true";
+  useEffect(() => {
+    if (hidden) window.dispatchEvent(new Event("opal:journal-hidden"));
+  }, [hidden]);
   const {
     vaults,
     root,
@@ -101,7 +111,16 @@ export function TodayRoute() {
     .split("\n")
     .filter((line) => /^\s*[-*]\s+/.test(line));
   return (
-    <div className="today-page" aria-label="Today workspace">
+    <div
+      className={`today-page${hidden ? " journal-is-hidden" : ""}${tasksFirst ? " tasks-first" : ""}`}
+      aria-label="Today workspace"
+      style={
+        {
+          "--journal-share": `${journalWidth}fr`,
+          "--task-share": `${100 - journalWidth}fr`,
+        } as React.CSSProperties
+      }
+    >
       <div className="today-wrap">
         <header className="today-heading">
           <p className="today-eyebrow">
@@ -176,6 +195,39 @@ export function TodayRoute() {
               className={loading ? "today-refreshing" : ""}
             />
           </button>
+          <details className="today-layout-settings">
+            <summary>Layout</summary>
+            <div className="today-layout-options">
+              <p>Arrange your workspace</p>
+              <label>
+                Journal width <span>{journalWidth}%</span>
+                <input
+                  aria-label="Journal width"
+                  type="range"
+                  min="35"
+                  max="70"
+                  value={journalWidth}
+                  disabled={hidden}
+                  onChange={(event) => setWidth(event.target.value)}
+                />
+              </label>
+              {hidden && <small>Show your journal to adjust its width.</small>}
+              <button
+                aria-pressed={tasksFirst}
+                onClick={() => setOrder(tasksFirst ? "false" : "true")}
+              >
+                Tasks first
+              </button>
+              <button
+                onClick={() => {
+                  setWidth("55");
+                  setOrder("false");
+                }}
+              >
+                Reset layout
+              </button>
+            </div>
+          </details>
           <button
             className="today-privacy"
             aria-pressed={hidden}
@@ -222,14 +274,13 @@ export function TodayRoute() {
               <div className="today-columns" key={`${root}:${day}`}>
                 <main className="today-main">
                   <section
+                    hidden={hidden}
                     className="today-writing"
                     aria-labelledby="journal-title"
                   >
                     <div className="today-section-heading">
                       <h2 id="journal-title">Your journal</h2>
-                      <span className="today-count">
-                        {hidden ? "Hidden from view" : "Just for you"}
-                      </span>
+                      <span className="today-count">Just for you</span>
                     </div>
                     {data.document ? (
                       <JournalPanel
@@ -299,7 +350,7 @@ export function TodayRoute() {
                       </p>
                     )}
                   </details>
-                  {!!data.photos.length && (
+                  {!hidden && !!data.photos.length && (
                     <section
                       className="today-moments"
                       aria-label="Daily photos"

@@ -48,12 +48,10 @@ beforeEach(() => {
   });
   useDiskStore.setState({ roots: ["/vault"] });
   window.vaultAPI = {
-    discover: vi
-      .fn()
-      .mockResolvedValue({
-        success: true,
-        data: [{ path: "/vault", name: "Vault" }],
-      }),
+    discover: vi.fn().mockResolvedValue({
+      success: true,
+      data: [{ path: "/vault", name: "Vault" }],
+    }),
     readDay: vi
       .fn()
       .mockImplementation((_root, date) =>
@@ -70,6 +68,9 @@ beforeEach(() => {
 });
 it("offers explicit creation and keeps activity collapsed initially", async () => {
   render(<TodayRoute />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Show journal & photos" }),
+  );
   fireEvent.click(
     await screen.findByRole("button", { name: "Start this day’s journal" }),
   );
@@ -98,7 +99,7 @@ it("never displays a previous day under a new date while loading", async () => {
 });
 it("ignores an old date response that resolves after a newer request", async () => {
   render(<TodayRoute />);
-  await screen.findByText("A little focus");
+  await screen.findByText("To do");
   let resolveOld: (value: unknown) => void = () => undefined;
   vi.mocked(window.vaultAPI.readDay)
     .mockImplementationOnce(
@@ -128,7 +129,7 @@ it("persists privacy after the shortcut and hides associated photos", async () =
     data: { ...empty, photos: ["/vault/Photos/a.jpg"] },
   });
   render(<TodayRoute />);
-  await screen.findByText("Photos are hidden with your journal.");
+  await screen.findByText("To do");
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
   fireEvent.keyDown(window, { key: "j", ctrlKey: true, shiftKey: true });
   await waitFor(() =>
@@ -138,7 +139,7 @@ it("persists privacy after the shortcut and hides associated photos", async () =
 });
 it("adds an intention scoped to the displayed day", async () => {
   render(<TodayRoute />);
-  await screen.findByText("A little focus");
+  await screen.findByText("To do");
   fireEvent.change(
     screen.getByRole("textbox", { name: "Add a daily intention" }),
     { target: { value: "Take a walk" } },
@@ -173,16 +174,15 @@ it("exposes real queue context and adds a source task without completing it", as
     },
   });
   render(<TodayRoute />);
-  await screen.findByText("A little focus");
-  expect(screen.queryByText("Review proposal")).not.toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("button", { name: /Choose from your queue/ }),
-  );
-  fireEvent.click(screen.getByText("Review proposal"));
+  await screen.findByText("To do");
+  expect(screen.getByText("Review proposal")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Details · Routines"));
   expect(
     screen.getByText("A proposal from yesterday’s meeting"),
   ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Add to focus" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add Review proposal to today" }),
+  );
   await waitFor(() =>
     expect(window.vaultAPI.addFocus).toHaveBeenCalledWith(
       "/vault",
@@ -270,7 +270,7 @@ it("shows a concise briefing with expansion and source freshness", async () => {
 });
 it("refreshes relevant sources without watching every vault directory", async () => {
   render(<TodayRoute />);
-  await screen.findByText("A little focus");
+  await screen.findByText("To do");
   const handler = vi.mocked(window.diskAPI.onChanged).mock.calls.at(-1)?.[0];
   if (!handler) throw new Error("Missing directory watcher");
   const initial = vi.mocked(window.vaultAPI.readDay).mock.calls.length;
@@ -323,4 +323,84 @@ it("retains a chosen task’s context and source after it leaves the queue", asy
   expect(screen.getByText("Yesterday’s meeting notes")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Open source ↗" }));
   expect(navigateFiles).toHaveBeenCalled();
+});
+
+it("removes the entire journal and photo sections when hidden", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: { ...empty, photos: ["/vault/Photos/a.jpg"] },
+  });
+  render(<TodayRoute />);
+  await screen.findByText("To do");
+  expect(
+    screen.queryByRole("heading", { name: "Your journal" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Daily photos")).not.toBeInTheDocument();
+  expect(screen.queryByText("Hidden from view")).not.toBeInTheDocument();
+});
+it("remembers layout width and ordering and resets them", async () => {
+  render(<TodayRoute />);
+  await screen.findByText("To do");
+  fireEvent.click(screen.getByText("Layout"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Show journal & photos" }),
+  );
+  fireEvent.change(screen.getByRole("slider", { name: "Journal width" }), {
+    target: { value: "45" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Tasks first" }));
+  expect(localStorage.getItem("opal.today.journal-width")).toBe("45");
+  expect(localStorage.getItem("opal.today.tasks-first")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "Reset layout" }));
+  expect(localStorage.getItem("opal.today.journal-width")).toBe("55");
+});
+
+it("searches task context, filters sources, and adds without opening details", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: {
+      ...empty,
+      tasks: [
+        {
+          id: "one",
+          title: "Review proposal",
+          source: "markdown",
+          sourcePath: "/vault/RAM/todo.md",
+          status: "open",
+          context: "Budget for September",
+        },
+        {
+          id: "two",
+          title: "Book appointment",
+          source: "triage",
+          sourcePath: "/vault/RAM/triage/state.json",
+          status: "suggested",
+        },
+      ],
+    },
+  });
+  render(<TodayRoute />);
+  await screen.findByText("Review proposal");
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Search task queue" }),
+    { target: { value: "budget" } },
+  );
+  expect(screen.queryByText("Book appointment")).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add Review proposal to today" }),
+  );
+  await waitFor(() =>
+    expect(window.vaultAPI.addFocus).toHaveBeenCalledWith(
+      "/vault",
+      localDate(),
+      { title: "Review proposal", taskId: "one" },
+    ),
+  );
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Search task queue" }),
+    { target: { value: "" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Suggestions" }));
+  expect(screen.queryByText("Review proposal")).not.toBeInTheDocument();
+  expect(screen.getByText("Book appointment")).toBeInTheDocument();
 });
