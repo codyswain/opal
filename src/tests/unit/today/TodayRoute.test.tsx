@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { TodayRoute } from "@/renderer/features/today/TodayRoute";
@@ -12,6 +13,8 @@ import type { VaultDay } from "@/types/vault";
 import { localDate } from "@/common/vaultModel";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { installDiskApi } from "@/tests/helpers/diskApi";
+
+import { useChatHandoffStore } from "@/renderer/features/chat";
 
 const navigateFiles = vi.hoisted(() => vi.fn());
 vi.mock("@/renderer/features/shell", () => ({
@@ -42,6 +45,12 @@ const empty: VaultDay = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  useChatHandoffStore.setState({
+    pending: [],
+    drafts: {},
+    processing: false,
+    error: null,
+  });
   localStorage.clear();
   installDiskApi({
     listRoots: vi.fn().mockResolvedValue({ success: true, data: ["/vault"] }),
@@ -176,13 +185,13 @@ it("exposes real queue context and adds a source task without completing it", as
   render(<TodayRoute />);
   await screen.findByText("To do");
   expect(screen.getByText("Review proposal")).toBeInTheDocument();
-  fireEvent.click(screen.getByText("Details · Routines"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Details for Review proposal" }),
+  );
   expect(
     screen.getByText("A proposal from yesterday’s meeting"),
   ).toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Add Review proposal to today" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Add to today" }));
   await waitFor(() =>
     expect(window.vaultAPI.addFocus).toHaveBeenCalledWith(
       "/vault",
@@ -319,9 +328,11 @@ it("retains a chosen task’s context and source after it leaves the queue", asy
     },
   });
   render(<TodayRoute />);
-  fireEvent.click(await screen.findByText("Context"));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Details for Review proposal" }),
+  );
   expect(screen.getByText("Yesterday’s meeting notes")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Open source ↗" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open source" }));
   expect(navigateFiles).toHaveBeenCalled();
 });
 
@@ -403,4 +414,78 @@ it("searches task context, filters sources, and adds without opening details", a
   fireEvent.click(screen.getByRole("button", { name: "Suggestions" }));
   expect(screen.queryByText("Review proposal")).not.toBeInTheDocument();
   expect(screen.getByText("Book appointment")).toBeInTheDocument();
+});
+
+it("offers separate day and queue views with priority sorting and remembered density", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: {
+      ...empty,
+      tasks: [
+        {
+          id: "one",
+          title: "[P2] Write notes",
+          source: "markdown",
+          sourcePath: "/vault/RAM/todo.md",
+          status: "open",
+        },
+        {
+          id: "two",
+          title: "[P0] Reply today",
+          source: "markdown",
+          sourcePath: "/vault/RAM/todo.md",
+          status: "open",
+        },
+      ],
+    },
+  });
+  render(<TodayRoute />);
+  const queue = await screen.findByRole("tabpanel", {
+    name: /Your queue/,
+  });
+  expect(
+    within(queue).getAllByRole("button", { name: /Details for/ })[0],
+  ).toHaveAccessibleName("Details for [P0] Reply today");
+  fireEvent.click(screen.getByRole("button", { name: "Compact task rows" }));
+  expect(localStorage.getItem("opal.today.task-compact")).toContain("true");
+  fireEvent.change(screen.getByRole("combobox", { name: "Sort tasks" }), {
+    target: { value: "source" },
+  });
+  expect(
+    within(queue).getAllByRole("button", { name: /Details for/ })[0],
+  ).toHaveAccessibleName("Details for [P2] Write notes");
+  fireEvent.click(screen.getByRole("tab", { name: /For this day/ }));
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(screen.getByText("What deserves your attention?")).toBeInTheDocument();
+});
+it("prepares task context for chat without sending a message", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: {
+      ...empty,
+      tasks: [
+        {
+          id: "one",
+          title: "Review proposal",
+          source: "markdown",
+          sourcePath: "/vault/RAM/todo.md",
+          status: "open",
+          context: "Yesterday’s notes",
+        },
+      ],
+    },
+  });
+  render(<TodayRoute />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Details for Review proposal" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Think it through" }));
+  expect(useChatHandoffStore.getState().pending).toEqual([
+    {
+      title: "Review proposal",
+      sourcePath: "/vault/RAM/todo.md",
+      context: "Yesterday’s notes",
+      date: localDate(),
+    },
+  ]);
 });

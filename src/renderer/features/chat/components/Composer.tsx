@@ -1,28 +1,32 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/renderer/shared/ui';
 
 interface ComposerProps {
   sending: boolean;
+  preparing?: boolean;
   onSend: (question: string) => void;
   onCancel: () => void;
+  draft: string;
+  onDraftChange: (text: string) => void;
   /** Text handed in from outside (a suggested question); adopted and focused when it changes. */
   prefill?: { text: string; seq: number } | null;
 }
 
-export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, prefill = null }) => {
-  const [draft, setDraft] = useState('');
+export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, draft, onDraftChange, preparing = false, prefill = null }) => {
   const prefillRef = useRef<HTMLTextAreaElement>(null);
+  const appliedPrefill = useRef<ComposerProps['prefill']>(null);
   useEffect(() => {
-    if (!prefill) return;
-    setDraft(prefill.text);
+    if (!prefill || appliedPrefill.current === prefill) return;
+    appliedPrefill.current = prefill;
+    onDraftChange(draft ? `${draft}\n\n${prefill.text}` : prefill.text);
     prefillRef.current?.focus();
-  }, [prefill]);
+  }, [prefill, draft, onDraftChange]);
   const submit = () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || preparing) return;
     onSend(text);
-    setDraft('');
+    onDraftChange('');
   };
   return (
     <form
@@ -31,11 +35,12 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, p
     >
       <textarea
         ref={prefillRef}
+        disabled={preparing}
         aria-label="Ask about your library"
         value={draft}
         rows={Math.min(6, Math.max(1, draft.split('\n').length))}
         placeholder="Ask about your files… Enter to send, Shift+Enter for a new line"
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => onDraftChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit(); }
         }}
@@ -46,7 +51,7 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, p
           <Square aria-hidden className="h-4 w-4" />
         </Button>
       ) : (
-        <Button type="submit" disabled={!draft.trim()} aria-label="Send">
+        <Button type="submit" disabled={preparing || !draft.trim()} aria-label="Send">
           <SendHorizontal aria-hidden className="h-4 w-4" />
         </Button>
       )}

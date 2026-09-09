@@ -7,6 +7,7 @@ import {
   EyeOff,
   RefreshCw,
   Sun,
+  Search,
 } from "lucide-react";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { focusFile } from "@/renderer/features/disk-explorer/navigation";
@@ -22,6 +23,8 @@ import { JournalPanel } from "./JournalPanel";
 import { DailyBrief, DailyFocus, Markdown } from "./TodayContext";
 import { useVaultDay } from "./useVaultDay";
 import "./today.css";
+import { useChatHandoffStore } from "@/renderer/features/chat";
+import { usePaletteStore } from "@/renderer/features/commands/store/paletteStore";
 
 function usePreference(
   key: string,
@@ -123,6 +126,12 @@ export function TodayRoute() {
     >
       <div className="today-wrap">
         <header className="today-heading">
+          <button
+            className="today-search-launch"
+            onClick={() => usePaletteStore.getState().show()}
+          >
+            <Search size={14} /> Search your vault <kbd>⌘ K</kbd>
+          </button>
           <p className="today-eyebrow">
             <Sun size={15} strokeWidth={1.4} /> A little space for your day
           </p>
@@ -391,6 +400,10 @@ export function TodayRoute() {
                     busy={busy}
                     mutate={mutate}
                     openSource={openSource}
+                    onDiscuss={(task) => {
+                      useChatHandoffStore.getState().prepare(task);
+                      navigateTo("/chat");
+                    }}
                   />
                   <DailyBrief data={data} openSource={openSource} />
                   <p className="today-footer">

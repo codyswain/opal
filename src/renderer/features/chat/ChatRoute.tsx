@@ -8,6 +8,7 @@ import { Composer } from './components/Composer';
 import { ConversationList } from './components/ConversationList';
 import { IndexStatusBar } from './components/IndexStatusBar';
 import { MessageThread } from './components/MessageThread';
+import { useChatHandoffStore } from './store/chatHandoffStore';
 import { useChatStore } from './store/chatStore';
 
 /** Chat over the library: conversations, a cited thread, and the index controls. */
@@ -28,6 +29,16 @@ export const ChatRoute: React.FC = () => {
   const cancel = useChatStore((state) => state.cancel);
   const updateIndex = useChatStore((state) => state.updateIndex);
   const cancelIndex = useChatStore((state) => state.cancelIndex);
+  const draftId = active?.id ?? 'new';
+  const draft = useChatHandoffStore((state) => state.drafts[draftId] ?? '');
+  const setDraft = useChatHandoffStore((state) => state.setDraft);
+  const pending = useChatHandoffStore((state) => state.pending);
+  const processing = useChatHandoffStore((state) => state.processing);
+  const handoffError = useChatHandoffStore((state) => state.error);
+  const consume = useChatHandoffStore((state) => state.consume);
+  useEffect(() => {
+    if (pending.length && !processing && !handoffError && !sending) void consume();
+  }, [pending, processing, handoffError, sending, consume]);
   const [prefill, setPrefill] = useState<{ text: string; seq: number } | null>(null);
 
   useEffect(() => {
@@ -59,8 +70,10 @@ export const ChatRoute: React.FC = () => {
           onOpenSource={openSource}
           onSuggest={(question) => setPrefill((previous) => ({ text: question, seq: (previous?.seq ?? 0) + 1 }))}
         />
-        {error ? <p role="alert" className="px-4 py-1 text-xs text-destructive">{error}</p> : null}
-        <Composer sending={sending} onSend={(question) => void send(question)} onCancel={cancel} prefill={prefill} />
+        {handoffError ? <div role="alert" className="px-4 py-2 text-sm text-destructive">{handoffError} <button type="button" className="underline" onClick={() => void consume()}>Retry draft</button></div> : null}
+        {error && !handoffError ? <p role="alert" className="px-4 py-1 text-xs text-destructive">{error}</p> : null}
+        {processing ? <p role="status" aria-label="Preparing task draft" className="px-4 py-2 text-xs text-muted-foreground">Preparing task draft…</p> : null}
+        <Composer preparing={processing} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending} onSend={(question) => void send(question)} onCancel={cancel} prefill={prefill} />
       </section>
     </div>
   );

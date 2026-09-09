@@ -30,6 +30,7 @@ export interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
+let loadInFlight: Promise<void> | null = null;
 let unsubscribe: (() => void) | null = null;
 let cancelInFlight: (() => void) | null = null;
 
@@ -40,12 +41,22 @@ const INITIAL: ChatState = {
 export const useChatStore = create<ChatStore>((set, get) => ({
   ...INITIAL,
 
-  load: async () => {
-    const response = await window.chatAPI.list();
-    if (!response.success) { set({ error: response.error, loaded: true }); return; }
-    set({ conversations: response.data, loaded: true, error: null });
-    if (!get().active && response.data[0]) await get().select(response.data[0].id);
-    await get().refreshIndex();
+  load: () => {
+    if (loadInFlight) return loadInFlight;
+    loadInFlight = (async () => {
+      try {
+        const response = await window.chatAPI.list();
+        if (!response.success) { set({ error: response.error, loaded: true }); return; }
+        set({ conversations: response.data, loaded: true, error: null });
+        if (!get().active && response.data[0]) await get().select(response.data[0].id);
+        await get().refreshIndex();
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : 'Could not load conversations.', loaded: true });
+      } finally {
+        loadInFlight = null;
+      }
+    })();
+    return loadInFlight;
   },
 
   select: async (id) => {

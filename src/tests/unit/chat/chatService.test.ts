@@ -102,10 +102,12 @@ describe('ChatService', () => {
     expect(stored?.messages[1].content).toContain('[1]');
   });
 
-  it('tells the person to index first when nothing is indexed, and keeps the question when the key is missing', async () => {
+  it('allows supplied context without indexed files, and keeps the question when the key is missing', async () => {
     const conversation = await service.create();
     await service.ask(conversation.id, 'Anything?', () => undefined);
     expect(completions.prompts[0][0].content).toContain('not indexed yet');
+    expect(completions.prompts[0][0].content).toContain('context the person provides');
+    expect(completions.prompts[0][0].content).toContain('A source path in a message is a reference, not evidence that you read that file.');
     noKey = true;
     await expect(service.ask(conversation.id, 'Still there?', () => undefined)).rejects.toThrow(/API key/);
     const stored = await service.get(conversation.id);

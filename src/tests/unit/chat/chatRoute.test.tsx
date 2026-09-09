@@ -1,9 +1,10 @@
-import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import React, { StrictMode } from 'react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ChatRoute } from '@/renderer/features/chat';
+import { useChatHandoffStore } from '@/renderer/features/chat/store/chatHandoffStore';
 import { useChatStore } from '@/renderer/features/chat/store/chatStore';
 import { ShellProvider } from '@/renderer/features/shell';
 import { TooltipProvider } from '@/renderer/shared/ui';
@@ -20,7 +21,7 @@ function renderChat() {
     <MemoryRouter initialEntries={['/chat']}>
       <TooltipProvider>
         <ShellProvider routes={[{ path: '/chat', element: null, handle: { shell: { id: 'chat', header: { title: 'Chat' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
-          <ChatRoute />
+          <StrictMode><ChatRoute /></StrictMode>
           <LocationProbe />
         </ShellProvider>
       </TooltipProvider>
@@ -30,6 +31,7 @@ function renderChat() {
 
 beforeEach(() => {
   useChatStore.getState().reset();
+  useChatHandoffStore.setState({ pending: [], drafts: {}, processing: false, error: null });
   installActivityApi();
 });
 
@@ -115,4 +117,99 @@ describe('ChatRoute', () => {
     expect(composer.value).toBe('Summarize the notes in my library');
     expect(composer).toHaveFocus();
   });
+});
+
+
+describe('task chat handoff', () => {
+  it('opens one empty conversation with editable context, preserving another unsent draft across navigation', async () => {
+    const api = installChatApi();
+    const original = await api.create();
+    if (!original.success) throw new Error('fixture');
+    const user = userEvent.setup();
+    const view = renderChat();
+    await waitFor(() => expect(useChatStore.getState().active?.id).toBe(original.data.id));
+    await user.type(screen.getByLabelText('Ask about your library'), 'Keep my original thought');
+    view.unmount();
+    useChatHandoffStore.getState().prepare({ title: 'Plan the launch', context: 'Decide the next step', sourcePath: '/Vault/launch.md', date: '2026-09-08' });
+    renderChat();
+    await waitFor(() => expect((screen.getByLabelText('Ask about your library') as HTMLTextAreaElement).value).toContain('Plan the launch'));
+    const composer = screen.getByLabelText('Ask about your library') as HTMLTextAreaElement;
+    expect(composer.value).toContain('Decide the next step');
+    expect(composer.value).toContain('/Vault/launch.md');
+    expect(composer.value).toContain('2026-09-08');
+    expect(useChatStore.getState().active?.messages).toEqual([]);
+    expect(api.conversations.size).toBe(2);
+    expect(api.ask).not.toHaveBeenCalled();
+    expect(api.indexUpdate).not.toHaveBeenCalled();
+    await user.type(composer, ' Please be concise.');
+    const handoffId = useChatStore.getState().active?.id;
+    await act(async () => { await useChatStore.getState().select(original.data.id); });
+    await waitFor(() => expect(composer).toHaveValue('Keep my original thought'));
+    if (!handoffId) throw new Error('handoff missing');
+    await act(async () => { await useChatStore.getState().select(handoffId); });
+    await waitFor(() => expect(composer.value).toContain('Please be concise.'));
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(api.ask).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps a failed handoff available for explicit retry without duplicate conversations', async () => {
+    const api = installChatApi();
+    vi.mocked(api.create).mockRejectedValueOnce(new Error('Storage unavailable'));
+    useChatHandoffStore.getState().prepare({ title: 'Prepare notes', date: '2026-09-08' });
+    const user = userEvent.setup();
+    renderChat();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage unavailable');
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.ask).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Retry draft' }));
+    await waitFor(() => expect((screen.getByLabelText('Ask about your library') as HTMLTextAreaElement).value).toContain('Prepare notes'));
+    expect(api.conversations.size).toBe(1);
+    expect(api.create).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+it('preserves a draft written before any conversation exists when a task arrives', async () => {
+  const api = installChatApi();
+  const user = userEvent.setup();
+  const view = renderChat();
+  await screen.findByText(/not indexed yet/);
+  await user.type(screen.getByLabelText('Ask about your library'), 'An unsaved thought');
+  view.unmount();
+  useChatHandoffStore.getState().prepare({ title: 'New task', date: '2026-09-08' });
+  renderChat();
+  await waitFor(() => expect((screen.getByLabelText('Ask about your library') as HTMLTextAreaElement).value).toContain('New task'));
+  expect(api.conversations.size).toBe(2);
+  const previousId = [...api.conversations.keys()][0];
+  await act(async () => { await useChatStore.getState().select(previousId); });
+  await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toHaveValue('An unsaved thought'));
+  expect(api.ask).not.toHaveBeenCalled();
+});
+
+it('blocks editing and sending to the previous conversation while preparing a task draft', async () => {
+  const api = installChatApi();
+  const user = userEvent.setup();
+  await useChatStore.getState().startConversation();
+  const oldId = useChatStore.getState().active?.id;
+  const view = renderChat();
+  await user.type(screen.getByLabelText('Ask about your library'), 'Keep this in the previous conversation');
+  view.unmount();
+  const create = vi.mocked(api.create).getMockImplementation();
+  if (!create) throw new Error('fixture');
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  vi.mocked(api.create).mockImplementationOnce(async () => { await gate; return create(); });
+  useChatHandoffStore.getState().prepare({ title: 'Next task', date: '2026-09-08' });
+  renderChat();
+  expect(await screen.findByRole('status', { name: 'Preparing task draft' })).toHaveTextContent('Preparing task draft');
+  expect(screen.getByLabelText('Ask about your library')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  expect(useChatStore.getState().active?.id).toBe(oldId);
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  expect(api.ask).not.toHaveBeenCalled();
+  await act(async () => { release(); await gate; });
+  await waitFor(() => expect((screen.getByLabelText('Ask about your library') as HTMLTextAreaElement).value).toContain('Next task'));
+  expect(screen.getByLabelText('Ask about your library')).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+  expect(useChatHandoffStore.getState().drafts[oldId ?? '']).toBe('Keep this in the previous conversation');
 });
