@@ -44,7 +44,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
 
   if (messages.length === 0 && streaming === null) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center" data-testid="chat-empty">
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-auto p-6 text-center" data-testid="chat-empty">
         <span aria-hidden className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-focus/10 text-focus">
           <MessageSquareText className="h-6 w-6" />
         </span>

@@ -62,7 +62,7 @@ export const ChatRoute: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full min-h-0" data-testid="chat-route">
+    <div className="flex h-full min-h-0 overflow-hidden" data-testid="chat-route">
       <ConversationList
         conversations={conversations}
         activeId={active?.id ?? null}
@@ -72,7 +72,7 @@ export const ChatRoute: React.FC = () => {
         drafts={drafts}
         busy={sending || processing || preparingSend}
       />
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Chat">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Chat">
         <ThreadHeader conversation={active} busy={sending || processing || preparingSend}
           onRename={(title) => active ? updateConversation(active.id, { title }) : Promise.resolve(false)}
           onOpenSource={(path) => openSource({ path, name: '', n: 1, excerpt: '', score: 0 })}

@@ -21,7 +21,7 @@
 .thread-list-row:hover .thread-archive-action, .thread-list-row:focus-within .thread-archive-action { opacity: 1; }
 .thread-list-empty { padding: 16px; color: hsl(var(--text-secondary)); font-size: 12px; line-height: 1.6; }
 .thread-list-empty span { display: block; margin-top: 5px; color: hsl(var(--text-tertiary)); }
-.thread-header { padding: 22px 28px 17px; border-bottom: 1px solid hsl(var(--border-subtle)); }
+.thread-header { flex-shrink: 0; max-height: 40%; overflow: auto; padding: 22px 28px 17px; border-bottom: 1px solid hsl(var(--border-subtle)); }
 .thread-header-title-row { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
 .thread-header h1 { min-width: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 500; line-height: 1.4; letter-spacing: -.025em; color: hsl(var(--text-primary)); }
 .thread-archived-badge { padding: 2px 5px; border: 1px solid hsl(var(--border-subtle)); border-radius: 4px; font-size: 9px; }
@@ -36,5 +36,5 @@
 .thread-context { margin-top: 8px; }
 .thread-context summary { cursor: pointer; width: fit-content; }
 .thread-context p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow: auto; margin-top: 8px; line-height: 1.6; color: hsl(var(--text-secondary)); }
-@media (max-width: 760px) { .thread-sidebar { width: 220px; } .thread-header { padding: 18px; } }
+@media (max-width: 760px) { .thread-sidebar { width: 220px; } .thread-header { flex-shrink: 0; max-height: 40%; overflow: auto; padding: 18px; } }
 @media (hover: none) { .thread-archive-action { opacity: 1; } }
