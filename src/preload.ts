@@ -1,3 +1,4 @@
+import type { ChatDraftState, CreateConversationOptions, ConversationPatch } from './types/chat';
 import type { VaultAPI } from "./types/vault";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
@@ -146,7 +147,10 @@ contextBridge.exposeInMainWorld("markdownAPI", {
 contextBridge.exposeInMainWorld("chatAPI", {
   list: () => ipcRenderer.invoke("chat:list"),
   get: (id: string) => ipcRenderer.invoke("chat:get", id),
-  create: () => ipcRenderer.invoke("chat:create"),
+  create: (options?: CreateConversationOptions) => ipcRenderer.invoke("chat:create", options),
+  update: (id: string, patch: ConversationPatch) => ipcRenderer.invoke("chat:update", id, patch),
+  getDraftState: () => ipcRenderer.invoke("chat:drafts-get"),
+  saveDraftState: (state: ChatDraftState) => ipcRenderer.invoke("chat:drafts-save", state),
   remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
   indexStatus: () => ipcRenderer.invoke("chat:index-status"),
   indexUpdate: () => ipcRenderer.invoke("chat:index-update"),

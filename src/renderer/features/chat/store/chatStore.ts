@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { ChatMessage, Conversation, ConversationSummary, LibraryIndexStatus } from '@/types/chat';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
+import type { ChatMessage, Conversation, ConversationSummary, LibraryIndexStatus, ThreadContext } from '@/types/chat';
 
 export interface ChatState {
   conversations: ConversationSummary[];
@@ -16,9 +17,10 @@ export interface ChatState {
 export interface ChatActions {
   load: () => Promise<void>;
   select: (id: string) => Promise<void>;
-  startConversation: () => Promise<string | null>;
+  startConversation: (options?: { title?: string; context?: ThreadContext }) => Promise<string | null>;
+  updateConversation: (id: string, patch: { title?: string; archived?: boolean }) => Promise<boolean>;
   removeConversation: (id: string) => Promise<void>;
-  send: (question: string) => Promise<void>;
+  send: (question: string, threadId?: string) => Promise<boolean>;
   cancel: () => void;
   refreshIndex: () => Promise<void>;
   updateIndex: () => Promise<void>;
@@ -30,6 +32,7 @@ export interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
+let selectionRevision = 0;
 let loadInFlight: Promise<void> | null = null;
 let unsubscribe: (() => void) | null = null;
 let cancelInFlight: (() => void) | null = null;
@@ -48,7 +51,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const response = await window.chatAPI.list();
         if (!response.success) { set({ error: response.error, loaded: true }); return; }
         set({ conversations: response.data, loaded: true, error: null });
-        if (!get().active && response.data[0]) await get().select(response.data[0].id);
+        if (!get().active) {
+          const remembered = readPref<string | null>('threads.active', null);
+          const resume = response.data.find((item) => item.id === remembered) ?? response.data.find((item) => !item.archivedAt);
+          if (remembered !== 'new' && resume) await get().select(resume.id);
+        }
         await get().refreshIndex();
       } catch (error) {
         set({ error: error instanceof Error ? error.message : 'Could not load conversations.', loaded: true });
@@ -60,21 +67,45 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   select: async (id) => {
+    if (get().sending) return;
+    const request = ++selectionRevision;
+    if (id === 'new') { writePref('threads.active', 'new'); set({ active: null, error: null, streaming: null }); return; }
     const response = await window.chatAPI.get(id);
+    if (request !== selectionRevision || get().sending) return;
     if (!response.success || !response.data) { set({ error: response.success ? 'This conversation no longer exists.' : response.error }); return; }
+    writePref('threads.active', id);
     set({ active: response.data, error: null, streaming: null });
   },
 
-  startConversation: async () => {
-    const response = await window.chatAPI.create();
+  startConversation: async (options) => {
+    const request = ++selectionRevision;
+    const response = await window.chatAPI.create(options);
+    if (request !== selectionRevision) return response.success ? response.data.id : null;
     if (!response.success) { set({ error: response.error }); return null; }
     set((state) => ({
       active: response.data,
-      conversations: [{ id: response.data.id, title: response.data.title, createdAt: response.data.createdAt, updatedAt: response.data.updatedAt, messageCount: 0 }, ...state.conversations],
+      conversations: [{ id: response.data.id, title: response.data.title, createdAt: response.data.createdAt, updatedAt: response.data.updatedAt, messageCount: 0, context: response.data.context }, ...state.conversations],
       error: null,
       streaming: null,
     }));
+    writePref('threads.active', response.data.id);
     return response.data.id;
+  },
+
+  updateConversation: async (id, patch) => {
+    try {
+      const response = await window.chatAPI.update(id, patch);
+      if (!response.success) { set({ error: response.error }); return false; }
+      const updated = response.data;
+      set((state) => ({ active: state.active?.id === id ? updated : state.active,
+        conversations: state.conversations.map((item) => item.id === id ? { id: updated.id, title: updated.title,
+          createdAt: updated.createdAt, updatedAt: updated.updatedAt, messageCount: updated.messages.length,
+          archivedAt: updated.archivedAt, context: updated.context } : item), error: null }));
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Could not update the thread.' });
+      return false;
+    }
   },
 
   removeConversation: async (id) => {
@@ -86,39 +117,54 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  send: async (question) => {
+  send: async (question, threadId) => {
     const text = question.trim();
-    if (!text || get().sending) return;
+    if (!text || get().sending) return false;
+    if (threadId && get().active?.id !== threadId) { set({ error: 'The selected thread changed. Your draft is still saved; open it to send.' }); return false; }
+    if (text.length > 8000) { set({ error: 'Messages can contain up to 8,000 characters. Your draft is still here.' }); return false; }
+    set({ sending: true, error: null });
     let active = get().active;
-    if (!active) {
-      const id = await get().startConversation();
-      if (!id) return;
-      active = get().active;
-      if (!active) return;
+    let accepted = false;
+    try {
+      if (!active) {
+        const id = await get().startConversation();
+        if (!id) return false;
+        active = get().active;
+        if (!active) return false;
+      }
+      const threadId = active.id;
+      const previousCount = active.messages.length;
+      const pendingUser: ChatMessage = { id: `pending-${Date.now()}`, role: 'user', content: text, createdAt: Date.now() };
+      set({ active: { ...active, messages: [...active.messages, pendingUser] }, streaming: '' });
+      const handle = window.chatAPI.ask(threadId, text,
+        (delta) => set((state) => ({ streaming: state.active?.id === threadId ? (state.streaming ?? '') + delta : state.streaming })),
+        (message) => set({ error: message }));
+      cancelInFlight = handle.cancel;
+      const response = await handle.result;
+      const refreshed = await window.chatAPI.get(threadId);
+      if (refreshed.success && refreshed.data) {
+        accepted = refreshed.data.messages.slice(previousCount).some((message) => message.role === 'user' && message.content === text);
+        if (get().active?.id === threadId) set({ active: refreshed.data });
+      }
+      set({ error: response.success ? null : response.error });
+      const list = await window.chatAPI.list();
+      if (list.success) set({ conversations: list.data });
+      return accepted;
+    } catch (error) {
+      // A transport failure is not proof that main persisted the message.
+      set({ error: error instanceof Error ? error.message : 'Could not send. Your draft is still here.' });
+      return false;
+    } finally {
+      cancelInFlight = null;
+      set({ sending: false, streaming: null });
     }
-    const pendingUser: ChatMessage = { id: `pending-${Date.now()}`, role: 'user', content: text, createdAt: Date.now() };
-    set({ active: { ...active, messages: [...active.messages, pendingUser] }, sending: true, streaming: '', error: null });
-    const handle = window.chatAPI.ask(
-      active.id,
-      text,
-      (delta) => set((state) => ({ streaming: (state.streaming ?? '') + delta })),
-      (message) => set({ error: message })
-    );
-    cancelInFlight = handle.cancel;
-    const response = await handle.result;
-    cancelInFlight = null;
-    // The persisted conversation is the truth: it carries sources and errors.
-    const refreshed = await window.chatAPI.get(active.id);
-    if (refreshed.success && refreshed.data) set({ active: refreshed.data });
-    set({ sending: false, streaming: null, error: response.success ? null : response.error });
-    const list = await window.chatAPI.list();
-    if (list.success) set({ conversations: list.data });
   },
 
   cancel: () => {
     cancelInFlight?.();
     cancelInFlight = null;
-    set({ sending: false, streaming: null });
+    // The IPC request still finishes in main; retain the send lock until then.
+    set({ streaming: null });
   },
 
   refreshIndex: async () => {
@@ -148,6 +194,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   reset: () => {
+    selectionRevision++;
     unsubscribe?.();
     unsubscribe = null;
     cancelInFlight = null;

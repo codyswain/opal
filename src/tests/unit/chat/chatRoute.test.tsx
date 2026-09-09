@@ -31,7 +31,8 @@ function renderChat() {
 
 beforeEach(() => {
   useChatStore.getState().reset();
-  useChatHandoffStore.setState({ pending: [], drafts: {}, processing: false, error: null });
+  useChatHandoffStore.getState().reset();
+  localStorage.clear();
   installActivityApi();
 });
 
@@ -88,7 +89,7 @@ describe('ChatRoute', () => {
     expect(window.activityAPI.record).toHaveBeenCalledWith('/Vault/Projects/atlas.md', 'opened');
   });
 
-  it('lists, switches and removes conversations', async () => {
+  it('lists, switches, archives and restores threads', async () => {
     const api = installChatApi({ status: { ready: true, files: 1, chunks: 1 } });
     const first = await api.create();
     const firstId = first.success ? first.data.id : '';
@@ -102,9 +103,12 @@ describe('ChatRoute', () => {
     await waitFor(() => expect(useChatStore.getState().active?.title).toBe('New conversation'));
     await user.click(screen.getByRole('button', { name: /^Older one/ }));
     await waitFor(() => expect(useChatStore.getState().active?.id).toBe(firstId));
-    await user.click(screen.getByRole('button', { name: 'Remove conversation Older one' }));
+    await user.click(screen.getByRole('button', { name: 'Archive thread Older one' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Older one/ })).not.toBeInTheDocument());
-    expect(useChatStore.getState().active).toBeNull();
+    expect(api.conversations.get(firstId)?.archivedAt).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Archived' }));
+    await user.click(screen.getByRole('button', { name: 'Restore thread Older one' }));
+    expect(api.conversations.get(firstId)?.archivedAt).toBeUndefined();
   });
 
   it('offers starter questions on an empty conversation that fill the composer', async () => {
@@ -192,6 +196,7 @@ it('blocks editing and sending to the previous conversation while preparing a ta
   await useChatStore.getState().startConversation();
   const oldId = useChatStore.getState().active?.id;
   const view = renderChat();
+  await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toBeEnabled());
   await user.type(screen.getByLabelText('Ask about your library'), 'Keep this in the previous conversation');
   view.unmount();
   const create = vi.mocked(api.create).getMockImplementation();
@@ -212,4 +217,19 @@ it('blocks editing and sending to the previous conversation while preparing a ta
   expect(screen.getByLabelText('Ask about your library')).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   expect(useChatHandoffStore.getState().drafts[oldId ?? '']).toBe('Keep this in the previous conversation');
+});
+
+it('recovers a draft after restart and retains it when the send is rejected', async () => {
+  const api = installChatApi();
+  const original = await api.create({ title: 'A lasting thought' });
+  if (!original.success) throw new Error('fixture');
+  await api.saveDraftState({ drafts: { [original.data.id]: 'Keep this for tomorrow' }, pending: [] });
+  vi.mocked(api.ask).mockImplementation(() => ({ result: Promise.resolve({ success: false, error: 'Could not save the message' }), cancel: vi.fn() }));
+  const user = userEvent.setup();
+  renderChat();
+  await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toHaveValue('Keep this for tomorrow'));
+  expect(screen.getByRole('status', { name: 'Draft storage' })).toHaveTextContent('Draft saved on this Mac');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save the message'));
+  expect(screen.getByLabelText('Ask about your library')).toHaveValue('Keep this for tomorrow');
 });

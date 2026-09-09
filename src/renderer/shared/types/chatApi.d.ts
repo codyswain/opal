@@ -1,10 +1,13 @@
 import type { DiskResult } from '@/types/disk';
-import type { ChatAnswer, Conversation, ConversationSummary, LibraryIndexStatus } from '@/types/chat';
+import type { ChatAnswer, ChatDraftState, CreateConversationOptions, ConversationPatch, Conversation, ConversationSummary, LibraryIndexStatus } from '@/types/chat';
 
 export interface ChatAPI {
   list: () => Promise<DiskResult<ConversationSummary[]>>;
   get: (id: string) => Promise<DiskResult<Conversation | null>>;
-  create: () => Promise<DiskResult<Conversation>>;
+  create: (options?: CreateConversationOptions) => Promise<DiskResult<Conversation>>;
+  update: (id: string, patch: ConversationPatch) => Promise<DiskResult<Conversation>>;
+  getDraftState: () => Promise<DiskResult<ChatDraftState>>;
+  saveDraftState: (state: ChatDraftState) => Promise<DiskResult>;
   remove: (id: string) => Promise<DiskResult>;
   indexStatus: () => Promise<DiskResult<LibraryIndexStatus>>;
   indexUpdate: () => Promise<DiskResult<LibraryIndexStatus>>;

@@ -1,54 +1,74 @@
-import React from 'react';
-import { MessageSquare, Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Archive, ArchiveRestore, Plus, Search } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { Button, IconButton } from '@/renderer/shared/ui';
-import { cn } from '@/renderer/shared/utils';
 import type { ConversationSummary } from '@/types/chat';
+import './threadWorkspace.css';
 
 interface ConversationListProps {
   conversations: ConversationSummary[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onRemove: (id: string) => void;
+  onArchive: (id: string, archived: boolean) => void;
+  busy?: boolean;
+  drafts?: Record<string, string>;
 }
 
-export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onRemove }) => (
-  <aside aria-label="Conversations" className="flex h-full w-64 shrink-0 flex-col border-r border-border/60">
-    <div className="flex items-center justify-between px-3 py-2">
-      <span className="text-metadata font-medium uppercase tracking-[0.08em] text-foreground-tertiary">Conversations</span>
-      <Button size="compact" variant="ghost" onClick={onNew}>
-        <Plus aria-hidden className="h-3.5 w-3.5" />
-        New
-      </Button>
-    </div>
-    {conversations.length === 0 ? (
-      <p className="px-3 py-2 text-control text-foreground-tertiary">Ask a question to start one.</p>
-    ) : (
-      <ul className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-        {conversations.map((conversation) => (
-          <li key={conversation.id} className="group flex items-center">
-            <button
-              type="button"
-              aria-current={conversation.id === activeId ? 'true' : undefined}
-              onClick={() => onSelect(conversation.id)}
-              className={cn(
-                'flex min-w-0 flex-1 flex-col rounded-row px-2 py-1.5 text-left text-ui text-foreground-secondary hover:bg-surface-hover hover:text-foreground',
-                conversation.id === activeId && 'bg-surface-selected text-foreground'
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <MessageSquare aria-hidden className="h-3.5 w-3.5 shrink-0 text-icon" />
-                <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
-              </span>
-              <span className="pl-5 text-2xs text-foreground-tertiary">{formatRelativeTime(conversation.updatedAt, Date.now())}</span>
+export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onArchive, busy = false, drafts = {} }) => {
+  const [archived, setArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLocaleLowerCase();
+  const visible = conversations.filter((conversation) =>
+    (conversation.archivedAt != null) === archived &&
+    [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath]
+      .some((value) => value?.toLocaleLowerCase().includes(query))
+  );
+
+  const showScratch = !archived && Boolean(drafts.new?.trim()) &&
+    (!query || 'unfinished thought'.includes(query) || drafts.new.toLocaleLowerCase().includes(query));
+
+  return (
+    <aside aria-label="Threads" className="thread-sidebar">
+      <div className="thread-sidebar-heading">
+        <span className="thread-eyebrow">Your threads</span>
+        <Button size="compact" variant="ghost" onClick={onNew} disabled={busy}><Plus aria-hidden className="h-3.5 w-3.5" />New</Button>
+      </div>
+      <label className="thread-search">
+        <Search aria-hidden size={14} />
+        <input type="search" aria-label="Search threads" placeholder="Find a thread…" value={search} onChange={(event) => setSearch(event.target.value)} />
+      </label>
+      <div className="thread-filters" role="group" aria-label="Thread status">
+        <button type="button" aria-pressed={!archived} onClick={() => setArchived(false)}>Active</button>
+        <button type="button" aria-pressed={archived} onClick={() => setArchived(true)}>Archived</button>
+      </div>
+      {visible.length === 0 && !showScratch ? (
+        <div className="thread-list-empty">
+          <p>{query ? 'No matching threads' : archived ? 'No archived threads' : 'Room for your next thought'}</p>
+          <span>{query ? 'Try another name or a word from the source.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
+        </div>
+      ) : (
+        <ul className="thread-list">
+          {showScratch && <li className="thread-list-row" data-active={activeId === 'new' || activeId === null}>
+            <button type="button" className="thread-list-select" aria-current={activeId === 'new' || activeId === null ? 'true' : undefined} disabled={busy} onClick={() => onSelect('new')}>
+              <span className="thread-list-title">Unfinished thought</span>
+              <span className="thread-list-meta"><span className="thread-draft">Draft</span></span>
             </button>
-            <IconButton label={`Remove conversation ${conversation.title}`} size="compact" onClick={() => onRemove(conversation.id)} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
-              <Trash2 aria-hidden className="h-3.5 w-3.5" />
-            </IconButton>
-          </li>
-        ))}
-      </ul>
-    )}
-  </aside>
-);
+          </li>}
+          {visible.map((conversation) => (
+            <li key={conversation.id} className="thread-list-row" data-active={conversation.id === activeId}>
+              <button type="button" aria-current={conversation.id === activeId ? 'true' : undefined} onClick={() => onSelect(conversation.id)} disabled={busy} className="thread-list-select">
+                <span className="thread-list-title">{conversation.title}</span>
+                {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
+                <span className="thread-list-meta"><span>{formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
+              </button>
+              <IconButton label={`${archived ? 'Restore' : 'Archive'} thread ${conversation.title}`} size="compact" onClick={() => onArchive(conversation.id, !archived)} disabled={busy} className="thread-archive-action">
+                {archived ? <ArchiveRestore aria-hidden size={14} /> : <Archive aria-hidden size={14} />}
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
+  );
+};

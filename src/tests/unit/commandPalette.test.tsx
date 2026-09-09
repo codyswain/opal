@@ -87,7 +87,7 @@ describe('CommandPalette', () => {
     const palette = await screen.findByTestId('command-palette');
     expect(within(palette).getByRole('group', { name: 'Commands' })).toBeInTheDocument();
     await user.type(within(palette).getByRole('combobox'), 'chat');
-    await waitFor(() => expect(within(palette).getAllByRole('option')[0]).toHaveTextContent('Go to Chat'));
+    await waitFor(() => expect(within(palette).getAllByRole('option')[0]).toHaveTextContent('Go to Threads'));
     expect(within(palette).queryByRole('group', { name: 'Files' })).toBeNull();
     await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));

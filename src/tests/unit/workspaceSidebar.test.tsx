@@ -135,7 +135,7 @@ describe("WorkspaceSidebar", () => {
     renderSidebar();
 
     expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Threads" })).toHaveAttribute(
       "href",
       "/chat",
     );

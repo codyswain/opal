@@ -12,7 +12,7 @@ back up the personal workspace or update the installed application.
 | UI preferences, legacy database | Remaining Application Support/Opal | Include the full profile for recovery |
 | Search indexes and thumbnails | Application Support/Opal | Rebuildable; currently included in full copies |
 | API credentials | macOS Keychain | Not exported by workspace backup; reconnect on another Mac |
-| Unsent chat composer text | Renderer memory | Not durable across restart yet |
+| Unsent chat composer text and queued task handoffs | Application Support/Opal/library/chat/drafts.json | Atomic local saves; included in full profile recovery |
 
 ## Verified recovery copies
 
@@ -62,7 +62,7 @@ backup tooling changes do not require replacing the installed bundle.
 
 ## Next product work
 
-1. Make unsent chat drafts durable across app restart, with explicit recovery.
+1. Bring thread recovery and storage location into a unified workspace settings view.
 2. Add honest storage status: saved locally, last verified recovery copy, and
    remote sync status are separate facts.
 3. Offer backup destination selection and a restore preview inside Settings.

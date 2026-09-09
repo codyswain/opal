@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useChatStore } from '@/renderer/features/chat/store/chatStore';
 import { installChatApi } from '@/tests/helpers/chatApi';
 
-beforeEach(() => { useChatStore.getState().reset(); });
+beforeEach(() => { useChatStore.getState().reset(); localStorage.clear(); });
 
 describe('chatStore', () => {
   it('loads conversations and index status, selecting the newest conversation', async () => {
@@ -64,4 +64,14 @@ describe('chatStore', () => {
     expect(api.indexCancel).toHaveBeenCalled();
     expect(useChatStore.getState().index).toMatchObject({ indexing: false, cancelled: true, progress: null });
   });
+});
+
+it('never sends a draft to a different thread after the selection changes', async () => {
+  const api = installChatApi();
+  const first = await useChatStore.getState().startConversation();
+  await useChatStore.getState().startConversation();
+  if (!first) throw new Error('Missing thread');
+  expect(await useChatStore.getState().send('Belongs to the first thread', first)).toBe(false);
+  expect(api.ask).not.toHaveBeenCalled();
+  expect(useChatStore.getState().error).toMatch(/selected thread changed/);
 });

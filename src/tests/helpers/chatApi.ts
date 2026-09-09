@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import type { ChatAPI } from '@/renderer/shared/types/chatApi';
-import type { ChatMessage, Conversation, LibraryIndexStatus } from '@/types/chat';
+import type { ChatDraftState, CreateConversationOptions, ConversationPatch, ChatMessage, Conversation, LibraryIndexStatus } from '@/types/chat';
 
 export function indexStatus(over: Partial<LibraryIndexStatus> = {}): LibraryIndexStatus {
   return { files: 0, chunks: 0, staleFiles: 0, indexing: false, progress: null, cancelled: false, lastIndexedAt: null, error: null, skipped: [], ready: false, ...over };
@@ -20,6 +20,7 @@ export function installChatApi(options: {
   const conversations = new Map<string, Conversation>();
   let status = indexStatus(options.status);
   let counter = 0;
+  let draftState: ChatDraftState = { drafts: {}, pending: [] };
   const answerFor = options.answer ?? ((question: string) => `Answer to "${question}" [1]`);
   const listeners = new Set<() => void>();
   const api: ChatAPI & { conversations: Map<string, Conversation>; setStatus: (next: Partial<LibraryIndexStatus>) => void } = {
@@ -29,15 +30,25 @@ export function installChatApi(options: {
       success: true as const,
       data: [...conversations.values()]
         .sort((left, right) => right.updatedAt - left.updatedAt)
-        .map((conversation) => ({ id: conversation.id, title: conversation.title, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length })),
+        .map((conversation) => ({ id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length })),
     })),
     get: vi.fn(async (id: string) => ({ success: true as const, data: conversations.get(id) ?? null })),
-    create: vi.fn(async () => {
+    create: vi.fn(async (options: CreateConversationOptions = {}) => {
       counter += 1;
-      const conversation: Conversation = { id: `00000000-0000-4000-8000-${String(counter).padStart(12, '0')}`, title: 'New conversation', createdAt: counter, updatedAt: counter, messages: [] };
+      const conversation: Conversation = { id: `00000000-0000-4000-8000-${String(counter).padStart(12, '0')}`, title: options.title ?? 'New conversation', context: options.context, createdAt: counter, updatedAt: counter, messages: [] };
       conversations.set(conversation.id, conversation);
       return { success: true as const, data: conversation };
     }),
+    update: vi.fn(async (id: string, patch: ConversationPatch) => {
+      const conversation = conversations.get(id);
+      if (!conversation) return { success: false as const, error: 'This conversation no longer exists.' };
+      if (patch.title !== undefined) conversation.title = patch.title;
+      if (patch.archived === true) conversation.archivedAt = Date.now();
+      if (patch.archived === false) delete conversation.archivedAt;
+      return { success: true as const, data: conversation };
+    }),
+    getDraftState: vi.fn(async () => ({ success: true as const, data: draftState })),
+    saveDraftState: vi.fn(async (state: ChatDraftState) => { draftState = structuredClone(state); return { success: true as const, data: undefined }; }),
     remove: vi.fn(async (id: string) => { conversations.delete(id); return { success: true as const, data: undefined }; }),
     indexStatus: vi.fn(async () => ({ success: true as const, data: status })),
     indexUpdate: vi.fn(async () => { status = { ...status, ready: true, files: status.files || 2, chunks: status.chunks || 5, staleFiles: 0, lastIndexedAt: Date.now() }; return { success: true as const, data: status }; }),
@@ -49,7 +60,7 @@ export function installChatApi(options: {
         if (!conversation) return { success: false as const, error: 'This conversation no longer exists.' };
         counter += 1;
         conversation.messages.push({ id: `u${counter}`, role: 'user', content: question, createdAt: counter });
-        if (conversation.messages.length === 1) conversation.title = question.slice(0, 60);
+        if (conversation.messages.length === 1 && conversation.title === 'New conversation') conversation.title = question.slice(0, 60);
         if (options.failWith) {
           onError(options.failWith);
           conversation.messages.push({ id: `a${counter}`, role: 'assistant', content: '', createdAt: counter, error: options.failWith });
@@ -60,7 +71,7 @@ export function installChatApi(options: {
         const message: ChatMessage = { id: `a${counter}`, role: 'assistant', content: text, createdAt: counter, sources: options.sources ?? [] };
         conversation.messages.push(message);
         conversation.updatedAt = counter;
-        return { success: true as const, data: { message, conversation: { id: conversation.id, title: conversation.title, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length } } };
+        return { success: true as const, data: { message, conversation: { id: conversation.id, title: conversation.title, context: conversation.context, archivedAt: conversation.archivedAt, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt, messageCount: conversation.messages.length } } };
       })();
       return { result, cancel: vi.fn() };
     }),

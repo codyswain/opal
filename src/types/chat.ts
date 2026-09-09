@@ -64,9 +64,26 @@ export interface ChatMessage {
   error?: string;
 }
 
+export interface ThreadContext {
+  title: string;
+  date: string;
+  context?: string;
+  sourcePath?: string;
+}
+
+export interface ChatDraftState {
+  drafts: Record<string, string>;
+  pending: ThreadContext[];
+}
+
+export interface CreateConversationOptions { title?: string; context?: ThreadContext }
+export interface ConversationPatch { title?: string; archived?: boolean }
+
 export interface Conversation {
   id: string;
   title: string;
+  context?: ThreadContext;
+  archivedAt?: number;
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
@@ -75,6 +92,8 @@ export interface Conversation {
 export interface ConversationSummary {
   id: string;
   title: string;
+  context?: ThreadContext;
+  archivedAt?: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;

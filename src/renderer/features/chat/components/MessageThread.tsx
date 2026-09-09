@@ -48,8 +48,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
         <span aria-hidden className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-focus/10 text-focus">
           <MessageSquareText className="h-6 w-6" />
         </span>
-        <p className="text-base font-medium text-foreground">Ask about anything in your library</p>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">Answers come from your own files and cite the passages they used, so you can open the source in one click.</p>
+        <p className="text-base font-medium text-foreground">A place to keep thinking</p>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">Work through an idea, make a decision, or ask about your library. Your conversation stays here to continue another day.</p>
         {onSuggest ? (
           <ul className="mt-6 flex max-w-lg flex-wrap justify-center gap-2" aria-label="Suggested questions">
             {SUGGESTED_QUESTIONS.map((question) => (

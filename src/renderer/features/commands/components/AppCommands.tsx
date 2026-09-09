@@ -88,9 +88,9 @@ export const AppCommands: React.FC = () => {
       },
       {
         id: "nav.chat",
-        name: "Go to Chat",
+        name: "Go to Threads",
         type: "navigation",
-        keywords: ["ask", "ai", "question"],
+        keywords: ["chat", "conversation", "ask", "ai", "question"],
         perform: () => navigateTo("/chat"),
       },
       {
@@ -156,7 +156,7 @@ export const AppCommands: React.FC = () => {
       },
       {
         id: "chat.indexLibrary",
-        name: "Index Library for Chat",
+        name: "Index Library for Threads",
         type: "action",
         keywords: ["embed", "openai", "update index"],
         perform: () => {

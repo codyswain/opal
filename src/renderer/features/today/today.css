@@ -858,3 +858,12 @@
     display: none;
   }
 }
+
+.today-continue { margin-top: 24px; padding-top: 20px; border-top: 1px solid hsl(var(--border) / .65); }
+.today-continue .today-section-heading > button { display: flex; align-items: center; gap: 5px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.today-thread-list { display: grid; gap: 3px; margin-top: 10px; }
+.today-thread-list > button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 8px; border-radius: 7px; color: hsl(var(--muted-foreground)); }
+.today-thread-list > button:hover { background: hsl(var(--muted) / .6); }
+.today-thread-list > button > span { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.today-thread-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: hsl(var(--foreground)); }
+.today-thread-list small { font-size: 10px; }

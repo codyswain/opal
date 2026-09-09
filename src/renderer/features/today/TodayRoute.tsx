@@ -23,6 +23,7 @@ import { JournalPanel } from "./JournalPanel";
 import { DailyBrief, DailyFocus, Markdown } from "./TodayContext";
 import { useVaultDay } from "./useVaultDay";
 import "./today.css";
+import { ContinueThinking } from "@/renderer/features/chat/components/ContinueThinking";
 import { useChatHandoffStore } from "@/renderer/features/chat";
 import { usePaletteStore } from "@/renderer/features/commands/store/paletteStore";
 
@@ -405,6 +406,7 @@ export function TodayRoute() {
                       navigateTo("/chat");
                     }}
                   />
+                  <ContinueThinking />
                   <DailyBrief data={data} openSource={openSource} />
                   <p className="today-footer">
                     Rooted in{" "}

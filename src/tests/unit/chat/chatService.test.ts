@@ -66,7 +66,6 @@ beforeEach(async () => {
       return { embeddings, completions };
     },
     now: () => now++,
-    maxConversations: 3,
   });
 });
 afterEach(async () => { await rm(tmp, { recursive: true, force: true }); });
@@ -81,8 +80,53 @@ describe('ChatService', () => {
     expect(await service.list()).toEqual([]);
     expect(await service.get(conversation.id)).toBeNull();
     await expect(service.get('nope')).rejects.toThrow(ChatError);
-    for (let i = 0; i < 5; i += 1) await service.create();
-    expect((await readdir(path.join(tmp, 'library', 'chat'))).filter((name) => name.endsWith('.json'))).toHaveLength(3);
+    for (let i = 0; i < 35; i += 1) await service.create();
+    expect((await readdir(path.join(tmp, 'library', 'chat'))).filter((name) => name.endsWith('.json'))).toHaveLength(35);
+  });
+
+  it('reloads context, manual titles, archives and drafts without calling AI', async () => {
+    noKey = true;
+    const context = { title: 'Atlas', date: '2026-09-09', context: 'Map research', sourcePath: '/atlas.md' };
+    const conversation = await service.create({ title: 'Research', context });
+    await service.update(conversation.id, { title: 'My research', archived: true });
+    const drafts = { drafts: { [conversation.id]: 'Unsent thought', new: 'Scratch thought' }, pending: [context] };
+    await service.saveDraftState(drafts);
+    const reloaded = new ChatService({ directory: path.join(tmp, 'library', 'chat'), index, clients: async () => { throw new Error('Must not call AI'); } });
+    expect(await reloaded.getDraftState()).toEqual(drafts);
+    expect(await reloaded.get(conversation.id)).toMatchObject({ title: 'My research', context, archivedAt: expect.any(Number) });
+    expect(await reloaded.list()).toHaveLength(1);
+    await reloaded.update(conversation.id, { archived: false });
+    expect((await reloaded.get(conversation.id))?.archivedAt).toBeUndefined();
+  });
+
+  it('preserves metadata edited while an answer streams', async () => {
+    const conversation = await service.create({ title: 'New conversation' });
+    let finish!: (answer: string) => void;
+    let started!: () => void;
+    const streaming = new Promise<void>((resolve) => { started = resolve; });
+    completions.stream = async () => { started(); return new Promise<string>((resolve) => { finish = resolve; }); };
+    const answer = service.ask(conversation.id, 'Question', () => undefined);
+    await streaming;
+    expect((await service.get(conversation.id))?.title).toBe('New conversation');
+    await expect(service.ask(conversation.id, 'Another', () => undefined)).rejects.toThrow(/already/);
+    await expect(service.remove(conversation.id)).rejects.toThrow(/answer/);
+    await service.update(conversation.id, { title: 'Renamed during answer', archived: true });
+    finish('Answer');
+    await answer;
+    expect(await service.get(conversation.id)).toMatchObject({ title: 'Renamed during answer', archivedAt: expect.any(Number), messages: [expect.objectContaining({ role: 'user' }), expect.objectContaining({ role: 'assistant' })] });
+  });
+
+  it('rejects invalid metadata and refuses to overwrite corrupt drafts', async () => {
+    await expect(service.create({ title: ' ' })).rejects.toThrow();
+    await expect(service.create({ context: { title: 'x', date: 2 } } as never)).rejects.toThrow();
+    const conversation = await service.create();
+    await expect(service.update(conversation.id, { archived: 'yes' } as never)).rejects.toThrow();
+    await expect(service.update(conversation.id, { messages: [] } as never)).rejects.toThrow();
+    await expect(service.update('00000000-0000-4000-8000-000000000000', { title: 'Gone' })).rejects.toThrow();
+    await expect(service.saveDraftState({ drafts: JSON.parse('{"__proto__":"bad"}'), pending: [] })).rejects.toThrow();
+    await writeFile(path.join(tmp, 'library', 'chat', 'drafts.json'), '{broken');
+    await expect(service.getDraftState()).rejects.toThrow();
+    await expect(service.saveDraftState({ drafts: {}, pending: [] })).rejects.toThrow();
   });
 
   it('answers from indexed sources, streams deltas, cites, and persists both messages', async () => {
@@ -130,7 +174,7 @@ describe('ChatHandlers', () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new ChatHandlers({ ipc, service, index }).registerAll();
-    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove']);
+    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:update']);
     const frames: unknown[] = [];
     const event = { sender: { isDestroyed: () => false, send: (_channel: string, payload: unknown) => frames.push(payload) } };
     const invoke = (channel: string, ...args: unknown[]) => {

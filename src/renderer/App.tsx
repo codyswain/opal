@@ -11,6 +11,7 @@ import { commandRegistry } from "@/renderer/features/commands/services/commandRe
 import { FilesRoute } from "@/renderer/features/disk-explorer";
 import { ChatRoute } from "@/renderer/features/chat";
 import { TodayRoute } from "@/renderer/features/today/TodayRoute";
+import { ChatDraftGuard } from "@/renderer/features/chat/components/ChatDraftGuard";
 import { JournalDraftGuard } from "@/renderer/features/today/JournalDraftGuard";
 import { PrivacyBoundary } from "@/renderer/features/privacy/PrivacyBoundary";
 import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
@@ -35,7 +36,7 @@ const TODAY_ROUTE: ShellRouteDescriptor = {
 
 const CHAT_ROUTE: ShellRouteDescriptor = {
   id: "chat",
-  header: { title: "Chat" },
+  header: { title: "Threads" },
 };
 
 const SETTINGS_ROUTE: ShellRouteDescriptor = {
@@ -114,6 +115,7 @@ const App: React.FC = () => {
             <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
               <AppCommands />
               <JournalDraftGuard />
+              <ChatDraftGuard />
               <CommandPalette />
               <AppShell>
                 <AppRoutes />

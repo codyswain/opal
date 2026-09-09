@@ -5,7 +5,8 @@ import { installChatApi } from '@/tests/helpers/chatApi';
 
 beforeEach(() => {
   useChatStore.getState().reset();
-  useChatHandoffStore.setState({ pending: [], drafts: {}, processing: false, error: null });
+  useChatHandoffStore.getState().reset();
+  localStorage.clear();
 });
 
 it('queues drafts locally and serializes consumption while conversation creation is delayed', async () => {

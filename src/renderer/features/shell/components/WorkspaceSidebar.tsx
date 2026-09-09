@@ -152,7 +152,7 @@ export function WorkspaceSidebar({
           <SidebarItem
             to="/chat"
             icon={MessageSquare}
-            label="Chat"
+            label="Threads"
             onActivate={onNavigate}
           />
         </SidebarSection>

@@ -20,7 +20,10 @@ export class ChatHandlers {
     const { ipc, service, index } = this.deps;
     ipc.handle('chat:list', async (): Promise<IPCResponse<ConversationSummary[]>> => this.respond(() => service.list(), 'Failed to load conversations'));
     ipc.handle('chat:get', async (_, id: unknown): Promise<IPCResponse<Conversation | null>> => this.respond(() => service.get(id), 'Failed to load the conversation'));
-    ipc.handle('chat:create', async (): Promise<IPCResponse<Conversation>> => this.respond(() => service.create(), 'Failed to start a conversation'));
+    ipc.handle('chat:create', async (_, options: unknown): Promise<IPCResponse<Conversation>> => this.respond(() => service.create(options), 'Failed to start a conversation'));
+    ipc.handle('chat:update', async (_, id: unknown, patch: unknown) => this.respond(() => service.update(id, patch), 'Failed to update the thread'));
+    ipc.handle('chat:drafts-get', async () => this.respond(() => service.getDraftState(), 'Failed to load thread drafts'));
+    ipc.handle('chat:drafts-save', async (_, state: unknown) => this.act(() => service.saveDraftState(state), 'Failed to save thread drafts'));
     ipc.handle('chat:remove', async (_, id: unknown): Promise<IPCResponse> => this.act(() => service.remove(id), 'Failed to remove the conversation'));
     ipc.handle('chat:index-status', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(async () => { await index.load(); return index.status(); }, 'Failed to read the index'));
     ipc.handle('chat:index-update', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(() => index.update(), 'Failed to update the index'));

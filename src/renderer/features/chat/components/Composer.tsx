@@ -26,7 +26,7 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, d
     const text = draft.trim();
     if (!text || sending || preparing) return;
     onSend(text);
-    onDraftChange('');
+
   };
   return (
     <form
@@ -35,11 +35,11 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, d
     >
       <textarea
         ref={prefillRef}
-        disabled={preparing}
+        disabled={preparing || sending}
         aria-label="Ask about your library"
         value={draft}
         rows={Math.min(6, Math.max(1, draft.split('\n').length))}
-        placeholder="Ask about your files… Enter to send, Shift+Enter for a new line"
+        placeholder="Keep thinking… Enter to send, Shift+Enter for a new line"
         onChange={(event) => onDraftChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit(); }
