@@ -79,6 +79,22 @@ describe('CommandPalette', () => {
     await act(async () => finish({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Obsolete result' }], incomplete: false } }));
     expect(screen.queryByText('Obsolete result')).not.toBeInTheDocument();
   });
+  it('keeps the keyboard-selected command selected when body results arrive', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    let finish!: (value: unknown) => void;
+    window.chatAPI.searchContent = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof window.chatAPI.searchContent;
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'chat');
+    await waitFor(() => expect(window.chatAPI.searchContent).toHaveBeenCalled());
+    await user.keyboard('{ArrowDown}{ArrowUp}');
+    const selected = screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
+    const identity = selected?.getAttribute('data-testid');
+    expect(identity).toMatch(/^palette-command-/);
+    await act(async () => finish({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Chat about garden plans.' }], incomplete: false } }));
+    expect(screen.getByTestId(identity as string)).toHaveAttribute('aria-selected', 'true');
+  });
   it('opens with Cmd+K, shows recent files and commands, and Escape closes it', async () => {
     const user = userEvent.setup();
     renderPalette();

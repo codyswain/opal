@@ -18,6 +18,8 @@ type PaletteItem =
   | { kind: 'file'; entry: DiskEntry; hint: string; excerpt?: string }
   | { kind: 'command'; command: Command };
 
+const itemKey = (item: PaletteItem): string => item.kind === 'file' ? `file:${item.entry.path}` : `command:${item.command.id}`;
+
 const FILE_LIMIT = 8;
 const RECENT_LIMIT = 6;
 const COMMAND_LIMIT_WITH_FILES = 5;
@@ -59,7 +61,8 @@ export const CommandPalette: React.FC = () => {
   const [deep, setDeep] = useState(false);
   const [contentStatus, setContentStatus] = useState('');
   const [recent, setRecent] = useState<PaletteItem[]>([]);
-  const [active, setActive] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [namesLoading, setNamesLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const request = useRef(0);
 
@@ -69,7 +72,8 @@ export const CommandPalette: React.FC = () => {
   useEffect(() => {
     if (!open) return;
     setQuery(initialQuery);
-    setActive(0);
+    setActiveKey(null);
+    setDeep(false);
     setFiles([]);
     const token = ++request.current;
     void window.activityAPI.recent({ limit: RECENT_LIMIT * 2 }).then((response) => {
@@ -83,7 +87,8 @@ export const CommandPalette: React.FC = () => {
   }, [open, initialQuery]);
 
   useEffect(() => {
-    if (!open || commandMode || !term) { setFiles([]); return; }
+    if (!open || commandMode || !term) { setFiles([]); setNamesLoading(false); return; }
+    setNamesLoading(true);
     const token = ++request.current;
     setFiles([]);
     const timer = setTimeout(() => {
@@ -92,14 +97,14 @@ export const CommandPalette: React.FC = () => {
         { limit: FILE_LIMIT }
       ).then((response) => {
         if (token !== request.current) return;
+        setNamesLoading(false);
         if (!response.success) { setFiles([]); return; }
         setFiles(response.data.rows.map((row) => ({ kind: 'file', entry: row.entry, hint: locate(row.entry.path, roots) })));
-      }).catch(() => { if (token === request.current) setFiles([]); });
+      }).catch(() => { if (token === request.current) { setFiles([]); setNamesLoading(false); } });
     }, FILE_SEARCH_DEBOUNCE_MS);
     return () => { request.current += 1; clearTimeout(timer); };
   }, [open, term, commandMode, roots]);
 
-  useEffect(() => { setDeep(false); }, [term, open]);
   useEffect(() => {
     let current = true;
     setContent([]);
@@ -126,10 +131,8 @@ export const CommandPalette: React.FC = () => {
   }, [commands, term, commandMode, recent, files, content, deep]);
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 
-  useEffect(() => { setActive(0); }, [term, commandMode]);
-  useEffect(() => {
-    if (active >= flat.length) setActive(Math.max(0, flat.length - 1));
-  }, [flat.length, active]);
+  const active = Math.max(0, flat.findIndex((item) => itemKey(item) === activeKey));
+  useEffect(() => { setActiveKey(null); }, [term, commandMode]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [active]);
@@ -146,8 +149,8 @@ export const CommandPalette: React.FC = () => {
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => (flat.length ? (index + 1) % flat.length : 0)); }
-    else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => (flat.length ? (index - 1 + flat.length) % flat.length : 0)); }
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveKey(flat.length ? itemKey(flat[(active + 1) % flat.length]) : null); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveKey(flat.length ? itemKey(flat[(active - 1 + flat.length) % flat.length]) : null); }
     else if (event.key === 'Enter') { event.preventDefault(); const item = flat[active]; if (item) run(item); }
   };
 
@@ -169,7 +172,7 @@ export const CommandPalette: React.FC = () => {
             <input
               autoFocus
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setDeep(false); }}
               placeholder="Search names and contents, or > for commands"
               aria-label="Search files and commands"
               aria-activedescendant={flat[active] ? `palette-item-${active}` : undefined}
@@ -184,7 +187,7 @@ export const CommandPalette: React.FC = () => {
           <div ref={listRef} id="palette-results" role="listbox" aria-label="Results" className="max-h-[52vh] overflow-y-auto p-1.5">
             {flat.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {term ? `Nothing matches “${term}”` : 'Open a folder to search its files.'}
+                {term ? namesLoading || contentStatus.startsWith('Searching') ? 'Searching…' : `Nothing matches “${term}”` : 'Open a folder to search its files.'}
               </p>
             ) : sections.map((section) => (
               <div key={section.title} role="group" aria-label={section.title}>
@@ -202,7 +205,7 @@ export const CommandPalette: React.FC = () => {
                       aria-selected={selected}
                       data-index={index}
                       data-testid={item.kind === 'file' ? `palette-file-${item.entry.path}` : `palette-command-${item.command.id}`}
-                      onMouseMove={() => setActive(index)}
+                      onMouseMove={() => setActiveKey(itemKey(item))}
                       onClick={() => run(item)}
                       className={`flex min-h-9 py-2 cursor-default items-center gap-3 rounded-row px-2.5 text-sm ${selected ? 'bg-surface-active text-foreground' : 'text-foreground-secondary'}`}
                     >
