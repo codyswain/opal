@@ -1,4 +1,5 @@
 import React from "react";
+import type { Editor } from "@tiptap/core";
 import {
   act,
   fireEvent,
@@ -9,6 +10,14 @@ import {
 import { beforeEach, expect, it, vi } from "vitest";
 import { JournalPanel } from "@/renderer/features/today/JournalPanel";
 import { useJournalStore } from "@/renderer/features/today/journalStore";
+let mountedEditor: Editor | null = null;
+vi.mock("@tiptap/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tiptap/react")>();
+  return { ...actual, useEditor: (...args: Parameters<typeof actual.useEditor>) => {
+    mountedEditor = actual.useEditor(...args);
+    return mountedEditor;
+  } };
+});
 beforeEach(() => {
   useJournalStore.setState({ drafts: {}, hydrated: false });
   window.vaultAPI = {
@@ -121,4 +130,27 @@ it("renders an ordinary daily template with separators and blank prompts without
   expect(screen.getByRole("heading", { name: "Evening" })).toBeInTheDocument();
   expect(useJournalStore.getState().drafts["/day"].text).toBe(journal);
   expect(window.vaultAPI.saveJournal).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("keeps the cursor beneath a heading when saving normalizes the final newline (blank paragraph: %s)", async (blankParagraph) => {
+  vi.mocked(window.vaultAPI.saveJournal).mockImplementation(async (_path, _base, text) => ({
+    success: true, data: { journal: text + "\n", revision: "saved" },
+  }));
+  render(<JournalPanel path="/day" journal={"## Morning\n\nFirst thought\n\n## Evening\n\nLast thought"} hidden={false} onOpen={vi.fn()} />);
+  await screen.findByRole("textbox", { name: "Daily journal" });
+  const editor = mountedEditor;
+  if (!editor) throw new Error("Journal editor did not mount");
+  await act(async () => {
+    editor.commands.setTextSelection(12);
+    editor.commands.insertContent("New ");
+    if (blankParagraph) editor.commands.splitBlock();
+  });
+  const position = editor.state.selection.from;
+  const document = editor.state.doc;
+  await act(async () => { await useJournalStore.getState().save("/day"); });
+  expect(editor.state.selection.from).toBe(position);
+  expect(editor.state.doc.eq(document)).toBe(true);
+  await act(async () => { editor.commands.insertContent("continued "); });
+  expect(editor.state.selection.from).toBe(position + "continued ".length);
+  if (!blankParagraph) expect(editor.getText()).toContain("New continued ");
 });

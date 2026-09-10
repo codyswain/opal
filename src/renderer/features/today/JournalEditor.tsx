@@ -63,7 +63,11 @@ export function JournalEditor({
   useEffect(() => {
     if (!editor) return;
     if (lastText.current !== text) {
-      editor.commands.setContent(text, false);
+      // Saving appends a final newline. Do not replace the live document for
+      // that acknowledgement: replacement moves selection and loses empty blocks.
+      if (lastText.current.replace(/\n+$/, "") !== text.replace(/\n+$/, "")) {
+        editor.commands.setContent(text, false);
+      }
       lastText.current = text;
     }
     const needsSource = journalNeedsSource(
