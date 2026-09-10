@@ -33,6 +33,22 @@ describe('Thread workspace', () => {
     await user.click(screen.getByRole('button', { name: /Unfinished thought/ }));
     expect(onSelect).toHaveBeenCalledWith('new');
   });
+  it('finds attached drafts and originating dates while respecting archive scope', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<TooltipProvider><ConversationList conversations={conversations} activeId="a" onSelect={onSelect} onNew={vi.fn()} onArchive={vi.fn()} drafts={{ a: 'Consider the solstice', b: 'Solstice archive' }} /></TooltipProvider>);
+    await user.type(screen.getByRole('searchbox'), 'SOLSTICE');
+    await user.click(screen.getByRole('button', { name: /^A quiet morning/ }));
+    expect(onSelect).toHaveBeenCalledWith('a');
+    expect(screen.queryByText('Old ideas')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Archived' }));
+    expect(screen.getByText('Old ideas')).toBeVisible();
+    expect(screen.queryByText('A quiet morning')).not.toBeInTheDocument();
+    await user.clear(screen.getByRole('searchbox'));
+    await user.type(screen.getByRole('searchbox'), '2026-09-09');
+    await user.click(screen.getByRole('button', { name: 'Active' }));
+    expect(screen.getByText('A quiet morning')).toBeVisible();
+  });
   it('searches source context and separates archived threads with restore actions', async () => {
     const user = userEvent.setup();
     const onArchive = vi.fn();

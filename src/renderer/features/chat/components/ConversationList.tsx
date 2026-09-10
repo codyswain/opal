@@ -23,7 +23,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
   const query = search.trim().toLocaleLowerCase();
   const visible = conversations.filter((conversation) =>
     (conversation.archivedAt != null) === archived &&
-    [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath]
+    [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath, conversation.context?.date, drafts[conversation.id]]
       .some((value) => value?.toLocaleLowerCase().includes(query))
   ).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt);
 
@@ -40,7 +40,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
       </div>
       <label className="thread-search">
         <Search aria-hidden size={14} />
-        <input type="search" aria-label="Search threads" placeholder="Find a thread…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input type="search" aria-label="Search threads" placeholder="Search names, context & drafts…" value={search} onChange={(event) => setSearch(event.target.value)} />
       </label>
       <div className="thread-filters" role="group" aria-label="Thread status">
         <button type="button" aria-pressed={!archived} onClick={() => setArchived(false)}>Active</button>
@@ -53,7 +53,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
       {visible.length === 0 && !showScratch ? stranded.length ? null : (
         <div className="thread-list-empty">
           <p>{query ? 'No matching threads' : archived ? 'No archived threads' : 'Room for your next thought'}</p>
-          <span>{query ? 'Try another name or a word from the source.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
+          <span>{query ? 'Try a name, source, date, or word from your draft.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
         </div>
       ) : (
         <ul className="thread-list">

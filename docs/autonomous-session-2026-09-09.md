@@ -157,3 +157,14 @@ and install only if the installed app is already normally closed.
   text safely through React. No HTML interpretation or new search/network work.
 - Twelve focused checks, TypeScript and lint passed. Packaged synthetic recovery,
   result opening and highlight checks passed; inspected light/dark screenshots.
+
+### Thread draft search consistency
+
+- Audited journal hiding: editor content and source links are removed while
+  drafts remain protected. Five existing privacy/fidelity checks passed.
+- Found attached drafts excluded from thread search while new/recovery drafts
+  were searchable. Added attached drafts and source dates to existing matching.
+- Search wording now explains its scope: names, context and drafts. Full sent
+  message history is not searched by this sidebar yet.
+- Active/archive scope regression, TypeScript, lint and packaged synthetic
+  draft search/open verification passed. No AI calls or storage changes.
