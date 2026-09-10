@@ -520,3 +520,27 @@ it('keeps a selected past day on resume and returns to live Today', async () => 
     expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-11');
   } finally { view?.unmount(); vi.useRealTimers(); }
 });
+
+it('edits daily task wording, keeps a failed edit, and cancels with Escape', async () => {
+  const item = { id: 'focus-edit', title: 'Call Sam', completed: false, createdAt: '2026-09-09T12:00:00Z' };
+  vi.mocked(window.vaultAPI.readDay).mockImplementation(async (_root, date) => ({ success: true, data: { ...empty, date, focus: [item] } }));
+  vi.mocked(window.vaultAPI.updateFocus).mockResolvedValueOnce({ success: false, error: 'Disk unavailable' }).mockImplementationOnce(async (_root, _date, _id, patch) => {
+    item.title = patch.title ?? item.title;
+    return { success: true, data: [item] };
+  });
+  render(<TodayRoute />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Details for Call Sam' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit task title' }));
+  const input = screen.getByRole('textbox', { name: 'Daily task title' });
+  fireEvent.change(input, { target: { value: 'Call Sam about the proposal' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+  expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Your edit is still here');
+  expect(input).toHaveValue('Call Sam about the proposal');
+  fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Daily task title' })).not.toBeInTheDocument());
+  expect(window.vaultAPI.updateFocus).toHaveBeenLastCalledWith('/vault', localDate(), 'focus-edit', { title: 'Call Sam about the proposal' });
+  fireEvent.click(screen.getByRole('button', { name: 'Edit task title' }));
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Daily task title' }), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Daily task title' })).not.toBeInTheDocument());
+  expect(screen.getByRole('dialog')).toBeVisible();
+});

@@ -34,6 +34,8 @@ describe("Vault IPC validation", () => {
       ["add-focus", ["/vault", "2026-09-08", { title: " " }]],
       ["update-focus", ["/vault", "2026-09-08", "id", { completed: "yes" }]],
       ["update-focus", ["/vault", "2026-09-08", "id", {}]],
+      ...[" ", "x".repeat(2001), 42, "bad\0title"].map(title =>
+        ["update-focus", ["/vault", "2026-09-08", "id", { title }]]),
       ["put-draft", [{ path: "/x", text: "x", version: "v" }]],
       ["clear-draft", ["/x", ""]],
     ] as Array<[string, unknown[]]>) {
@@ -44,5 +46,7 @@ describe("Vault IPC validation", () => {
     Object.values(service).forEach((method) =>
       expect(method).not.toHaveBeenCalled(),
     );
+    await handlers.get("vault:update-focus")?.({}, "/vault", "2026-09-08", "id", { title: "Revised task" });
+    expect(service.updateFocus).toHaveBeenCalledWith("/vault", "2026-09-08", "id", expect.objectContaining({ title: "Revised task" }));
   });
 });

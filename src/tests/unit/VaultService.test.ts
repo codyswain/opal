@@ -96,6 +96,18 @@ describe("VaultService", () => {
       await readFile(path.join(root, `Inbox/Logs/${date}.md`), "utf8"),
     ).toContain("## Morning");
   });
+  it("renames a daily task without replacing its identity or source", async () => {
+    await mkdir(path.join(root, "RAM"));
+    await writeFile(path.join(root, "RAM/todo.md"), "- [ ] Call Sam\n");
+    const day = await service.readDay(root, date);
+    const [item] = await service.addFocus(root, date, { title: 'Call Sam', taskId: day.tasks[0].id });
+    await service.updateFocus(root, date, item.id, { completed: true });
+    await service.updateFocus(root, date, item.id, { title: '  Call Sam about the proposal  ' });
+    expect((await service.readDay(root, date)).focus[0]).toMatchObject({ id: item.id, taskId: item.taskId, completed: true, title: 'Call Sam about the proposal', source: expect.objectContaining({ id: day.tasks[0].id }) });
+    expect(await readFile(path.join(root, 'RAM/todo.md'), 'utf8')).toBe('- [ ] Call Sam\n');
+    await expect(service.updateFocus(root, date, item.id, { title: ' ' })).rejects.toThrow();
+    expect((await service.readDay(root, date)).focus[0].title).toBe('Call Sam about the proposal');
+  });
   it("persists stable focus IDs by date without completing the source task", async () => {
     await mkdir(path.join(root, "RAM"));
     await writeFile(path.join(root, "RAM/todo.md"), "- [ ] Call Sam\n");

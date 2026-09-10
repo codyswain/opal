@@ -371,3 +371,12 @@
     margin-left: 0;
   }
 }
+
+.task-title-edit { justify-self: start; font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: underline; text-underline-offset: 3px; }
+.task-title-form { display: grid; gap: 10px; }
+.task-title-form label { font-size: 12px; font-weight: 600; }
+.task-title-form input { width: 100%; border: 1px solid hsl(var(--border)); background: hsl(var(--background)); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.task-title-form input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.task-title-form p { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.task-title-form p[role="alert"] { color: hsl(var(--destructive)); }
+.task-title-form .task-inspector-actions { border-top: 0; padding-top: 0; }

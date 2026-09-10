@@ -118,3 +118,14 @@ and install only if the installed app is already normally closed.
   recovery/focus/persistence verification passed.
 - Next priority: inspect daily task interaction and useful search/continuity
   improvements, keeping the remaining session balanced with product usability.
+
+### Daily task editing
+
+- Task details now allow changing the wording of a daily intention, preserving
+  its identity, completion, and original source. Source files are unchanged.
+- Failed saves retain the edit for retry. Escape cancels editing while keeping
+  the details panel open; empty and oversized titles are rejected at IPC.
+- 34 focused tests, TypeScript and targeted lint passed. Packaged synthetic
+  verification confirmed real IPC persistence across reload and Escape behavior.
+- Next: review other everyday task and search affordances, then checkpoint the
+  latest build without interrupting the running app.

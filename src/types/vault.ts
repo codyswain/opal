@@ -60,7 +60,7 @@ export interface VaultAPI {
     root: string,
     date: string,
     id: string,
-    patch: { completed?: boolean; remove?: boolean },
+    patch: { completed?: boolean; remove?: boolean; title?: string },
   ) => Promise<VaultResult<FocusItem[]>>;
   listDrafts: () => Promise<VaultResult<JournalDraft[]>>;
   putDraft: (draft: JournalDraft) => Promise<VaultResult<undefined>>;

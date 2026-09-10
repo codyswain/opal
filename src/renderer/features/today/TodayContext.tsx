@@ -1,5 +1,5 @@
 import "./taskWorkspace.css";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -78,6 +78,13 @@ export function DailyFocus({
     kind: "focus" | "queue";
     id: string;
   } | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState("");
+  const savingTitle = useRef(false);
+  useEffect(() => {
+    setEditingTitle(null);
+    setTitleError("");
+  }, [selected?.id]);
   const inspectorTrigger = useRef<HTMLButtonElement | null>(null);
   const unfinished = data.focus.filter((item) => !item.completed);
   const completed = data.focus.filter((item) => item.completed);
@@ -111,6 +118,19 @@ export function DailyFocus({
       : undefined;
   const source = focus?.source ?? queued;
   const selectedTitle = focus?.title ?? queued?.title;
+  const saveTitle = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = editingTitle?.trim();
+    if (!focus || !title || busy || savingTitle.current) return;
+    if (title === focus.title) { setEditingTitle(null); return; }
+    savingTitle.current = true;
+    setTitleError("");
+    try {
+      if (await mutate(() => window.vaultAPI.updateFocus(data.root, data.date, focus.id, { title })))
+        setEditingTitle(null);
+      else setTitleError("Could not save. Your edit is still here. Try again.");
+    } finally { savingTitle.current = false; }
+  };
   const add = async (event: React.FormEvent) => {
     event.preventDefault();
     const title = intention.trim();
@@ -418,6 +438,12 @@ export function DailyFocus({
       >
         <DialogContent
           className="task-inspector"
+          onEscapeKeyDown={(event) => {
+            if (editingTitle !== null) {
+              event.preventDefault();
+              if (!savingTitle.current) { setEditingTitle(null); setTitleError(""); }
+            }
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             if (inspectorTrigger.current?.isConnected)
@@ -427,6 +453,23 @@ export function DailyFocus({
         >
           <DialogTitle>{taskLabel(selectedTitle ?? "Task")}</DialogTitle>
           <DialogDescription>Context for {data.date}</DialogDescription>
+          {focus && (editingTitle === null ? (
+            <button className="task-title-edit" onClick={() => { setEditingTitle(focus.title); setTitleError(""); }}>
+              Edit task title
+            </button>
+          ) : (
+            <form className="task-title-form" onSubmit={(event) => void saveTitle(event)}>
+              <label htmlFor="daily-task-title">Daily task title</label>
+              <input id="daily-task-title" autoFocus maxLength={2000} value={editingTitle}
+                disabled={busy} onChange={(event) => setEditingTitle(event.target.value)} />
+              <p>For this day. Your original source stays intact.</p>
+              {titleError && <p role="alert">{titleError}</p>}
+              <div className="task-inspector-actions">
+                <button type="submit" disabled={busy || !editingTitle.trim()}>Save title</button>
+                <button type="button" disabled={busy} onClick={() => { setEditingTitle(null); setTitleError(""); }}>Cancel</button>
+              </div>
+            </form>
+          ))}
           <div className="task-inspector-body">
             <p>{source?.context ?? (queued ? "Choose this task for today, or work through the next step." : "A task you chose to keep in view.")}</p>
             {source && (

@@ -536,9 +536,13 @@ export class VaultService {
     target: string,
     date: string,
     id: string,
-    patch: { completed?: boolean; remove?: boolean },
+    patch: { completed?: boolean; remove?: boolean; title?: string },
   ): Promise<FocusItem[]> {
     this.checkDate(date);
+    if (patch.title !== undefined &&
+      (typeof patch.title !== "string" || !patch.title.trim() ||
+        patch.title.length > 2000 || patch.title.includes("\0")))
+      throw new Error("Enter a task title of up to 2,000 characters.");
     const root = await this.root(target);
     return filesystemMutationQueue.run(async () => {
       const data = await this.readFocus(root, date);
@@ -548,8 +552,10 @@ export class VaultService {
       if (patch.remove) {
         data.focus = data.focus.filter((focus) => focus.id !== id);
         if (item.taskId) delete data.sources[item.taskId];
-      } else if (patch.completed !== undefined)
-        item.completed = patch.completed;
+      } else {
+        if (patch.completed !== undefined) item.completed = patch.completed;
+        if (patch.title !== undefined) item.title = patch.title.trim();
+      }
       await this.writeFocus(root, date, data);
       return data.focus;
     });

@@ -79,17 +79,19 @@ export class VaultHandlers {
           !record(patch) ||
           !Object.keys(patch).length ||
           Object.keys(patch).some(
-            (key) => key !== "completed" && key !== "remove",
+            (key) => key !== "completed" && key !== "remove" && key !== "title",
           ) ||
           (patch.completed !== undefined &&
             typeof patch.completed !== "boolean") ||
           (patch.remove !== undefined && typeof patch.remove !== "boolean") ||
-          (patch.completed === undefined && patch.remove !== true)
+          (patch.title !== undefined && !nonempty(patch.title, 2000)) ||
+          (patch.completed === undefined && patch.remove !== true && patch.title === undefined)
         )
           return invalid();
         const clean = {
           completed: patch.completed as boolean | undefined,
           remove: patch.remove as boolean | undefined,
+          title: patch.title as string | undefined,
         };
         return this.respond(() => service.updateFocus(root, day, id, clean));
       },
