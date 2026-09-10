@@ -3,11 +3,13 @@ import {
   act,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { useVaultDay } from "@/renderer/features/today/useVaultDay";
 import { TodayRoute } from "@/renderer/features/today/TodayRoute";
 import type { VaultDay } from "@/types/vault";
 import { localDate } from "@/common/vaultModel";
@@ -543,4 +545,27 @@ it('edits daily task wording, keeps a failed edit, and cancels with Escape', asy
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Daily task title' }), { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Daily task title' })).not.toBeInTheDocument());
   expect(screen.getByRole('dialog')).toBeVisible();
+});
+
+
+it('admits only one daily write before React renders and unlocks after failure', async () => {
+  const { result } = renderHook(() => useVaultDay('/vault', localDate()));
+  await waitFor(() => expect(result.current.data).not.toBeNull());
+  let finish!: (value: { success: false; error: string }) => void;
+  const first = vi.fn(() => new Promise<{ success: false; error: string }>(resolve => { finish = resolve; }));
+  const duplicate = vi.fn().mockResolvedValue({ success: true, data: [] });
+  let pending!: Promise<boolean>;
+  let rejected!: Promise<boolean>;
+  act(() => {
+    pending = result.current.mutate(first);
+    rejected = result.current.mutate(duplicate);
+  });
+  expect(first).toHaveBeenCalledTimes(1);
+  expect(duplicate).not.toHaveBeenCalled();
+  await expect(rejected).resolves.toBe(false);
+  await act(async () => { finish({ success: false, error: 'Disk unavailable' }); await pending; });
+  expect(result.current.busy).toBe(false);
+  expect(result.current.error).toBe('Disk unavailable');
+  await act(async () => { expect(await result.current.mutate(duplicate)).toBe(true); });
+  expect(duplicate).toHaveBeenCalledTimes(1);
 });

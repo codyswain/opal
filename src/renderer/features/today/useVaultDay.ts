@@ -11,6 +11,7 @@ export function useVaultDay(selectedRoot: string, date: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mutationPending = useRef(false);
   const [revision, setRevision] = useState(0);
   const request = useRef(0);
   const root =
@@ -104,7 +105,9 @@ export function useVaultDay(selectedRoot: string, date: string) {
     return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
   const mutate = async (operation: () => Promise<VaultResult<unknown>>) => {
-    if (busy) return false;
+    // React state updates on the next render; this guard also covers same-turn submissions.
+    if (mutationPending.current) return false;
+    mutationPending.current = true;
     const origin = scope;
     setBusy(true);
     setError(null);
@@ -122,6 +125,7 @@ export function useVaultDay(selectedRoot: string, date: string) {
         );
       return false;
     } finally {
+      mutationPending.current = false;
       setBusy(false);
     }
   };

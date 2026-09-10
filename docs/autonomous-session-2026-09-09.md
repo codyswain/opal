@@ -129,3 +129,12 @@ and install only if the installed app is already normally closed.
   verification confirmed real IPC persistence across reload and Escape behavior.
 - Next: review other everyday task and search affordances, then checkpoint the
   latest build without interrupting the running app.
+
+### Daily write concurrency
+
+- Reproduced duplicate daily mutations arriving before React's busy state renders.
+  The old state-only check allowed both writes and could clear busy too early.
+- Added an immediate shared guard to the day hook. The guard releases after
+  either success or failure, preserving retry behavior for task and day actions.
+- Regression covers two calls in one render turn and retry after disk failure.
+  All 20 Today tests, TypeScript and targeted lint passed.
