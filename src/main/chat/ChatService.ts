@@ -114,6 +114,11 @@ export class ChatService {
   async list(): Promise<ConversationSummary[]> {
     return (await this.repository.list()).map(summarize).sort((left, right) => Number(right.pinnedAt != null) - Number(left.pinnedAt != null) || right.updatedAt - left.updatedAt);
   }
+  async searchMessages(query: unknown, archived: unknown = false) {
+    const term = textValue(query, 200).trim().replace(/\s+/g, ' ');
+    if (typeof archived !== 'boolean') throw new ChatError('Invalid archive filter.');
+    return this.repository.searchMessages(term, archived);
+  }
   async get(id: unknown): Promise<Conversation | null> {
     try { return await this.repository.read(validId(id)); } catch (error) {
       if (error instanceof UnreadableThreadError) throw new ChatError(error.message);

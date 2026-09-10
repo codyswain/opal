@@ -332,7 +332,7 @@ describe('ChatHandlers', () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new ChatHandlers({ ipc, service, index }).registerAll();
-    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:cancel', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:search-content', 'chat:update']);
+    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:cancel', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:search-content', 'chat:search-messages', 'chat:update']);
     const frames: unknown[] = [];
     const event = { sender: { isDestroyed: () => false, send: (_channel: string, payload: unknown) => frames.push(payload) } };
     const invoke = (channel: string, ...args: unknown[]) => {
@@ -340,6 +340,8 @@ describe('ChatHandlers', () => {
       if (!handler) throw new Error(`Missing ${channel}`);
       return handler(event, ...args);
     };
+    expect(await invoke('chat:search-messages', ' ', false)).toMatchObject({ success: false });
+    expect(await invoke('chat:search-messages', 'garden', false)).toMatchObject({ success: true, data: { hits: [], incomplete: false } });
     await invoke('chat:index-update');
     expect(await invoke('chat:index-cancel')).toMatchObject({ success: true, data: { indexing: false } });
     const created = await invoke('chat:create') as { data: { id: string } };
@@ -351,4 +353,41 @@ describe('ChatHandlers', () => {
     expect(await invoke('chat:index-status')).toMatchObject({ success: true, data: { ready: true } });
     expect(await invoke('chat:get', 'nope')).toMatchObject({ success: false, error: /Invalid/ });
   });
+});
+
+
+it('searches stored message text locally with archive scope and unreadable-file coverage', async () => {
+  noKey = true;
+  const first = await service.create({ title: 'Garden' });
+  const archived = await service.create({ title: 'Older' });
+  await writeFile(path.join(tmp, 'library/chat', first.id + '.json'), JSON.stringify({ ...first, messages: [{ id: 'm1', role: 'user', content: 'Remember the SOLSTICE planting plan', createdAt: 1 }] }));
+  await writeFile(path.join(tmp, 'library/chat', archived.id + '.json'), JSON.stringify({ ...archived, archivedAt: 2, messages: [{ id: 'm2', role: 'assistant', content: 'Solstice notes', createdAt: 2 }] }));
+  const damaged = path.join(tmp, 'library/chat/11111111-1111-4111-8111-111111111111.json');
+  await writeFile(damaged, '{broken');
+  expect(await service.searchMessages('solstice', false)).toEqual({ hits: [{ id: first.id, excerpt: 'Remember the SOLSTICE planting plan' }], incomplete: true });
+  expect((await service.searchMessages('SOLSTICE', true)).hits).toEqual([{ id: archived.id, excerpt: 'Solstice notes' }]);
+  await expect(service.searchMessages(' ', false)).rejects.toThrow();
+  await expect(service.searchMessages('x'.repeat(201), false)).rejects.toThrow();
+  await expect(service.searchMessages('solstice', 'yes')).rejects.toThrow();
+  expect(await readFile(damaged, 'utf8')).toBe('{broken');
+  expect(completions.prompts).toHaveLength(0);
+});
+
+
+it('caps message matches at fifty distinct threads and bounds excerpts', async () => {
+  noKey = true;
+  await mkdir(path.join(tmp, 'library/chat'), { recursive: true });
+  await Promise.all(Array.from({ length: 51 }, async (_, index) => {
+    const id = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    await writeFile(path.join(tmp, 'library/chat', id + '.json'), JSON.stringify({ id, title: 'Thread', createdAt: 1, updatedAt: index, messages: [
+      { id: 'm1', role: 'user', content: 'Before '.repeat(100) + 'solstice' + ' after'.repeat(100), createdAt: 1 },
+      { id: 'm2', role: 'assistant', content: 'Solstice again', createdAt: 2 }
+    ] }));
+  }));
+  const result = await service.searchMessages('solstice', false);
+  expect(result.incomplete).toBe(true);
+  expect(result.hits).toHaveLength(50);
+  expect(new Set(result.hits.map(hit => hit.id)).size).toBe(50);
+  expect(result.hits[0].id).toBe('00000000-0000-4000-8000-000000000050');
+  expect(result.hits.every(hit => hit.excerpt.length < 200 && hit.excerpt.includes('solstice'))).toBe(true);
 });

@@ -9,6 +9,7 @@ export interface ChatAPI {
   getDraftState: () => Promise<DiskResult<ChatDraftState>>;
   saveDraftState: (state: ChatDraftState) => Promise<DiskResult>;
   remove: (id: string) => Promise<DiskResult>;
+  searchMessages: (query: string, archived?: boolean) => Promise<DiskResult<import('@/types/chat').ThreadSearchResult>>;
   searchContent: (query: string, deep?: boolean) => Promise<DiskResult<import('@/types/chat').ContentSearchResult>>;
   indexStatus: () => Promise<DiskResult<LibraryIndexStatus>>;
   indexUpdate: () => Promise<DiskResult<LibraryIndexStatus>>;

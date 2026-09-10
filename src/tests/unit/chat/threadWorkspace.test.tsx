@@ -1,11 +1,14 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { ConversationList } from '@/renderer/features/chat/components/ConversationList';
 import { ThreadHeader } from '@/renderer/features/chat/components/ThreadHeader';
 import type { Conversation, ConversationSummary } from '@/types/chat';
+
+import { installChatApi } from '@/tests/helpers/chatApi';
+beforeEach(() => { installChatApi(); });
 
 const conversations: ConversationSummary[] = [
   { id: 'a', title: 'A quiet morning', createdAt: 1, updatedAt: 2, messageCount: 0, context: { title: 'Garden plan', date: '2026-09-09', context: 'Plant lavender' } },
@@ -13,6 +16,32 @@ const conversations: ConversationSummary[] = [
 ];
 
 describe('Thread workspace', () => {
+  it('adds saved-message matches and discards a response for an old query', async () => {
+    const user = userEvent.setup();
+    let finish!: (value: unknown) => void;
+    window.chatAPI.searchMessages = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ success: true, data: { hits: [{ id: 'a', excerpt: 'Remember the solstice' }], incomplete: false } });
+    render(<TooltipProvider><ConversationList conversations={conversations} activeId={null} onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} /></TooltipProvider>);
+    await user.type(screen.getByRole('searchbox'), 'obsolete');
+    await waitFor(() => expect(window.chatAPI.searchMessages).toHaveBeenCalledWith('obsolete', false));
+    await user.clear(screen.getByRole('searchbox'));
+    await user.type(screen.getByRole('searchbox'), 'solstice');
+    await act(async () => finish({ success: true, data: { hits: [{ id: 'a', excerpt: 'Old response' }], incomplete: false } }));
+    expect(screen.queryByText('Old response')).not.toBeInTheDocument();
+    expect(await screen.findByText('Remember the solstice')).toBeVisible();
+    expect(screen.getByText('A quiet morning')).toBeVisible();
+  });
+  it('retries failed message search while preserving immediate title matches', async () => {
+    const user = userEvent.setup();
+    window.chatAPI.searchMessages = vi.fn().mockRejectedValueOnce(new Error('Unavailable'))
+      .mockResolvedValue({ success: true, data: { hits: [], incomplete: true } });
+    render(<TooltipProvider><ConversationList conversations={conversations} activeId={null} onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} /></TooltipProvider>);
+    await user.type(screen.getByRole('searchbox'), 'morning');
+    expect(screen.getByText('A quiet morning')).toBeVisible();
+    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('may be incomplete'));
+    expect(window.chatAPI.searchMessages).toHaveBeenLastCalledWith('morning', false);
+  });
   it('prioritizes pinned threads and lets you unpin them', async () => {
     const onPin = vi.fn();
     render(<TooltipProvider><ConversationList conversations={[conversations[0], { ...conversations[0], id: 'p', title: 'Keep close', pinnedAt: 1, updatedAt: 1 }]} activeId="a" onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} onPin={onPin} /></TooltipProvider>);

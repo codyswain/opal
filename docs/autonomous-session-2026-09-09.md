@@ -168,3 +168,19 @@ and install only if the installed app is already normally closed.
   message history is not searched by this sidebar yet.
 - Active/archive scope regression, TypeScript, lint and packaged synthetic
   draft search/open verification passed. No AI calls or storage changes.
+
+### Saved message search
+
+- Thread sidebar keeps immediate name/context/draft matching, then searches saved
+  user and assistant messages locally after 300 ms. No AI key or index required.
+- Returns one bounded excerpt per thread, newest threads first, limited to 50
+  matching threads. Active/archive scope is enforced in repository and UI.
+- Unreadable files and result truncation produce an incomplete-coverage notice.
+  Failed searches can be retried while immediate matches remain usable; stale
+  responses are ignored when the query or scope changes.
+- Repository currently reads existing thread JSON through the established list
+  path; a dedicated index remains a future scalability improvement. Selecting
+  a hit opens its thread; it does not jump to the matching message yet.
+- 31 focused service/UI/IPC checks, TypeScript and lint passed. Packaged synthetic
+  verification crossed real IPC, found saved message text and opened the intact
+  thread and draft, without any AI request.

@@ -68,3 +68,6 @@ section:has(> .writing-composer[data-expanded=true]) > .thread-welcome { visibil
 .thread-recovery > button { display: flex; align-items: center; gap: 7px; padding: 7px 0; color: hsl(var(--focus)); text-align: left; }
 .thread-recovery > button:hover { text-decoration: underline; }
 .thread-recovery > button:disabled { opacity: .5; }
+
+.thread-search-status { display: flex; gap: 8px; padding: 0 14px 10px; font-size: 11px; color: hsl(var(--muted-foreground)); }
+.thread-search-status button { color: hsl(var(--focus)); text-decoration: underline; }

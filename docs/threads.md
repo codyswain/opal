@@ -74,3 +74,10 @@ Saved writing from an unreadable or missing thread can be opened as a recovery
 copy in a new thread. This retains the original recovery record and unrelated
 scratch drafts and never sends content to AI. Repeated clicks within the current
 view reuse the new copy. This recovers saved draft text, not a damaged history.
+
+Thread search matches names, source context/dates and drafts immediately. After
+300 ms it also searches saved message text locally, returning a short excerpt
+for up to 50 matching threads in the selected active/archive scope. Unreadable
+files or truncated results are explicitly reported. This requires no AI key;
+thread JSON is read directly, so very large histories may benefit from a future
+index. Opening a result selects the thread, not a specific message position.

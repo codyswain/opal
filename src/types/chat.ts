@@ -126,3 +126,8 @@ export interface ContentSearchResult {
   hits: { path: string; name: string; excerpt: string }[];
   incomplete: boolean;
 }
+
+export interface ThreadSearchResult {
+  hits: { id: string; excerpt: string }[];
+  incomplete: boolean;
+}

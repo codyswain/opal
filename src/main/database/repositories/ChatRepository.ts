@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'fs/promises';
 import path from 'path';
-import type { ChatDraftState, Conversation } from '@/types/chat';
+import type { ChatDraftState, Conversation, ThreadSearchResult } from '@/types/chat';
 
 export interface StoredConversation extends Conversation { titleIsManual?: boolean; unreadable?: boolean }
 
@@ -42,6 +42,26 @@ export class ChatRepository {
       }
     }));
     return rows.filter((row): row is StoredConversation => row !== null);
+  }
+  async searchMessages(query: string, archived: boolean): Promise<ThreadSearchResult> {
+    const result: ThreadSearchResult = { hits: [], incomplete: false };
+    const term = query.toLowerCase();
+    const rows = (await this.list()).sort((a, b) => b.updatedAt - a.updatedAt);
+    for (const row of rows) {
+      if (row.unreadable) { result.incomplete = true; continue; }
+      if ((row.archivedAt != null) !== archived) continue;
+      for (const message of row.messages) {
+        const text = message.content.replace(/\s+/g, ' ');
+        const offset = text.toLowerCase().indexOf(term);
+        if (offset < 0) continue;
+        if (result.hits.length === 50) { result.incomplete = true; return result; }
+        const start = Math.max(0, offset - 65);
+        const end = Math.min(text.length, offset + term.length + 120);
+        result.hits.push({ id: row.id, excerpt: `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}` });
+        break;
+      }
+    }
+    return result;
   }
   async read(id: string): Promise<StoredConversation | null> {
     try {

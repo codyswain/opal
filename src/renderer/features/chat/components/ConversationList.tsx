@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Archive, ArchiveRestore, Plus, Search, Pin, PinOff, RotateCcw } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { Button, IconButton } from '@/renderer/shared/ui';
@@ -21,10 +21,31 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
   const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState('');
   const query = search.trim().toLocaleLowerCase();
+  const [messageHits, setMessageHits] = useState<Record<string, string>>({});
+  const [messageStatus, setMessageStatus] = useState('');
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setMessageHits({});
+    setSearchFailed(false);
+    setMessageStatus('');
+    if (query.length < 2) return;
+    setMessageStatus('Searching saved messages…');
+    const timer = setTimeout(() => {
+      void window.chatAPI.searchMessages(query.slice(0, 200), archived).then(response => {
+        if (!current) return;
+        if (!response.success) { setMessageStatus('Message search could not finish.'); setSearchFailed(true); return; }
+        setMessageHits(Object.fromEntries(response.data.hits.map(hit => [hit.id, hit.excerpt])));
+        setMessageStatus(response.data.incomplete ? 'Message matches may be incomplete: unreadable files or result limit.' : 'Names, context, drafts & saved messages');
+      }).catch(() => { if (current) { setMessageStatus('Message search could not finish.'); setSearchFailed(true); } });
+    }, 300);
+    return () => { current = false; clearTimeout(timer); };
+  }, [query, archived, conversations, retry]);
   const visible = conversations.filter((conversation) =>
     (conversation.archivedAt != null) === archived &&
-    [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath, conversation.context?.date, drafts[conversation.id]]
-      .some((value) => value?.toLocaleLowerCase().includes(query))
+    (Boolean(messageHits[conversation.id]) || [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath, conversation.context?.date, drafts[conversation.id]]
+      .some((value) => value?.toLocaleLowerCase().includes(query)))
   ).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt);
 
   const stranded = !archived && onRecoverDraft ? Object.entries(drafts).filter(([id, text]) => id !== 'new' && text.trim() && !conversations.some((thread) => thread.id === id) && (!query || text.toLocaleLowerCase().includes(query) || 'saved writing'.includes(query))) : [];
@@ -40,20 +61,21 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
       </div>
       <label className="thread-search">
         <Search aria-hidden size={14} />
-        <input type="search" aria-label="Search threads" placeholder="Search names, context & drafts…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input type="search" aria-label="Search threads" placeholder="Search threads & messages…" maxLength={200} value={search} onChange={(event) => setSearch(event.target.value)} />
       </label>
       <div className="thread-filters" role="group" aria-label="Thread status">
         <button type="button" aria-pressed={!archived} onClick={() => setArchived(false)}>Active</button>
         <button type="button" aria-pressed={archived} onClick={() => setArchived(true)}>Archived</button>
       </div>
+      {messageStatus && <div className="thread-search-status"><span role="status">{messageStatus}</span>{searchFailed && <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button>}</div>}
       {stranded.length > 0 && <section className="thread-recovery" aria-label="Saved recovery copies">
         <p>Saved recovery copies</p><span>Open a copy in a new thread. The original stays protected.</span>
         {stranded.map(([id], index) => <button key={id} type="button" disabled={busy} onClick={() => onRecoverDraft?.(id)} aria-label={`Recover saved writing ${index + 1}`}><RotateCcw aria-hidden size={13} />Saved writing {index + 1}</button>)}
       </section>}
       {visible.length === 0 && !showScratch ? stranded.length ? null : (
         <div className="thread-list-empty">
-          <p>{query ? 'No matching threads' : archived ? 'No archived threads' : 'Room for your next thought'}</p>
-          <span>{query ? 'Try a name, source, date, or word from your draft.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
+          <p>{query ? messageStatus.startsWith('Searching') ? 'Searching…' : searchFailed ? 'Message search unavailable' : 'No matching threads' : archived ? 'No archived threads' : 'Room for your next thought'}</p>
+          <span>{query ? 'Try a name, date, or phrase from your writing.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
         </div>
       ) : (
         <ul className="thread-list">
@@ -68,6 +90,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               <button type="button" aria-current={conversation.id === activeId ? 'true' : undefined} onClick={() => onSelect(conversation.id)} disabled={busy} className="thread-list-select">
                 <span className="thread-list-title">{conversation.title}</span>
                 {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
+                {messageHits[conversation.id] && <span className="thread-list-context" title={messageHits[conversation.id]}>{messageHits[conversation.id]}</span>}
                 <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{conversation.unreadable ? 'File kept for recovery' : formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
               </button>
               {conversation.unreadable && drafts[conversation.id]?.trim() && onRecoverDraft && <IconButton label={`Recover draft for ${conversation.title}`} size="compact" onClick={() => onRecoverDraft(conversation.id)} disabled={busy}><RotateCcw aria-hidden size={14} /></IconButton>}
