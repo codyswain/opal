@@ -194,3 +194,19 @@ and install only if the installed app is already normally closed.
 - 45 focused repository/sidebar/route/message checks passed. Packaged synthetic
   verification used an earlier match in a thirty-message thread, confirming
   visibility, focus, repeated selection and preserved draft. Screenshot inspected.
+
+### Backup and delivery audit
+
+- Rechecked the earlier iCloud recovery archive: macOS now reports Uploaded=true,
+  Uploading=false, and no upload error. The earlier pending-upload issue cleared.
+- Local and iCloud archive bytes match by SHA-256. Reverified the full recovery
+  manifest: 8,724 files. This is the earlier snapshot, not a backup of all edits
+  since it was created; a fresh consistent full snapshot still needs writers quiet.
+- Confirmed one Dock shortcut and a still-running installed app. Latest staged
+  compiled tree remains verified. Removed nine obsolete session-created staging
+  copies, retaining the latest app and its immediate predecessor; explicit
+  rollback backups and the installed app are untouched.
+- Prior message-navigation commit passed all 1,071 checks using one test worker.
+  Under heavy concurrent system load, the first full run timed out in five
+  existing tests; affected files then passed in isolation and the complete suite
+  passed with VITEST_MAX_FORKS=1 VITEST_MIN_FORKS=1, without changing timeouts.
