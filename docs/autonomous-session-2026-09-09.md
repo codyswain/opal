@@ -104,3 +104,17 @@ and install only if the installed app is already normally closed.
   notice, and unchanged damaged file and recovery draft bytes.
 - Next opportunity: a guided way to copy a stranded draft into a fresh thread,
   preserving the original, rather than requiring manual recovery-file access.
+
+### Guided draft recovery checkpoint
+
+- Missing-thread drafts appear as saved recovery copies; unreadable threads
+  with drafts offer a recovery action.
+- Recovery creates an editable thread without sending to AI, preserving the
+  original record and unrelated scratch writing. The composer receives focus.
+- Repeated clicks reuse the copy during the current view instead of creating
+  duplicate threads. Original recovery records remain available on later visits.
+- Failed creation and disk-full/retry regressions preserve both copies.
+- Focused route/component checks, type validation, and packaged synthetic
+  recovery/focus/persistence verification passed.
+- Next priority: inspect daily task interaction and useful search/continuity
+  improvements, keeping the remaining session balanced with product usability.

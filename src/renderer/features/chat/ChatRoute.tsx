@@ -20,7 +20,10 @@ export const ChatRoute: React.FC = () => {
   const { navigateFiles, navigateTo } = useShell();
   const [listVisible, setListVisible] = useState(() => readPref('threads.listVisible', window.innerWidth >= 1000));
   const submitting = useRef(false);
+  const recoveryCopies = useRef(new Map<string, string>());
+  const [composerFocus, setComposerFocus] = useState(0);
   const [preparingSend, setPreparingSend] = useState(false);
+  const loaded = useChatStore((state) => state.loaded);
   const conversations = useChatStore((state) => state.conversations);
   const active = useChatStore((state) => state.active);
   const streaming = useChatStore((state) => state.streaming);
@@ -65,6 +68,34 @@ export const ChatRoute: React.FC = () => {
     navigateFiles(focusFile(parent, source.path));
   };
 
+  const recoverDraft = async (sourceId: string) => {
+    if (submitting.current || sending || processing) return;
+    const text = useChatHandoffStore.getState().drafts[sourceId];
+    if (!text?.trim()) return;
+    submitting.current = true;
+    setPreparingSend(true);
+    try {
+      const existing = recoveryCopies.current.get(sourceId);
+      if (existing) {
+        const saved = await window.chatAPI.get(existing);
+        if (saved.success && saved.data) { setPrefill(null); await select(existing); setComposerFocus((value) => value + 1); return; }
+        recoveryCopies.current.delete(sourceId);
+      }
+      const id = await startConversation({ title: 'Recovered writing' });
+      if (!id) return;
+      recoveryCopies.current.set(sourceId, id);
+      setPrefill(null);
+      setDraft(id, text);
+      setComposerFocus((value) => value + 1);
+      await useChatHandoffStore.getState().flush();
+    } catch {
+      useChatStore.setState({ error: 'Could not open a recovery copy. Your original saved writing is still protected.' });
+    } finally {
+      submitting.current = false;
+      setPreparingSend(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 overflow-hidden" data-testid="chat-route">
       <div id="thread-list-panel" hidden={!listVisible}>
@@ -75,6 +106,7 @@ export const ChatRoute: React.FC = () => {
         onNew={() => { setPrefill(null); void startConversation(); }}
         onArchive={(id, archived) => void updateConversation(id, { archived })}
         onPin={(id, pinned) => void updateConversation(id, { pinned })}
+        onRecoverDraft={loaded && hydrated ? (id) => void recoverDraft(id) : undefined}
         drafts={drafts}
         busy={sending || processing || preparingSend}
       />
@@ -106,7 +138,7 @@ export const ChatRoute: React.FC = () => {
         {active?.archivedAt ? (
           <div className="px-6 py-4 text-sm text-muted-foreground">This thread is archived. Its history and draft are kept. <button className="underline" onClick={() => void updateConversation(active.id, { archived: false })}>Restore thread</button></div>
         ) : <>
-          <Composer saveStatus={!hydrated ? 'Loading saved drafts…' : dirty ? 'Saving draft…' : draft ? 'Draft saved on this Mac' : 'Threads are saved on this Mac'} preparing={processing || preparingSend || !hydrated} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending}
+          <Composer focusRequest={composerFocus} saveStatus={!hydrated ? 'Loading saved drafts…' : dirty ? 'Saving draft…' : draft ? 'Draft saved on this Mac' : 'Threads are saved on this Mac'} preparing={processing || preparingSend || !hydrated} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending}
             onSend={(question) => void (async () => {
               if (submitting.current) return;
               submitting.current = true;

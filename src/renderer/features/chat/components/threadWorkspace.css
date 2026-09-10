@@ -61,3 +61,10 @@ section:has(> .writing-composer[data-expanded=true]) > .thread-welcome { visibil
 .thread-retrieval-evidence { margin-top: 12px; color: hsl(var(--text-tertiary)); font-size: 11px; line-height: 1.7; }
 .thread-retrieval-evidence summary { cursor: pointer; width: fit-content; }
 .thread-retrieval-evidence p { max-width: 70ch; margin-top: 8px; padding: 10px 12px; border-left: 2px solid hsl(var(--border-subtle)); color: hsl(var(--text-secondary)); }
+
+.thread-recovery { margin: 0 14px 12px; padding: 12px; border: 1px solid hsl(var(--border-subtle)); border-radius: 8px; flex-shrink: 0; max-height: 190px; overflow: auto; font-size: 11px; color: hsl(var(--text-secondary)); }
+.thread-recovery > p { font-weight: 550; color: hsl(var(--text-primary)); }
+.thread-recovery > span { display: block; margin: 5px 0 9px; line-height: 1.6; color: hsl(var(--text-tertiary)); }
+.thread-recovery > button { display: flex; align-items: center; gap: 7px; padding: 7px 0; color: hsl(var(--focus)); text-align: left; }
+.thread-recovery > button:hover { text-decoration: underline; }
+.thread-recovery > button:disabled { opacity: .5; }

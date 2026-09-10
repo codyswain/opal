@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Archive, ArchiveRestore, Plus, Search, Pin, PinOff } from 'lucide-react';
+import { Archive, ArchiveRestore, Plus, Search, Pin, PinOff, RotateCcw } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { Button, IconButton } from '@/renderer/shared/ui';
 import type { ConversationSummary } from '@/types/chat';
@@ -12,11 +12,12 @@ interface ConversationListProps {
   onNew: () => void;
   onArchive: (id: string, archived: boolean) => void;
   onPin?: (id: string, pinned: boolean) => void;
+  onRecoverDraft?: (id: string) => void;
   busy?: boolean;
   drafts?: Record<string, string>;
 }
 
-export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onArchive, onPin, busy = false, drafts = {} }) => {
+export const ConversationList: React.FC<ConversationListProps> = ({ conversations, activeId, onSelect, onNew, onArchive, onPin, onRecoverDraft, busy = false, drafts = {} }) => {
   const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState('');
   const query = search.trim().toLocaleLowerCase();
@@ -25,6 +26,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
     [conversation.title, conversation.context?.title, conversation.context?.context, conversation.context?.sourcePath]
       .some((value) => value?.toLocaleLowerCase().includes(query))
   ).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt);
+
+  const stranded = !archived && onRecoverDraft ? Object.entries(drafts).filter(([id, text]) => id !== 'new' && text.trim() && !conversations.some((thread) => thread.id === id) && (!query || text.toLocaleLowerCase().includes(query) || 'saved writing'.includes(query))) : [];
 
   const showScratch = !archived && Boolean(drafts.new?.trim()) &&
     (!query || 'unfinished thought'.includes(query) || drafts.new.toLocaleLowerCase().includes(query));
@@ -43,7 +46,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
         <button type="button" aria-pressed={!archived} onClick={() => setArchived(false)}>Active</button>
         <button type="button" aria-pressed={archived} onClick={() => setArchived(true)}>Archived</button>
       </div>
-      {visible.length === 0 && !showScratch ? (
+      {stranded.length > 0 && <section className="thread-recovery" aria-label="Saved recovery copies">
+        <p>Saved recovery copies</p><span>Open a copy in a new thread. The original stays protected.</span>
+        {stranded.map(([id], index) => <button key={id} type="button" disabled={busy} onClick={() => onRecoverDraft?.(id)} aria-label={`Recover saved writing ${index + 1}`}><RotateCcw aria-hidden size={13} />Saved writing {index + 1}</button>)}
+      </section>}
+      {visible.length === 0 && !showScratch ? stranded.length ? null : (
         <div className="thread-list-empty">
           <p>{query ? 'No matching threads' : archived ? 'No archived threads' : 'Room for your next thought'}</p>
           <span>{query ? 'Try another name or a word from the source.' : archived ? 'Threads you archive will be kept here.' : 'Start a thread, or pick up a task from your day.'}</span>
@@ -63,6 +70,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
                 {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
                 <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{conversation.unreadable ? 'File kept for recovery' : formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
               </button>
+              {conversation.unreadable && drafts[conversation.id]?.trim() && onRecoverDraft && <IconButton label={`Recover draft for ${conversation.title}`} size="compact" onClick={() => onRecoverDraft(conversation.id)} disabled={busy}><RotateCcw aria-hidden size={14} /></IconButton>}
               {onPin && !archived && !conversation.unreadable && <IconButton label={`${conversation.pinnedAt != null ? 'Unpin' : 'Pin'} thread ${conversation.title}`} size="compact" onClick={() => onPin(conversation.id, conversation.pinnedAt == null)} disabled={busy} className="thread-archive-action">
                 {conversation.pinnedAt != null ? <PinOff aria-hidden size={14} /> : <Pin aria-hidden size={14} />}
               </IconButton>}

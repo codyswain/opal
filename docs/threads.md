@@ -69,3 +69,8 @@ blocking the entire list. The original JSON is retained unchanged in
 Saved drafts are independent recovery records and remain writable even when
 their conversation file is damaged or missing. A corrupt drafts.json itself
 still blocks replacement to avoid overwriting recovery data.
+
+Saved writing from an unreadable or missing thread can be opened as a recovery
+copy in a new thread. This retains the original recovery record and unrelated
+scratch drafts and never sends content to AI. Repeated clicks within the current
+view reuse the new copy. This recovers saved draft text, not a damaged history.

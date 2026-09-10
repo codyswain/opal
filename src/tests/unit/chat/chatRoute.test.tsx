@@ -37,6 +37,57 @@ beforeEach(() => {
 });
 
 describe('ChatRoute', () => {
+  it('opens a stranded draft in one new thread while preserving its recovery copy and scratch writing', async () => {
+    const api = installChatApi();
+    const stranded = '11111111-1111-4111-8111-111111111111';
+    await api.saveDraftState({ drafts: { [stranded]: 'A thought worth keeping', new: 'Existing scratch' }, pending: [] });
+    const user = userEvent.setup();
+    renderChat();
+    await user.dblClick(await screen.findByRole('button', { name: 'Recover saved writing 1' }));
+    await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toHaveValue('A thought worth keeping'));
+    expect(api.create).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByLabelText('Ask about your library')).toHaveFocus());
+    const id = useChatStore.getState().active?.id;
+    if (!id) throw new Error('No recovered thread');
+    await waitFor(async () => {
+      const saved = await api.getDraftState();
+      expect(saved.success && saved.data.drafts).toMatchObject({ [stranded]: 'A thought worth keeping', new: 'Existing scratch', [id]: 'A thought worth keeping' });
+    });
+    expect(api.ask).not.toHaveBeenCalled();
+  });
+
+  it('keeps stranded writing when creating its recovery thread fails', async () => {
+    const api = installChatApi();
+    const stranded = '11111111-1111-4111-8111-111111111111';
+    await api.saveDraftState({ drafts: { [stranded]: 'Protected text' }, pending: [] });
+    vi.mocked(api.create).mockResolvedValueOnce({ success: false, error: 'Storage unavailable' });
+    renderChat();
+    await userEvent.click(await screen.findByRole('button', { name: 'Recover saved writing 1' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage unavailable');
+    expect(useChatHandoffStore.getState().drafts[stranded]).toBe('Protected text');
+    expect(api.ask).not.toHaveBeenCalled();
+  });
+
+  it('retains both copies and retries when saving recovered writing fails', async () => {
+    const api = installChatApi();
+    const stranded = '11111111-1111-4111-8111-111111111111';
+    await api.saveDraftState({ drafts: { [stranded]: 'Protected text' }, pending: [] });
+    vi.mocked(api.saveDraftState).mockResolvedValueOnce({ success: false, error: 'Disk full' });
+    renderChat();
+    await userEvent.click(await screen.findByRole('button', { name: 'Recover saved writing 1' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Disk full');
+    expect(screen.getByLabelText('Ask about your library')).toHaveValue('Protected text');
+    const id = useChatStore.getState().active?.id;
+    if (!id) throw new Error('No recovery copy');
+    expect(useChatHandoffStore.getState().drafts[stranded]).toBe('Protected text');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry saving' }));
+    await waitFor(async () => {
+      const saved = await api.getDraftState();
+      expect(saved.success && saved.data.drafts).toMatchObject({ [id]: 'Protected text', [stranded]: 'Protected text' });
+    });
+    expect(api.ask).not.toHaveBeenCalled();
+  });
+
   it('hides the list without losing a draft and remembers the preference', async () => {
     const api = installChatApi();
     const user = userEvent.setup();

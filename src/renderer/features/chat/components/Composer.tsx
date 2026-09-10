@@ -13,14 +13,16 @@ interface ComposerProps {
   /** Text handed in from outside (a suggested question); adopted and focused when it changes. */
   prefill?: { text: string; seq: number } | null;
   saveStatus?: string;
+  focusRequest?: number;
 }
 
 const QUESTION_LIMIT = 8000;
 
-export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, draft, onDraftChange, preparing = false, prefill = null, saveStatus }) => {
+export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, draft, onDraftChange, preparing = false, prefill = null, saveStatus, focusRequest = 0 }) => {
   const prefillRef = useRef<HTMLTextAreaElement>(null);
   const appliedPrefill = useRef<ComposerProps['prefill']>(null);
   const composing = useRef(false);
+  const focusedRequest = useRef(0);
   const [expanded, setExpanded] = useState(false);
   const helpId = useId();
   const limitId = useId();
@@ -33,6 +35,13 @@ export const Composer: React.FC<ComposerProps> = ({ sending, onSend, onCancel, d
     onDraftChange(draft ? `${draft}\n\n${prefill.text}` : prefill.text);
     prefillRef.current?.focus();
   }, [prefill, draft, onDraftChange]);
+
+  useEffect(() => {
+    if (focusRequest !== focusedRequest.current && !preparing && !sending) {
+      prefillRef.current?.focus();
+      focusedRequest.current = focusRequest;
+    }
+  }, [focusRequest, preparing, sending]);
 
   useLayoutEffect(() => {
     const textarea = prefillRef.current;
