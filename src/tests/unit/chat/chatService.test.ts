@@ -143,6 +143,27 @@ describe('ChatService', () => {
     await expect(index.searchContent('', true)).rejects.toThrow();
   });
 
+  it('cancels the actual stream and keeps the partial answer across reload', async () => {
+    const conversation = await service.create();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => { started = resolve; });
+    let received: AbortSignal | undefined;
+    completions.stream = async (_messages, onDelta, signal) => {
+      received = signal;
+      onDelta('A partial thought');
+      started();
+      return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+    };
+    const result = service.ask(conversation.id, 'Help me think', () => undefined);
+    await ready;
+    expect(service.cancel(conversation.id)).toBe(true);
+    const answer = await result;
+    expect(received?.aborted).toBe(true);
+    expect(answer.message).toMatchObject({ content: 'A partial thought', cancelled: true });
+    expect((await service.get(conversation.id))?.messages.at(-1)).toMatchObject({ content: 'A partial thought', cancelled: true });
+    expect(service.cancel(conversation.id)).toBe(false);
+  });
+
   it('creates, lists, titles, persists and removes conversations', async () => {
     const conversation = await service.create();
     expect(conversation).toMatchObject({ title: 'New conversation', messages: [] });
@@ -248,7 +269,8 @@ describe('ChatService', () => {
     noKey = true;
     await expect(service.ask(conversation.id, 'Still there?', () => undefined)).rejects.toThrow(/API key/);
     const stored = await service.get(conversation.id);
-    expect(stored?.messages.at(-1)).toMatchObject({ role: 'user', content: 'Still there?' });
+    expect(stored?.messages.at(-2)).toMatchObject({ role: 'user', content: 'Still there?' });
+    expect(stored?.messages.at(-1)?.error).toMatch(/API key/);
     await expect(service.ask(conversation.id, '   ', () => undefined)).rejects.toThrow(/Ask a question/);
   });
 
@@ -263,11 +285,32 @@ describe('ChatService', () => {
 });
 
 describe('ChatHandlers', () => {
+  it('only lets the requesting window stop its own answer channel', async () => {
+    const handlers = new Map<string, (event: { sender: { isDestroyed: () => boolean; send: ReturnType<typeof vi.fn> } }, ...args: unknown[]) => Promise<unknown>>();
+    const ipc = { handle: (channel: string, handler: (event: { sender: { isDestroyed: () => boolean; send: ReturnType<typeof vi.fn> } }, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
+    new ChatHandlers({ ipc, service, index }).registerAll();
+    const owner = { isDestroyed: () => false, send: vi.fn() };
+    const other = { isDestroyed: () => false, send: vi.fn() };
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => { started = resolve; });
+    completions.stream = async (_messages, onDelta, signal) => {
+      onDelta('Partial'); started();
+      return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+    };
+    const conversation = await service.create();
+    const answer = handlers.get('chat:ask')?.({ sender: owner }, conversation.id, 'Question', 'chat:answer:test');
+    await ready;
+    expect(await handlers.get('chat:cancel')?.({ sender: other }, 'chat:answer:test')).toMatchObject({ data: false });
+    expect(await handlers.get('chat:cancel')?.({ sender: owner }, 'chat:answer:test')).toMatchObject({ data: true });
+    expect(await answer).toMatchObject({ success: true, data: { message: { cancelled: true, content: 'Partial' } } });
+    expect(await handlers.get('chat:cancel')?.({ sender: owner }, 'chat:answer:test')).toMatchObject({ data: false });
+  });
+
   it('registers channels, validates the answer channel, streams frames and ends with null', async () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
     new ChatHandlers({ ipc, service, index }).registerAll();
-    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:search-content', 'chat:update']);
+    expect([...handlers.keys()].sort()).toEqual(['chat:ask', 'chat:cancel', 'chat:create', 'chat:drafts-get', 'chat:drafts-save', 'chat:get', 'chat:index-cancel', 'chat:index-status', 'chat:index-update', 'chat:list', 'chat:remove', 'chat:search-content', 'chat:update']);
     const frames: unknown[] = [];
     const event = { sender: { isDestroyed: () => false, send: (_channel: string, payload: unknown) => frames.push(payload) } };
     const invoke = (channel: string, ...args: unknown[]) => {

@@ -53,3 +53,19 @@ the user's installed app. Stage verified builds for a normal close.
 Next concrete defect found: Stop currently only removes the renderer listener;
 main continues the request. Investigate real cancellation and partial-answer
 persistence, with owner-scoped IPC and synthetic clients before shipping.
+
+### Request cancellation checkpoint
+
+- Stop now propagates to an AbortController and the installed OpenAI SDK's
+  request signal for completion and query embedding calls.
+- Partial generated text is persisted with a Stopped marker. Send remains
+  locked until cancellation is acknowledged and the saved thread is reloaded.
+- Cancellation channels are scoped to the requesting WebContents; other
+  windows cannot cancel them. Destroyed windows cancel their own requests.
+- Focused service/store/UI checks, type check and lint pass.
+- Remaining limitation: cancellation during local calendar scanning is observed
+  before the network call; it does not interrupt every individual local read.
+
+Upcoming: review calendar-period interpretation and daily journal/task recovery.
+Do not request an app-close interruption during autonomous work; stage updates
+and install only if the installed app is already normally closed.

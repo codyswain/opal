@@ -89,6 +89,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                   </div>
                 )}
+                {message.cancelled && <p role="status" className="mt-2 text-xs text-muted-foreground">Stopped{message.content ? ' · partial answer saved' : ' before an answer was generated'}</p>}
                 {message.retrieval && <details className="thread-retrieval-evidence">
                   <summary>{message.retrieval.method === 'calendar' ? 'Daily notes checked' : 'Library context checked'}</summary>
                   <p>{message.retrieval.summary}</p>

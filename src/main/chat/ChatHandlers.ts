@@ -14,6 +14,7 @@ export interface ChatHandlerDependencies {
 const CHANNEL = /^chat:answer:[A-Za-z0-9._-]{1,80}$/;
 
 export class ChatHandlers {
+  private requests = new WeakMap<WebContents, Map<string, string>>();
   constructor(private deps: ChatHandlerDependencies) {}
 
   registerAll(): void {
@@ -30,10 +31,22 @@ export class ChatHandlers {
     ipc.handle('chat:index-update', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(() => index.update(), 'Failed to update the index'));
     ipc.handle('chat:index-cancel', async (): Promise<IPCResponse<LibraryIndexStatus>> => this.respond(() => index.cancel(), 'Failed to stop indexing'));
     // Deltas stream on a per-request channel the renderer names; `null` ends the stream.
+    ipc.handle('chat:cancel', async (event, channel: unknown) => {
+      if (typeof channel !== 'string' || !CHANNEL.test(channel)) return { success: false, error: 'Invalid chat request.' };
+      const id = this.requests.get(event.sender)?.get(channel);
+      return { success: true, data: id ? service.cancel(id) : false };
+    });
     ipc.handle('chat:ask', async (event, conversationId: unknown, question: unknown, channel: unknown): Promise<IPCResponse<ChatAnswer>> => {
       if (typeof channel !== 'string' || !CHANNEL.test(channel)) return { success: false, error: 'Invalid chat request.' };
       const sender: WebContents = event.sender;
       const send = (payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload); };
+      const requests = this.requests.get(sender) ?? new Map<string, string>();
+      this.requests.set(sender, requests);
+      if (requests.has(channel)) return { success: false, error: 'This request is already running.' };
+      if (typeof conversationId !== 'string') return { success: false, error: 'Invalid conversation.' };
+      requests.set(channel, conversationId);
+      const onDestroyed = () => { service.cancel(conversationId); };
+      sender.once?.('destroyed', onDestroyed);
       try {
         const answer = await service.ask(conversationId, question, (delta) => send({ delta }));
         send(null);
@@ -44,6 +57,9 @@ export class ChatHandlers {
         send({ error: message });
         send(null);
         return { success: false, error: message };
+      } finally {
+        requests.delete(channel);
+        sender.removeListener?.('destroyed', onDestroyed);
       }
     });
   }

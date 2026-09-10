@@ -57,3 +57,7 @@ New answers keep a deterministic retrieval record beside the generated text.
 Expand “Daily notes checked” or “Library context checked” to inspect its scope,
 index date, missing days and limits. This record is saved with the message.
 Older messages without this metadata remain readable.
+
+Stop aborts the network request and saves any partial answer with a Stopped
+marker. The send lock stays in place until main acknowledges the stop. Cancelling
+while local dated notes are being read is observed before the model request.

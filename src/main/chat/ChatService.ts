@@ -26,7 +26,7 @@ export class ChatError extends Error {
 
 export interface ChatCompletionClient {
   /** Streams answer text deltas for the given messages. */
-  stream(messages: { role: 'system' | 'user' | 'assistant'; content: string }[], onDelta: (text: string) => void): Promise<string>;
+  stream(messages: { role: 'system' | 'user' | 'assistant'; content: string }[], onDelta: (text: string) => void, signal?: AbortSignal): Promise<string>;
 }
 
 export interface ChatServiceDependencies {
@@ -72,8 +72,8 @@ function validId(id: unknown): string {
 
 export function openAICompletionClient(client: Pick<OpenAI, 'chat'>): ChatCompletionClient {
   return {
-    async stream(messages, onDelta) {
-      const stream = await client.chat.completions.create({ model: CHAT_COMPLETION_MODEL, messages, stream: true, temperature: 0.3 });
+    async stream(messages, onDelta, signal) {
+      const stream = await client.chat.completions.create({ model: CHAT_COMPLETION_MODEL, messages, stream: true, temperature: 0.3 }, { signal });
       let full = '';
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content ?? '';
@@ -104,6 +104,7 @@ function summarize(conversation: Conversation): ConversationSummary {
  */
 export class ChatService {
   private activeAnswers = new Set<string>();
+  private controllers = new Map<string, AbortController>();
   private queue: Promise<unknown> = Promise.resolve();
 
   private repository: ChatRepository;
@@ -165,11 +166,20 @@ export class ChatService {
     const id = validId(conversationId);
     if (this.activeAnswers.has(id)) throw new ChatError('An answer is already in progress for this thread.');
     this.activeAnswers.add(id);
-    try { return await this.answer(id, question, onDelta); }
-    finally { this.activeAnswers.delete(id); }
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
+    try { return await this.answer(id, question, onDelta, controller.signal); }
+    finally { this.activeAnswers.delete(id); this.controllers.delete(id); }
   }
 
-  private async answer(conversationId: string, question: unknown, onDelta: (text: string) => void): Promise<ChatAnswer> {
+  cancel(conversationId: string): boolean {
+    const controller = this.controllers.get(conversationId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+
+  private async answer(conversationId: string, question: unknown, onDelta: (text: string) => void, signal: AbortSignal): Promise<ChatAnswer> {
     if (typeof question !== 'string' || question.trim().length === 0) throw new ChatError('Ask a question first.');
     if (question.length > 8000) throw new ChatError('Questions are at most 8,000 characters.');
     const conversation = await this.serialize(async () => {
@@ -182,6 +192,10 @@ export class ChatService {
       return current;
     });
 
+    const sources: ChatSource[] = [];
+    const assistant: ChatMessage = { id: randomUUID(), role: 'assistant', content: '', createdAt: (this.deps.now ?? Date.now)(), sources };
+    try {
+    signal.throwIfAborted();
     const clients = await this.deps.clients();
     await this.deps.index.load();
     const status = this.deps.index.status();
@@ -193,10 +207,9 @@ export class ChatService {
       hits = dated.hits;
       coverage = dated.coverage;
     } else if (status.ready && status.chunks > 0) {
-      const [vector] = await clients.embeddings.embed([question.trim()]);
+      const [vector] = await clients.embeddings.embed([question.trim()], signal);
       hits = this.deps.index.search(vector, CHAT_MAX_SOURCES * 4, CHAT_SIMILARITY_FLOOR);
     }
-    const sources: ChatSource[] = [];
     for (const hit of hits) {
       const existing = sources.find((source) => source.path === hit.path);
       if (existing) {
@@ -215,11 +228,17 @@ export class ChatService {
       sources.length > 0 ? `Sources:\n${sources.map((source) => `[${source.n}] ${source.name}${source.page ? ` (page ${source.page})` : ''}\n${source.excerpt}`).join('\n\n')}` : 'Sources: none matched this question.',
     ].filter(Boolean).join('\n\n');
     const history = conversation.messages.slice(-9).map((message) => ({ role: message.role, content: message.content }));
-    const assistant: ChatMessage = { id: randomUUID(), role: 'assistant', content: '', createdAt: (this.deps.now ?? Date.now)(), sources, retrieval: { method: temporal ? 'calendar' : 'semantic', summary: coverage || `${sources.length} files matched in the local text index. ${status.lastIndexedAt ? `Index last updated ${calendarDay(new Date(status.lastIndexedAt))}. ` : ''}These are relevant excerpts, not a complete search of every file. ${status.staleFiles ? 'Changes are waiting to be indexed.' : ''}`.trim() } };
-    try {
-      assistant.content = await clients.completions.stream([{ role: 'system', content: system }, ...history], onDelta);
+    assistant.retrieval = { method: temporal ? 'calendar' : 'semantic', summary: coverage || `${sources.length} files matched in the local text index. ${status.lastIndexedAt ? `Index last updated ${calendarDay(new Date(status.lastIndexedAt))}. ` : ''}These are relevant excerpts, not a complete search of every file. ${status.staleFiles ? 'Changes are waiting to be indexed.' : ''}`.trim() };
+    signal.throwIfAborted();
+    assistant.content = await clients.completions.stream([{ role: 'system', content: system }, ...history], (delta) => {
+      if (signal.aborted) return;
+      assistant.content += delta;
+      onDelta(delta);
+    }, signal);
+    if (signal.aborted) assistant.cancelled = true;
     } catch (error) {
-      assistant.error = error instanceof Error ? error.message : String(error);
+      if (signal.aborted) assistant.cancelled = true;
+      else assistant.error = error instanceof Error ? error.message : String(error);
     }
     const cited = new Set([...assistant.content.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])));
     assistant.sources = sources.filter((source) => cited.has(source.n));

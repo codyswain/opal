@@ -12,3 +12,9 @@ it('keeps retrieval coverage available separately from the generated answer', as
   await userEvent.click(screen.getByText('Daily notes checked'));
   expect(screen.getByText('Read two days of notes. Eight days have no readable notes.')).toBeVisible();
 });
+
+it('marks a stopped answer while keeping its partial text readable', () => {
+  render(<MessageThread messages={[{ id: 'a', role: 'assistant', content: 'A partial thought', createdAt: 1, cancelled: true }]} streaming={null} onOpenSource={vi.fn()} />);
+  expect(screen.getByText('A partial thought')).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('Stopped · partial answer saved');
+});

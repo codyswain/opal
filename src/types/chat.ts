@@ -64,6 +64,7 @@ export interface ChatMessage {
   /** Deterministic retrieval evidence, separate from model-authored text. */
   retrieval?: { method: 'calendar' | 'semantic'; summary: string };
   error?: string;
+  cancelled?: boolean;
 }
 
 export interface ThreadContext {

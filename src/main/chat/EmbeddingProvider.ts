@@ -3,7 +3,7 @@ import { CHAT_EMBEDDING_DIMENSIONS, CHAT_EMBEDDING_MODEL } from '@/types/chat';
 
 export interface EmbeddingProvider {
   readonly dimensions: number;
-  embed(texts: string[]): Promise<Float32Array[]>;
+  embed(texts: string[], signal?: AbortSignal): Promise<Float32Array[]>;
 }
 
 const BATCH = 64;
@@ -14,7 +14,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 
   constructor(private client: Pick<OpenAI, 'embeddings'>) {}
 
-  async embed(texts: string[]): Promise<Float32Array[]> {
+  async embed(texts: string[], signal?: AbortSignal): Promise<Float32Array[]> {
     const vectors: Float32Array[] = [];
     for (let offset = 0; offset < texts.length; offset += BATCH) {
       const batch = texts.slice(offset, offset + BATCH);
@@ -23,7 +23,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         input: batch,
         dimensions: CHAT_EMBEDDING_DIMENSIONS,
         encoding_format: 'float',
-      });
+      }, { signal });
       const ordered = [...response.data].sort((left, right) => left.index - right.index);
       for (const item of ordered) vectors.push(normalize(Float32Array.from(item.embedding)));
     }

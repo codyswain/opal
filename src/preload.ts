@@ -186,10 +186,10 @@ contextBridge.exposeInMainWorld("chatAPI", {
       conversationId,
       question,
       channel,
-    );
+    ).finally(() => ipcRenderer.removeListener(channel, listener));
     return {
       result,
-      cancel: () => ipcRenderer.removeListener(channel, listener),
+      cancel: () => { void ipcRenderer.invoke("chat:cancel", channel).catch(() => undefined); },
     };
   },
 });

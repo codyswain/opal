@@ -163,8 +163,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   cancel: () => {
     cancelInFlight?.();
     cancelInFlight = null;
-    // The IPC request still finishes in main; retain the send lock until then.
-    set({ streaming: null });
+    // Keep the partial text and send lock until main acknowledges cancellation.
   },
 
   refreshIndex: async () => {
