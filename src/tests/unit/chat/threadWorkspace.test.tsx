@@ -20,16 +20,19 @@ describe('Thread workspace', () => {
     const user = userEvent.setup();
     let finish!: (value: unknown) => void;
     window.chatAPI.searchMessages = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
-      .mockResolvedValue({ success: true, data: { hits: [{ id: 'a', excerpt: 'Remember the solstice' }], incomplete: false } });
-    render(<TooltipProvider><ConversationList conversations={conversations} activeId={null} onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} /></TooltipProvider>);
+      .mockResolvedValue({ success: true, data: { hits: [{ id: 'a', messageId: 'm1', excerpt: 'Remember the solstice' }], incomplete: false } });
+    const onSelect = vi.fn();
+    render(<TooltipProvider><ConversationList conversations={conversations} activeId={null} onSelect={onSelect} onNew={vi.fn()} onArchive={vi.fn()} /></TooltipProvider>);
     await user.type(screen.getByRole('searchbox'), 'obsolete');
     await waitFor(() => expect(window.chatAPI.searchMessages).toHaveBeenCalledWith('obsolete', false));
     await user.clear(screen.getByRole('searchbox'));
     await user.type(screen.getByRole('searchbox'), 'solstice');
-    await act(async () => finish({ success: true, data: { hits: [{ id: 'a', excerpt: 'Old response' }], incomplete: false } }));
+    await act(async () => finish({ success: true, data: { hits: [{ id: 'a', messageId: 'm1', excerpt: 'Old response' }], incomplete: false } }));
     expect(screen.queryByText('Old response')).not.toBeInTheDocument();
     expect(await screen.findByText('Remember the solstice')).toBeVisible();
     expect(screen.getByText('A quiet morning')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: /^A quiet morning/ }));
+    expect(onSelect).toHaveBeenCalledWith('a', 'm1');
   });
   it('retries failed message search while preserving immediate title matches', async () => {
     const user = userEvent.setup();

@@ -128,6 +128,6 @@ export interface ContentSearchResult {
 }
 
 export interface ThreadSearchResult {
-  hits: { id: string; excerpt: string }[];
+  hits: { id: string; messageId: string; excerpt: string }[];
   incomplete: boolean;
 }

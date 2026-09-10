@@ -57,7 +57,7 @@ export class ChatRepository {
         if (result.hits.length === 50) { result.incomplete = true; return result; }
         const start = Math.max(0, offset - 65);
         const end = Math.min(text.length, offset + term.length + 120);
-        result.hits.push({ id: row.id, excerpt: `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}` });
+        result.hits.push({ id: row.id, messageId: message.id, excerpt: `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}` });
         break;
       }
     }

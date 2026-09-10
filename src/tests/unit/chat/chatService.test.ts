@@ -364,8 +364,8 @@ it('searches stored message text locally with archive scope and unreadable-file 
   await writeFile(path.join(tmp, 'library/chat', archived.id + '.json'), JSON.stringify({ ...archived, archivedAt: 2, messages: [{ id: 'm2', role: 'assistant', content: 'Solstice notes', createdAt: 2 }] }));
   const damaged = path.join(tmp, 'library/chat/11111111-1111-4111-8111-111111111111.json');
   await writeFile(damaged, '{broken');
-  expect(await service.searchMessages('solstice', false)).toEqual({ hits: [{ id: first.id, excerpt: 'Remember the SOLSTICE planting plan' }], incomplete: true });
-  expect((await service.searchMessages('SOLSTICE', true)).hits).toEqual([{ id: archived.id, excerpt: 'Solstice notes' }]);
+  expect(await service.searchMessages('solstice', false)).toEqual({ hits: [{ id: first.id, messageId: 'm1', excerpt: 'Remember the SOLSTICE planting plan' }], incomplete: true });
+  expect((await service.searchMessages('SOLSTICE', true)).hits).toEqual([{ id: archived.id, messageId: 'm2', excerpt: 'Solstice notes' }]);
   await expect(service.searchMessages(' ', false)).rejects.toThrow();
   await expect(service.searchMessages('x'.repeat(201), false)).rejects.toThrow();
   await expect(service.searchMessages('solstice', 'yes')).rejects.toThrow();

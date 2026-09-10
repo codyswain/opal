@@ -184,3 +184,13 @@ and install only if the installed app is already normally closed.
 - 31 focused service/UI/IPC checks, TypeScript and lint passed. Packaged synthetic
   verification crossed real IPC, found saved message text and opened the intact
   thread and draft, without any AI request.
+
+### Message match navigation
+
+- Search results now carry the matching message ID through the sidebar and route.
+  Selecting an excerpt scrolls to that message, outlines it and gives keyboard focus.
+- Repeated selections work; ordinary rerenders do not steal focus back. Starting
+  a send clears the search target so normal response scrolling resumes.
+- 45 focused repository/sidebar/route/message checks passed. Packaged synthetic
+  verification used an earlier match in a thirty-message thread, confirming
+  visibility, focus, repeated selection and preserved draft. Screenshot inspected.

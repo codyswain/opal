@@ -18,3 +18,21 @@ it('marks a stopped answer while keeping its partial text readable', () => {
   expect(screen.getByText('A partial thought')).toBeVisible();
   expect(screen.getByRole('status')).toHaveTextContent('Stopped · partial answer saved');
 });
+
+it('focuses a selected search message once without pulling focus back on updates', () => {
+  const messages = [{ id: 'first', role: 'user' as const, content: 'Earlier thought', createdAt: 1 }, { id: 'last', role: 'user' as const, content: 'Later thought', createdAt: 2 }];
+  const props = { messages, streaming: null as string | null, onOpenSource: vi.fn() };
+  const { rerender } = render(<><button>Keep writing</button><MessageThread {...props} /></>);
+  const article = screen.getByText('Earlier thought').closest('article');
+  if (!article) throw new Error('Expected a message article');
+  article.scrollIntoView = vi.fn();
+  const target = { messageId: 'first', sequence: 1 };
+  rerender(<><button>Keep writing</button><MessageThread {...props} focusMessage={target} /></>);
+  expect(article).toHaveFocus();
+  expect(article.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+  expect(article).toHaveAttribute('data-search-match', 'true');
+  screen.getByRole('button', { name: 'Keep writing' }).focus();
+  rerender(<><button>Keep writing</button><MessageThread {...props} messages={[...messages]} focusMessage={target} /></>);
+  expect(screen.getByRole('button', { name: 'Keep writing' })).toHaveFocus();
+  expect(article.scrollIntoView).toHaveBeenCalledTimes(1);
+});

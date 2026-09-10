@@ -80,4 +80,6 @@ Thread search matches names, source context/dates and drafts immediately. After
 for up to 50 matching threads in the selected active/archive scope. Unreadable
 files or truncated results are explicitly reported. This requires no AI key;
 thread JSON is read directly, so very large histories may benefit from a future
-index. Opening a result selects the thread, not a specific message position.
+index. Opening a message result selects its thread, scrolls to the matching message,
+and gives it keyboard focus and a subtle outline. Ordinary updates do not
+repeat that focus change.

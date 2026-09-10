@@ -21,6 +21,7 @@ export const ChatRoute: React.FC = () => {
   const [listVisible, setListVisible] = useState(() => readPref('threads.listVisible', window.innerWidth >= 1000));
   const submitting = useRef(false);
   const recoveryCopies = useRef(new Map<string, string>());
+  const [searchTarget, setSearchTarget] = useState<{ conversationId: string; messageId: string; sequence: number } | null>(null);
   const [composerFocus, setComposerFocus] = useState(0);
   const [preparingSend, setPreparingSend] = useState(false);
   const loaded = useChatStore((state) => state.loaded);
@@ -102,8 +103,8 @@ export const ChatRoute: React.FC = () => {
       <ConversationList
         conversations={conversations}
         activeId={active?.id ?? null}
-        onSelect={(id) => { setPrefill(null); void select(id); }}
-        onNew={() => { setPrefill(null); void startConversation(); }}
+        onSelect={(id, messageId) => { setPrefill(null); setSearchTarget(previous => messageId ? { conversationId: id, messageId, sequence: (previous?.sequence ?? 0) + 1 } : null); void select(id); }}
+        onNew={() => { setSearchTarget(null); setPrefill(null); void startConversation(); }}
         onArchive={(id, archived) => void updateConversation(id, { archived })}
         onPin={(id, pinned) => void updateConversation(id, { pinned })}
         onRecoverDraft={loaded && hydrated ? (id) => void recoverDraft(id) : undefined}
@@ -125,6 +126,7 @@ export const ChatRoute: React.FC = () => {
           onOpenDay={(date) => navigateTo(`/today?date=${encodeURIComponent(date)}`)} />
         <IndexStatusBar status={index} error={indexError} onUpdate={() => void updateIndex()} onCancel={() => void cancelIndex()} />
         <MessageThread
+          focusMessage={searchTarget?.conversationId === active?.id ? searchTarget : null}
           messages={active?.messages ?? []}
           streaming={streaming}
           hasDraft={Boolean(draft.trim())}
@@ -141,6 +143,7 @@ export const ChatRoute: React.FC = () => {
           <Composer focusRequest={composerFocus} saveStatus={!hydrated ? 'Loading saved drafts…' : dirty ? 'Saving draft…' : draft ? 'Draft saved on this Mac' : 'Threads are saved on this Mac'} preparing={processing || preparingSend || !hydrated} draft={draft} onDraftChange={(text) => setDraft(draftId, text)} sending={sending}
             onSend={(question) => void (async () => {
               if (submitting.current) return;
+              setSearchTarget(null);
               submitting.current = true;
               setPreparingSend(true);
               try {

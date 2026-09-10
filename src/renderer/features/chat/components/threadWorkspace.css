@@ -71,3 +71,5 @@ section:has(> .writing-composer[data-expanded=true]) > .thread-welcome { visibil
 
 .thread-search-status { display: flex; gap: 8px; padding: 0 14px 10px; font-size: 11px; color: hsl(var(--muted-foreground)); }
 .thread-search-status button { color: hsl(var(--focus)); text-decoration: underline; }
+
+[data-search-match="true"] { outline: 2px solid hsl(var(--focus) / 0.5); outline-offset: 6px; scroll-margin-block: 24px; }

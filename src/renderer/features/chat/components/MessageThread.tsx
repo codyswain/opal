@@ -9,6 +9,7 @@ interface MessageThreadProps {
   messages: ChatMessage[];
   streaming: string | null;
   hasDraft?: boolean;
+  focusMessage?: { messageId: string; sequence: number } | null;
   onOpenSource: (source: ChatSource) => void;
   /** Fills the composer with a starter question. */
   onSuggest?: (question: string) => void;
@@ -39,9 +40,22 @@ export const SUGGESTED_QUESTIONS = [
   'What are the open to-dos across my notes?',
 ];
 
-export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource, onSuggest, hasDraft = false }) => {
+export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streaming, onOpenSource, onSuggest, hasDraft = false, focusMessage = null }) => {
   const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => { bottom.current?.scrollIntoView?.({ block: 'end' }); }, [messages.length, streaming]);
+  const messageNodes = useRef(new Map<string, HTMLElement>());
+  const handledTarget = useRef<typeof focusMessage>(null);
+  useEffect(() => {
+    if (focusMessage) {
+      const node = messageNodes.current.get(focusMessage.messageId);
+      if (node && handledTarget.current !== focusMessage) {
+        node.scrollIntoView?.({ block: 'center' });
+        node.focus({ preventScroll: true });
+        handledTarget.current = focusMessage;
+      }
+      if (node) return;
+    }
+    bottom.current?.scrollIntoView?.({ block: 'end' });
+  }, [messages, streaming, focusMessage]);
 
   if (messages.length === 0 && streaming === null) {
     return (
@@ -75,6 +89,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
         {messages.map((message) => (
           <article
             key={message.id}
+            ref={(node) => { if (node) messageNodes.current.set(message.id, node); else messageNodes.current.delete(message.id); }}
+            tabIndex={-1}
+            data-search-match={focusMessage?.messageId === message.id || undefined}
             data-testid={`chat-message-${message.role}`}
             className={message.role === 'user'
               ? 'self-end rounded-2xl bg-surface-selected px-4 py-2 text-sm'
