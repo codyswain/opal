@@ -52,3 +52,8 @@ and text files without AI, including files absent from the index. It excludes
 hidden files and symlinks and observes mounted roots. Deep search is bounded to
 5,000 files, 25 MiB total, 1 MiB per file and 50 results; partial searches are
 labeled. PDFs remain available through indexed contents, not the deep text scan.
+
+New answers keep a deterministic retrieval record beside the generated text.
+Expand “Daily notes checked” or “Library context checked” to inspect its scope,
+index date, missing days and limits. This record is saved with the message.
+Older messages without this metadata remain readable.

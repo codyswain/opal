@@ -61,6 +61,8 @@ export interface ChatMessage {
   content: string;
   createdAt: number;
   sources?: ChatSource[];
+  /** Deterministic retrieval evidence, separate from model-authored text. */
+  retrieval?: { method: 'calendar' | 'semantic'; summary: string };
   error?: string;
 }
 

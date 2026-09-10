@@ -215,7 +215,7 @@ export class ChatService {
       sources.length > 0 ? `Sources:\n${sources.map((source) => `[${source.n}] ${source.name}${source.page ? ` (page ${source.page})` : ''}\n${source.excerpt}`).join('\n\n')}` : 'Sources: none matched this question.',
     ].filter(Boolean).join('\n\n');
     const history = conversation.messages.slice(-9).map((message) => ({ role: message.role, content: message.content }));
-    const assistant: ChatMessage = { id: randomUUID(), role: 'assistant', content: '', createdAt: (this.deps.now ?? Date.now)(), sources };
+    const assistant: ChatMessage = { id: randomUUID(), role: 'assistant', content: '', createdAt: (this.deps.now ?? Date.now)(), sources, retrieval: { method: temporal ? 'calendar' : 'semantic', summary: coverage || `${sources.length} files matched in the local text index. ${status.lastIndexedAt ? `Index last updated ${calendarDay(new Date(status.lastIndexedAt))}. ` : ''}These are relevant excerpts, not a complete search of every file. ${status.staleFiles ? 'Changes are waiting to be indexed.' : ''}`.trim() } };
     try {
       assistant.content = await clients.completions.stream([{ role: 'system', content: system }, ...history], onDelta);
     } catch (error) {

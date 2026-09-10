@@ -57,3 +57,7 @@
 .thread-welcome[data-draft=true] > span { display: none; }
 section:has(> .writing-composer[data-expanded=true]) > .thread-welcome { visibility: hidden; }
 @media (max-height: 700px) { .thread-welcome { padding: 16px 24px; } .thread-welcome > span { display: none; } .thread-welcome > ul { margin-top: 16px; } }
+
+.thread-retrieval-evidence { margin-top: 12px; color: hsl(var(--text-tertiary)); font-size: 11px; line-height: 1.7; }
+.thread-retrieval-evidence summary { cursor: pointer; width: fit-content; }
+.thread-retrieval-evidence p { max-width: 70ch; margin-top: 8px; padding: 10px 12px; border-left: 2px solid hsl(var(--border-subtle)); color: hsl(var(--text-secondary)); }

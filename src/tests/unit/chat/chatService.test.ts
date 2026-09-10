@@ -87,6 +87,7 @@ describe('ChatService', () => {
     expect(prompt).not.toContain('2023-10-14');
     expect(prompt).not.toContain('Outside requested window');
     expect(prompt).toContain('8 days without readable dated notes');
+    expect((await service.get(conversation.id))?.messages.at(-1)?.retrieval).toMatchObject({ method: 'calendar', summary: expect.stringContaining('8 days without readable dated notes') });
   });
 
   it('uses the newest dated note for most recent, excludes future notes, and reports missing periods', async () => {

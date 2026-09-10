@@ -41,3 +41,15 @@ the user's installed app. Stage verified builds for a normal close.
 - Deep-search reset happens with input changes rather than a deferred effect;
   loading is distinguished from an empty result set.
 - Seven palette tests and TypeScript validation pass before commit checks.
+
+### Retrieval evidence checkpoint
+
+- New answers persist a retrieval record independently of model prose.
+- Calendar coverage exposes the actual period, missing days and bounded reads.
+- Semantic coverage states index date and non-exhaustive matching.
+- Evidence is collapsed by default and remains accessible beside the answer.
+- Focused backend/UI tests and type validation passed.
+
+Next concrete defect found: Stop currently only removes the renderer listener;
+main continues the request. Investigate real cancellation and partial-answer
+persistence, with owner-scoped IPC and synthetic clients before shipping.

@@ -89,6 +89,10 @@ export const MessageThread: React.FC<MessageThreadProps> = ({ messages, streamin
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                   </div>
                 )}
+                {message.retrieval && <details className="thread-retrieval-evidence">
+                  <summary>{message.retrieval.method === 'calendar' ? 'Daily notes checked' : 'Library context checked'}</summary>
+                  <p>{message.retrieval.summary}</p>
+                </details>}
                 {message.sources && message.sources.length > 0 ? <Sources sources={message.sources} onOpen={onOpenSource} /> : null}
               </>
             ) : (
