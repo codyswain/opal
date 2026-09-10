@@ -37,9 +37,10 @@ Small windows begin with the list hidden. The composer grows with the draft and
 can expand into a writing room. Library indexing details and explicit controls
 are available from Library context. Opening that control does not index files.
 
-Calendar questions (today, yesterday, last/past N days up to 366, last/past week,
-most recent) read current dated Markdown/text files from mounted roots. Day
-ranges include today and use the Mac’s local calendar. Filename dates are
+Calendar questions (today, yesterday, last/past N days up to 366, this/last week
+or month, past week, explicit ISO dates/ranges, most recent) read current dated Markdown/text files from mounted roots. Rolling day ranges include today and use the Mac’s local calendar. Weeks start
+on Monday; last week/month means the previous complete calendar period, while
+past week means seven days through today. Explicit ranges show their endpoints. Filename dates are
 evidence of the note date, not file modification timestamps. The model receives
 coverage and missing-day information. Reads are bounded to 60 files and 3,000
 characters per file, with omissions disclosed in its context. Other date phrasing

@@ -79,3 +79,12 @@ and install only if the installed app is already normally closed.
 - Returning to Today removes the date override, restoring live behavior.
 - Route regressions use a fake local clock; journal drafts remain keyed by file
   and the existing unmount-save/recovery behavior is preserved.
+
+### Calendar-period checkpoint
+
+- Added deterministic this/last week and month, explicit ISO day/range parsing.
+- Last week uses the previous Monday–Sunday; past week remains rolling seven
+  days. The retrieval record displays the resolved endpoints.
+- Added leap-month/year-boundary and invalid/ambiguous-date regressions.
+- Focused calendar/service checks: 27 passed. Type check passed.
+- The preceding Today checkpoint passed the complete 1,041-test suite.

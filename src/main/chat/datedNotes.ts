@@ -1,4 +1,5 @@
 import path from 'path';
+import { validDate } from '@/common/vaultModel';
 import { readFile, stat } from 'fs/promises';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { scanRootsFor, walkRoot } from '@/main/fs/rootTraversal';
@@ -17,6 +18,25 @@ function shifted(now: Date, days: number): string {
 export function dateRequest(question: string, now: Date): DateRequest | null {
   const text = question.toLowerCase();
   const end = calendarDay(now);
+  const explicit = [...text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
+  if (explicit.length) {
+    if (explicit.some((date) => !validDate(date))) return null;
+    if (explicit.length === 1) return { start: explicit[0], end: explicit[0] };
+    const range = text.match(/\b(\d{4}-\d{2}-\d{2})\s+(?:to|through|until|and)\s+(\d{4}-\d{2}-\d{2})\b/);
+    if (explicit.length === 2 && range) {
+      const [start, finish] = [range[1], range[2]].sort();
+      return { start, end: finish };
+    }
+    return null;
+  }
+  const weekday = (now.getDay() + 6) % 7;
+  if (/\bthis week\b/.test(text)) return { start: shifted(now, -weekday), end };
+  if (/\b(?:last|previous) week\b/.test(text)) return { start: shifted(now, -weekday - 7), end: shifted(now, -weekday - 1) };
+  if (/\bthis month\b/.test(text)) return { start: calendarDay(new Date(now.getFullYear(), now.getMonth(), 1, 12)), end };
+  if (/\b(?:last|previous) month\b/.test(text)) return {
+    start: calendarDay(new Date(now.getFullYear(), now.getMonth() - 1, 1, 12)),
+    end: calendarDay(new Date(now.getFullYear(), now.getMonth(), 0, 12)),
+  };
   const days = text.match(/\b(?:last|past|previous)\s+(\d+|one|two|three|seven|ten|fourteen|thirty)\s+days?\b/);
   if (days) {
     const words: Record<string, number> = { one: 1, two: 2, three: 3, seven: 7, ten: 10, fourteen: 14, thirty: 30 };
@@ -25,7 +45,7 @@ export function dateRequest(question: string, now: Date): DateRequest | null {
   }
   if (/\byesterday\b/.test(text)) return { start: shifted(now, -1), end: shifted(now, -1) };
   if (/\btoday\b/.test(text)) return { start: end, end };
-  if (/\b(?:past|last) week\b/.test(text)) return { start: shifted(now, -6), end };
+  if (/\bpast week\b/.test(text)) return { start: shifted(now, -6), end };
   if (/\bmost recent(?:ly)?\b/.test(text) || /\blatest\b.*\b(?:note|entry|journal|writing)/.test(text)) return { start: '0000-01-01', end, latest: true };
   return null;
 }
@@ -78,7 +98,7 @@ export async function readDatedNotes(registry: RootRegistry, request: DateReques
       dates.add(date);
     } catch { unreadable += 1; }
   }
-  const period = request.latest ? `Newest dated notes on or before ${request.end}${selected[0] ? `: ${selected[0].date}` : ''}` : `${request.start} through ${request.end} (inclusive; last N days includes today)`;
+  const period = request.latest ? `Newest dated notes on or before ${request.end}${selected[0] ? `: ${selected[0].date}` : ''}` : `${request.start} through ${request.end} (inclusive)`;
   const dayCount = request.latest ? 1 : Math.round((Date.parse(request.end) - Date.parse(request.start)) / 86400000) + 1;
   const coverage = `${period}. ${hits.length ? `Read ${hits.length} dated files across ${dates.size} days` : 'No readable dated notes found'}. ${dayCount - dates.size} days without readable dated notes. ${Math.max(0, ordered.length - 60)} files omitted by the 60-file limit; ${excerpted} files excerpted at 3,000 characters; ${unreadable} files or folders unreadable. Dates come from filenames, not modification times. This covers dated Markdown/text notes only, not all activity or all library formats. Missing notes do not mean nothing happened.`;
   return { hits, coverage };
