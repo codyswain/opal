@@ -57,7 +57,7 @@ describe('CommandPalette', () => {
     renderPalette();
     act(() => usePaletteStore.getState().show());
     await user.type(await screen.findByRole('combobox'), 'foxglove');
-    expect(await screen.findByText('Plant foxglove in the garden.')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /Plant foxglove in the garden/ })).toHaveTextContent('Plant foxglove in the garden.');
     await user.click(screen.getByRole('button', { name: 'Search current text files' }));
     await waitFor(() => expect(searchContent).toHaveBeenLastCalledWith('foxglove', true));
     await user.click(screen.getByTestId(`palette-file-${PLAN}`));
@@ -76,7 +76,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(search).toHaveBeenCalledWith('foxglove', false));
     await user.click(screen.getByRole('button', { name: 'Search current text files' }));
     await user.click(await screen.findByRole('button', { name: 'Retry search' }));
-    expect(await screen.findByText('Found foxglove')).toBeVisible();
+    expect(await screen.findByRole('option', { name: /Found foxglove/ })).toBeVisible();
     expect(search).toHaveBeenLastCalledWith('foxglove', true);
     expect(screen.getByRole('combobox')).toHaveValue('foxglove');
   });

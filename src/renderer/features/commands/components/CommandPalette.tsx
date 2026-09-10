@@ -1,3 +1,4 @@
+import { SearchHighlight } from './SearchHighlight';
 import { classifyFile } from '@/common/fileKind';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
@@ -218,9 +219,9 @@ export const CommandPalette: React.FC = () => {
                         <>
                           <FileKindIcon kind={item.entry.kind} className="h-4 w-4" />
                           <span className="min-w-0 flex-1 truncate">
-                            <span className="text-foreground">{item.entry.name}</span>
-                            {item.excerpt && <span className="block truncate text-xs text-foreground-secondary">{item.excerpt}</span>}
-                            {item.hint ? <span className="ml-2 text-2xs text-muted-foreground">{item.hint}</span> : null}
+                            <span className="block truncate text-foreground" title={item.entry.name}><SearchHighlight text={item.entry.name} query={term} /></span>
+                            {item.excerpt && <span className="mt-0.5 block truncate text-xs text-foreground-secondary"><SearchHighlight text={item.excerpt} query={term} /></span>}
+                            {item.hint ? <span className="mt-0.5 block truncate text-2xs text-muted-foreground" title={item.entry.path}>{item.hint}</span> : null}
                           </span>
                         </>
                       ) : (

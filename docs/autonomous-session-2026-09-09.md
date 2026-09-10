@@ -148,3 +148,12 @@ and install only if the installed app is already normally closed.
 - Nine palette regressions, TypeScript and targeted lint passed. Packaged QA
   injected a synthetic IPC read failure, retried and opened the recovered match.
   No AI requests were used. The QA fixture uses canonical paths, like real hits.
+
+### Search readability
+
+- Added subtle literal-match highlighting to filenames and body excerpts, with
+  file locations on a separate muted line and full names/paths on hover.
+- Preserves original case and text, escapes regex punctuation and renders vault
+  text safely through React. No HTML interpretation or new search/network work.
+- Twelve focused checks, TypeScript and lint passed. Packaged synthetic recovery,
+  result opening and highlight checks passed; inspected light/dark screenshots.
