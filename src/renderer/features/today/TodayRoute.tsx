@@ -14,13 +14,13 @@ import { focusFile } from "@/renderer/features/disk-explorer/navigation";
 import { useShell } from "@/renderer/features/shell";
 import { toOpalFileUrl } from "@/common/opalFileUrl";
 import {
-  localDate,
   shiftDate,
   splitDailyLog,
   validDate,
 } from "@/common/vaultModel";
 import { JournalPanel } from "./JournalPanel";
 import { DailyBrief, DailyFocus, Markdown } from "./TodayContext";
+import { useTodayDate } from "./useTodayDate";
 import { useVaultDay } from "./useVaultDay";
 import "./today.css";
 import { ContinueThinking } from "@/renderer/features/chat/components/ContinueThinking";
@@ -53,11 +53,13 @@ function usePreference(
 
 export function TodayRoute() {
   const { navigateFiles, location, navigateTo } = useShell();
+  const today = useTodayDate();
   const dateParam = new URLSearchParams(location.search).get("date");
-  const day = dateParam && validDate(dateParam) ? dateParam : localDate();
+  const day = dateParam && validDate(dateParam) ? dateParam : today;
   const setDay = (next: string) => {
     const search = new URLSearchParams(location.search);
-    search.set("date", next);
+    if (next === today) search.delete("date");
+    else search.set("date", next);
     navigateTo({ pathname: location.pathname, search: search.toString() });
   };
   const [selectedRoot, selectRoot] = usePreference("opal.today.vault", "");
@@ -146,7 +148,7 @@ export function TodayRoute() {
             </span>
           </h1>
           <p className="today-subtitle">
-            {day === localDate()
+            {day === today
               ? "Make room for what matters. Let the rest unfold."
               : "A day to return to. A thought to pick up."}
           </p>
@@ -176,8 +178,8 @@ export function TodayRoute() {
             >
               <ChevronRight size={16} />
             </button>
-            {day !== localDate() && (
-              <button onClick={() => setDay(localDate())}>Today</button>
+            {day !== today && (
+              <button onClick={() => setDay(today)}>Today</button>
             )}
           </nav>
           <span className="today-toolbar-spacer" />

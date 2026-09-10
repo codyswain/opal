@@ -489,3 +489,34 @@ it("prepares task context for chat without sending a message", async () => {
     },
   ]);
 });
+
+it('rolls the live Today page forward across midnight', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 8, 9, 23, 59, 59));
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    await act(async () => { view = render(<TodayRoute />); });
+    expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-09');
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-10');
+    expect(window.vaultAPI.readDay).toHaveBeenLastCalledWith('/vault', '2026-09-10');
+  } finally { view?.unmount(); vi.useRealTimers(); }
+});
+
+it('keeps a selected past day on resume and returns to live Today', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 8, 9, 12));
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    await act(async () => { view = render(<TodayRoute />); });
+    fireEvent.change(screen.getByLabelText('Choose day'), { target: { value: '2026-09-05' } });
+    vi.setSystemTime(new Date(2026, 8, 10, 12));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-05');
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+    expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-10');
+    vi.setSystemTime(new Date(2026, 8, 11, 12));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(screen.getByLabelText('Choose day')).toHaveValue('2026-09-11');
+  } finally { view?.unmount(); vi.useRealTimers(); }
+});

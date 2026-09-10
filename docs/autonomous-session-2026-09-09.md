@@ -69,3 +69,13 @@ persistence, with owner-scoped IPC and synthetic clients before shipping.
 Upcoming: review calendar-period interpretation and daily journal/task recovery.
 Do not request an app-close interruption during autonomous work; stage updates
 and install only if the installed app is already normally closed.
+
+### Live Today checkpoint
+
+- Reproduced Today remaining on yesterday across midnight and remaining pinned
+  after the Today button was used.
+- Live Today now follows local midnight, focus/resume and visibility changes;
+  explicitly selected historical dates stay fixed.
+- Returning to Today removes the date override, restoring live behavior.
+- Route regressions use a fake local clock; journal drafts remain keyed by file
+  and the existing unmount-save/recovery behavior is preserved.
