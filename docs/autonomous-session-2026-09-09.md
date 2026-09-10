@@ -242,3 +242,16 @@ and install only if the installed app is already normally closed.
   worker under sustained workstation load. Added OPAL_TEST_SLOW_HOST=1 as an
   explicit local-only option for a 20-second test limit; default and CI limits
   stay unchanged. Assertions and the pre-commit suite are not skipped.
+
+### Final installed checkpoint
+
+- All 1,073 tests across 113 files passed for 0fe82f1. The earlier watcher
+  failure passed in isolation and in the complete rerun; no assertion bypass.
+- Pushed 0fe82f1 to origin/codex/core-ux. Packaged compiled files matched the
+  staged bundle by SHA-256 before installation.
+- Found installed Opal normally closed, preserved its previous bundle as a
+  timestamped rollback copy, installed this checkpoint, and reopened it.
+  Verified installed compiled files, running process, and the existing Dock link.
+- Current installed application includes the daily layout and thread-load retry.
+  The iCloud archive remains the earlier verified recovery snapshot; it does not
+  include every later personal-data edit. No private content was used for AI QA.
