@@ -63,6 +63,36 @@ describe('CommandPalette', () => {
     await user.click(screen.getByTestId(`palette-file-${PLAN}`));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`file=${encodeURIComponent(PLAN)}`));
   });
+  it('retries a failed local content search without changing its query or scope', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    const search = vi.fn().mockResolvedValueOnce({ success: true, data: { hits: [], incomplete: false } })
+      .mockRejectedValueOnce(new Error('Temporary read failure'))
+      .mockResolvedValue({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Found foxglove' }], incomplete: false } });
+    window.chatAPI.searchContent = search;
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'foxglove');
+    await waitFor(() => expect(search).toHaveBeenCalledWith('foxglove', false));
+    await user.click(screen.getByRole('button', { name: 'Search current text files' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry search' }));
+    expect(await screen.findByText('Found foxglove')).toBeVisible();
+    expect(search).toHaveBeenLastCalledWith('foxglove', true);
+    expect(screen.getByRole('combobox')).toHaveValue('foxglove');
+  });
+  it('distinguishes failed filename search from no matches and allows retry', async () => {
+    const query = vi.fn().mockResolvedValueOnce({ success: false, error: 'Unavailable' })
+      .mockResolvedValue({ success: true, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) });
+    installCollectionsApi({ query });
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'zzzz');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Filename search could not finish.');
+    expect(screen.queryByText('Nothing matches “zzzz”')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Retry search' }));
+    expect(await screen.findByTestId(`palette-file-${PLAN}`)).toBeVisible();
+  });
   it('discards a slow content response after the query changes', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
     let finish!: (value: unknown) => void;

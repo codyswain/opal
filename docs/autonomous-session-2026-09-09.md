@@ -138,3 +138,13 @@ and install only if the installed app is already normally closed.
   either success or failure, preserving retry behavior for task and day actions.
 - Regression covers two calls in one render turn and retry after disk failure.
   All 20 Today tests, TypeScript and targeted lint passed.
+
+### Search failure recovery
+
+- Reproduced the deep-search failure dead end: the UI said to retry while its
+  local-search button remained disabled. Filename failures silently looked empty.
+- Added explicit search failure feedback and a Retry search action that retains
+  the query and indexed/current-text scope, with existing stale-response guards.
+- Nine palette regressions, TypeScript and targeted lint passed. Packaged QA
+  injected a synthetic IPC read failure, retried and opened the recovered match.
+  No AI requests were used. The QA fixture uses canonical paths, like real hits.

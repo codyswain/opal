@@ -63,6 +63,9 @@ export const CommandPalette: React.FC = () => {
   const [recent, setRecent] = useState<PaletteItem[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [namesLoading, setNamesLoading] = useState(false);
+  const [namesError, setNamesError] = useState(false);
+  const [contentError, setContentError] = useState(false);
+  const [searchRevision, setSearchRevision] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const request = useRef(0);
 
@@ -87,6 +90,7 @@ export const CommandPalette: React.FC = () => {
   }, [open, initialQuery]);
 
   useEffect(() => {
+    setNamesError(false);
     if (!open || commandMode || !term) { setFiles([]); setNamesLoading(false); return; }
     setNamesLoading(true);
     const token = ++request.current;
@@ -98,29 +102,30 @@ export const CommandPalette: React.FC = () => {
       ).then((response) => {
         if (token !== request.current) return;
         setNamesLoading(false);
-        if (!response.success) { setFiles([]); return; }
+        if (!response.success) { setFiles([]); setNamesError(true); return; }
         setFiles(response.data.rows.map((row) => ({ kind: 'file', entry: row.entry, hint: locate(row.entry.path, roots) })));
-      }).catch(() => { if (token === request.current) { setFiles([]); setNamesLoading(false); } });
+      }).catch(() => { if (token === request.current) { setFiles([]); setNamesLoading(false); setNamesError(true); } });
     }, FILE_SEARCH_DEBOUNCE_MS);
     return () => { request.current += 1; clearTimeout(timer); };
-  }, [open, term, commandMode, roots]);
+  }, [open, term, commandMode, roots, searchRevision]);
 
   useEffect(() => {
     let current = true;
     setContent([]);
     setContentStatus('');
+    setContentError(false);
     if (!open || commandMode || term.length < 2) return;
     setContentStatus(deep ? 'Searching current text files…' : 'Searching indexed contents…');
     const timer = setTimeout(() => {
       void window.chatAPI.searchContent(term.slice(0, 200), deep).then((response) => {
         if (!current) return;
-        if (!response.success) { setContentStatus('Content search failed. Try again.'); return; }
+        if (!response.success) { setContentStatus('Content search failed. Try again.'); setContentError(true); return; }
         setContent(response.data.hits.map((hit) => ({ kind: 'file', entry: { path: hit.path, name: hit.name, kind: classifyFile(hit.name), isDirectory: false, size: 0, mtimeMs: 0 }, hint: locate(hit.path, roots), excerpt: hit.excerpt })));
         setContentStatus(`${deep ? 'Current Markdown and text files' : 'Indexed contents · may exclude new changes'}${response.data.incomplete ? ' · partial results (search limits or unreadable files)' : ''}`);
-      }).catch(() => { if (current) setContentStatus('Content search failed. Try again.'); });
+      }).catch(() => { if (current) { setContentStatus('Content search failed. Try again.'); setContentError(true); } });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [open, commandMode, term, deep, roots]);
+  }, [open, commandMode, term, deep, roots, searchRevision]);
 
   const sections = useMemo((): { title: string; items: PaletteItem[] }[] => {
     const matched = rankCommands(commands, term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
@@ -187,7 +192,7 @@ export const CommandPalette: React.FC = () => {
           <div ref={listRef} id="palette-results" role="listbox" aria-label="Results" className="max-h-[52vh] overflow-y-auto p-1.5">
             {flat.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {term ? namesLoading || contentStatus.startsWith('Searching') ? 'Searching…' : `Nothing matches “${term}”` : 'Open a folder to search its files.'}
+                {term ? namesLoading || contentStatus.startsWith('Searching') ? 'Searching…' : namesError || contentError ? 'Search could not finish. You can try again.' : `Nothing matches “${term}”` : 'Open a folder to search its files.'}
               </p>
             ) : sections.map((section) => (
               <div key={section.title} role="group" aria-label={section.title}>
@@ -234,6 +239,10 @@ export const CommandPalette: React.FC = () => {
               </div>
             ))}
           </div>
+          {!commandMode && term && (namesError || contentError) && <div className="flex items-center justify-between gap-3 border-t border-border-subtle px-4 py-2 text-xs">
+            <span role="alert" className="text-muted-foreground">{namesError ? 'Filename search could not finish.' : 'Content search could not finish.'}</span>
+            <button type="button" className="shrink-0 text-focus hover:underline" onKeyDown={(event) => event.stopPropagation()} onClick={() => setSearchRevision((value) => value + 1)}>Retry search</button>
+          </div>}
           {!commandMode && term.length >= 2 && <div className="flex items-center justify-between gap-3 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
             <span role="status">{contentStatus}</span>
             <button type="button" className="shrink-0 text-focus hover:underline" disabled={deep} onKeyDown={(event) => event.stopPropagation()} onClick={() => setDeep(true)}>{deep ? 'Local search' : 'Search current text files'}</button>
