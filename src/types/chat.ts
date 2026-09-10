@@ -94,6 +94,7 @@ export interface Conversation {
 }
 
 export interface ConversationSummary {
+  unreadable?: boolean;
   id: string;
   title: string;
   context?: ThreadContext;

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readdir, rm, writeFile, symlink } from 'fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile, symlink, readFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { IpcMain } from 'electron';
+import type { ChatDraftState } from '@/types/chat';
 vi.mock('@/main/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 import { ChatError, ChatService, type ChatCompletionClient } from '@/main/chat/ChatService';
 import { ChatHandlers } from '@/main/chat/ChatHandlers';
@@ -162,6 +163,27 @@ describe('ChatService', () => {
     expect(answer.message).toMatchObject({ content: 'A partial thought', cancelled: true });
     expect((await service.get(conversation.id))?.messages.at(-1)).toMatchObject({ content: 'A partial thought', cancelled: true });
     expect(service.cancel(conversation.id)).toBe(false);
+  });
+
+  it('isolates damaged thread files without hiding healthy threads or changing the damaged bytes', async () => {
+    const healthy = await service.create({ title: 'Keep thinking' });
+    const damaged = await service.create({ title: 'Damaged fixture' });
+    const file = path.join(tmp, 'library', 'chat', `${damaged.id}.json`);
+    await writeFile(file, '{broken');
+    const listed = await service.list();
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: healthy.id, title: 'Keep thinking' }),
+      expect.objectContaining({ id: damaged.id, unreadable: true }),
+    ]));
+    await expect(service.get(damaged.id)).rejects.toThrow();
+    expect(await readFile(file, 'utf8')).toBe('{broken');
+    const drafts: ChatDraftState = { drafts: { [healthy.id]: 'Keep this new writing', [damaged.id]: 'Recover this writing' }, pending: [] };
+    await service.saveDraftState(drafts);
+    expect(await service.getDraftState()).toEqual(drafts);
+    await writeFile(file, JSON.stringify({ ...damaged, messages: [{ id: 'invalid', role: 'assistant', content: 123, createdAt: 1 }] }));
+    expect((await service.list()).find((item) => item.id === damaged.id)?.unreadable).toBe(true);
+    await expect(service.update(damaged.id, { title: 'Do not overwrite' })).rejects.toThrow();
+    expect(JSON.parse(await readFile(file, 'utf8')).messages[0].content).toBe(123);
   });
 
   it('creates, lists, titles, persists and removes conversations', async () => {

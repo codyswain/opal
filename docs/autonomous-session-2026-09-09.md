@@ -88,3 +88,19 @@ and install only if the installed app is already normally closed.
 - Added leap-month/year-boundary and invalid/ambiguous-date regressions.
 - Focused calendar/service checks: 27 passed. Type check passed.
 - The preceding Today checkpoint passed the complete 1,041-test suite.
+
+### Damaged-thread isolation checkpoint
+
+- Reproduced a malformed conversation preventing the entire list from loading.
+- Per-file failures now produce an unreadable recovery entry; healthy threads
+  remain available. Saved conversation/message/source shapes are validated
+  before rendering. Damaged bytes are never rewritten or deleted.
+- Unreadable entries are excluded from automatic resume and Today suggestions;
+  archive/pin mutations are not offered for them.
+- Draft persistence no longer depends on its conversation file being readable;
+  recovery drafts and healthy new writing can be saved together.
+- Focused service/UI/store/draft checks passed, along with type check and lint.
+- Packaged synthetic-profile QA confirmed healthy loading/saving, the recovery
+  notice, and unchanged damaged file and recovery draft bytes.
+- Next opportunity: a guided way to copy a stranded draft into a fresh thread,
+  preserving the original, rather than requiring manual recovery-file access.

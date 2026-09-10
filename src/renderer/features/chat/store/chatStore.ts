@@ -53,7 +53,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         set({ conversations: response.data, loaded: true, error: null });
         if (!get().active) {
           const remembered = readPref<string | null>('threads.active', null);
-          const resume = response.data.find((item) => item.id === remembered) ?? response.data.find((item) => !item.archivedAt);
+          const resume = response.data.find((item) => item.id === remembered && !item.unreadable) ?? response.data.find((item) => !item.archivedAt && !item.unreadable);
           if (remembered !== 'new' && resume) await get().select(resume.id);
         }
         await get().refreshIndex();

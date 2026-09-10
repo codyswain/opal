@@ -14,7 +14,7 @@ export function ContinueThinking() {
     let current = true;
     if (!window.chatAPI?.list) return;
     void window.chatAPI.list().then((response) => {
-      if (current && response.success) setThreads(response.data.filter((item) => !item.archivedAt).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt).slice(0, 3));
+      if (current && response.success) setThreads(response.data.filter((item) => !item.archivedAt && !item.unreadable).sort((a, b) => Number(b.pinnedAt != null) - Number(a.pinnedAt != null) || b.updatedAt - a.updatedAt).slice(0, 3));
     }).catch(() => undefined);
     return () => { current = false; };
   }, []);

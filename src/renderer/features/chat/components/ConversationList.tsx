@@ -61,14 +61,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               <button type="button" aria-current={conversation.id === activeId ? 'true' : undefined} onClick={() => onSelect(conversation.id)} disabled={busy} className="thread-list-select">
                 <span className="thread-list-title">{conversation.title}</span>
                 {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
-                <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
+                <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{conversation.unreadable ? 'File kept for recovery' : formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
               </button>
-              {onPin && !archived && <IconButton label={`${conversation.pinnedAt != null ? 'Unpin' : 'Pin'} thread ${conversation.title}`} size="compact" onClick={() => onPin(conversation.id, conversation.pinnedAt == null)} disabled={busy} className="thread-archive-action">
+              {onPin && !archived && !conversation.unreadable && <IconButton label={`${conversation.pinnedAt != null ? 'Unpin' : 'Pin'} thread ${conversation.title}`} size="compact" onClick={() => onPin(conversation.id, conversation.pinnedAt == null)} disabled={busy} className="thread-archive-action">
                 {conversation.pinnedAt != null ? <PinOff aria-hidden size={14} /> : <Pin aria-hidden size={14} />}
               </IconButton>}
-              <IconButton label={`${archived ? 'Restore' : 'Archive'} thread ${conversation.title}`} size="compact" onClick={() => onArchive(conversation.id, !archived)} disabled={busy} className="thread-archive-action">
+              {!conversation.unreadable && <IconButton label={`${archived ? 'Restore' : 'Archive'} thread ${conversation.title}`} size="compact" onClick={() => onArchive(conversation.id, !archived)} disabled={busy} className="thread-archive-action">
                 {archived ? <ArchiveRestore aria-hidden size={14} /> : <Archive aria-hidden size={14} />}
-              </IconButton>
+              </IconButton>}
             </li>
           ))}
         </ul>

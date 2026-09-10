@@ -20,6 +20,12 @@ describe('Thread workspace', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Unpin thread Keep close' }));
     expect(onPin).toHaveBeenCalledWith('p', false);
   });
+  it('keeps unreadable threads visible for recovery without offering mutations', () => {
+    render(<TooltipProvider><ConversationList conversations={[{ ...conversations[0], unreadable: true }]} activeId={null} onSelect={vi.fn()} onNew={vi.fn()} onArchive={vi.fn()} onPin={vi.fn()} /></TooltipProvider>);
+    expect(screen.getByText('File kept for recovery')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Archive thread A quiet morning' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pin thread A quiet morning' })).not.toBeInTheDocument();
+  });
   it('recovers an unsent new-thread draft alongside saved threads', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

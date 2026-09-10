@@ -15,7 +15,7 @@ import {
   type Conversation,
   type ConversationSummary,
 } from '@/types/chat';
-import { ChatRepository, CHAT_UUID as UUID, type StoredConversation } from '@/main/database/repositories/ChatRepository';
+import { ChatRepository, UnreadableThreadError, CHAT_UUID as UUID, type StoredConversation } from '@/main/database/repositories/ChatRepository';
 import type { EmbeddingProvider } from './EmbeddingProvider';
 import type { LibraryTextIndex } from './LibraryTextIndex';
 
@@ -84,9 +84,10 @@ export function openAICompletionClient(client: Pick<OpenAI, 'chat'>): ChatComple
   };
 }
 
-function summarize(conversation: Conversation): ConversationSummary {
+function summarize(conversation: StoredConversation): ConversationSummary {
   return {
     id: conversation.id,
+    ...(conversation.unreadable ? { unreadable: true } : {}),
     title: conversation.title,
     context: conversation.context,
     archivedAt: conversation.archivedAt,
@@ -113,7 +114,12 @@ export class ChatService {
   async list(): Promise<ConversationSummary[]> {
     return (await this.repository.list()).map(summarize).sort((left, right) => Number(right.pinnedAt != null) - Number(left.pinnedAt != null) || right.updatedAt - left.updatedAt);
   }
-  async get(id: unknown): Promise<Conversation | null> { return this.repository.read(validId(id)); }
+  async get(id: unknown): Promise<Conversation | null> {
+    try { return await this.repository.read(validId(id)); } catch (error) {
+      if (error instanceof UnreadableThreadError) throw new ChatError(error.message);
+      throw error;
+    }
+  }
   create(options: unknown = {}): Promise<Conversation> {
     return this.serialize(async () => {
       const data = record(options, ['title', 'context']);
@@ -148,7 +154,7 @@ export class ChatService {
     return this.serialize(async () => {
       const validated = draftValue(state);
       await this.getDraftState();
-      for (const id of Object.keys(validated.drafts)) if (id !== 'new') await this.required(id);
+      // Drafts are recovery records: keep them even if their thread is damaged or missing.
       await this.repository.writeDrafts(validated);
     });
   }

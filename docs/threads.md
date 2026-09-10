@@ -62,3 +62,10 @@ Older messages without this metadata remain readable.
 Stop aborts the network request and saves any partial answer with a Stopped
 marker. The send lock stays in place until main acknowledges the stop. Cancelling
 while local dated notes are being read is observed before the model request.
+
+A damaged conversation file is isolated as an unreadable thread instead of
+blocking the entire list. The original JSON is retained unchanged in
+`Application Support/Opal/library/chat`; automatic resume and Today omit it.
+Saved drafts are independent recovery records and remain writable even when
+their conversation file is damaged or missing. A corrupt drafts.json itself
+still blocks replacement to avoid overwriting recovery data.
