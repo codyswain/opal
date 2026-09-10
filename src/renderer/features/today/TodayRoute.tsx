@@ -408,6 +408,7 @@ export function TodayRoute() {
                       navigateTo("/chat");
                     }}
                   />
+                  <div className="today-context-rail">
                   <ContinueThinking />
                   <DailyBrief data={data} openSource={openSource} />
                   <p className="today-footer">
@@ -417,6 +418,7 @@ export function TodayRoute() {
                     .<br />
                     Your files. Your pace.
                   </p>
+                  </div>
                 </aside>
               </div>
             )}

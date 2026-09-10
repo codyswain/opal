@@ -1,4 +1,5 @@
 .today-page {
+  container: today / inline-size;
   height: 100%;
   overflow: auto;
   background: hsl(var(--background));
@@ -523,7 +524,7 @@
     padding-left: 24px;
   }
 }
-@media (max-width: 820px) {
+@container today (max-width: 780px) {
   .today-wrap {
     padding: 30px 22px 50px;
   }
@@ -832,7 +833,7 @@
     font-size: 10px;
   }
 }
-@media (max-width: 820px) {
+@container today (max-width: 780px) {
   .today-columns,
   .tasks-first .today-columns,
   .journal-is-hidden .today-aside {
@@ -867,3 +868,20 @@
 .today-thread-list > button > span { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .today-thread-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: hsl(var(--foreground)); }
 .today-thread-list small { font-size: 10px; }
+
+/* Keep secondary context together instead of auto-placing it among daily tasks. */
+.today-context-rail { min-width: 0; }
+.today-heading h1 { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 4px; }
+.today-heading h1 span { display: inline-block; margin: 0; }
+.journal-is-hidden .today-context-rail { border-left: 1px solid hsl(var(--border)); padding-left: 28px; }
+.journal-is-hidden .today-context-rail .today-continue { margin-top: 0; padding-top: 0; border-top: 0; }
+.journal-is-hidden .today-context-rail .today-brief { margin: 26px 0 0; padding: 24px 0 0; border-left: 0; border-top: 1px solid hsl(var(--border)); }
+.journal-is-hidden .today-context-rail .today-brief:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.journal-is-hidden .today-context-rail .today-footer { grid-column: auto; padding-left: 0; margin-top: 24px; }
+@container today (max-width: 780px) {
+  .today-wrap { padding: 24px 22px 40px; }
+  .today-heading { padding-bottom: 16px; }
+  .today-heading h1 { font-size: 30px; }
+  .today-toolbar { margin-bottom: 22px; }
+  .journal-is-hidden .today-context-rail { border-left: 0; border-top: 1px solid hsl(var(--border)); padding: 24px 0 0; }
+}

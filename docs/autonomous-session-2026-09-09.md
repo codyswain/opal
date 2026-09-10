@@ -210,3 +210,20 @@ and install only if the installed app is already normally closed.
   Under heavy concurrent system load, the first full run timed out in five
   existing tests; affected files then passed in isolation and the complete suite
   passed with VITEST_MAX_FORKS=1 VITEST_MIN_FORKS=1, without changing timeouts.
+
+### Installed checkpoint
+
+- After the user's normal close, installed verified build 8d112e2 into the stable
+  application location and reopened it. Previous installed app was preserved as
+  a timestamped rollback copy. Verified compiled tree, running process, and one
+  persistent Dock shortcut to the stable path. This is the current installed build.
+
+### Daily workspace layout
+
+- Reproduced the briefing auto-placing below tasks after continuing threads were
+  added to the hidden-journal grid. Grouped secondary sections in a context column.
+- Responsive stacking now follows actual available page width beside the sidebar.
+  Date heading wraps without a leading indent; compact page spacing stays usable.
+- Packaged geometry checks reproduce the original problem and pass at wide/narrow
+  window sizes after the fix. Both screenshots inspected; no horizontal overflow.
+  All 21 focused Today/continuity checks, TypeScript and lint passed.
