@@ -227,3 +227,18 @@ and install only if the installed app is already normally closed.
 - Packaged geometry checks reproduce the original problem and pass at wide/narrow
   window sizes after the fix. Both screenshots inspected; no horizontal overflow.
   All 21 focused Today/continuity checks, TypeScript and lint passed.
+
+### Daily thread-load recovery
+
+- Confirmed task entry already preserves newer typing when an older save completes.
+- Reproduced the Continue thinking section disappearing on a failed list request.
+  It now explains the read failure and offers retry, without mutating saved files.
+- Response failures and rejected requests are covered; retry remains local and
+  does not index files or call AI. Existing success/empty/archive behavior remains.
+- 23 focused checks, TypeScript and lint passed. Packaged synthetic verification
+  confirmed the visible failure and successful retry through the IPC bridge.
+
+- A later full verification hit unrelated five-second timeouts even with one
+  worker under sustained workstation load. Added OPAL_TEST_SLOW_HOST=1 as an
+  explicit local-only option for a 20-second test limit; default and CI limits
+  stay unchanged. Assertions and the pre-commit suite are not skipped.

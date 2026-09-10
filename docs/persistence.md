@@ -73,3 +73,15 @@ backup tooling changes do not require replacing the installed bundle.
 
 A commercial service can later add optional sync and hosted routines without
 requiring that the only copy of a person's information lives on our servers.
+
+
+For verification on a heavily loaded local workstation, the full pre-commit
+suite can run serially with an explicit timing allowance:
+
+```sh
+OPAL_TEST_SLOW_HOST=1 VITEST_MAX_FORKS=1 VITEST_MIN_FORKS=1 git commit
+```
+
+This permits up to 20 seconds per test locally. It does not skip assertions,
+change default test limits, or affect CI. Use it for resource contention, not
+as a substitute for investigating a reproducible failing assertion.

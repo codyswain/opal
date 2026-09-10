@@ -885,3 +885,6 @@
   .today-toolbar { margin-bottom: 22px; }
   .journal-is-hidden .today-context-rail { border-left: 0; border-top: 1px solid hsl(var(--border)); padding: 24px 0 0; }
 }
+
+.today-thread-load-error { font-size: 12px; line-height: 1.6; color: hsl(var(--muted-foreground)); }
+.today-thread-load-error button { margin-top: 6px; border: 1px solid hsl(var(--border)); }
