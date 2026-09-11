@@ -370,7 +370,8 @@ export function TodayRoute() {
                       <div className="today-section-heading">
                         <h2>Small moments</h2>
                         <span className="today-count">
-                          {data.photos.length} photos
+                          {data.photos.length}{" "}
+                          {data.photos.length === 1 ? "photo" : "photos"}
                         </span>
                       </div>
                       {hidden ? (

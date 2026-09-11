@@ -560,6 +560,12 @@ export function DailyBrief({
             </button>
           )}
         </>
+      ) : data.digestPath ? (
+        <p className="today-empty">
+          This day’s digest has no “The brief” section yet.
+          <br />
+          Open the full briefing to read it as written.
+        </p>
       ) : (
         <p className="today-empty">
           No briefing for this day yet.

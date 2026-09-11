@@ -147,6 +147,7 @@ it("persists privacy after the shortcut and hides associated photos", async () =
     expect(localStorage.getItem("opal.today.journal-hidden")).toBe("false"),
   );
   expect(screen.getByRole("img")).toBeInTheDocument();
+  expect(screen.getByText("1 photo")).toBeInTheDocument();
 });
 it("adds an intention scoped to the displayed day", async () => {
   render(<TodayRoute />);
@@ -261,6 +262,19 @@ it("keeps last loaded content and offers retry on failed refresh", async () => {
   await screen.findByRole("alert");
   expect(screen.getByText("Saved briefing")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+});
+it("explains a digest that has no brief section instead of claiming there is none", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: { ...empty, digestPath: "/vault/Inbox/Digests/day.md" },
+  });
+  render(<TodayRoute />);
+  await screen.findByText("To do");
+  expect(
+    screen.getByText(/digest has no .The brief. section yet/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("No briefing for this day yet.")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Full briefing/ })).toBeInTheDocument();
 });
 it("shows a concise briefing with expansion and source freshness", async () => {
   vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
