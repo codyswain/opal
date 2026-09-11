@@ -82,6 +82,8 @@ conversation. Read it top to bottom before touching code.
    wiki links, and the `opal.links` connections from the properties work) as
    whole-context chat; chat as a drawer on the file; a visible context budget;
    retire the Threads nav. Independent of the feed track.
+5. **Persistence tiers.** Client-side, independent of the feed track.
+   Direction agreed 2026-09-11 (second machine); see section 9.
 
 ## 5. Slice 1 design: approved sections
 
@@ -227,6 +229,41 @@ Then open this document, continue with Section 3 above, and keep the
 one-section-at-a-time review before writing the spec. When slice 1 is
 implemented, the server is started with `npm --workspace server start` and
 verified with `curl localhost:4321/v1/health`.
+
+## 9. Persistence tiers (direction agreed 2026-09-11)
+
+Three tiers with different cadences. Version history is local and
+content-based; git is cross-machine sync and off-device backup, not history.
+
+- **Tier 1, keystrokes to disk.** Keep the existing debounce (800 ms after the
+  last change, flush on unmount, temp-file-plus-rename writes). Add a max wait
+  of about 5 s so continuous typing still saves.
+- **Tier 2, version history.** A local snapshot store (SQLite in the library,
+  or `.opal/history/`), full snapshots addressed by content hash since the
+  files are kilobytes. A 30 s tick hashes dirty files; a snapshot is taken
+  only when the file changed *and* one of: changed characters since the last
+  snapshot exceed about 200 or 10 % of the file, whichever is smaller; the
+  last snapshot is older than 5 min; a checkpoint event fired (below). Thin
+  to hourly after a day, daily after a month. The right sidebar shows the
+  per-file list (time, size delta, diff against current, restore). Restore
+  snapshots the current text first, so it is reversible. Git commits can
+  appear in the same list as the coarser tier.
+- **Tier 3, git commit and push.** Commit on checkpoint events, with a 5 min
+  timer as the floor while active; pull with rebase before every commit; push
+  right after; skip when the tree is clean; queue the push when offline and
+  retry on `online`; never force. Checkpoint events: leaving the file (switch,
+  close, window blur); user idle 60–90 s via `powerMonitor.getSystemIdleTime`;
+  `powerMonitor` suspend, lock-screen, shutdown; app quit; midnight; before
+  a rename, move, or delete in Files; before a pull triggered by another
+  writer's change (Basecamp's SSE can drive this); an explicit checkpoint
+  keystroke with a message.
+- **Who runs the loop.** Each process that writes the vault runs its own
+  commit loop: Opal's main process on each laptop, Basecamp on the Mac mini.
+  A server-side cron cannot see a laptop's uncommitted edits. Why git is not
+  the history tier: a 30 s commit-and-push loop is fine for GitHub (git push
+  is the smart transport, not the REST API, and its rate limit does not
+  apply) but produces thousands of commits a day and multiplies cross-machine
+  merges, which the vault already shows (merge commit 2026-09-08).
 
 ### Resumed on a second machine, 2026-09-11 (Codys-Mac-mini)
 
