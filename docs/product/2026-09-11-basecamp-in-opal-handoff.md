@@ -1,7 +1,7 @@
 # Basecamp in Opal: handoff
 
-Date: 2026-09-11. Status: direction approved, design sections 1–2 approved,
-sections 3–5 still to be designed. Nothing implemented yet.
+Date: 2026-09-11. Status: direction approved, design sections 1–3 approved,
+sections 4–5 still to be designed. Nothing implemented yet.
 
 This document is the product and design authority for the next piece of work.
 It is written so a session on another machine can continue without this
@@ -166,20 +166,52 @@ JSON over HTTP plus one server-sent-events stream, defined once in
 - **Errors**: `{ error: { code, message } }`. A failed source write-back
   returns 502 and leaves the item's state unchanged.
 
+### Section 3: Server internals (approved 2026-09-11, second machine)
+
+- **Adapter contract.** Basecamp's `Adapter` interface is kept unchanged
+  (`source`, `fetchItems`, optional `complete`, `createItem`, `listTeams`,
+  `writeContent`) so the port is mechanical and the 192 tests carry over.
+  Each adapter owns one kind and one id namespace: Linear emits `issue`
+  (`linear:EXE-32`; facets team, status, priority; payload description), the
+  vault emits `note` (`vault:<relative path>`; facets date, folder; payload
+  contents), Gmail emits `email` (`gmail:<threadId>`; facets from, unread,
+  date; payload the thread). The `sourceState` to `facets` mapping is one
+  function per adapter, tested against fixtures.
+- **Item cache.** One slot per adapter holding last good items, fetch time,
+  and last error. A single 60 s timer refreshes every slot; `fresh=1` forces
+  it. A failing adapter keeps serving its last good items and raises
+  `source-failed`. The feed is the union of slots joined with state, ordered
+  by effective priority tier, then newest date, then title.
+- **State store.** `node:sqlite` over the existing `item_state` table in
+  `~/.basecamp/basecamp.db`. The idempotent migration checks
+  `pragma table_info` before each `ADD COLUMN`. Universal verbs are store
+  methods. `done` fails closed: it calls the adapter's `complete` first when
+  one exists, then writes the row; if the adapter throws, the row is
+  untouched and the route returns 502. Orphan rows are pruned only after a
+  cycle in which every adapter succeeded.
+- **Action dispatch.** A static table maps declared action ids to adapter
+  methods (`edit-content` to `writeContent`, `create-issue` to Linear's
+  `createItem`). The manifest is built from that table at startup, with the
+  team enum filled from `listTeams` and refreshed with the cache. Inputs are
+  checked with the protocol validators before dispatch; unknown action ids
+  return 404 before any adapter is touched.
+- **SSE fan-out.** One event hub with a subscriber set. `feed-changed` after
+  a refresh that changed any item or state and after every mutation,
+  `source-failed` from the cache, a heartbeat every 15 s. Subscribers that
+  error are dropped silently.
+- **Layout.** `server/src/adapters/`, `core/` (cache, ordering, actions),
+  `store/`, `http/` (routes, bearer auth, events), `index.ts` wiring them
+  from `.env`.
+- Deferred, changeable later without touching the protocol: optimistic
+  `done` with retry for offline use, per-source refresh intervals.
+
 ## 6. Slice 1 design: sections still to write and approve
 
 Continue the brainstorming flow: present each section in chat, get approval,
 then write the spec to `docs/superpowers/specs/2026-09-11-feed-protocol-and-basecamp-design.md`,
 self-review it, get it reviewed, then invoke writing-plans.
 
-- **Section 3: Server internals.** Adapter contract (keep Basecamp's
-  `Adapter` interface: `source`, `fetchItems`, optional `complete`,
-  `createItem`, `listTeams`, `writeContent`) and how each adapter maps to the
-  protocol's kinds and facets. Item cache (per-adapter slots, last good items
-  survive failures, 60 s refresh). State store on `node:sqlite` with the
-  existing `item_state` schema (`item_id`, `snooze_until`, `status`,
-  `priority_override`, `updated_at`) and the idempotent column migration.
-  Action dispatch from declared actions to adapter methods. SSE fan-out.
+
 - **Section 4: Testing.** Port Basecamp's tests (adapters, core, server,
   store) to the workspace; protocol validators get unit tests in `protocol/`;
   route tests use Fastify `inject`; one contract test proves the client-side
