@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  FileText,
   RefreshCw,
   Sun,
   Search,
@@ -105,6 +106,22 @@ export function TodayRoute() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [hidden, setPrivacy]);
+  const logPath = data?.document?.path ?? null;
+  useEffect(() => {
+    if (!logPath) return;
+    const handler = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "o"
+      ) {
+        event.preventDefault();
+        openSource(logPath);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [logPath, navigateFiles]);
   const date = new Date(`${day}T12:00:00`);
   const label = date.toLocaleDateString(undefined, {
     weekday: "long",
@@ -195,6 +212,17 @@ export function TodayRoute() {
                 </option>
               ))}
             </select>
+          )}
+          {logPath && (
+            <button
+              className="today-open-log"
+              aria-label="Open day's log"
+              title="Open this day's log in the editor (Cmd/Ctrl+Shift+O)"
+              onClick={() => openSource(logPath)}
+            >
+              <FileText size={14} />
+              <span>Open log</span>
+            </button>
           )}
           <button
             aria-label="Refresh day"

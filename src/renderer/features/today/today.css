@@ -102,7 +102,8 @@
 .today-toolbar-spacer {
   flex: 1;
 }
-.today-toolbar .today-privacy {
+.today-toolbar .today-privacy,
+.today-toolbar .today-open-log {
   font-size: 11px;
 }
 .today-columns {

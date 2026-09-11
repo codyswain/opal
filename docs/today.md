@@ -3,6 +3,7 @@
 Today is Opal's homepage over an existing vault. Open a folder containing `Inbox/Logs` to use it. The vault stays readable by other editors and routines.
 
 - Browse days with the arrows or date picker; **Today** returns to the current date.
+- **Open log** in the toolbar, or **Cmd/Ctrl+Shift+O**, opens the day's file `Inbox/Logs/YYYY-MM-DD.md` in the editor. It works while the journal is hidden. It is absent until the day's file exists.
 - **Show journal & photos** reveals personal content. **Cmd/Ctrl+Shift+J** toggles it while on Today. The preference survives restart. This hides content on Today only; source files opened in Files remain readable.
 - Journal changes save automatically to `Inbox/Logs/YYYY-MM-DD.md`. The editor preserves the routine-owned `## Activity Log` section, including new entries written while you type. Concurrent journal changes produce a conflict. Retry after transient errors, or compare/copy your draft before explicitly choosing **Use saved version**.
 - Unsaved drafts survive navigation within the session, and prevent normal window closing until resolved. They are not a backup against a forced quit or crash.

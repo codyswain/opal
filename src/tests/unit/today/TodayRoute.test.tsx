@@ -352,6 +352,39 @@ it("retains a chosen task’s context and source after it leaves the queue", asy
   expect(navigateFiles).toHaveBeenCalled();
 });
 
+it("opens the day's log in Files from the toolbar and the shortcut while the journal is hidden", async () => {
+  vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
+    success: true,
+    data: {
+      ...empty,
+      document: {
+        path: "/vault/Inbox/Logs/day.md",
+        body: "## Morning\n",
+        revision: "r1",
+        size: 11,
+        hasFrontmatter: false,
+      },
+    },
+  });
+  render(<TodayRoute />);
+  await screen.findByText("To do");
+  expect(localStorage.getItem("opal.today.journal-hidden")).not.toBe("false");
+  fireEvent.click(screen.getByRole("button", { name: "Open day's log" }));
+  expect(navigateFiles).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true, shiftKey: true });
+  expect(navigateFiles).toHaveBeenCalledTimes(2);
+});
+
+it("offers no log to open before the day's file exists", async () => {
+  render(<TodayRoute />);
+  await screen.findByText("To do");
+  expect(
+    screen.queryByRole("button", { name: "Open day's log" }),
+  ).not.toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true, shiftKey: true });
+  expect(navigateFiles).not.toHaveBeenCalled();
+});
+
 it("removes the entire journal and photo sections when hidden", async () => {
   vi.mocked(window.vaultAPI.readDay).mockResolvedValue({
     success: true,
