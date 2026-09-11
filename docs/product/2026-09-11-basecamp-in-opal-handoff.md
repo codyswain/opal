@@ -316,3 +316,8 @@ content-based; git is cross-machine sync and off-device backup, not history.
   at `~/code/vault`, last auto-sync 2026-09-09 14:49; it has no `Photos/`
   directory, so Today's photo strip is empty here. Tailscale is installed
   but stopped.
+- The vault is registered as an opened root on this machine by writing
+  `~/Library/Application Support/Opal/disk-roots.json`
+  (`{"version":1,"roots":["/Users/cody/code/vault"]}`), which is the same
+  file the "Open vault folder" button on Today writes. Today discovers a
+  vault by finding `Inbox/Logs` under an opened root.
