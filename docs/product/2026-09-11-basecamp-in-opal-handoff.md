@@ -227,3 +227,23 @@ Then open this document, continue with Section 3 above, and keep the
 one-section-at-a-time review before writing the spec. When slice 1 is
 implemented, the server is started with `npm --workspace server start` and
 verified with `curl localhost:4321/v1/health`.
+
+### Resumed on a second machine, 2026-09-11 (Codys-Mac-mini)
+
+- Clone at `~/code/opal` on `dev` at `727f294`. Baseline reproduced exactly:
+  1,079 of 1,079 tests in 114 files, `npx tsc --noEmit` silent, the same 7
+  lint warnings, 8 Playwright tests in 7.8 s, `npm start` opens the app.
+- **Node must be 22.** `.nvmrc` said `v20.17.0`; it now says `v22.23.2`.
+  On Node 20 three `pdfText` tests fail (`pdfjs-dist` needs
+  `Promise.withResolvers`, added in Node 22). On Node 25, 214 tests fail
+  because Node exposes a global `localStorage` stub that shadows happy-dom's
+  (`localStorage.clear is not a function`). This machine has no nvm; Node 22
+  is the Homebrew keg `node@22`, unlinked, so every command here runs with
+  `export PATH="/opt/homebrew/opt/node@22/bin:$PATH"` first.
+- Not present on this machine: `~/code/basecamp` (slice 1 still cannot port
+  the server until it is pushed or copied), `~/.basecamp`,
+  `/Applications/Opal.app`, `~/Opal Backups/`, and
+  `~/Library/Application Support/Opal` (first launch creates it). The vault is
+  at `~/code/vault`, last auto-sync 2026-09-09 14:49; it has no `Photos/`
+  directory, so Today's photo strip is empty here. Tailscale is installed
+  but stopped.
