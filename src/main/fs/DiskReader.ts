@@ -2,6 +2,7 @@ import { readdir, stat, open } from 'fs/promises';
 import path from 'path';
 import { classifyFile } from '@/common/fileKind';
 import { normalizePath } from '@/main/fs/paths';
+import { isValidAdjacentCarrier } from './MetadataCodec';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import type { DiskEntry, DirectoryListing } from '@/types/disk';
 
@@ -62,6 +63,7 @@ export class DiskReader {
       if (!options.includeHidden && dirent.name.startsWith('.')) continue;
 
       const childPath = normalizePath(path.join(resolved, dirent.name));
+      if (await isValidAdjacentCarrier(this.deps.registry, childPath)) continue;
 
       // A child can vanish between readdir and stat (an external tool deleting
       // during a browse). One missing entry must not fail the whole listing.
@@ -133,8 +135,10 @@ export class DiskReader {
   }
 }
 
+const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+
 /** Directories first, then case-insensitive name order — Finder's convention. */
 function compareEntries(a: DiskEntry, b: DiskEntry): number {
   if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  return collator.compare(a.name, b.name);
 }

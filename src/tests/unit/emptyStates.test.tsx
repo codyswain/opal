@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { DiskFolderView } from '@/renderer/features/disk-explorer/components/DiskFolderView';
-import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import type { DirectoryListing, DiskResult } from '@/types/disk';
 
@@ -68,12 +67,28 @@ describe('density', () => {
     expect(useDiskStore.getState().density).toBe('compact');
   });
 
-  it('toggles density from the toolbar', async () => {
+  it('switches density from the Display popover', async () => {
     const user = userEvent.setup();
-    render(<Toolbar dirPath={DIR} />);
+    installDiskApi();
+    useDiskStore.setState({ listings: { [DIR]: [] } });
+    render(<DiskFolderView dirPath={DIR} />);
 
-    await user.click(screen.getByTestId('toolbar-density'));
+    await user.click(screen.getByTestId('display-menu'));
+    await user.click(await screen.findByRole('radio', { name: 'Compact' }));
 
     expect(useDiskStore.getState().density).toBe('compact');
+  });
+});
+
+describe('welcome panel', () => {
+  it('explains the app and opens a folder', async () => {
+    const { WelcomePanel } = await import('@/renderer/features/disk-explorer/components/WelcomePanel');
+    const api = installDiskApi();
+    const user = userEvent.setup();
+    render(<WelcomePanel />);
+    expect(screen.getByText('Open a folder to begin')).toBeInTheDocument();
+    expect(screen.getByText('Ask your library')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open folder…' }));
+    expect(api.openFolder).toHaveBeenCalled();
   });
 });

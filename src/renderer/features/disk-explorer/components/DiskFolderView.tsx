@@ -1,381 +1,271 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutGrid, List as ListIcon, Image as ImageIcon, Folder, FileText, Film, Music, File, FolderOpen, SearchX } from 'lucide-react';
-import { FixedSizeGrid, FixedSizeList } from 'react-window';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { FolderOpen, RotateCw, SearchX, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { LISTING_SORT_FIELDS, folderScope, suggestViewName } from '@/common/collectionQuery';
 import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
-import { sortEntries } from '@/common/sortEntries';
-import type { DiskEntry, FileKind } from '@/types/disk';
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import { activityReason, formatRelativeTime } from '@/common/relativeTime';
+import { sortEntries, type SortField } from '@/common/sortEntries';
+import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
+import type { DiskEntry } from '@/types/disk';
+import type { SavedView } from '@/types/savedView';
+import { Button } from '@/renderer/shared/ui';
 import { useDiskStore } from '../store/diskStore';
-import { toOpalThumbUrl } from '@/common/opalThumbUrl';
-import { clearActiveDragSourcePath, getActiveDragSourcePath, setActiveDragSourcePath } from './dragMoveState';
-import { useGridNavigation } from '../hooks/useGridNavigation';
-import { useElementSize } from '../hooks/useElementSize';
+import { DEFAULT_FOLDER_VIEW, useFolderViewStore } from '../store/folderViewStore';
+import { useSavedViewsStore } from '../store/savedViewsStore';
+import { useViewDraftsStore } from '../store/viewDraftsStore';
+import { directoryCollection, viewCollection } from '../navigation/filesLocation';
+import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
+import { Breadcrumb } from './Breadcrumb';
+import { CollectionView, type CollectionRowDecoration, type CollectionViewMode } from './CollectionView';
 import { EmptyState } from './EmptyState';
 import { GallerySkeleton } from './Skeleton';
-
-type ViewMode = 'gallery' | 'list';
-
-const ICONS: Record<FileKind, React.ComponentType<{ className?: string }>> = {
-  directory: Folder, image: ImageIcon, markdown: FileText, text: FileText,
-  pdf: File, video: Film, audio: Music, other: File,
-};
+import { Toolbar } from './Toolbar';
+import { DisplayPopover } from './query/DisplayPopover';
+import { CHIP_TEXT_INPUT } from './query/FilterChips';
+import { ListToolbar } from './query/ListToolbar';
+import { ViewsPopover } from './query/ViewsPopover';
+import { filtersFromChips, newChip } from './query/editableFilters';
+import { useCollectionResult } from './query/useCollectionResult';
+import { useTagSuggestions } from './query/useTagSuggestions';
 
 interface DiskFolderViewProps {
   dirPath: string;
+  /** Rendered at the end of the toolbar, such as the Preview toggle. */
+  trailing?: React.ReactNode;
 }
 
-const ROW_HEIGHT = 40;
-const TILE = {
-  comfortable: { width: 172, height: 208, min: 160 },
-  compact: { width: 116, height: 144, min: 104 },
-} as const;
+const UNDO_WINDOW_MS = 10_000;
 
-export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath }) => {
+function detailFor(row: CollectionRow, query: CollectionQuery, now: number): string {
+  switch (query.sort.field) {
+    case 'touched':
+      return row.touchedAt && row.touchedKind ? activityReason(row.touchedKind, row.touchedAt, now) : 'Never touched';
+    case 'opened':
+      return row.openedAt ? `Opened ${formatRelativeTime(row.openedAt, now)}` : 'Never opened';
+    case 'modified':
+      return `Modified ${formatRelativeTime(row.entry.mtimeMs, now)}`;
+    default:
+      return row.entry.isDirectory ? 'Folder' : formatBytes(row.entry.size);
+  }
+}
+
+/**
+ * A folder, wearing the one list toolbar. With no filters it lists the
+ * folder's own children; the first chip (or Include subfolders, or an
+ * activity sort) turns the same surface into a collection query scoped to
+ * the folder, without leaving it. Saving the toolbar state names a view.
+ */
+export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailing }) => {
+  const navigation = useFilesNavigation();
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
-  const selectedPath = useDiskStore((state) => state.selectedPath);
-  const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const sort = useDiskStore((state) => state.sort);
+  const density = useDiskStore((state) => state.density);
+  const setDensity = useDiskStore((state) => state.setDensity);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
-  const density = useDiskStore((state) => state.density);
-
-  const [mode, setMode] = useState<ViewMode | null>(null);
-  const [viewportRef, viewport] = useElementSize<HTMLDivElement>();
-  const gridRef = useRef<FixedSizeGrid>(null);
-  const listRef = useRef<FixedSizeList>(null);
+  const view = useFolderViewStore((state) => state.byDirectory[dirPath] ?? DEFAULT_FOLDER_VIEW);
+  const setChips = useFolderViewStore((state) => state.setChips);
+  const setIncludeDescendants = useFolderViewStore((state) => state.setIncludeDescendants);
+  const setLayout = useFolderViewStore((state) => state.setLayout);
+  const tagSuggestions = useTagSuggestions();
+  const header = useRef<HTMLDivElement>(null);
   const hasMountedRef = useRef(false);
 
   useEffect(() => { void loadDirectory(dirPath); }, [dirPath, loadDirectory]);
   // A filter carried into a new folder makes it look empty for no visible
   // reason. Clear it whenever the folder changes.
   useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      return;
-    }
-
+    if (!hasMountedRef.current) { hasMountedRef.current = true; return; }
     setFilter('');
   }, [dirPath, setFilter]);
 
+  // Cmd+F: focus the first text chip, or start a Name chip.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f' || event.defaultPrevented) return;
+      event.preventDefault();
+      const existing = header.current?.querySelector<HTMLInputElement>(`[${CHIP_TEXT_INPUT}]`);
+      if (existing) { existing.focus(); existing.select(); return; }
+      setChips(dirPath, [...(useFolderViewStore.getState().byDirectory[dirPath]?.chips ?? []), newChip('name')]);
+      requestAnimationFrame(() => header.current?.querySelector<HTMLInputElement>(`[${CHIP_TEXT_INPUT}]`)?.focus());
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dirPath, setChips]);
+
+  const filters = useMemo(() => filtersFromChips(view.chips), [view.chips]);
+  const listingSort = LISTING_SORT_FIELDS.includes(sort.field);
+  const queryMode = filters.length > 0 || view.includeDescendants || !listingSort;
+  const query = useMemo<CollectionQuery | null>(
+    () => (queryMode ? { version: 1, scope: folderScope(dirPath, view.includeDescendants), filters, sort: { field: sort.field, direction: sort.direction } } : null),
+    [queryMode, dirPath, view.includeDescendants, filters, sort.field, sort.direction]
+  );
+  const { result, byPath, entries: queryEntries, reload, loadMore } = useCollectionResult(`folder:${dirPath}`, query);
+  const now = Date.now();
+
   // A folder that is mostly pictures wants to be looked at, not listed. The
-  // user's explicit choice always wins once they make one.
-  const suggestedMode: ViewMode = useMemo(() => {
+  // person's explicit choice always wins once they make one.
+  const suggestedMode: CollectionViewMode = useMemo(() => {
     if (!entries || entries.length === 0) return 'list';
     const images = entries.filter((entry) => entry.kind === 'image').length;
     return images > 0 && images >= entries.length / 2 ? 'gallery' : 'list';
   }, [entries]);
+  const location = useMemo(() => ({ mode: 'browse' as const, collection: directoryCollection(dirPath) }), [dirPath]);
+  const layout: CollectionViewMode = view.layout
+    ?? (filesLocationSnapshots.read(location)?.scroll?.view === 'gallery' ? 'gallery' : filesLocationSnapshots.read(location)?.scroll?.view === 'details' ? 'list' : suggestedMode);
 
   const visibleEntries = useMemo(() => {
+    if (queryMode) return queryEntries;
     if (!entries) return [];
-    return sortEntries(filterEntries(entries, filter), sort.field, sort.direction);
-  }, [entries, filter, sort.field, sort.direction]);
-  const hasActiveFilter = filter.trim().length > 0;
-  const tile = TILE[density];
+    return sortEntries(filterEntries(entries, filter), sort.field as SortField, sort.direction);
+  }, [queryMode, queryEntries, entries, filter, sort.field, sort.direction]);
 
-  const activeMode = mode ?? suggestedMode;
-  const columns = activeMode === 'gallery'
-    ? Math.max(1, Math.floor(viewport.width / tile.width))
-    : 1;
-  const { onKeyDown } = useGridNavigation({ entries: visibleEntries, columns });
+  const decorate = useCallback((entry: DiskEntry): CollectionRowDecoration | null => {
+    if (!query) return null;
+    const row = byPath.get(entry.path);
+    if (!row) return null;
+    const parent = parentFsPath(entry.path);
+    return {
+      detail: detailFor(row, query, now),
+      secondary: view.includeDescendants && parent && parent !== dirPath ? basenameFsPath(parent) : undefined,
+      tags: row.tags ?? undefined,
+    };
+  }, [query, byPath, now, view.includeDescendants, dirPath]);
 
-  const handleClick = useCallback((event: React.MouseEvent, target: DiskEntry) => {
-    const store = useDiskStore.getState();
-    if (event.shiftKey) store.selectRange(visibleEntries, target.path);
-    else if (event.metaKey || event.ctrlKey) store.toggleSelected(target.path);
-    else store.select(target.path);
-  }, [visibleEntries]);
+  const suggestedName = query ? suggestViewName(query) : `Everything in ${basenameFsPath(dirPath)}`;
+  const definition = () => ({
+    query: query ?? { version: 1 as const, scope: folderScope(dirPath, view.includeDescendants), filters, sort: { field: sort.field, direction: sort.direction } },
+    layout,
+  });
+  const saveAsView = async (name: string) => {
+    const response = await window.viewsAPI.create({ ...definition(), name });
+    if (!response.success) { toast.error(response.error); return; }
+    await useSavedViewsStore.getState().load();
+    useViewDraftsStore.getState().openSaved(response.data);
+    toast(`Saved “${name}”`);
+    navigation.navigateCollection(viewCollection(response.data.id));
+  };
+  const openView = (saved: SavedView) => {
+    useViewDraftsStore.getState().openSaved(saved);
+    navigation.navigateCollection(viewCollection(saved.id));
+  };
+  const renameView = async (saved: SavedView, name: string) => {
+    const response = await window.viewsAPI.save(saved.id, { name, query: saved.query, layout: saved.layout }, saved.revision);
+    if (!response.success) { toast.error(response.error); return; }
+    await useSavedViewsStore.getState().load();
+  };
+  const removeView = async (saved: SavedView) => {
+    const response = await window.viewsAPI.remove(saved.id);
+    if (!response.success) { toast.error(response.error); return; }
+    useViewDraftsStore.getState().remove(saved.id);
+    await useSavedViewsStore.getState().load();
+    const { undoToken } = response.data;
+    toast(`Removed “${saved.name}”`, {
+      duration: UNDO_WINDOW_MS,
+      action: { label: 'Undo', onClick: () => { void window.viewsAPI.restore(undoToken).then((restored) => { if (restored.success) void useSavedViewsStore.getState().load(); else toast.error(restored.error); }); } },
+    });
+  };
 
-  useEffect(() => {
-    const index = visibleEntries.findIndex((candidate) => candidate.path === selectedPath);
-    if (index === -1) return;
+  const toolbar = (
+    <ListToolbar
+      headerRef={header}
+      leading={<><Breadcrumb dirPath={dirPath} /><Toolbar dirPath={dirPath} /></>}
+      chips={view.chips}
+      onChipsChange={(chips) => setChips(dirPath, chips)}
+      tagSuggestions={tagSuggestions}
+      layout={layout}
+      onLayout={(next) => setLayout(dirPath, next)}
+      actions={(
+        <>
+          <DisplayPopover
+            sort={{ field: sort.field, direction: sort.direction }}
+            onSort={(next) => useDiskStore.setState({ sort: next })}
+            density={density}
+            onDensity={setDensity}
+            includeDescendants={view.includeDescendants}
+            onIncludeDescendants={(value) => setIncludeDescendants(dirPath, value)}
+          />
+          <ViewsPopover suggestedName={suggestedName} onSaveAs={saveAsView} onOpen={openView} onRename={renameView} onRemove={removeView} />
+          {trailing}
+        </>
+      )}
+    />
+  );
 
-    if (activeMode === 'gallery') {
-      gridRef.current?.scrollToItem({
-        rowIndex: Math.floor(index / columns),
-        columnIndex: index % columns,
-      });
-    } else {
-      listRef.current?.scrollToItem(index);
-    }
-  }, [selectedPath, visibleEntries, activeMode, columns]);
-
-  if (!entries) {
-    return <GallerySkeleton />;
+  if (!entries && !queryMode) {
+    return <div className="flex h-full min-h-0 flex-col">{toolbar}<GallerySkeleton /></div>;
   }
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 shrink-0">
-        <span className="truncate text-2xs text-muted-foreground">
-          {visibleEntries.length} {visibleEntries.length === 1 ? 'item' : 'items'}
+  const emptyState = queryMode ? (
+    <EmptyState
+      Icon={SearchX}
+      title="No items match these filters"
+      description={view.includeDescendants ? 'Loosen a filter or clear them to see everything here.' : 'Only this folder was searched. Loosen a filter, or search its subfolders too.'}
+      action={(
+        <span className="flex items-center gap-2">
+          {!view.includeDescendants ? (
+            <Button size="compact" onClick={() => setIncludeDescendants(dirPath, true)}>Search subfolders too</Button>
+          ) : null}
+          <Button size="compact" variant="outline" onClick={() => setChips(dirPath, [])}>Clear filters</Button>
         </span>
-        <div className="flex items-center gap-1">
-          <ModeButton
-            mode="gallery" active={activeMode === 'gallery'} onSelect={setMode}
-            label="Gallery view" Icon={LayoutGrid}
-          />
-          <ModeButton
-            mode="list" active={activeMode === 'list'} onSelect={setMode}
-            label="List view" Icon={ListIcon}
-          />
-        </div>
-      </div>
+      )}
+    />
+  ) : (
+    <EmptyState Icon={FolderOpen} title="This folder is empty" description="Add files here or open a different folder to keep browsing." />
+  );
 
-      {visibleEntries.length === 0 ? (
-        <div
-          data-testid={hasActiveFilter ? 'disk-folder-no-matches' : 'disk-folder-empty'}
-          className="flex min-h-0 flex-1"
-        >
-          {hasActiveFilter ? (
-            <EmptyState
-              Icon={SearchX}
-              title={`No files matching “${filter}”`}
-              description="Try a different filter or clear it to see everything in this folder."
-              action={(
-                <button
-                  type="button"
-                  onClick={() => setFilter('')}
-                  data-testid="disk-folder-clear-filter"
-                  data-disk-shortcuts-ignore="true"
-                  className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-colors duration-100 hover:opacity-90"
-                >
-                  Clear filter
-                </button>
-              )}
-            />
-          ) : (
-            <EmptyState
-              Icon={FolderOpen}
-              title="This folder is empty"
-              description="Add files here or open a different folder to keep browsing."
-            />
-          )}
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {toolbar}
+      {result.warnings.length > 0 && queryMode ? (
+        <div role="status" data-testid="query-warnings" className="flex shrink-0 items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+          <div className="flex-1">
+            {result.incomplete ? <p className="font-medium">Results are incomplete.</p> : null}
+            {result.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+          </div>
+          <X aria-hidden className="h-3 w-3 opacity-50" />
         </div>
-      ) : activeMode === 'gallery' ? (
-        <div
-          ref={viewportRef}
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          data-testid="disk-folder-gallery"
-          className="flex-1 min-h-0 outline-none"
-        >
-          <FixedSizeGrid
-            ref={gridRef}
-            columnCount={columns}
-            rowCount={Math.ceil(visibleEntries.length / columns)}
-            columnWidth={tile.width}
-            rowHeight={tile.height}
-            width={viewport.width}
-            height={viewport.height}
-            itemKey={({ columnIndex, rowIndex }) => {
-              const item = visibleEntries[rowIndex * columns + columnIndex];
-              return item?.path ?? `empty-${rowIndex}-${columnIndex}`;
-            }}
-          >
-            {({ columnIndex, rowIndex, style }) => {
-              const item = visibleEntries[rowIndex * columns + columnIndex];
-              if (!item) return null;
-
-              return (
-                <div style={style} className="p-2">
-                  <GalleryTile
-                    entry={item}
-                    isSelected={selectedPaths.includes(item.path)}
-                    onSelect={(event) => handleClick(event, item)}
-                  />
-                </div>
-              );
-            }}
-          </FixedSizeGrid>
+      ) : null}
+      {queryMode && result.error && result.rows.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <p role="alert" className="text-sm text-destructive">{result.error}</p>
+          <Button variant="outline" onClick={reload}><RotateCw aria-hidden className="h-4 w-4" />Retry</Button>
+        </div>
+      ) : queryMode && result.loading && result.query === null ? (
+        <div role="status" className="flex flex-1 flex-col">
+          <p className="px-4 py-2 text-xs text-muted-foreground">Indexing your folders…</p>
+          <GallerySkeleton />
         </div>
       ) : (
-        <div
-          ref={viewportRef}
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          data-testid="disk-folder-list"
-          className="flex-1 min-h-0 outline-none"
-        >
-          <FixedSizeList
-            ref={listRef}
-            itemCount={visibleEntries.length}
-            itemSize={ROW_HEIGHT}
-            width={viewport.width}
-            height={viewport.height}
-            itemKey={(index) => visibleEntries[index].path}
-          >
-            {({ index, style }) => {
-              const item = visibleEntries[index];
-
-              return (
-                <div style={style}>
-                  <ListRow
-                    entry={item}
-                    isSelected={selectedPaths.includes(item.path)}
-                    onSelect={(event) => handleClick(event, item)}
-                  />
-                </div>
-              );
-            }}
-          </FixedSizeList>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
+            <CollectionView
+              location={location}
+              mode={layout}
+              onModeChange={(next) => setLayout(dirPath, next)}
+              layoutControls={false}
+              entries={visibleEntries}
+              suggestedMode={suggestedMode}
+              filter={queryMode ? '' : filter}
+              onClearFilter={() => setFilter('')}
+              decorate={queryMode ? decorate : undefined}
+              countLabel={queryMode ? `${visibleEntries.length === result.total ? visibleEntries.length : `${visibleEntries.length} of ${result.total}`} ${result.total === 1 ? 'item' : 'items'}${result.incomplete ? ' (incomplete)' : ''}` : undefined}
+              emptyState={emptyState}
+            />
+          </div>
+          {queryMode && visibleEntries.length < result.total ? (
+            <div className="flex shrink-0 items-center justify-center border-t border-border/60 py-2">
+              <Button size="compact" variant="outline" disabled={result.loading} onClick={loadMore}>
+                {result.loading ? 'Loading…' : `Load more (${visibleEntries.length} of ${result.total})`}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
   );
 };
-
-interface ModeButtonProps {
-  mode: ViewMode;
-  active: boolean;
-  label: string;
-  Icon: React.ComponentType<{ className?: string }>;
-  onSelect: (mode: ViewMode) => void;
-}
-
-const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSelect }) => (
-  <button
-    type="button"
-    aria-label={label}
-    aria-pressed={active}
-    data-testid={`disk-folder-view-${mode}`}
-    data-disk-shortcuts-ignore="true"
-    onClick={() => onSelect(mode)}
-    className={`rounded-md p-2 transition-colors duration-100 ${active ? 'bg-accent text-accent-foreground' : 'hover:bg-muted text-muted-foreground'}`}
-  >
-    <Icon className="h-4 w-4" />
-  </button>
-);
-
-interface EntryProps {
-  entry: DiskEntry;
-  isSelected: boolean;
-  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
-}
-
-const GalleryTile: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
-  const Icon = ICONS[entry.kind];
-  const [thumbFailed, setThumbFailed] = useState(false);
-  const { dragProps, isDropTarget } = useDropTarget(entry);
-
-  useEffect(() => {
-    setThumbFailed(false);
-  }, [entry.mtimeMs, entry.size]);
-
-  // Anything the OS can render a preview for gets a thumbnail, not just images
-  // — on macOS that includes PDFs and video first-frames.
-  const canThumbnail =
-    !entry.isDirectory && ['image', 'pdf', 'video'].includes(entry.kind) && !thumbFailed;
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={isSelected}
-      title={entry.name}
-      data-testid={`disk-folder-entry-${entry.path}`}
-      // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
-      // refuses to shrink below its content's intrinsic width. A long filename
-      // would push the tile past its track and overlap its neighbours.
-      className={`flex h-full min-w-0 w-full flex-col gap-2 rounded-lg p-2 text-left transition-colors duration-100 ${
-        isSelected ? 'bg-accent/60 ring-1 ring-accent' : 'hover:bg-muted/50'
-      } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
-      {...dragProps}
-    >
-      <div className="aspect-square rounded-md overflow-hidden bg-muted/40 grid place-items-center">
-        {canThumbnail ? (
-          <img
-            src={toOpalThumbUrl(entry.path)}
-            alt={entry.name}
-            loading="lazy"
-            decoding="async"
-            onError={() => setThumbFailed(true)}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <Icon className="h-8 w-8 opacity-40" />
-        )}
-      </div>
-      {/* Two lines then ellipsis, with a reserved height so tiles stay on a
-          consistent baseline regardless of how long each name is. */}
-      <span className="min-h-8 break-words px-1 text-xs leading-snug line-clamp-2">
-        {entry.name}
-      </span>
-    </button>
-  );
-};
-
-const ListRow: React.FC<EntryProps> = ({ entry, isSelected, onSelect }) => {
-  const Icon = ICONS[entry.kind];
-  const { dragProps, isDropTarget } = useDropTarget(entry);
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={isSelected}
-      data-testid={`disk-folder-entry-${entry.path}`}
-      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors duration-100 ${
-        isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-      } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
-      {...dragProps}
-    >
-      <Icon className="h-4 w-4 shrink-0 opacity-60" />
-      <span className="flex-1 truncate">{entry.name}</span>
-      <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-        {entry.isDirectory ? '—' : formatBytes(entry.size)}
-      </span>
-    </button>
-  );
-};
-
-function useDropTarget(entry: DiskEntry) {
-  const [isDropTarget, setIsDropTarget] = useState(false);
-
-  const isNoopDropTarget = useMemo(
-    () => (source: string) => {
-      if (!source || source === entry.path) return true;
-      const parent = source.slice(0, source.lastIndexOf('/'));
-      return parent === entry.path;
-    },
-    [entry.path]
-  );
-
-  const dragProps = {
-    draggable: true,
-    onDragStart: (event: React.DragEvent) => {
-      setActiveDragSourcePath(entry.path);
-      event.dataTransfer.setData('text/plain', entry.path);
-      event.dataTransfer.effectAllowed = 'move';
-    },
-    onDragEnd: () => {
-      setIsDropTarget(false);
-      clearActiveDragSourcePath();
-    },
-    onDragOver: (event: React.DragEvent) => {
-      if (!entry.isDirectory) return;
-      const source = getActiveDragSourcePath() ?? '';
-      if (isNoopDropTarget(source)) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      setIsDropTarget(true);
-    },
-    onDragLeave: () => setIsDropTarget(false),
-    onDrop: async (event: React.DragEvent) => {
-      event.preventDefault();
-      setIsDropTarget(false);
-      if (!entry.isDirectory) return;
-
-      const source = event.dataTransfer.getData('text/plain');
-      clearActiveDragSourcePath();
-      if (isNoopDropTarget(source)) return;
-
-      const result = await window.diskAPI.move(source, entry.path);
-      if (!result.success) {
-        useDiskStore.setState({ loading: { isLoading: false, error: result.error } });
-      }
-    },
-  };
-
-  return { dragProps, isDropTarget };
-}

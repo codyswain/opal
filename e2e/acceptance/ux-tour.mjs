@@ -1,0 +1,126 @@
+// Disposable screenshot tour for UX review. Own userData and temp vault.
+import { _electron as electron } from '@playwright/test';
+import { mkdtemp, mkdir, writeFile, realpath, copyFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
+const OUT = process.env.TOUR_OUT;
+const PROJECT_ROOT = process.cwd();
+const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-tour-userdata-'));
+const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-tour-vault-'));
+await mkdir(path.join(vaultParent, 'Vault', 'Projects', 'Atlas'), { recursive: true });
+await mkdir(path.join(vaultParent, 'Vault', 'Reading'), { recursive: true });
+const vault = await realpath(path.join(vaultParent, 'Vault'));
+const md = (title, tags, body) => `---\ntags: [${tags.join(', ')}]\ndescription: ${title} notes\n---\n# ${title}\n\n${body}\n`;
+await writeFile(`${vault}/Projects/Atlas/plan.md`, md('Atlas plan', ['research', 'maps'], 'The atlas project maps mountains and rivers in detail.\n\n## Milestones\n\n- [x] Gather survey data\n- [ ] Draft the first plates\n- [ ] Review with the cartography team\n\n> Maps are arguments about space.\n\n| Region | Status |\n|---|---|\n| Alps | surveyed |\n| Andes | pending |\n'));
+await writeFile(`${vault}/Projects/Atlas/budget.md`, md('Atlas budget', ['finance'], 'Printing costs dominate the second year.'));
+await writeFile(`${vault}/Projects/roadmap.md`, md('Roadmap', ['planning'], 'Quarterly goals for the studio.'));
+await writeFile(`${vault}/Reading/sourdough.md`, md('Sourdough', ['recipes', 'weekend'], 'Flour, water, salt and patience.'));
+await writeFile(`${vault}/Reading/paper.pdf`, '%PDF-1.4\n');
+await writeFile(`${vault}/Reading/paper.pdf.opal.yaml`, `schema: 1\nid: ${crypto.randomUUID()}\ntags: [research, to-read]\ndescription: A paper on map projections\n`);
+await writeFile(`${vault}/inbox.md`, '# Inbox\n\nLoose thoughts.\n');
+await writeFile(`${vault}/todo.txt`, 'buy flour\n');
+await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
+
+const app = await electron.launch({ args: [PROJECT_ROOT], env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData } });
+const page = await app.firstWindow();
+await page.waitForLoadState('domcontentloaded');
+const win = await app.browserWindow(page);
+await win.evaluate((w) => { w.setSize(1440, 900); w.center(); });
+const errors = [];
+page.on('pageerror', (e) => errors.push(String(e)));
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+const shot = async (name) => { await page.waitForTimeout(400); await page.screenshot({ path: path.join(OUT, `${name}.png`) }); console.log('shot', name); };
+
+try {
+  await page.evaluate(() => { window.location.hash = '#/files'; });
+  await page.getByTestId(`disk-folder-entry-${vault}/inbox.md`).waitFor();
+  await shot('01-files-root');
+  await page.getByTestId(`disk-folder-entry-${vault}/inbox.md`).click({ button: 'right' });
+  await page.getByRole('menu').waitFor();
+  await shot('02-row-menu');
+  await page.keyboard.press('Escape');
+  await page.getByTestId(`disk-folder-entry-${vault}/Projects`).click();
+  await page.waitForTimeout(300);
+  await shot('02-files-projects');
+  await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);
+  await page.locator('.ProseMirror').waitFor();
+  await page.waitForTimeout(500);
+  await shot('03-editor');
+  // Open a few more files so the strip has several tabs, then leave one unsaved.
+  for (const file of ['Projects/Atlas/budget.md', 'Projects/roadmap.md', 'Reading/paper.pdf', 'Reading/sourdough.md']) {
+    await page.evaluate(([v, f]) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/' + f.split('/').slice(0, -1).join('/'))}&file=${encodeURIComponent(v + '/' + f)}`; }, [vault, file]);
+    await page.waitForTimeout(350);
+  }
+  await page.locator('.ProseMirror').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\n\nEdited from the tour.');
+  await page.waitForTimeout(150);
+  await shot('04-tabs-unsaved');
+  await page.waitForTimeout(1200);
+  await page.getByTestId('tab-strip').getByText('plan.md').click({ button: 'right' });
+  await page.getByRole('menu').waitFor();
+  await shot('04b-tab-menu');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('tab-strip').getByText('roadmap.md').hover();
+  await shot('04c-tab-hover');
+  await page.evaluate(() => { window.location.hash = '#/files?mode=browse&collection=recent'; });
+  await page.waitForTimeout(600);
+  await shot('05-recent');
+  await page.evaluate(() => { window.location.hash = '#/files'; });
+  await page.getByTestId(`disk-folder-entry-${vault}/inbox.md`).waitFor();
+  // Filter the folder in place: Filter › Tags, type a tag.
+  await page.getByTestId('filter-menu').click();
+  await page.getByTestId('add-filter-tags').click();
+  await page.getByLabel('Tags value').fill('research');
+  await page.waitForTimeout(700);
+  await shot('06a-folder-filtered');
+  await page.getByTestId('display-menu').click();
+  await page.getByTestId('display-popover').waitFor();
+  await page.getByRole('switch', { name: 'Include subfolders' }).click();
+  await page.waitForTimeout(600);
+  await shot('06b-display-popover');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('views-menu').click();
+  await page.getByTestId('views-popover').waitFor();
+  await shot('06c-views-popover');
+  await page.getByTestId('views-save-current').click();
+  await page.waitForTimeout(300);
+  await shot('06d-views-save');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.location.hash.includes('collection=view'));
+  await page.waitForTimeout(600);
+  await shot('06e-saved-view');
+  await page.getByTestId('display-menu').click();
+  await page.getByTestId('display-popover').waitFor();
+  await page.getByRole('radio', { name: 'Chosen folders' }).click().catch(() => page.getByText('Chosen folders').click());
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: 'Choose folder…' }).click();
+  await page.getByRole('dialog', { name: 'Choose a folder' }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Vault' }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole('dialog').getByRole('button', { name: 'Projects' }).click();
+  await page.waitForTimeout(300);
+  await shot('07-folder-picker');
+  await page.getByRole('dialog', { name: 'Choose a folder' }).getByRole('button', { name: 'Choose Projects' }).click();
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await shot('07b-view-edited');
+  await page.evaluate(() => { window.location.hash = '#/chat'; });
+  await page.getByTestId('chat-index-status').waitFor();
+  await shot('08-chat');
+  await page.evaluate(() => { window.location.hash = '#/settings'; });
+  await page.waitForTimeout(500);
+  await shot('09-settings');
+  // Dark theme pass on the two densest screens.
+  await page.evaluate(() => { document.documentElement.classList.add('dark'); localStorage.setItem('opal.theme', JSON.stringify({ version: 1, value: 'dark' })); });
+  await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);
+  await page.locator('.ProseMirror').waitFor();
+  await shot('10-editor-dark');
+  await page.evaluate(() => { window.location.hash = '#/files'; });
+  await page.waitForTimeout(500);
+  await shot('11-files-dark');
+} finally {
+  console.log('errors', JSON.stringify(errors, null, 1));
+  await app.close();
+}

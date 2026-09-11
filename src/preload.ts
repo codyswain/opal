@@ -1,6 +1,7 @@
+import type { ChatDraftState, CreateConversationOptions, ConversationPatch } from './types/chat';
+import type { VaultAPI } from "./types/vault";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
-import { DirectoryStructures } from "./renderer/shared/types";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
@@ -24,138 +25,189 @@ contextBridge.exposeInMainWorld("systemAPI", {
   reportTheme: (report: ThemeReport) =>
     ipcRenderer.send("system:report-theme", report),
   openFolderDialog: () => ipcRenderer.invoke(`system:open-folder-dialog`),
-  createDirectoryOnDisk: (dirPath: string) => ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
-  reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) =>
-    ipcRenderer.send("menu:commands", commands),
+  createDirectoryOnDisk: (dirPath: string) =>
+    ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
+  reportCommands: (
+    commands: Array<{ id: string; label: string; accelerator?: string }>,
+  ) => ipcRenderer.send("menu:commands", commands),
   onMenuCommand: (handler: (commandId: string) => void) => {
-    const listener = (_event: IpcRendererEvent, commandId: string) => handler(commandId);
+    const listener = (_event: IpcRendererEvent, commandId: string) =>
+      handler(commandId);
     ipcRenderer.on("menu:invoke", listener);
     return () => ipcRenderer.removeListener("menu:invoke", listener);
   },
 });
 
-// These need to be moved elsewhere or deprecated
-contextBridge.exposeInMainWorld("fileExplorer", {
-  updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
-});
-
-contextBridge.exposeInMainWorld("chatAPI", {
-  getConversation: (conversationId: string) => ipcRenderer.invoke('chat:get-conversation', conversationId),
-  getAllConversations: () => ipcRenderer.invoke('chat:get-all-conversations'),
-  addMessage: (conversationId: string, role: string, content: string) => ipcRenderer.invoke('chat:add-message', conversationId, role, content),
-  performRAG: (conversationId: string, query: string) => ipcRenderer.invoke('chat:perform-rag', conversationId, query),
-  performRAGStreaming: (conversationId: string, query: string, callback: (chunk: string) => void) => {
-    // Create unique channel ID for this request to avoid conflicts
-    const responseChannel = `chat:rag-response:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    console.log(`Starting streaming on channel ${responseChannel}`);
-    
-    // Set up the listener for streaming chunks
-    const listener = (_event: IpcRendererEvent, chunk: string | null) => {
-      if (chunk === null) {
-        // Null chunk signals end of stream, clean up listener
-        console.log(`Streaming complete on ${responseChannel}`);
-        // Send a special completion message to the callback
-        callback("__DONE__");
-        ipcRenderer.removeListener(responseChannel, listener);
-      } else if (chunk.startsWith("Error:")) {
-        // Handle error message from main process
-        console.error(`Streaming error: ${chunk}`);
-        // Pass the error as a chunk so the UI can display it
-        callback(chunk);
-        // Don't remove listener yet - wait for the null signal
-      } else {
-        // Pass the chunk to the callback without logging each chunk
-        callback(chunk);
-      }
-    };
-    
-    // Add the event listener
-    ipcRenderer.on(responseChannel, listener);
-    
-    // Start the streaming request and return cleanup function
-    ipcRenderer.invoke('chat:perform-rag-streaming', conversationId, query, responseChannel)
-      .then(result => {
-        if (!result.success) {
-          console.error(`Error starting streaming: ${result.error}`);
-          // Send the error as a chunk
-          callback(`Error: ${result.error}`);
-        }
-      })
-      .catch(err => {
-        console.error(`Exception invoking streaming: ${err}`);
-        callback(`Error: Failed to start streaming - ${err.message}`);
-      });
-    
-    return () => {
-      ipcRenderer.removeListener(responseChannel, listener);
-    };
-  }
-});
-
-contextBridge.exposeInMainWorld("vfsAPI", {
-  getItems: () => ipcRenderer.invoke('vfs:get-items'),
-
-  createFolder: (parentPath: string, folderName: string) => ipcRenderer.invoke('vfs:create-folder', parentPath, folderName),
-  deleteFolder: (folderId: string) => ipcRenderer.invoke("vfs:delete-folder", folderId),
-  renameFolder: (folderId: string, newName: string) => ipcRenderer.invoke("vfs:rename-folder", folderId, newName),
-  moveFolder: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("vfs:move-folder", oldPath, newParentPath),
-  getFolder: (directoryPath: string) => ipcRenderer.invoke("vfs:get-folder", directoryPath),
-
-  createNote: (parentPath: string, noteName: string, initialContent: string) => ipcRenderer.invoke("create-note", parentPath, noteName, initialContent),
-  deleteNote: (notePath: string) => ipcRenderer.invoke("delete-note", notePath),
-  renameNote: (noteId: string, newName: string) => ipcRenderer.invoke("vfs:rename-note", noteId, newName),
-  moveNote: (oldPath: string, newParentPath: string) => ipcRenderer.invoke("move-note", oldPath, newParentPath),
-  getNote: (id: string) => ipcRenderer.invoke('file-explorer:get-note', id),
-  updateNoteContent: (id: string, content: string) => ipcRenderer.invoke('file-explorer:update-note-content', id, content),
-
-  createEmbeddedItem: (noteId: string, embeddedItemId: string, positionData: Record<string, unknown>) => ipcRenderer.invoke("create-embedded-item", noteId, embeddedItemId, positionData),
-  getEmbeddedItem: (embeddedId: string) => ipcRenderer.invoke("get-embedded-item", embeddedId),
-  getNoteEmbeddedItems: (noteId: string) => ipcRenderer.invoke("get-note-embedded-items", noteId),
-  updateEmbeddedItem: (embeddedId: string, positionData: Record<string, unknown>) => ipcRenderer.invoke("update-embedded-item", embeddedId, positionData),
-  deleteEmbeddedItem: (embeddedId: string) => ipcRenderer.invoke("delete-embedded-item", embeddedId),
-
-  findSimilarNotes: (query: string, directoryStructures: DirectoryStructures) => ipcRenderer.invoke("perform-similarity-search", query, directoryStructures),
-});
-
-contextBridge.exposeInMainWorld("syncAPI", {
-  mountFolder: (targetPath: string, realFolderPath: string) => ipcRenderer.invoke("mount-folder", targetPath, realFolderPath),
-  unmountFolder: (mountedFolderPath: string) => ipcRenderer.invoke("unmount-folder", mountedFolderPath),
-  getImageData: (imagePath: string) => ipcRenderer.invoke("get-image-data", imagePath),
-});
-
-contextBridge.exposeInMainWorld("adminAPI", {
-  resetDatabase: () => ipcRenderer.invoke('reset-database'),
-  backupDatabase: () => ipcRenderer.invoke('backup-database'),
-  clearVectorIndex: () => ipcRenderer.invoke("clear-vector-index"),
-  regenerateAllEmbeddings: () => ipcRenderer.invoke("regenerate-all-embeddings"),
-});
-
 contextBridge.exposeInMainWorld("credentialAPI", {
   getKey: (account: string) => ipcRenderer.invoke("credentials:get", account),
-  setKey: (account: string, password: string) => ipcRenderer.invoke("credentials:set", account, password),
-  deleteKey: (account: string) => ipcRenderer.invoke("credentials:delete", account),
+  setKey: (account: string, password: string) =>
+    ipcRenderer.invoke("credentials:set", account, password),
+  deleteKey: (account: string) =>
+    ipcRenderer.invoke("credentials:delete", account),
 });
 
 contextBridge.exposeInMainWorld("diskAPI", {
   openFolder: () => ipcRenderer.invoke("disk:open-folder"),
   listRoots: () => ipcRenderer.invoke("disk:list-roots"),
-  removeRoot: (rootPath: string) => ipcRenderer.invoke("disk:remove-root", rootPath),
-  readDirectory: (dirPath: string) => ipcRenderer.invoke("disk:read-directory", dirPath),
+  removeRoot: (rootPath: string) =>
+    ipcRenderer.invoke("disk:remove-root", rootPath),
+  readDirectory: (dirPath: string) =>
+    ipcRenderer.invoke("disk:read-directory", dirPath),
   createDirectory: (parentDir: string, name: string) =>
     ipcRenderer.invoke("disk:create-directory", parentDir, name),
-  readTextFile: (target: string) => ipcRenderer.invoke("disk:read-text-file", target),
+  readTextFile: (target: string) =>
+    ipcRenderer.invoke("disk:read-text-file", target),
   rename: (target: string, nextName: string) =>
     ipcRenderer.invoke("disk:rename", target, nextName),
   move: (target: string, destinationDir: string) =>
     ipcRenderer.invoke("disk:move", target, destinationDir),
   trash: (target: string) => ipcRenderer.invoke("disk:trash", target),
   reveal: (target: string) => ipcRenderer.invoke("disk:reveal", target),
-  openExternal: (target: string) => ipcRenderer.invoke("disk:open-external", target),
+  openExternal: (target: string) =>
+    ipcRenderer.invoke("disk:open-external", target),
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
   onChanged: (callback: (payload: { directories: string[] }) => void) => {
-    const listener = (_event: IpcRendererEvent, payload: { directories: string[] }) =>
-      callback(payload);
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { directories: string[] },
+    ) => callback(payload);
     ipcRenderer.on("disk:changed", listener);
     return () => ipcRenderer.removeListener("disk:changed", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("metadataAPI", {
+  read: (target: string) => ipcRenderer.invoke("metadata:read", target),
+  saveProperties: (
+    target: string,
+    properties: { tags: string[]; description: string },
+    expectedRevision: string,
+  ) =>
+    ipcRenderer.invoke(
+      "metadata:save-properties",
+      target,
+      properties,
+      expectedRevision,
+    ),
+  addRelated: (target: string, relatedTarget: string) =>
+    ipcRenderer.invoke("metadata:add-related", target, relatedTarget),
+  removeRelated: (target: string, edgeId: string) =>
+    ipcRenderer.invoke("metadata:remove-related", target, edgeId),
+});
+
+contextBridge.exposeInMainWorld("activityAPI", {
+  record: (target: string, kind: "opened") =>
+    ipcRenderer.invoke("activity:record", target, kind),
+  recent: (query?: { limit?: number }) =>
+    ipcRenderer.invoke("activity:recent", query ?? {}),
+  clear: () => ipcRenderer.invoke("activity:clear"),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("activity:changed", listener);
+    return () => ipcRenderer.removeListener("activity:changed", listener);
+  },
+});
+
+contextBridge.exposeInMainWorld("collectionsAPI", {
+  query: (query: unknown, page?: { offset?: number; limit?: number }) =>
+    ipcRenderer.invoke("collections:query", query, page ?? {}),
+  tags: () => ipcRenderer.invoke("collections:tags"),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("collections:changed", listener);
+    return () => ipcRenderer.removeListener("collections:changed", listener);
+  },
+});
+
+contextBridge.exposeInMainWorld("viewsAPI", {
+  list: () => ipcRenderer.invoke("views:list"),
+  create: (definition: unknown) =>
+    ipcRenderer.invoke("views:create", definition),
+  save: (id: string, definition: unknown, expectedRevision: string) =>
+    ipcRenderer.invoke("views:save", id, definition, expectedRevision),
+  duplicate: (id: string) => ipcRenderer.invoke("views:duplicate", id),
+  remove: (id: string) => ipcRenderer.invoke("views:remove", id),
+  restore: (undoToken: string) =>
+    ipcRenderer.invoke("views:restore", undoToken),
+  onChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("views:changed", listener);
+    return () => ipcRenderer.removeListener("views:changed", listener);
+  },
+});
+
+contextBridge.exposeInMainWorld("markdownAPI", {
+  read: (target: string) => ipcRenderer.invoke("markdown:read", target),
+  write: (target: string, body: string, expectedRevision: string) =>
+    ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
+  create: (parentDir: string, baseName?: string) =>
+    ipcRenderer.invoke("markdown:create", parentDir, baseName),
+});
+
+contextBridge.exposeInMainWorld("chatAPI", {
+  list: () => ipcRenderer.invoke("chat:list"),
+  get: (id: string) => ipcRenderer.invoke("chat:get", id),
+  create: (options?: CreateConversationOptions) => ipcRenderer.invoke("chat:create", options),
+  update: (id: string, patch: ConversationPatch) => ipcRenderer.invoke("chat:update", id, patch),
+  getDraftState: () => ipcRenderer.invoke("chat:drafts-get"),
+  saveDraftState: (state: ChatDraftState) => ipcRenderer.invoke("chat:drafts-save", state),
+  remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
+  searchMessages: (query: string, archived?: boolean) => ipcRenderer.invoke("chat:search-messages", query, archived),
+  searchContent: (query: string, deep?: boolean) => ipcRenderer.invoke("chat:search-content", query, deep),
+  indexStatus: () => ipcRenderer.invoke("chat:index-status"),
+  indexUpdate: () => ipcRenderer.invoke("chat:index-update"),
+  indexCancel: () => ipcRenderer.invoke("chat:index-cancel"),
+  onIndexChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("chat:index-changed", listener);
+    return () => ipcRenderer.removeListener("chat:index-changed", listener);
+  },
+  // One response channel per question; `null` ends the stream.
+  ask: (
+    conversationId: string,
+    question: string,
+    onDelta: (delta: string) => void,
+    onError: (error: string) => void,
+  ) => {
+    const channel = `chat:answer:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { delta?: string; error?: string } | null,
+    ) => {
+      if (payload === null) {
+        ipcRenderer.removeListener(channel, listener);
+        return;
+      }
+      if (payload.error) onError(payload.error);
+      else if (payload.delta) onDelta(payload.delta);
+    };
+    ipcRenderer.on(channel, listener);
+    const result = ipcRenderer.invoke(
+      "chat:ask",
+      conversationId,
+      question,
+      channel,
+    ).finally(() => ipcRenderer.removeListener(channel, listener));
+    return {
+      result,
+      cancel: () => { void ipcRenderer.invoke("chat:cancel", channel).catch(() => undefined); },
+    };
+  },
+});
+
+const vaultAPI: VaultAPI = {
+  discover: () => ipcRenderer.invoke("vault:discover"),
+  readDay: (root, date) => ipcRenderer.invoke("vault:read-day", root, date),
+  createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
+  saveJournal: (path, original, next) =>
+    ipcRenderer.invoke("vault:save-journal", path, original, next),
+  addFocus: (root, date, input) =>
+    ipcRenderer.invoke("vault:add-focus", root, date, input),
+  updateFocus: (root, date, id, patch) =>
+    ipcRenderer.invoke("vault:update-focus", root, date, id, patch),
+  listDrafts: () => ipcRenderer.invoke("vault:list-drafts"),
+  putDraft: (draft) => ipcRenderer.invoke("vault:put-draft", draft),
+  clearDraft: (path, version) =>
+    ipcRenderer.invoke("vault:clear-draft", path, version),
+};
+contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);

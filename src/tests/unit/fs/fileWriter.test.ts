@@ -9,6 +9,7 @@ import {
   stat,
   lstat,
   readlink,
+  realpath,
   symlink,
 } from 'fs/promises';
 import path from 'path';
@@ -280,5 +281,25 @@ describe('FileWriter leaves nothing behind on rejection', () => {
   it('does not create partial state when a name is invalid', async () => {
     await expect(writer.createDirectory(root, '..')).rejects.toThrow(InvalidNameError);
     expect((await readdir(root)).sort()).toEqual(['Archive', 'Photos', 'note.md']);
+  });
+});
+
+describe('activity hooks', () => {
+  it('remaps on rename and move, removes on trash, and skips failed mutations', async () => {
+    const activity = { noteOrganized: vi.fn(async () => undefined), noteEdited: vi.fn(async () => undefined), noteMoved: vi.fn(async () => undefined), noteRemoved: vi.fn(async () => undefined) };
+    const tracked = new FileWriter({ registry, trashItem, activity });
+    // Activity receives resolved real paths, matching every other guard.
+    const source = await realpath(path.join(root, 'note.md'));
+    const renamed = await tracked.rename(source, 'renamed.md');
+    expect(activity.noteMoved).toHaveBeenCalledWith(source, renamed);
+    const moved = await tracked.move(renamed, path.join(root, 'Archive'));
+    expect(activity.noteMoved).toHaveBeenLastCalledWith(renamed, moved);
+    await expect(tracked.rename(moved, 'bad/name')).rejects.toThrow();
+    expect(await tracked.rename(moved, 'renamed.md')).toBe(moved);
+    expect(activity.noteMoved).toHaveBeenCalledTimes(2);
+    await tracked.moveToTrash(moved);
+    expect(activity.noteRemoved).toHaveBeenCalledWith(moved);
+    await expect(tracked.moveToTrash(path.join(root, 'missing.md'))).rejects.toThrow();
+    expect(activity.noteRemoved).toHaveBeenCalledTimes(1);
   });
 });

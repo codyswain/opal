@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { DiskEntry } from '@/types/disk';
 import { useTextFile } from '../../hooks/useTextFile';
+import { stripMarkdownFrontmatter } from './markdownFrontmatter';
 
 export const MarkdownPreview: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
   const { text, truncated, error, isLoading } = useTextFile(entry.path);
@@ -40,7 +41,9 @@ export const MarkdownPreview: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
       >
         {/* No rehype-raw: this renders arbitrary files off the user's disk, and
             enabling embedded HTML would execute whatever they contain. */}
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text ?? ''}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {stripMarkdownFrontmatter(text ?? '')}
+        </ReactMarkdown>
       </div>
     </div>
   );

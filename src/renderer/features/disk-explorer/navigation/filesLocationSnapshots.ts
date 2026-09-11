@@ -6,6 +6,7 @@ import {
 } from '@/common/fsPaths';
 import {
   filesLocationKey,
+  locationDirectory,
   remapFilesLocation,
   type FilesLocation,
 } from './filesLocation';
@@ -46,11 +47,10 @@ export function sanitizeFilesLocationSnapshot(
     return { selectedPaths: [], focusedPath: null, scroll: null };
   }
   const candidate = value as Partial<FilesLocationSnapshot>;
+  // Only a directory collection bounds its rows; Recent spans every root.
+  const scope = options.location ? locationDirectory(options.location) : null;
   const isAllowed = (path: string) => {
-    if (
-      options.location &&
-      !isFsPathAtOrBelow(options.location.directory, path)
-    ) {
+    if (scope && !isFsPathAtOrBelow(scope, path)) {
       return false;
     }
     if (
@@ -201,8 +201,9 @@ export function createFilesLocationSnapshotStore(
         removed.some((prefix) => isFsPathAtOrBelow(prefix, path));
 
       for (const [key, record] of records) {
+        const directory = locationDirectory(record.location);
         if (
-          isRemoved(record.location.directory) ||
+          (directory && isRemoved(directory)) ||
           (record.location.mode === 'focus' && isRemoved(record.location.file))
         ) {
           records.delete(key);
@@ -229,11 +230,15 @@ export function createFilesLocationSnapshotStore(
       }
 
       for (const [key, record] of records) {
-        const locationPaths =
-          record.location.mode === 'focus'
-            ? [record.location.directory, record.location.file]
-            : [record.location.directory];
-        if (!isWithinOneRoot(locationPaths, normalizedRoots)) {
+        const directory = locationDirectory(record.location);
+        const locationPaths = [
+          ...(directory ? [directory] : []),
+          ...(record.location.mode === 'focus' ? [record.location.file] : []),
+        ];
+        if (
+          locationPaths.length > 0 &&
+          !isWithinOneRoot(locationPaths, normalizedRoots)
+        ) {
           records.delete(key);
           continue;
         }

@@ -1,213 +1,134 @@
-import React, { useState } from "react";
-import { Input } from "@/renderer/shared/components/Input";
-import { Eye, EyeOff } from "lucide-react";
+import React, { useEffect, useId, useState } from "react";
+import { Link } from "react-router-dom";
+import { Database, Eye, EyeOff, FolderOpen, FolderPlus, RefreshCw, Square, X } from "lucide-react";
+import { basenameFsPath } from "@/common/fsPaths";
+import { formatRelativeTime } from "@/common/relativeTime";
+import { useChatStore } from "@/renderer/features/chat/store/chatStore";
+import { describeProgress } from "@/renderer/features/chat/components/IndexStatusBar";
+import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { useTheme, type Theme } from "@/renderer/features/theme";
+import { Button, IconButton, SegmentedControl } from "@/renderer/shared/ui";
 import { useSettingsStore } from "@/renderer/store/settingsStore";
 
+const Section: React.FC<{ title: string; description: string; children: React.ReactNode }> = ({ title, description, children }) => (
+  <section className="grid gap-4 border-t border-border-subtle py-6 sm:grid-cols-[13rem_1fr]">
+    <div>
+      <h3 className="text-ui font-medium text-foreground">{title}</h3>
+      <p className="mt-1 text-control text-foreground-secondary">{description}</p>
+    </div>
+    <div className="min-w-0">{children}</div>
+  </section>
+);
+
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
 export const Settings: React.FC = () => {
-  const { settings, updateSettings } = useSettingsStore();
+  const { settings, updateSettings, loading } = useSettingsStore();
+  const { theme, setTheme } = useTheme();
+  const roots = useDiskStore((state) => state.roots);
+  const openFolder = useDiskStore((state) => state.openFolder);
+  const closeRoot = useDiskStore((state) => state.closeRoot);
+  const index = useChatStore((state) => state.index);
+  const indexError = useChatStore((state) => state.indexError);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [resetStatus, setResetStatus] = useState<string | null>(null);
-  const [embeddingsStatus, setEmbeddingsStatus] = useState<string | null>(null);
-  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const keyId = useId();
 
-  const toggleApiKeyVisibility = () => {
-    setShowApiKey(!showApiKey);
-  };
+  useEffect(() => {
+    useChatStore.getState().subscribe();
+    void useChatStore.getState().refreshIndex();
+  }, []);
 
-  const handleResetDatabase = async () => {
-    // Show confirmation dialog
-    if (
-      window.confirm(
-        "Are you sure you want to reset the database? This will delete all data in the database."
-      )
-    ) {
-      setResetStatus("Database reset in progress...");
-      try {
-        const result = await window.adminAPI.resetDatabase();
-        if (result.success) {
-          setResetStatus(
-            "Database reset successfully! You can now migrate your notes again."
-          );
-        } else {
-          setResetStatus(
-            `Database reset failed: ${result.message || "Unknown error"}`
-          );
-        }
-      } catch (error) {
-        setResetStatus(`Database reset error: ${error}`);
-      }
-    }
-  };
-
-  const handleBackupDatabase = async () => {
-    setBackupStatus("Backup in progress...");
-    try {
-      const result = await window.adminAPI.backupDatabase();
-      if (result.success && result.filePath) {
-        setBackupStatus(`Backup created successfully at ${result.filePath}!`);
-      } else {
-        setBackupStatus(`Backup failed: ${result.message || "Unknown error"}`);
-      }
-    } catch (error) {
-      setBackupStatus(`Backup error: ${error}`);
-    }
-  };
-
-  const handleRebuildEmbeddings = async () => {
-    // Show confirmation dialog
-    if (
-      window.confirm(
-        "Are you sure you want to rebuild all note embeddings? This may take a while but can fix issues with related notes."
-      )
-    ) {
-      setEmbeddingsStatus("Rebuilding embeddings in progress...");
-
-      try {
-        // Check if the clearVectorIndex function exists
-        if (!window.adminAPI.clearVectorIndex) {
-          setEmbeddingsStatus(
-            "This version of the application does not support the rebuild embeddings feature yet. Please restart the application first."
-          );
-          return;
-        }
-
-        // First, clear the vector index
-        const clearResult = await window.adminAPI.clearVectorIndex();
-        if (!clearResult.success) {
-          setEmbeddingsStatus(
-            `Failed to clear vector index: ${clearResult.message}`
-          );
-          return;
-        }
-
-        // Check if the regenerateAllEmbeddings function exists
-        if (!window.adminAPI.regenerateAllEmbeddings) {
-          setEmbeddingsStatus(
-            "This version of the application does not support the regenerate embeddings feature yet. Please restart the application first."
-          );
-          return;
-        }
-
-        // Then regenerate all embeddings
-        const result = await window.adminAPI.regenerateAllEmbeddings();
-        if (result.success) {
-          setEmbeddingsStatus(
-            `Successfully rebuilt embeddings for ${result.count} notes. Related notes should now work properly.`
-          );
-        } else {
-          setEmbeddingsStatus(
-            `Failed to rebuild embeddings: ${result.message}`
-          );
-        }
-      } catch (error) {
-        setEmbeddingsStatus(`Error rebuilding embeddings: ${error}`);
-      }
-    }
-  };
+  const hasKey = settings.openAIKey.trim().length > 0;
 
   return (
-    <div className="container mx-auto mt-2 pt-12 ">
-      <h2 className="text-2xl font-bold mb-4">Settings</h2>
-      <div className="mb-4">
-        <label htmlFor="apiKey" className="block text-sm font-medium mb-1">
-          OpenAI API Key
-        </label>
-        <div className="flex items-center">
-          <div className="flex-grow">
-            <Input
-              id="apiKey"
-              type={showApiKey ? "text" : "password"}
-              value={settings.openAIKey}
-              onChange={(e) => updateSettings({ openAIKey: e.target.value })}
-              className="w-full"
-              placeholder="Enter your OpenAI API key"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={toggleApiKeyVisibility}
-            className="ml-2 p-2 focus:outline-none"
-          >
-            {showApiKey ? (
-              <EyeOff className="h-5 w-5 text-gray-400" />
+    <div className="mx-auto w-full max-w-3xl px-8 py-8">
+      <h2 className="mb-6 text-heading font-semibold">Settings</h2>
+
+      <Section title="Appearance" description="Follow the system or pick a side.">
+        <SegmentedControl label="Theme" value={theme} onValueChange={(value) => setTheme(value as Theme)} options={THEME_OPTIONS} />
+      </Section>
+
+      <Section title="Library" description="The folders Opal can see. Nothing outside them is ever read.">
+        <ul className="flex flex-col gap-1" aria-label="Opened folders">
+          {roots.length === 0 ? <li className="text-control text-foreground-secondary">No folders are open yet.</li> : null}
+          {roots.map((root) => (
+            <li key={root} className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-3 py-2" title={root}>
+              <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-amber-500" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-ui text-foreground">{basenameFsPath(root)}</span>
+                <span className="block truncate text-2xs text-muted-foreground">{root}</span>
+              </span>
+              <IconButton label={`Close ${basenameFsPath(root)}`} onClick={() => void closeRoot(root)}>
+                <X aria-hidden className="h-4 w-4" />
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+        <Button variant="outline" size="compact" className="mt-3" onClick={() => void openFolder()}>
+          <FolderPlus aria-hidden className="h-3.5 w-3.5" />
+          Open folder…
+        </Button>
+      </Section>
+
+      <Section title="OpenAI API key" description="Used by Chat to embed and answer from your library. Stored in the system keychain, never in a file.">
+        <label htmlFor={keyId} className="sr-only">OpenAI API key</label>
+        <div className="flex items-center gap-2">
+          <input
+            id={keyId}
+            type={showApiKey ? "text" : "password"}
+            value={settings.openAIKey}
+            onChange={(event) => updateSettings({ openAIKey: event.target.value })}
+            placeholder="sk-…"
+            autoComplete="off"
+            spellCheck={false}
+            className="h-control w-full rounded-md border border-border bg-surface px-2 text-ui outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          />
+          <IconButton label={showApiKey ? "Hide API key" : "Show API key"} onClick={() => setShowApiKey((previous) => !previous)}>
+            {showApiKey ? <EyeOff aria-hidden className="h-4 w-4" /> : <Eye aria-hidden className="h-4 w-4" />}
+          </IconButton>
+        </div>
+        {loading.error ? <p role="alert" className="mt-2 text-control text-destructive">{loading.error}</p> : null}
+      </Section>
+
+      <Section title="Chat index" description="Embeddings of your Markdown, text and PDF files. Built only when you ask; updated incrementally.">
+        <div className="flex items-start gap-3 rounded-md border border-border-subtle bg-surface px-3 py-2.5">
+          <Database aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1 text-control">
+            {index?.indexing ? (
+              <p role="status" className="text-foreground">{index.progress ? describeProgress(index.progress) : "Indexing your library…"}</p>
+            ) : index?.ready ? (
+              <p role="status" className="text-foreground">
+                {index.files.toLocaleString()} {index.files === 1 ? "file" : "files"}, {index.chunks.toLocaleString()} passages
+                {index.lastIndexedAt ? `, updated ${formatRelativeTime(index.lastIndexedAt, Date.now())}` : ""}
+                {index.staleFiles > 0 ? ` · ${index.staleFiles.toLocaleString()} pending ${index.staleFiles === 1 ? "change" : "changes"}` : ""}
+                {index.skipped.length > 0 ? ` · ${index.skipped.length} skipped` : ""}
+              </p>
             ) : (
-              <Eye className="h-5 w-5 text-gray-400" />
+              <p role="status" className="text-foreground-secondary">Not indexed yet.</p>
             )}
-          </button>
-        </div>
-      </div>
-      <div className="mt-8 border-t pt-6">
-        <h2 className="text-xl font-semibold mb-4">Database Management</h2>
-        <p className="mb-4">
-          Manage your database settings and perform maintenance tasks.
-        </p>
-        <div className="flex flex-col space-y-4">
-          <button
-            onClick={handleBackupDatabase}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            Backup Database
-          </button>
-          {backupStatus && (
-            <div
-              className={`p-2 rounded ${
-                backupStatus.includes("failed") ||
-                backupStatus.includes("error")
-                  ? "bg-red-100 text-red-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {backupStatus}
-            </div>
-          )}
-
-          <button
-            onClick={handleRebuildEmbeddings}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
-            Fix Related Notes (Rebuild Embeddings)
-          </button>
-          {embeddingsStatus && (
-            <div
-              className={`p-2 rounded ${
-                embeddingsStatus.includes("Failed") ||
-                embeddingsStatus.includes("Error")
-                  ? "bg-red-100 text-red-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {embeddingsStatus}
-            </div>
-          )}
-
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <h3 className="text-lg font-semibold mb-2 text-red-600">
-              Danger Zone
-            </h3>
-            <p className="mb-4 text-sm text-gray-600">
-              These actions cannot be undone. Be careful!
-            </p>
-            <button
-              onClick={handleResetDatabase}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Reset Database
-            </button>
-            {resetStatus && (
-              <div
-                className={`mt-2 p-2 rounded ${
-                  resetStatus.includes("failed") ||
-                  resetStatus.includes("error")
-                    ? "bg-red-100 text-red-800"
-                    : "bg-green-100 text-green-800"
-                }`}
-              >
-                {resetStatus}
-              </div>
-            )}
+            {!hasKey ? <p className="mt-1 text-foreground-secondary">Add your OpenAI API key above to enable indexing.</p> : null}
+            {indexError ?? index?.error ? <p role="alert" className="mt-1 text-destructive">{indexError ?? index?.error}</p> : null}
           </div>
+          {index?.indexing ? (
+            <Button size="compact" variant="outline" onClick={() => void useChatStore.getState().cancelIndex()}>
+              <Square aria-hidden className="h-3 w-3" />
+              Stop
+            </Button>
+          ) : (
+            <Button size="compact" variant="outline" disabled={!hasKey || roots.length === 0} onClick={() => void useChatStore.getState().updateIndex()}>
+              <RefreshCw aria-hidden className="h-3.5 w-3.5" />
+              {index?.ready ? "Update index" : "Index library"}
+            </Button>
+          )}
         </div>
-      </div>
+        <p className="mt-2 text-2xs text-muted-foreground">
+          Questions and answers live in <Link to="/chat" className="underline underline-offset-2">Chat</Link>.
+        </p>
+      </Section>
     </div>
   );
 };

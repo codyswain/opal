@@ -6,3 +6,4 @@ export * from './IconButton';
 export * from './Menu';
 export * from './Popover';
 export * from './Tooltip';
+export * from './ContextMenu';

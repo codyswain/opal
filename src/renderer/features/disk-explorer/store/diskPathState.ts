@@ -6,11 +6,23 @@ import {
   remapFsPath,
 } from '@/common/fsPaths';
 import type { DiskEntry } from '@/types/disk';
+import {
+  directoryCollection,
+  type FilesCollection,
+} from '../navigation/filesLocation';
 import type {
   AppPathMutation,
   PathRemovalReason,
 } from '../navigation/pathMutationCoordinator';
 import type { DiskState } from './diskStore';
+
+function collectionFor(
+  previous: FilesCollection | null,
+  currentDirectory: string | null
+): FilesCollection | null {
+  if (previous && previous.kind !== 'directory') return previous;
+  return currentDirectory ? directoryCollection(currentDirectory) : null;
+}
 
 function remapNullablePath(
   path: string | null,
@@ -69,6 +81,12 @@ export function remapDiskState(
     expanded[remappedPath] = Boolean(expanded[remappedPath] || value);
   }
 
+  const currentDirectory = remapNullablePath(
+    state.currentDirectory,
+    oldPath,
+    newPath
+  );
+
   return {
     roots: [
       ...new Set(
@@ -77,11 +95,8 @@ export function remapDiskState(
     ],
     listings: remapListings(state.listings, oldPath, newPath),
     expanded,
-    currentDirectory: remapNullablePath(
-      state.currentDirectory,
-      oldPath,
-      newPath
-    ),
+    currentCollection: collectionFor(state.currentCollection, currentDirectory),
+    currentDirectory,
     focusedPath,
     selectedPath: focusedPath,
     selectedPaths: [
@@ -158,6 +173,11 @@ export function removePathsFromDiskState(
   const quickPreviewWasRemoved =
     state.quickPreviewPath !== null &&
     isRemoved(state.quickPreviewPath);
+  const currentDirectory = fallbackDirectoryAfterRemoval(
+    state.currentDirectory,
+    roots,
+    isRemoved
+  );
 
   return {
     roots,
@@ -172,11 +192,8 @@ export function removePathsFromDiskState(
     expanded: Object.fromEntries(
       Object.entries(state.expanded).filter(([path]) => !isRemoved(path))
     ),
-    currentDirectory: fallbackDirectoryAfterRemoval(
-      state.currentDirectory,
-      roots,
-      isRemoved
-    ),
+    currentCollection: collectionFor(state.currentCollection, currentDirectory),
+    currentDirectory,
     focusedPath,
     selectedPath: focusedPath,
     selectedPaths,

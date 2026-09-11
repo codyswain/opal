@@ -1,4 +1,4 @@
-import { COMMAND_IDS } from '@/common/commandIds';
+import { COMMAND_IDS } from "@/common/commandIds";
 
 export interface MenuCommand {
   id: string;
@@ -12,7 +12,7 @@ export interface MenuTemplateItem {
   accelerator?: string;
   /** Set when selecting this item should dispatch a renderer command. */
   commandId?: string;
-  type?: 'separator';
+  type?: "separator";
 }
 
 export interface MenuTemplateEntry {
@@ -32,33 +32,39 @@ export interface MenuTemplateEntry {
  */
 export function buildMenuTemplate(
   commands: MenuCommand[],
-  options: { appName: string }
+  options: { appName: string },
 ): MenuTemplateEntry[] {
   const byId = new Map(commands.map((command) => [command.id, command]));
 
   const item = (id: string): MenuTemplateItem[] => {
     const command = byId.get(id);
     if (!command) return [];
-    return [{ label: command.label, accelerator: command.accelerator, commandId: command.id }];
+    return [
+      {
+        label: command.label,
+        accelerator: command.accelerator,
+        commandId: command.id,
+      },
+    ];
   };
 
   const menus: MenuTemplateEntry[] = [
     {
       label: options.appName,
       submenu: [
-        { role: 'about', label: `About ${options.appName}` },
-        { type: 'separator' },
+        { role: "about", label: `About ${options.appName}` },
+        { type: "separator" },
         ...item(COMMAND_IDS.openSettings),
-        { type: 'separator' },
-        { role: 'hide', label: `Hide ${options.appName}` },
-        { role: 'hideOthers', label: 'Hide Others' },
-        { role: 'unhide', label: 'Show All' },
-        { type: 'separator' },
-        { role: 'quit', label: `Quit ${options.appName}` },
+        { type: "separator" },
+        { role: "hide", label: `Hide ${options.appName}` },
+        { role: "hideOthers", label: "Hide Others" },
+        { role: "unhide", label: "Show All" },
+        { type: "separator" },
+        { role: "quit", label: `Quit ${options.appName}` },
       ],
     },
     {
-      label: 'File',
+      label: "File",
       submenu: [
         // No 'close' role: Cmd+W closes the active tab, handled in the
         // renderer. A role here would close the whole window instead.
@@ -66,43 +72,44 @@ export function buildMenuTemplate(
       ],
     },
     {
-      label: 'Edit',
+      label: "Edit",
       submenu: [
-        { role: 'undo', label: 'Undo' },
-        { role: 'redo', label: 'Redo' },
-        { type: 'separator' },
-        { role: 'cut', label: 'Cut' },
-        { role: 'copy', label: 'Copy' },
-        { role: 'paste', label: 'Paste' },
-        { role: 'selectAll', label: 'Select All' },
+        { role: "undo", label: "Undo" },
+        { role: "redo", label: "Redo" },
+        { type: "separator" },
+        { role: "cut", label: "Cut" },
+        { role: "copy", label: "Copy" },
+        { role: "paste", label: "Paste" },
+        { role: "selectAll", label: "Select All" },
       ],
     },
     {
-      label: 'View',
+      label: "View",
       submenu: [
+        ...item(COMMAND_IDS.togglePrivacy),
         ...item(COMMAND_IDS.toggleLeftPane),
         ...item(COMMAND_IDS.toggleRightPane),
         ...item(COMMAND_IDS.toggleBottomPane),
-        { type: 'separator' },
+        { type: "separator" },
         ...item(COMMAND_IDS.toggleTheme),
-        { type: 'separator' },
-        { role: 'reload', label: 'Reload' },
-        { role: 'toggleDevTools', label: 'Toggle Developer Tools' },
-        { type: 'separator' },
-        { role: 'resetZoom', label: 'Actual Size' },
-        { role: 'zoomIn', label: 'Zoom In' },
-        { role: 'zoomOut', label: 'Zoom Out' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Toggle Full Screen' },
+        { type: "separator" },
+        { role: "reload", label: "Reload" },
+        { role: "toggleDevTools", label: "Toggle Developer Tools" },
+        { type: "separator" },
+        { role: "resetZoom", label: "Actual Size" },
+        { role: "zoomIn", label: "Zoom In" },
+        { role: "zoomOut", label: "Zoom Out" },
+        { type: "separator" },
+        { role: "togglefullscreen", label: "Toggle Full Screen" },
       ],
     },
     {
-      label: 'Window',
+      label: "Window",
       submenu: [
-        { role: 'minimize', label: 'Minimize' },
-        { role: 'zoom', label: 'Zoom' },
-        { type: 'separator' },
-        { role: 'front', label: 'Bring All to Front' },
+        { role: "minimize", label: "Minimize" },
+        { role: "zoom", label: "Zoom" },
+        { type: "separator" },
+        { role: "front", label: "Bring All to Front" },
       ],
     },
   ];

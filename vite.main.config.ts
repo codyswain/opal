@@ -34,6 +34,8 @@ export default defineConfig((env) => {
           /^@radix-ui/,
           /^@tiptap/,
           'keytar',
+          // ESM-only; loaded at run time by Node, see src/main/chat/pdfText.ts.
+          /^pdfjs-dist/,
         ],
         output: {
           // Ensure CJS format as required by Electron main process

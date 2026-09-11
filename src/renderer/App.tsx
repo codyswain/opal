@@ -1,39 +1,42 @@
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  HashRouter as Router,
-  Navigate,
-  useRoutes,
-} from "react-router-dom";
+import React, { useEffect } from "react";
+import { HashRouter as Router, Navigate, useRoutes } from "react-router-dom";
 import "@/renderer/styles/index.css";
 
 import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { Settings } from "@/renderer/features/settings";
-import { usePref } from "@/renderer/shared/prefs/usePref";
-import { useCommands } from "@/renderer/features/commands";
-import { Command, commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
+import { AppCommands, CommandPalette } from "@/renderer/features/commands";
+import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
+import { FilesRoute } from "@/renderer/features/disk-explorer";
+import { ChatRoute } from "@/renderer/features/chat";
+import { TodayRoute } from "@/renderer/features/today/TodayRoute";
+import { ChatDraftGuard } from "@/renderer/features/chat/components/ChatDraftGuard";
+import { JournalDraftGuard } from "@/renderer/features/today/JournalDraftGuard";
+import { PrivacyBoundary } from "@/renderer/features/privacy/PrivacyBoundary";
+import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
 import { COMMAND_IDS } from "@/common/commandIds";
-import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
-import { Explorer } from "@/renderer/features/file-explorer-v2";
-import { FilesRoute, useDiskStore } from "@/renderer/features/disk-explorer";
 import {
   AppShell,
   ShellProvider,
-  useShellStore,
   type ShellRouteDescriptor,
   type ShellRouteObject,
 } from "@/renderer/features/shell";
 import { useSettingsStore } from "./store/settingsStore";
 
-const NOTES_ROUTE: ShellRouteDescriptor = {
-  id: "notes",
-  header: { title: "Notes" },
-};
-
 const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
   header: { title: "Files" },
+};
+
+const TODAY_ROUTE: ShellRouteDescriptor = {
+  id: "today",
+  header: { title: "Today" },
+};
+
+const CHAT_ROUTE: ShellRouteDescriptor = {
+  id: "chat",
+  header: { title: "Threads" },
 };
 
 const SETTINGS_ROUTE: ShellRouteDescriptor = {
@@ -46,35 +49,22 @@ const FALLBACK_ROUTE: ShellRouteDescriptor = {
   header: { title: "Opal" },
 };
 
-const NotesRoute: React.FC = () => {
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-
-  return (
-    <Explorer
-      isLeftSidebarOpen={isLeftSidebarOpen}
-      isRightSidebarOpen={isRightSidebarOpen}
-      setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-      setIsRightSidebarOpen={setIsRightSidebarOpen}
-    />
-  );
-};
-
 const APP_ROUTES: ShellRouteObject[] = [
   {
     path: "/",
-    element: <Navigate to="/explorer" replace />,
-    handle: { shell: NOTES_ROUTE },
+    element: <Navigate to="/today" replace />,
+    handle: { shell: TODAY_ROUTE },
   },
-  {
-    path: "/explorer",
-    element: <NotesRoute />,
-    handle: { shell: NOTES_ROUTE },
-  },
+  { path: "/today", element: <TodayRoute />, handle: { shell: TODAY_ROUTE } },
   {
     path: "/files",
     element: <FilesRoute />,
     handle: { shell: FILES_ROUTE },
+  },
+  {
+    path: "/chat",
+    element: <ChatRoute />,
+    handle: { shell: CHAT_ROUTE },
   },
   {
     path: "/settings",
@@ -87,95 +77,23 @@ const APP_ROUTES: ShellRouteObject[] = [
   },
   {
     path: "*",
-    element: <Navigate to="/explorer" replace />,
-    handle: { shell: NOTES_ROUTE },
+    element: <Navigate to="/today" replace />,
+    handle: { shell: TODAY_ROUTE },
   },
 ];
 
 const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 
 const App: React.FC = () => {
-  const { registerCommand, unregisterCommand } = useCommands();
   const loadSettings = useSettingsStore((state) => state.loadSettings);
-  const toggleLeftSidebar = useShellStore((state) => state.toggleSidebar);
-  const toggleRightSidebar = useShellStore((state) => state.toggleInspector);
-  const [isBottomPaneOpen, setIsBottomPaneOpen] = usePref(
-    "isBottomPaneOpen",
-    true
-  );
-  const toggleBottomPane = useCallback(
-    () => setIsBottomPaneOpen(!isBottomPaneOpen),
-    [isBottomPaneOpen]
-  );
-
-  useEffect(() => {
-    const commands: Command[] = [
-      {
-        id: COMMAND_IDS.toggleLeftPane,
-        name: "Toggle Left Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+B"],
-        keywords: ["pane", "toggle"],
-        perform: toggleLeftSidebar,
-      },
-      {
-        id: COMMAND_IDS.toggleRightPane,
-        name: "Toggle Right Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+Alt+B"],
-        keywords: ["pane", "toggle"],
-        perform: toggleRightSidebar,
-      },
-      {
-        id: COMMAND_IDS.toggleBottomPane,
-        name: "Toggle Bottom Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+J"],
-        keywords: ["pane", "toggle"],
-        perform: toggleBottomPane,
-      },
-      {
-        id: COMMAND_IDS.openFolder,
-        name: "Open Folder on Disk",
-        type: "navigation",
-        shortcut: ["CmdOrCtrl+O"],
-        keywords: ["files", "folder", "open", "disk"],
-        perform: () => { void useDiskStore.getState().openFolder(); },
-      },
-      {
-        id: COMMAND_IDS.openSettings,
-        name: "Settings…",
-        type: "navigation",
-        shortcut: ["CmdOrCtrl+,"],
-        keywords: ["settings", "preferences"],
-        perform: () => { window.location.hash = "#/settings"; },
-      },
-    ];
-
-    commands.forEach(registerCommand);
-
-    // Tell main what exists, so the menu and the palette can never disagree.
-    window.systemAPI.reportCommands(
-      commands.map((command) => ({
-        id: command.id,
-        label: command.name,
-        accelerator: command.shortcut?.[0],
-      }))
-    );
-
-    return () => {
-      commands.forEach((command) => unregisterCommand(command));
-    };
-  }, [
-    registerCommand,
-    unregisterCommand,
-    toggleLeftSidebar,
-    toggleRightSidebar,
-    toggleBottomPane,
-  ]);
 
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
+      if (
+        usePrivacyStore.getState().shielded &&
+        commandId !== COMMAND_IDS.togglePrivacy
+      )
+        return;
       try {
         commandRegistry.executeCommand(commandId);
       } catch (error) {
@@ -190,22 +108,22 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <KBarActionsProvider>
-        <KBar />
-        <ThemeProvider>
-          <TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <PrivacyBoundary>
             <Toaster />
-            <ShellProvider
-              routes={APP_ROUTES}
-              fallbackRoute={FALLBACK_ROUTE}
-            >
+            <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
+              <AppCommands />
+              <JournalDraftGuard />
+              <ChatDraftGuard />
+              <CommandPalette />
               <AppShell>
                 <AppRoutes />
               </AppShell>
             </ShellProvider>
-          </TooltipProvider>
-        </ThemeProvider>
-      </KBarActionsProvider>
+          </PrivacyBoundary>
+        </TooltipProvider>
+      </ThemeProvider>
     </Router>
   );
 };

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { directoryCollection } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import {
   createPathMutationCoordinator,
@@ -172,7 +173,7 @@ describe('path mutation coordination', () => {
 
   it('atomically remaps disk state, tabs, and location snapshots', () => {
     filesLocationSnapshots.capture(
-      { mode: 'browse', directory: NOTES },
+      { mode: 'browse', collection: directoryCollection(NOTES)},
       {
         selectedPaths: [NOTE],
         focusedPath: NOTE,
@@ -211,7 +212,7 @@ describe('path mutation coordination', () => {
     expect(
       filesLocationSnapshots.read({
         mode: 'browse',
-        directory: WRITING,
+        collection: directoryCollection(WRITING),
       })
     ).toMatchObject({
       selectedPaths: [REMAPPED_NOTE],

@@ -3,7 +3,8 @@ import {
   isFsPathAtOrBelow,
   normalizeFsPath,
 } from '@/common/fsPaths';
-import type { SortDirection, SortField } from '@/common/sortEntries';
+import type { SortDirection } from '@/common/sortEntries';
+import type { CollectionSortField as SortField } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import {
   pathMutationCoordinator,
@@ -12,6 +13,10 @@ import {
   remapDiskState,
   removePathsFromDiskState,
 } from './diskPathState';
+import {
+  directoryCollection,
+  type FilesCollection,
+} from '../navigation/filesLocation';
 
 export interface PendingAction {
   /** The parent directory for new-folder; the item being renamed for rename. */
@@ -26,7 +31,9 @@ export interface DiskState {
   listings: Record<string, DiskEntry[]>;
   /** Directory path -> whether it is expanded in the tree. */
   expanded: Record<string, boolean>;
-  /** Canonical directory whose immediate children occupy the browse surface. */
+  /** The collection occupying the browse surface: a folder or built-in Recent. */
+  currentCollection: FilesCollection | null;
+  /** Directory of currentCollection when it is a folder; null otherwise. */
   currentDirectory: string | null;
   /** Canonical selection anchor and keyboard cursor. */
   focusedPath: string | null;
@@ -37,6 +44,8 @@ export interface DiskState {
   quickPreviewPath: string | null;
   /** @deprecated Task 7: compatibility mirror for the current QuickLook UI. */
   isQuickLookOpen: boolean;
+  /** Explicit browse-pane visibility; selection and navigation never toggle it. */
+  isPreviewPaneOpen: boolean;
   pendingAction: PendingAction | null;
   pendingDelete: string | null;
   sort: { field: SortField; direction: SortDirection };
@@ -54,6 +63,9 @@ export interface DiskActions {
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
   navigateToDirectory: (dirPath: string) => void;
+  /** Recent and query collections have no directory; selection resets either way. */
+  navigateToCollection: (collection: FilesCollection) => void;
+  navigateToRecent: () => void;
   select: (targetPath: string | null) => void;
   toggleSelected: (targetPath: string) => void;
   selectRange: (entries: DiskEntry[], targetPath: string) => void;
@@ -63,6 +75,7 @@ export interface DiskActions {
   openQuickLook: () => void;
   closeQuickLook: () => void;
   toggleQuickLook: () => void;
+  togglePreviewPane: () => void;
   beginNewFolder: (parentDir: string) => void;
   beginRename: (target: string) => void;
   beginDelete: (target: string) => void;
@@ -81,18 +94,22 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   roots: [],
   listings: {},
   expanded: {},
+  currentCollection: null,
   currentDirectory: null,
   focusedPath: null,
   selectedPath: null,
   selectedPaths: [],
   quickPreviewPath: null,
   isQuickLookOpen: false,
+  isPreviewPaneOpen: false,
   pendingAction: null,
   pendingDelete: null,
   sort: { field: 'name', direction: 'asc' },
   filter: '',
   density: 'comfortable',
   loading: { isLoading: false, error: null },
+
+  togglePreviewPane: () => set(state => ({isPreviewPaneOpen: !state.isPreviewPaneOpen})),
 
   loadRoots: async () => {
     const response = await window.diskAPI.listRoots();
@@ -110,6 +127,17 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     pathMutationCoordinator.reconcileAllowedRoots(response.data);
 
     set((state) => {
+      const roots = samePaths(state.roots, response.data)
+        ? state.roots
+        : response.data;
+      // Recent and query collections are not tied to a root; never substitute one.
+      if (state.currentCollection && state.currentCollection.kind !== 'directory') {
+        return {
+          roots,
+          currentDirectory: null,
+          loading: { isLoading: false, error: null },
+        };
+      }
       const previousDirectory = state.currentDirectory;
       const currentDirectory =
         previousDirectory &&
@@ -120,10 +148,11 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
           : response.data[0] ?? null;
 
       return {
-        roots: samePaths(state.roots, response.data)
-          ? state.roots
-          : response.data,
+        roots,
         currentDirectory,
+        currentCollection: currentDirectory
+          ? directoryCollection(currentDirectory)
+          : null,
         loading: { isLoading: false, error: null },
       };
     });
@@ -148,6 +177,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     set((state) => ({
       roots: state.roots.includes(root) ? state.roots : [...state.roots, root],
       expanded: { ...state.expanded, [root]: true },
+      currentCollection: directoryCollection(root),
       currentDirectory: root,
       loading: { isLoading: false, error: null },
     }));
@@ -180,6 +210,10 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       return;
     }
 
+    const nextPaths = new Set(response.data.entries.map(entry => entry.path));
+    const removed = (get().listings[dirPath] ?? []).filter(entry => !nextPaths.has(entry.path)).map(entry => entry.path);
+    if (removed.length) pathMutationCoordinator.applyExternalRemoval(removed);
+
     set((state) => ({
       listings: { ...state.listings, [dirPath]: response.data.entries },
       loading: { isLoading: false, error: null },
@@ -207,6 +241,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
 
   navigateToDirectory: (dirPath) =>
     set({
+      currentCollection: directoryCollection(dirPath),
       currentDirectory: normalizeFsPath(dirPath),
       focusedPath: null,
       selectedPath: null,
@@ -214,6 +249,24 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       quickPreviewPath: null,
       isQuickLookOpen: false,
     }),
+
+  navigateToCollection: (collection) => {
+    if (collection.kind === 'directory') {
+      get().navigateToDirectory(collection.directory);
+      return;
+    }
+    set({
+      currentCollection: collection,
+      currentDirectory: null,
+      focusedPath: null,
+      selectedPath: null,
+      selectedPaths: [],
+      quickPreviewPath: null,
+      isQuickLookOpen: false,
+    });
+  },
+
+  navigateToRecent: () => get().navigateToCollection({ kind: 'recent' }),
 
   select: (targetPath) =>
     set((state) => {

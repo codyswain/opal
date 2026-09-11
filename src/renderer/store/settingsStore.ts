@@ -32,9 +32,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   loadSettings: async () => {
     set({ loading: { isLoading: true, error: null } });
     try {
-      const key = await window.credentialAPI.getKey(CredentialAccount.OPENAI);
+      const response: unknown = await window.credentialAPI.getKey(CredentialAccount.OPENAI);
+      // The channel answers with an IPC envelope; older builds answered with the bare string.
+      const key = typeof response === "string"
+        ? response
+        : response && typeof response === "object" && "success" in response && (response as { success: boolean }).success
+          ? (response as { data?: unknown }).data
+          : "";
       set({
-        settings: { ...get().settings, openAIKey: key || "" },
+        settings: { ...get().settings, openAIKey: typeof key === "string" ? key : "" },
         loading: { isLoading: false, error: null },
       });
     } catch (err) {

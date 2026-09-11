@@ -24,11 +24,6 @@ const FILES: ShellRouteDescriptor = {
   },
 };
 
-const NOTES: ShellRouteDescriptor = {
-  id: 'notes',
-  header: { title: 'Notes' },
-};
-
 const SETTINGS: ShellRouteDescriptor = {
   id: 'settings',
   header: { title: 'Settings' },
@@ -39,11 +34,6 @@ const ROUTES: ShellRouteObject[] = [
     path: '/files',
     element: <div>Files content</div>,
     handle: { shell: FILES },
-  },
-  {
-    path: '/explorer',
-    element: <div>Notes content</div>,
-    handle: { shell: NOTES },
   },
   {
     path: '/settings',
@@ -127,11 +117,11 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByText('Files content')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Notes' }));
+    await user.click(screen.getByRole('link', { name: 'Settings' }));
 
     expect(screen.getByTestId('app-shell')).toBe(shell);
-    expect(screen.getByRole('heading', { name: 'Notes' })).toBeInTheDocument();
-    expect(screen.getByText('Notes content')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Settings content')).toBeInTheDocument();
   });
 
   it('uses router history for universal Back and Forward controls', async () => {
@@ -230,9 +220,9 @@ describe('AppShell', () => {
     await user.click(
       screen.getByRole('button', { name: 'Show workspace sidebar' })
     );
-    await user.click(screen.getByRole('link', { name: 'Notes' }));
+    await user.click(screen.getByRole('link', { name: 'Settings' }));
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
-    expect(screen.getByText('Notes content')).toBeInTheDocument();
+    expect(screen.getByText('Settings content')).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('workspace-surface')).toHaveFocus()
     );

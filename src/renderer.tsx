@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import App from "@/renderer/App";
 import "@/renderer/styles/index.css";
 import { mark, measure } from "@/renderer/shared/perf/marks";
+import { installDropGuard } from "@/renderer/shared/dropGuard";
+
+installDropGuard(window);
 
 // The global interface is already declared in @/renderer/shared/types
 

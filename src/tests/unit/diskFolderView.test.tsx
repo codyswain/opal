@@ -1,3 +1,4 @@
+import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -17,6 +18,7 @@ const listing: DiskEntry[] = [
 ];
 
 beforeEach(() => {
+  filesLocationSnapshots.clear();
   installDiskApi({
     readDirectory: vi.fn(async (p: string) => ({
       success: true as const,

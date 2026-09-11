@@ -1,3 +1,4 @@
+import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
 import { useCallback, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { DiskEntry } from '@/types/disk';
@@ -18,6 +19,7 @@ export function useGridNavigation({ entries, columns }: GridNavigationOptions) {
 
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
+      if (event.defaultPrevented || shouldIgnoreShortcutTarget(event.target as HTMLElement) || useDiskStore.getState().pendingAction || useDiskStore.getState().pendingDelete) return;
       if (entries.length === 0) return;
 
       // Let application shortcuts (Cmd+F, Cmd+Up, ...) through untouched.

@@ -7,6 +7,10 @@ interface SidebarItemProps {
   label: string;
   icon: LucideIcon;
   to?: To;
+  /**
+   * When given, overrides NavLink's pathname matching. Items that share a
+   * pathname but differ by search (Files and Recent) rely on this.
+   */
   active?: boolean;
   trailing?: React.ReactNode;
   onActivate?: () => void;
@@ -40,7 +44,7 @@ function ItemContents({
 }
 
 export function SidebarItem({
-  active = false,
+  active,
   className,
   icon,
   label,
@@ -56,7 +60,7 @@ export function SidebarItem({
         className={({ isActive }) =>
           cn(
             rowStyles,
-            (isActive || active) &&
+            (active === undefined ? isActive : active) &&
               'bg-surface-selected text-foreground',
             className
           )
@@ -74,7 +78,7 @@ export function SidebarItem({
       aria-pressed={active || undefined}
       className={cn(
         rowStyles,
-        active && 'bg-surface-selected text-foreground',
+        active === true && 'bg-surface-selected text-foreground',
         className
       )}
     >

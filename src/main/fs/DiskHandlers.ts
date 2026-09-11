@@ -7,6 +7,7 @@ import type { DiskReader } from '@/main/fs/DiskReader';
 import type { FileWriter } from '@/main/fs/FileWriter';
 import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
 import logger from '@/main/logger';
+import { MetadataError } from '@/main/fs/MetadataCodec';
 
 export interface DiskShell {
   showItemInFolder: (fullPath: string) => void;
@@ -26,6 +27,8 @@ export interface DiskHandlerDependencies {
     unwatch: (rootPath: string) => Promise<void>;
   };
   writer: FileWriter;
+  /** Called after the opened-root list changes so dependent indexes can rebuild. */
+  onRootsChanged?: () => void;
 }
 
 export class DiskHandlers {
@@ -60,6 +63,7 @@ export class DiskHandlers {
             return { success: true, data: { root: null } };
           }
           const root = await this.deps.registry.add(result.filePaths[0]);
+          this.deps.onRootsChanged?.();
           try {
             await this.deps.watcher.watch(root);
           } catch (error) {
@@ -94,6 +98,7 @@ export class DiskHandlers {
       async (_, rootPath: string): Promise<IPCResponse> => {
         try {
           await this.deps.registry.remove(rootPath);
+          this.deps.onRootsChanged?.();
           await this.deps.watcher.unwatch(rootPath);
           return { success: true };
         } catch (error) {
@@ -244,6 +249,7 @@ function describeError(error: unknown, fallback: string): string {
   if (error instanceof PathNotAllowedError) return error.message;
   if (error instanceof DestinationExistsError) return error.message;
   if (error instanceof InvalidNameError) return error.message;
+  if (error instanceof MetadataError) return error.message;
   if (error instanceof Error && /not a directory|into itself|opened folder/i.test(error.message)) {
     return error.message;
   }

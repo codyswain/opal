@@ -31,30 +31,32 @@ describe('explicitly opened files', () => {
     expect(selectOpenedPath(state())).toBe(A);
   });
 
-  it('does not expose a temporary preview as opened content', () => {
+  it('shows a preview like any other tab', () => {
     state().openPreview(A);
 
-    expect(state().openedPath).toBeNull();
-    expect(selectOpenedPath(state())).toBeNull();
-  });
-
-  it('keeps explicitly opened content independent from preview selection', () => {
-    state().openFile(A);
-    state().openPreview(B);
-
-    expect(state().activePath).toBe(B);
     expect(state().openedPath).toBe(A);
+    expect(state().previewPath).toBe(A);
     expect(selectOpenedPath(state())).toBe(A);
   });
 
-  it('does not let the preview adapter replace Focus with an existing tab', () => {
+  it('previewing another file moves focus onto it and swaps the preview slot', () => {
+    state().openFile(A);
+    state().openPreview(B);
+    state().openPreview(C);
+
+    expect(state().openPaths).toEqual([A, C]);
+    expect(state().activePath).toBe(C);
+    expect(state().openedPath).toBe(C);
+  });
+
+  it('previewing a pinned tab activates it without touching the preview slot', () => {
     state().openFile(A);
     state().openFile(B);
     state().openPreview(A);
 
     expect(state().activePath).toBe(A);
-    expect(state().openedPath).toBe(B);
-    expect(selectOpenedPath(state())).toBe(B);
+    expect(state().openedPath).toBe(A);
+    expect(state().previewPath).toBeNull();
   });
 });
 
@@ -234,5 +236,53 @@ describe('persistence', () => {
     state().openPreview(A);
     const restored = useTabsStore.getState().hydrate();
     expect(restored.openPaths).toEqual([]);
+  });
+});
+
+describe('bulk closing and reopening', () => {
+  const A = '/V/a.md';
+  const B = '/V/b.md';
+  const C = '/V/c.md';
+  const D = '/V/d.md';
+
+  beforeEach(() => {
+    useTabsStore.setState({ openPaths: [A, B, C, D], openedPath: B, activePath: B, previewPath: null, recentlyClosed: [] });
+  });
+
+  it('closeOthers keeps one tab and makes it active', () => {
+    useTabsStore.getState().closeOthers(C);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [C], activePath: C, openedPath: C, recentlyClosed: [A, B, D] });
+  });
+
+  it('closeToRight keeps the tab and everything before it', () => {
+    useTabsStore.getState().closeToRight(B);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [A, B], activePath: B, openedPath: B, recentlyClosed: [C, D] });
+    useTabsStore.setState({ activePath: A, openedPath: A });
+    useTabsStore.getState().closeToRight(B);
+    expect(useTabsStore.getState().openPaths).toEqual([A, B]);
+  });
+
+  it('closeToRight moves the active tab left when it was among the closed', () => {
+    useTabsStore.setState({ activePath: D, openedPath: D });
+    useTabsStore.getState().closeToRight(A);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [A], activePath: A, openedPath: A });
+  });
+
+  it('remembers closed tabs most recent first and reopens them in that order', () => {
+    const store = useTabsStore.getState();
+    store.close(A);
+    store.close(C);
+    expect(useTabsStore.getState().recentlyClosed).toEqual([C, A]);
+    expect(useTabsStore.getState().reopenClosed()).toBe(C);
+    expect(useTabsStore.getState()).toMatchObject({ openPaths: [B, D, C], activePath: C, recentlyClosed: [A] });
+    expect(useTabsStore.getState().reopenClosed()).toBe(A);
+    expect(useTabsStore.getState().reopenClosed()).toBeNull();
+  });
+
+  it('closeAll remembers everything and skips paths that are open again', () => {
+    useTabsStore.getState().closeAll();
+    expect(useTabsStore.getState().recentlyClosed).toEqual([A, B, C, D]);
+    useTabsStore.getState().openFile(A);
+    expect(useTabsStore.getState().reopenClosed()).toBe(B);
   });
 });

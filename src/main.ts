@@ -1,3 +1,6 @@
+import "@/main/applyTestProfile";
+import { VaultService } from "@/main/vault/VaultService";
+import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import {
   app,
   BrowserWindow,
@@ -14,23 +17,13 @@ import {
   DEFAULT_BROWSER_WINDOW_HEIGHT,
   DEFAULT_BROWSER_WINDOW_WIDTH,
 } from "@/common/constants";
-import {
-  closeDatabase,
-  initializeDatabase,
-  registerEmbeddingIPCHandlers,
-  registerDatabaseIPCHandlers,
-  log,
-} from "@/main/index";
-import { ensureAllTablesExist } from "@/main/database/handlers";
+import { log } from "@/main/index";
 import { SystemHandlers } from "@/main/services/system/SystemHandlers";
 import { CredentialHandlers } from "@/main/services/credentials/CredentialHandlers";
-import { VFSManager } from "@/main/services/vfs/VfsManager";
-import { VFSHandlers } from "@/main/services/vfs/VfsHandlers";
 import { CredentialManager } from "@/main/services/credentials/CredentialManager";
-import DatabaseManager from "@/main/database/db";
-import { ItemRepository } from "@/main/database/repositories/itemRepository";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
+import { isAllowedNavigation } from "@/main/window/navigationGuard";
 import { AppMenu } from "@/main/menu/AppMenu";
 import {
   resolveBounds,
@@ -42,6 +35,34 @@ import { DiskHandlers } from "@/main/fs/DiskHandlers";
 import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { FileWriter } from "@/main/fs/FileWriter";
 import { ThumbnailService } from "@/main/fs/ThumbnailService";
+import { MetadataService } from "@/main/fs/MetadataService";
+import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
+import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
+import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
+import { ActivityStore } from "@/main/activity/ActivityStore";
+import { ActivityService } from "@/main/activity/ActivityService";
+import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
+import {
+  activityStorePath,
+  chatConversationsDirectory,
+  chatIndexDirectory,
+  libraryDirectory,
+} from "@/main/library/libraryPaths";
+import { OpenAI } from "openai";
+import { CredentialAccount } from "@/types/credentials";
+import { LibraryTextIndex } from "@/main/chat/LibraryTextIndex";
+import { OpenAIEmbeddingProvider } from "@/main/chat/EmbeddingProvider";
+import {
+  ChatError,
+  ChatService,
+  openAICompletionClient,
+} from "@/main/chat/ChatService";
+import { ChatHandlers } from "@/main/chat/ChatHandlers";
+import { ViewRepository } from "@/main/views/ViewRepository";
+import { ViewHandlers } from "@/main/views/ViewHandlers";
+import { CollectionIndex } from "@/main/collections/CollectionIndex";
+import { CollectionQueryService } from "@/main/collections/CollectionQueryService";
+import { CollectionHandlers } from "@/main/collections/CollectionHandlers";
 import {
   OPAL_FILE_SCHEME,
   OPAL_THUMB_SCHEME,
@@ -92,7 +113,7 @@ app.setName("Opal");
 
 const createWindow = () => {
   log.info(
-    `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`
+    `Creating main window; windowWidth: ${DEFAULT_BROWSER_WINDOW_WIDTH}, windowHeight: ${DEFAULT_BROWSER_WINDOW_HEIGHT}`,
   );
 
   const displays = screen.getAllDisplays().map((display) => display.workArea);
@@ -143,7 +164,10 @@ const createWindow = () => {
       // after a restart restores a useful size rather than a full-screen one.
       const { x, y, width, height } = mainWindow.getNormalBounds();
       void windowStateStore.save({
-        x, y, width, height,
+        x,
+        y,
+        width,
+        height,
         isMaximized: mainWindow.isMaximized(),
       });
     }, 400);
@@ -159,7 +183,10 @@ const createWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { x, y, width, height } = mainWindow.getNormalBounds();
     void windowStateStore.save({
-      x, y, width, height,
+      x,
+      y,
+      width,
+      height,
       isMaximized: mainWindow.isMaximized(),
     });
   });
@@ -172,7 +199,7 @@ const createWindow = () => {
           "Content-Security-Policy": [CSP],
         },
       });
-    }
+    },
   );
 
   const loadPage = () => {
@@ -199,11 +226,11 @@ const createWindow = () => {
         } catch (pathErr) {
           // Fallback approach if the above fails
           log.warn(
-            `Error with standard path, trying fallback: ${pathErr.message}`
+            `Error with standard path, trying fallback: ${pathErr.message}`,
           );
           const fallbackPath = path.join(
             __dirname,
-            "../renderer/main_window/index.html"
+            "../renderer/main_window/index.html",
           );
           log.info(`Loading fallback file: ${fallbackPath}`);
           mainWindow.loadFile(fallbackPath);
@@ -213,12 +240,32 @@ const createWindow = () => {
       log.error(`Failed to load page: ${err.message}`);
       dialog.showErrorBox(
         "Loading Error",
-        `Failed to load application: ${err.message}`
+        `Failed to load application: ${err.message}`,
       );
     }
   };
 
   loadPage();
+
+  // A dropped file or an injected link must never replace the app document.
+  const rendererIndex =
+    typeof MAIN_WINDOW_VITE_NAME !== "undefined"
+      ? path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+      : path.join(__dirname, "../renderer/main_window/index.html");
+  const guardOptions = {
+    devServerUrl:
+      typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined"
+        ? MAIN_WINDOW_VITE_DEV_SERVER_URL
+        : null,
+    indexFile: rendererIndex,
+  };
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedNavigation(url, guardOptions)) {
+      log.warn(`Blocked navigation away from the app: ${url}`);
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   // Open dev tools if in development mode
   if (isDevelopment || forceDevTools) {
@@ -227,7 +274,7 @@ const createWindow = () => {
       "Opening DevTools - development mode:",
       isDevelopment,
       "forceDevTools:",
-      forceDevTools
+      forceDevTools,
     );
   }
 
@@ -239,7 +286,7 @@ const createWindow = () => {
     "did-fail-load",
     (_, errorCode, errorDescription) => {
       log.error(`Failed to load page: ${errorCode} - ${errorDescription}`);
-    }
+    },
   );
 
   mainWindow.on("closed", () => {
@@ -268,10 +315,6 @@ process.on("uncaughtException", (error) => {
 });
 
 // --- IPC Handlers ---
-const dbManager = DatabaseManager.getInstance();
-const dbItemRepository = new ItemRepository({ dbManager });
-const vfsManager = new VFSManager({ itemRepository: dbItemRepository });
-
 const systemHandlers = new SystemHandlers({
   ipc: ipcMain,
   dialog,
@@ -289,24 +332,24 @@ const credentialHandlers = new CredentialHandlers({
   credentialManager: CredentialManager.getInstance(),
 });
 
-const vfsHandlers = new VFSHandlers({ ipc: ipcMain, vfsManager });
-
-// OPAL_TEST_USER_DATA_DIR lets the E2E suite point the roots file at a temp
-// directory, mirroring the existing OPAL_TEST_DB_DIR convention. Without it,
-// tests would write into the real app's user data and corrupt the user's
-// actual list of opened folders.
+// OPAL_TEST_USER_DATA_DIR lets the E2E suite point every store at a temp
+// directory. Without it, tests would write into the real app's user data and
+// corrupt the user's actual list of opened folders. applyTestProfile (the
+// first import above) has already moved Electron's own profile there too, so
+// renderer localStorage and caches stay out of the real profile as well.
+const userDataDir = app.getPath("userData");
 const windowStateStore = new WindowStateStore({
-  storePath: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "window-state.json"
-  ),
+  storePath: path.join(userDataDir, "window-state.json"),
 });
 
 const appMenu = new AppMenu({
   menu: Menu,
   appName: app.getName(),
   send: (commandId) => {
-    BrowserWindow.getFocusedWindow()?.webContents.send("menu:invoke", commandId);
+    BrowserWindow.getFocusedWindow()?.webContents.send(
+      "menu:invoke",
+      commandId,
+    );
   },
 });
 
@@ -321,28 +364,117 @@ ipcMain.on("menu:commands", (_event, commands) => {
 });
 
 const rootRegistry = new RootRegistry({
-  storePath: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "disk-roots.json"
-  ),
+  storePath: path.join(userDataDir, "disk-roots.json"),
 });
 const diskReader = new DiskReader({ registry: rootRegistry });
+const activityStore = new ActivityStore({
+  storePath: activityStorePath(userDataDir),
+});
+// Collections re-evaluate after index, root or activity changes; one coalesced
+// event covers all three so the renderer never reloads twice for one cause.
+let collectionsChangedTimer: NodeJS.Timeout | null = null;
+const notifyCollectionsChanged = () => {
+  if (collectionsChangedTimer) return;
+  collectionsChangedTimer = setTimeout(() => {
+    collectionsChangedTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("collections:changed", {});
+  }, 150);
+};
+const collectionIndex = new CollectionIndex({
+  registry: rootRegistry,
+  onChanged: notifyCollectionsChanged,
+});
+const activityService = new ActivityService({
+  registry: rootRegistry,
+  store: activityStore,
+  statEntry: (target) => diskReader.statEntry(target),
+  onChanged: () => {
+    notifyCollectionsChanged();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("activity:changed", {});
+  },
+});
+const viewRepository = new ViewRepository({
+  libraryDirectory: libraryDirectory(userDataDir),
+  onChanged: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("views:changed", {});
+  },
+});
+// Chat: an explicit embedding index over the library's text and JSON
+// conversations, both under the library directory. The OpenAI key is read
+// from the keychain at call time so Settings changes apply immediately.
+const openAIClient = async () => {
+  const key = await CredentialManager.getInstance().getCredential(
+    CredentialAccount.OPENAI,
+  );
+  if (!key)
+    throw new ChatError("Add your OpenAI API key in Settings to use Chat.");
+  return new OpenAI({ apiKey: key });
+};
+const libraryTextIndex = new LibraryTextIndex({
+  registry: rootRegistry,
+  directory: chatIndexDirectory(libraryDirectory(userDataDir)),
+  provider: async () => new OpenAIEmbeddingProvider(await openAIClient()),
+  onChanged: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("chat:index-changed", {});
+  },
+});
+const chatService = new ChatService({
+  directory: chatConversationsDirectory(libraryDirectory(userDataDir)),
+  index: libraryTextIndex,
+  clients: async () => {
+    const client = await openAIClient();
+    return {
+      embeddings: new OpenAIEmbeddingProvider(client),
+      completions: openAICompletionClient(client),
+    };
+  },
+});
+const collectionQueryService = new CollectionQueryService({
+  registry: rootRegistry,
+  index: collectionIndex,
+  activity: activityStore,
+});
+const metadataService = new MetadataService({
+  registry: rootRegistry,
+  activity: activityService,
+});
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
+    collectionIndex.invalidateDirectories(directories);
+    libraryTextIndex.markChanged(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
+  onMetadataChanged: () => metadataService.invalidate(),
+});
+const markdownDocuments = new MarkdownDocumentService({
+  registry: rootRegistry,
+  metadata: metadataService,
+  activity: activityService,
+});
+const vaultService = new VaultService({
+  registry: rootRegistry,
+  reader: diskReader,
+  markdown: markdownDocuments,
+  draftDirectory: path.join(userDataDir, "journal-drafts"),
+});
+const vaultHandlers = new VaultHandlers({
+  ipc: ipcMain,
+  service: vaultService,
 });
 const fileWriter = new FileWriter({
   registry: rootRegistry,
+  metadata: metadataService,
+  activity: activityService,
   trashItem: (fullPath) => shell.trashItem(fullPath),
 });
 const thumbnailService = new ThumbnailService({
   registry: rootRegistry,
-  cacheDir: path.join(
-    process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData"),
-    "thumbnails"
-  ),
+  cacheDir: path.join(userDataDir, "thumbnails"),
   createThumbnail: (sourcePath, maxSize) =>
     nativeImage.createThumbnailFromPath(sourcePath, maxSize),
 });
@@ -363,6 +495,35 @@ const diskHandlers = new DiskHandlers({
   },
   watcher: diskWatcher,
   writer: fileWriter,
+  onRootsChanged: () => {
+    collectionIndex.invalidateAll();
+    notifyCollectionsChanged();
+  },
+});
+const metadataHandlers = new MetadataHandlers({
+  ipc: ipcMain,
+  service: metadataService,
+});
+const activityHandlers = new ActivityHandlers({
+  ipc: ipcMain,
+  service: activityService,
+});
+const collectionHandlers = new CollectionHandlers({
+  ipc: ipcMain,
+  service: collectionQueryService,
+});
+const markdownHandlers = new MarkdownHandlers({
+  ipc: ipcMain,
+  service: markdownDocuments,
+});
+const chatHandlers = new ChatHandlers({
+  ipc: ipcMain,
+  service: chatService,
+  index: libraryTextIndex,
+});
+const viewHandlers = new ViewHandlers({
+  ipc: ipcMain,
+  repository: viewRepository,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -376,37 +537,37 @@ app.whenReady().then(async () => {
     credentialHandlers.registerAll();
     log.info("Credential IPC handlers registered");
 
-    vfsHandlers.registerAll();
-    log.info("Virtual File System (VFS) IPC handlers registered");
-
     await rootRegistry.load();
+    await activityStore.load();
+    try {
+      await viewRepository.watch();
+    } catch (error) {
+      log.error(
+        "Failed to watch the views directory; external view edits will not refresh until restart",
+        error instanceof Error ? error : undefined,
+      );
+    }
     for (const root of rootRegistry.list()) {
       try {
         await diskWatcher.watch(root);
       } catch (error) {
         log.error(
           `Failed to start disk watcher for ${root}; continuing without live updates for that root`,
-          error instanceof Error ? error : undefined
+          error instanceof Error ? error : undefined,
         );
       }
     }
     registerOpalFileProtocol({ registry: rootRegistry });
     registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
+    metadataHandlers.registerAll();
+    activityHandlers.registerAll();
+    collectionHandlers.registerAll();
+    viewHandlers.registerAll();
+    markdownHandlers.registerAll();
+    vaultHandlers.registerAll();
+    chatHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
-
-    await registerDatabaseIPCHandlers();
-    log.info("Database IPC handlers registered");
-
-    await registerEmbeddingIPCHandlers();
-    log.info("Embedding IPC handlers registered");
-
-    await initializeDatabase();
-    log.info("Database initialized successfully");
-
-    // Ensure all database tables exist with correct schema
-    await ensureAllTablesExist();
-    log.info("Database tables verified");
 
     await windowStateStore.load();
     log.info("Window state loaded");
@@ -417,15 +578,14 @@ app.whenReady().then(async () => {
     log.error(`Error during app setup: ${error}`);
     dialog.showErrorBox(
       "Initialization Error",
-      `Failed to initialize the application: ${error.message}`
+      `Failed to initialize the application: ${error.message}`,
     );
   }
 });
 
 app.on("before-quit", async () => {
   try {
-    void diskWatcher.closeAll();
-    await closeDatabase();
+    await Promise.all([diskWatcher.closeAll(), viewRepository.close()]);
   } catch (error) {
     log.error("Error during app shutdown:", error);
   }

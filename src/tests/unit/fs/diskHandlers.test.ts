@@ -35,6 +35,7 @@ import { RootRegistry } from '@/main/fs/RootRegistry';
 import { DiskReader } from '@/main/fs/DiskReader';
 import { DiskHandlers } from '@/main/fs/DiskHandlers';
 import { FileWriter } from '@/main/fs/FileWriter';
+import { MetadataError } from '@/main/fs/MetadataCodec';
 
 type Handler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -212,6 +213,17 @@ describe('DiskHandlers', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/already exists/i);
+  });
+
+  it('surfaces metadata-aware file operation errors', async () => {
+    vi.spyOn(writer, 'rename').mockRejectedValue(new MetadataError('Managed files cannot move across filesystems.'));
+
+    const result = await stub.invoke('disk:rename', path.join(root, 'note.md'), 'renamed.md') as {
+      success: boolean;
+      error: string;
+    };
+
+    expect(result).toEqual({ success: false, error: 'Managed files cannot move across filesystems.' });
   });
 
   it('renames a file', async () => {

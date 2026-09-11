@@ -1,64 +1,74 @@
-import React, { useEffect, useMemo } from 'react';
-import { FolderPlus, X } from 'lucide-react';
+import { classifyFile } from '@/common/fileKind';
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import { Button } from '@/renderer/shared/ui';
+import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
+import { useFilesNavigation } from '../navigation/FilesNavigationContext';
+import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
+import { FolderPlus, X, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
-import { sortEntries } from '@/common/sortEntries';
+import { sortEntries, type SortField } from '@/common/sortEntries';
+import { LISTING_SORT_FIELDS } from '@/common/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { useRecentStore } from '../store/recentStore';
+import { useCollectionQueryStore } from '../store/collectionQueryStore';
+import type { RecentItem } from '@/types/activity';
+import type { CollectionRow } from '@/types/collectionQuery';
+import { RecentView } from './RecentView';
+import { QueryView } from './query/QueryView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
-import { Breadcrumb } from './Breadcrumb';
+import { MarkdownEditor } from './editor/MarkdownEditor';
 import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
 import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
 import { NameDialog } from './dialogs/NameDialog';
-import { Toolbar } from './Toolbar';
 import { TabStrip } from './TabStrip';
+import { WelcomePanel } from './WelcomePanel';
+import { Breadcrumb } from './Breadcrumb';
+import { FileKindIcon } from './fileKindIcon';
 import { useTabsStore } from '../store/tabsStore';
-import { PaneGroup, Pane, PaneHandle, usePaneLayout, sizesFor } from '@/renderer/shared/components/panes';
-
-/** The detail pane always shows a directory: a selected file shows its parent. */
-function directoryForSelection(
-  selectedPath: string | null,
-  isDirectory: (path: string) => boolean,
-  roots: string[]
-): string | null {
-  if (!selectedPath) return roots[0] ?? null;
-  if (isDirectory(selectedPath)) return selectedPath;
-
-  const parent = selectedPath.slice(0, selectedPath.lastIndexOf('/'));
-  return parent || roots[0] || null;
-}
-
-function shouldIgnoreShortcutTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
-    return true;
-  }
-
-  return typeof target.closest === 'function'
-    && target.closest('[role="dialog"], [data-disk-shortcuts-ignore="true"]') !== null;
-}
+import {
+  PaneGroup,
+  Pane,
+  PaneHandle,
+  usePaneLayout,
+  sizesFor,
+} from '@/renderer/shared/components/panes';
 
 interface DiskExplorerProps {
   showNavigationPane?: boolean;
 }
 
+const NO_RECENT_ITEMS: RecentItem[] = [];
+const NO_QUERY_ROWS: CollectionRow[] = [];
+
 export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   showNavigationPane = true,
 }) => {
+  const navigation = useFilesNavigation();
+  const previewPaneId = useId();
+  const isPreviewPaneOpen = useDiskStore((state) => state.isPreviewPaneOpen);
+  const togglePreviewPane = useDiskStore((state) => state.togglePreviewPane);
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const currentDirectory = useDiskStore((state) => state.currentDirectory);
+  const currentCollection = useDiskStore((state) => state.currentCollection);
+  const recentItems = useRecentStore((state) => state.result?.items ?? NO_RECENT_ITEMS);
+  const queryId =
+    currentCollection?.kind === 'query' || currentCollection?.kind === 'view'
+      ? currentCollection.id
+      : null;
+  const queryRows = useCollectionQueryStore((state) =>
+    queryId ? state.results[queryId]?.rows ?? NO_QUERY_ROWS : NO_QUERY_ROWS
+  );
   const selectedPath = useDiskStore((state) => state.selectedPath);
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
   const error = useDiskStore((state) => state.loading.error);
   const openFolder = useDiskStore((state) => state.openFolder);
   const invalidate = useDiskStore((state) => state.invalidate);
-  const openQuickLook = useDiskStore((state) => state.openQuickLook);
-  const select = useDiskStore((state) => state.select);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
   const layoutKey = showNavigationPane ? 'files' : 'files-shell';
@@ -67,105 +77,169 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
     showNavigationPane ? [20, 55, 25] : [72, 28]
   );
 
-  const activeTabPath = useTabsStore((state) => state.activePath);
-  const openPreviewTab = useTabsStore((state) => state.openPreview);
-  const hydrateTabs = useTabsStore((state) => state.hydrate);
-
-  // A path is a directory if it is a root, or if any cached listing describes
-  // it as one. That is enough without another IPC round-trip, because the tree
-  // can only surface a path it has already listed.
-  const isDirectory = useMemo(() => {
-    const directories = new Set(roots);
-    for (const entries of Object.values(listings)) {
-      for (const entry of entries) {
-        if (entry.isDirectory) directories.add(entry.path);
-      }
-    }
-    return (candidate: string) => directories.has(candidate);
-  }, [roots, listings]);
-
-  const activeDirectory =
-    (selectedPath
-      ? directoryForSelection(selectedPath, isDirectory, roots)
-      : currentDirectory) ??
-    roots[0] ??
-    null;
+  const openedPath = useTabsStore((state) => state.openedPath);
+  const activeDirectory = currentDirectory;
+  const folderRows = useCollectionQueryStore((state) => (activeDirectory ? state.results[`folder:${activeDirectory}`]?.query ? state.results[`folder:${activeDirectory}`].rows : null : null));
+  const isRecent = currentCollection?.kind === 'recent';
   const visibleEntries = useMemo(() => {
+    if (queryId) return queryRows.map((row) => row.entry);
+    if (isRecent) {
+      // Recent keeps its recency order; only the name filter applies.
+      return filterEntries(recentItems.map((item) => item.entry), filter);
+    }
     if (!activeDirectory) return [];
+    // A filtered folder shows collection rows, not the raw listing.
+    if (folderRows) return folderRows.map((row) => row.entry);
+    if (!LISTING_SORT_FIELDS.includes(sort.field)) return [];
     return sortEntries(
       filterEntries(listings[activeDirectory] ?? [], filter),
-      sort.field,
+      sort.field as SortField,
       sort.direction
     );
-  }, [activeDirectory, filter, listings, sort.direction, sort.field]);
+  }, [activeDirectory, filter, folderRows, isRecent, listings, queryId, queryRows, recentItems, sort.direction, sort.field]);
 
-  // The selected entry object, found in whichever cached listing contains it.
-  // The tree can only surface a path it has already listed, so no IPC is needed.
+  // The selected entry object, found in whichever cached listing contains it,
+  // or among Recent rows. The tree can only surface a path it has already
+  // listed, so no IPC is needed.
+  // A selected item whose row stops matching a live collection keeps its
+  // preview and Details until the selection changes; the last known entry is
+  // retained for exactly that path.
+  const retainedEntry = useRef<DiskEntry | null>(null);
   const selectedEntry = useMemo<DiskEntry | null>(() => {
-    if (!selectedPath) return null;
-    for (const entries of Object.values(listings)) {
-      const match = entries.find((candidate) => candidate.path === selectedPath);
-      if (match) return match;
+    if (!selectedPath) {
+      retainedEntry.current = null;
+      return null;
     }
-    return null;
-  }, [selectedPath, listings]);
-
-  // The tab being viewed, which is not always the grid selection: clicking a
-  // different tab changes what is displayed without moving the grid cursor.
-  const tabEntry = useMemo<DiskEntry | null>(() => {
-    if (!activeTabPath) return selectedEntry;
+    let found: DiskEntry | null = null;
     for (const entries of Object.values(listings)) {
-      const match = entries.find((candidate) => candidate.path === activeTabPath);
-      if (match) return match;
+      const match = entries.find(
+        (candidate) => candidate.path === selectedPath
+      );
+      if (match) { found = match; break; }
     }
-    return selectedEntry;
-  }, [activeTabPath, listings, selectedEntry]);
-  const showDetailPane = showNavigationPane || tabEntry !== null;
+    found ??=
+      recentItems.find((item) => item.entry.path === selectedPath)?.entry ??
+      queryRows.find((row) => row.entry.path === selectedPath)?.entry ??
+      null;
+    if (found) retainedEntry.current = found;
+    else if (retainedEntry.current?.path !== selectedPath) retainedEntry.current = null;
+    return found ?? retainedEntry.current;
+  }, [selectedPath, listings, recentItems, queryRows]);
 
+  const [focusedEntry, setFocusedEntry] = useState<{
+    path: string;
+    entry: DiskEntry | null;
+    loading: boolean;
+  } | null>(null);
   useEffect(() => {
-    hydrateTabs();
-  }, [hydrateTabs]);
-
-  useEffect(() => {
-    if (!selectedEntry || selectedEntry.isDirectory) return;
-    openPreviewTab(selectedEntry.path);
-  }, [openPreviewTab, selectedEntry]);
+    if (!openedPath) {
+      setFocusedEntry(null);
+      return;
+    }
+    const cached = Object.values(listings)
+      .flat()
+      .find((entry) => entry.path === openedPath && !entry.isDirectory);
+    if (cached) {
+      setFocusedEntry({ path: openedPath, entry: cached, loading: false });
+      return;
+    }
+    let cancelled = false;
+    setFocusedEntry({ path: openedPath, entry: null, loading: true });
+    void Promise.resolve(window.diskAPI.stat(openedPath))
+      .then((result) => {
+        if (!cancelled)
+          setFocusedEntry({
+            path: openedPath,
+            entry:
+              result?.success &&
+              result.data.path === openedPath &&
+              !result.data.isDirectory
+                ? result.data
+                : null,
+            loading: false,
+          });
+      })
+      .catch(() => {
+        if (!cancelled)
+          setFocusedEntry({ path: openedPath, entry: null, loading: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openedPath, listings]);
+  const showDetailPane = !openedPath && isPreviewPaneOpen;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreShortcutTarget(event.target as HTMLElement) ||
+        useDiskStore.getState().pendingAction ||
+        useDiskStore.getState().pendingDelete
+      )
+        return;
       if (!event.metaKey && !event.ctrlKey) return;
 
       const tabs = useTabsStore.getState();
 
+      // Ctrl+Tab cycles like a browser; Cmd+Shift+T brings back the last closed tab.
+      if (event.key === 'Tab' && event.ctrlKey) {
+        if (tabs.openPaths.length === 0) return;
+        event.preventDefault();
+        const index = tabs.activePath ? tabs.openPaths.indexOf(tabs.activePath) : -1;
+        const step = event.shiftKey ? -1 : 1;
+        const path = tabs.openPaths[(index + step + tabs.openPaths.length) % tabs.openPaths.length];
+        if (path) navigation.openFile(path);
+        return;
+      }
+
+      if (event.shiftKey && event.key.toLowerCase() === 't') {
+        const path = tabs.reopenClosed();
+        if (path) { event.preventDefault(); navigation.openFile(path); }
+        return;
+      }
+
       if (event.key === 'w') {
         if (!tabs.activePath) return;
         event.preventDefault();
-        tabs.close(tabs.activePath);
+        navigation.closeFile(tabs.activePath);
         return;
       }
 
       if (event.shiftKey && event.key === '[') {
         event.preventDefault();
-        tabs.activatePrevious();
+        const index = tabs.activePath
+          ? tabs.openPaths.indexOf(tabs.activePath)
+          : 0;
+        const path =
+          tabs.openPaths[
+            (index - 1 + tabs.openPaths.length) % tabs.openPaths.length
+          ];
+        if (path) navigation.openFile(path);
         return;
       }
 
       if (event.shiftKey && event.key === ']') {
         event.preventDefault();
-        tabs.activateNext();
+        const index = tabs.activePath
+          ? tabs.openPaths.indexOf(tabs.activePath)
+          : -1;
+        const path = tabs.openPaths[(index + 1) % tabs.openPaths.length];
+        if (path) navigation.openFile(path);
         return;
       }
 
       // Cmd+1..9 jump to a tab by position, as in every browser.
       if (event.key >= '1' && event.key <= '9') {
         event.preventDefault();
-        tabs.activateIndex(Number(event.key) - 1);
+        const path = tabs.openPaths[Number(event.key) - 1];
+        if (path) navigation.openFile(path);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
     return window.diskAPI.onChanged(({ directories }) => {
@@ -180,7 +254,14 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreShortcutTarget(event.target as HTMLElement)
+      )
+        return;
       const state = useDiskStore.getState();
+      if (state.pendingAction || state.pendingDelete) return;
+      if (openedPath) return;
       const selectionLocked = state.pendingDelete !== null;
 
       if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowDown') {
@@ -188,10 +269,9 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         event.preventDefault();
         if (!selectedEntry) return;
         if (selectedEntry.isDirectory) {
-          select(selectedEntry.path);
-          void useDiskStore.getState().toggleExpanded(selectedEntry.path);
+          navigation.navigateDirectory(selectedEntry.path);
         } else {
-          openQuickLook();
+          navigation.openFile(selectedEntry.path);
         }
         return;
       }
@@ -202,8 +282,11 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         if (!activeDirectory) return;
         // Never navigate above a root - the guard would reject it anyway.
         if (roots.includes(activeDirectory)) return;
-        const parent = activeDirectory.slice(0, activeDirectory.lastIndexOf('/'));
-        if (parent) select(parent);
+        const parent = activeDirectory.slice(
+          0,
+          activeDirectory.lastIndexOf('/')
+        );
+        if (parent) navigation.navigateDirectory(parent);
         return;
       }
 
@@ -245,7 +328,6 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
         if (
           tag === 'INPUT' ||
           tag === 'TEXTAREA' ||
-          tag === 'BUTTON' ||
           target?.isContentEditable ||
           useDiskStore.getState().pendingAction !== null
         ) {
@@ -264,8 +346,9 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       // and the rename dialog in Task 15 both need it.
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-      if (!selectedEntry) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable)
+        return;
+      if (!selectedEntry || selectedEntry.isDirectory) return;
 
       event.preventDefault();
       toggleQuickLook();
@@ -273,7 +356,15 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDirectory, openQuickLook, roots, select, selectedEntry, toggleQuickLook, visibleEntries]);
+  }, [
+    activeDirectory,
+    navigation,
+    openedPath,
+    roots,
+    selectedEntry,
+    toggleQuickLook,
+    visibleEntries,
+  ]);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -321,20 +412,103 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
           className="flex min-w-0 flex-col overflow-hidden"
         >
           {error && <ErrorBanner message={error} />}
-          {activeDirectory ? (
-            <>
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 shrink-0 min-w-0">
-                <Breadcrumb dirPath={activeDirectory} />
-                <Toolbar dirPath={activeDirectory} />
+          <TabStrip />
+          {(() => {
+            const previewToggle = (
+              <button
+                type="button"
+                aria-pressed={isPreviewPaneOpen}
+                aria-controls={previewPaneId}
+                data-disk-shortcuts-ignore="true"
+                onClick={togglePreviewPane}
+                className="mr-3 shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Preview
+              </button>
+            );
+            if (!openedPath && isRecent) {
+              return (
+                <div
+                  data-testid="files-recent"
+                  className="min-h-0 flex-1 overflow-hidden"
+                >
+                  <RecentView trailing={previewToggle} />
+                </div>
+              );
+            }
+            if (!openedPath && queryId) {
+              return (
+                <div
+                  data-testid="files-query"
+                  className="min-h-0 flex-1 overflow-hidden"
+                >
+                  <QueryView id={queryId} trailing={previewToggle} />
+                </div>
+              );
+            }
+            return null;
+          })()}
+          {openedPath ? (
+            <div
+              data-testid="files-focus"
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1" data-testid="focus-header">
+                <Button
+                  size="compact"
+                  variant="ghost"
+                  onClick={navigation.returnToFolder}
+                  aria-label={`Return to folder ${basenameFsPath(parentFsPath(openedPath) ?? openedPath)}`}
+                  title="Return to folder"
+                  className="shrink-0"
+                >
+                  <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+                </Button>
+                {/* The folder trail is live; the file itself is where you are. */}
+                <Breadcrumb dirPath={parentFsPath(openedPath) ?? openedPath} />
+                <ChevronRight aria-hidden className="h-3 w-3 shrink-0 opacity-40" />
+                <span className="flex min-w-0 items-center gap-1.5 px-1 text-2xs font-medium text-foreground" aria-current="page">
+                  <FileKindIcon kind={focusedEntry?.entry?.kind ?? classifyFile(basenameFsPath(openedPath))} className="h-3.5 w-3.5" />
+                  <span className="truncate">{basenameFsPath(openedPath)}</span>
+                </span>
               </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <DiskFolderView dirPath={activeDirectory} />
+              <div className="min-h-0 flex-1">
+                {focusedEntry?.path === openedPath && focusedEntry.entry ? (
+                  focusedEntry.entry.kind === 'markdown' ? (
+                    <MarkdownEditor key={focusedEntry.entry.path} path={focusedEntry.entry.path} />
+                  ) : (
+                    <DetailPane entry={focusedEntry.entry} />
+                  )
+                ) : (
+                  <div role="status" className="p-4">
+                    {focusedEntry?.path !== openedPath || focusedEntry.loading
+                      ? 'Loading file…'
+                      : 'File unavailable'}
+                  </div>
+                )}
               </div>
-            </>
-          ) : (
-            <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
-              Open a folder to get started
             </div>
+          ) : isRecent || queryId ? null : activeDirectory ? (
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <DiskFolderView
+                key={activeDirectory}
+                dirPath={activeDirectory}
+                trailing={(
+                  <button
+                    type="button"
+                    aria-pressed={isPreviewPaneOpen}
+                    aria-controls={previewPaneId}
+                    data-disk-shortcuts-ignore="true"
+                    onClick={togglePreviewPane}
+                    className="flex h-7 shrink-0 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                  >
+                    Preview
+                  </button>
+                )}
+              />
+            </div>
+          ) : (
+            <WelcomePanel />
           )}
         </Pane>
 
@@ -353,9 +527,26 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               collapsible
               className="flex flex-col overflow-hidden border-l border-border/60"
             >
-              <TabStrip />
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <DetailPane entry={tabEntry} />
+              <div
+                id={previewPaneId}
+                role="region"
+                aria-label="Selected item preview"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              >
+                <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2">
+                  <span className="text-xs text-muted-foreground">Preview</span>
+                  <button
+                    type="button"
+                    aria-label="Close preview pane"
+                    onClick={togglePreviewPane}
+                    className="rounded p-1 hover:bg-muted"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <DetailPane entry={selectedEntry} />
+                </div>
               </div>
             </Pane>
           </>

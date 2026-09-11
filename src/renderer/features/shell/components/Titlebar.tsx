@@ -1,5 +1,5 @@
-import * as React from 'react';
-import { Link } from 'react-router-dom';
+import * as React from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -7,14 +7,16 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-} from 'lucide-react';
+  Shield,
+} from "lucide-react";
 import {
   IconButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/renderer/shared/ui';
-import { useShell } from '../context/ShellContext';
+} from "@/renderer/shared/ui";
+import { useShell } from "../context/ShellContext";
+import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -103,7 +105,9 @@ export function Titlebar({
           </IconButton>
           <IconButton
             ref={sidebarToggleRef}
-            label={sidebarOpen ? 'Hide workspace sidebar' : 'Show workspace sidebar'}
+            label={
+              sidebarOpen ? "Hide workspace sidebar" : "Show workspace sidebar"
+            }
             active={sidebarOpen}
             onClick={onToggleSidebar}
           >
@@ -123,6 +127,16 @@ export function Titlebar({
 
         <div className="min-w-0 flex-1 px-1">
           <Breadcrumbs />
+        </div>
+
+        <div className="no-drag">
+          <IconButton
+            label="Hide Opal contents"
+            shortcut="⌘⇧H"
+            onClick={() => usePrivacyStore.getState().shield()}
+          >
+            <Shield aria-hidden className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </IconButton>
         </div>
 
         {actions ? (

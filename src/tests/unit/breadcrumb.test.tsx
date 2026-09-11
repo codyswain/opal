@@ -28,12 +28,13 @@ describe('Breadcrumb', () => {
     expect(screen.getByTestId('crumb-/V/Photos/Rwanda')).toHaveTextContent('Rwanda');
   });
 
-  it('selects the folder when a crumb is clicked', async () => {
+  it('navigates to the folder when a crumb is clicked', async () => {
     const user = userEvent.setup();
     render(<Breadcrumb dirPath="/V/Photos/Rwanda" />);
 
     await user.click(screen.getByTestId('crumb-/V/Photos'));
-    expect(useDiskStore.getState().selectedPath).toBe('/V/Photos');
+    expect(useDiskStore.getState().currentDirectory).toBe('/V/Photos');
+    expect(useDiskStore.getState().selectedPaths).toEqual([]);
   });
 
   it('marks the final crumb as current', () => {

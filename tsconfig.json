@@ -12,10 +12,23 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "jsx": "react-jsx",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     },
     "forceConsistentCasingInFileNames": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "out",
+    "dist",
+    ".vite",
+    ".worktrees"
+  ]
 }
