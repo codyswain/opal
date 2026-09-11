@@ -43,6 +43,7 @@ export class ChatRepository {
     }));
     return rows.filter((row): row is StoredConversation => row !== null);
   }
+  /** Reads existing thread JSON; the excerpt is plain text so the list can show it on one line. */
   async searchMessages(query: string, archived: boolean): Promise<ThreadSearchResult> {
     const result: ThreadSearchResult = { hits: [], incomplete: false };
     const term = query.toLowerCase();
@@ -51,13 +52,11 @@ export class ChatRepository {
       if (row.unreadable) { result.incomplete = true; continue; }
       if ((row.archivedAt != null) !== archived) continue;
       for (const message of row.messages) {
-        const text = message.content.replace(/\s+/g, ' ');
+        const text = plainExcerptText(message.content);
         const offset = text.toLowerCase().indexOf(term);
         if (offset < 0) continue;
         if (result.hits.length === 50) { result.incomplete = true; return result; }
-        const start = Math.max(0, offset - 65);
-        const end = Math.min(text.length, offset + term.length + 120);
-        result.hits.push({ id: row.id, messageId: message.id, excerpt: `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}` });
+        result.hits.push({ id: row.id, messageId: message.id, excerpt: excerptAround(text, offset, term.length) });
         break;
       }
     }
@@ -90,4 +89,29 @@ export class ChatRepository {
       await rename(temporary, this.file(id));
     } finally { await rm(temporary, { force: true }); }
   }
+}
+
+/** Leading context kept before a match; short enough to survive one-line truncation in the list. */
+const EXCERPT_LEAD = 32;
+const EXCERPT_TAIL = 120;
+
+/** Drops Markdown markers the model writes (emphasis, code, headings, list bullets) without touching the words. */
+export function plainExcerptText(markdown: string): string {
+  return markdown
+    .replace(/^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+\.[ \t]+)/gm, '')
+    .replace(/(\*\*|__|`+|~~)/g, '')
+    .replace(/(^|[^\w])[*_](?=\S)([^*_]+?)(?<=\S)[*_](?=[^\w]|$)/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** A bounded window that starts shortly before the match, on a word boundary where one is near. */
+export function excerptAround(text: string, offset: number, length: number): string {
+  let start = Math.max(0, offset - EXCERPT_LEAD);
+  if (start > 0) {
+    const boundary = text.indexOf(' ', start);
+    if (boundary !== -1 && boundary < offset) start = boundary + 1;
+  }
+  const end = Math.min(text.length, offset + length + EXCERPT_TAIL);
+  return `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
 }

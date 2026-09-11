@@ -76,8 +76,9 @@ scratch drafts and never sends content to AI. Repeated clicks within the current
 view reuse the new copy. This recovers saved draft text, not a damaged history.
 
 Thread search matches names, source context/dates and drafts immediately. After
-300 ms it also searches saved message text locally, returning a short excerpt
-for up to 50 matching threads in the selected active/archive scope. Unreadable
+300 ms it also searches saved message text locally, returning a short plain-text
+excerpt around the match, with the match highlighted, for up to 50 matching
+threads in the selected active/archive scope. Unreadable
 files or truncated results are explicitly reported. This requires no AI key;
 thread JSON is read directly, so very large histories may benefit from a future
 index. Opening a message result selects its thread, scrolls to the matching message,

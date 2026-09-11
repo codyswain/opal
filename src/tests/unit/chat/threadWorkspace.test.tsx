@@ -29,7 +29,9 @@ describe('Thread workspace', () => {
     await user.type(screen.getByRole('searchbox'), 'solstice');
     await act(async () => finish({ success: true, data: { hits: [{ id: 'a', messageId: 'm1', excerpt: 'Old response' }], incomplete: false } }));
     expect(screen.queryByText('Old response')).not.toBeInTheDocument();
-    expect(await screen.findByText('Remember the solstice')).toBeVisible();
+    const row = await screen.findByRole('button', { name: /^A quiet morning/ });
+    await waitFor(() => expect(row).toHaveTextContent('Remember the solstice'));
+    expect(row.querySelector('mark')).toHaveTextContent('solstice');
     expect(screen.getByText('A quiet morning')).toBeVisible();
     await user.click(screen.getByRole('button', { name: /^A quiet morning/ }));
     expect(onSelect).toHaveBeenCalledWith('a', 'm1');

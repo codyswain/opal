@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Archive, ArchiveRestore, Plus, Search, Pin, PinOff, RotateCcw } from 'lucide-react';
 import { formatRelativeTime } from '@/common/relativeTime';
 import { Button, IconButton } from '@/renderer/shared/ui';
+import { SearchHighlight } from '@/renderer/features/commands/components/SearchHighlight';
 import type { ConversationSummary, ThreadSearchResult } from '@/types/chat';
 import './threadWorkspace.css';
 
@@ -90,7 +91,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               <button type="button" aria-current={conversation.id === activeId ? 'true' : undefined} onClick={() => { const hit = messageHits[conversation.id]; if (hit) onSelect(conversation.id, hit.messageId); else onSelect(conversation.id); }} disabled={busy} className="thread-list-select">
                 <span className="thread-list-title">{conversation.title}</span>
                 {conversation.context?.title && <span className="thread-list-context">{conversation.context.title}</span>}
-                {messageHits[conversation.id] && <span className="thread-list-context" title={messageHits[conversation.id].excerpt}>{messageHits[conversation.id].excerpt}</span>}
+                {messageHits[conversation.id] && <span className="thread-list-context" title={messageHits[conversation.id].excerpt}><SearchHighlight text={messageHits[conversation.id].excerpt} query={query} /></span>}
                 <span className="thread-list-meta">{conversation.pinnedAt != null && <span className="thread-pin-label"><Pin aria-hidden size={10} />Pinned</span>}<span>{conversation.unreadable ? 'File kept for recovery' : formatRelativeTime(conversation.updatedAt, Date.now())}</span>{drafts[conversation.id]?.trim() && <span className="thread-draft">Draft</span>}</span>
               </button>
               {conversation.unreadable && drafts[conversation.id]?.trim() && onRecoverDraft && <IconButton label={`Recover draft for ${conversation.title}`} size="compact" onClick={() => onRecoverDraft(conversation.id)} disabled={busy}><RotateCcw aria-hidden size={14} /></IconButton>}

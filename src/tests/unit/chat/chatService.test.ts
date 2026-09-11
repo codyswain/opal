@@ -391,3 +391,15 @@ it('caps message matches at fifty distinct threads and bounds excerpts', async (
   expect(result.hits[0].id).toBe('00000000-0000-4000-8000-000000000050');
   expect(result.hits.every(hit => hit.excerpt.length < 200 && hit.excerpt.includes('solstice'))).toBe(true);
 });
+
+it('excerpts plain text around the match so a narrow list still shows it', async () => {
+  noKey = true;
+  const thread = await service.create({ title: 'Notes' });
+  const content = '# Planting\n\n' + 'Before '.repeat(30) + 'the **SOLSTICE** planting plan [1].\n\n- `seeds` ordered';
+  await writeFile(path.join(tmp, 'library/chat', thread.id + '.json'), JSON.stringify({ ...thread, messages: [{ id: 'm1', role: 'assistant', content, createdAt: 1 }] }));
+  const [hit] = (await service.searchMessages('solstice', false)).hits;
+  expect(hit.excerpt).toContain('the SOLSTICE planting plan [1]. seeds ordered');
+  expect(hit.excerpt).not.toMatch(/[*#`]/);
+  expect(hit.excerpt.startsWith('…')).toBe(true);
+  expect(hit.excerpt.indexOf('SOLSTICE')).toBeLessThanOrEqual(40);
+});
