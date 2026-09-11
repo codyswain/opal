@@ -1,7 +1,9 @@
 # Disposable acceptance scripts
 
 These drive the built app through Playwright's Electron launcher against a
-throwaway user-data directory and temp vault. They are evidence
+throwaway user-data directory and temp vault. `OPAL_TEST_USER_DATA_DIR` moves
+Electron's own profile (localStorage, session storage, caches) there as well,
+so a run never reads or writes the real profile's preferences. They are evidence
 runs for the handoff's acceptance criteria, not part of the Playwright suite
 (`playwright.config.ts` only collects `e2e/tests`), so the ten-test budget is
 unaffected. Each script prints one `PASS`/`FAIL` line per check and exits

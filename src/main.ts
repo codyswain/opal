@@ -1,3 +1,4 @@
+import "@/main/applyTestProfile";
 import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import {
@@ -333,9 +334,10 @@ const credentialHandlers = new CredentialHandlers({
 
 // OPAL_TEST_USER_DATA_DIR lets the E2E suite point every store at a temp
 // directory. Without it, tests would write into the real app's user data and
-// corrupt the user's actual list of opened folders.
-const userDataDir =
-  process.env.OPAL_TEST_USER_DATA_DIR || app.getPath("userData");
+// corrupt the user's actual list of opened folders. applyTestProfile (the
+// first import above) has already moved Electron's own profile there too, so
+// renderer localStorage and caches stay out of the real profile as well.
+const userDataDir = app.getPath("userData");
 const windowStateStore = new WindowStateStore({
   storePath: path.join(userDataDir, "window-state.json"),
 });
