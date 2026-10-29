@@ -419,7 +419,7 @@ const markdownDocuments = new MarkdownDocumentService({
   recoveryDir: path.join(userDataDir, "Recovered"),
   history: new PageHistory(),
 });
-const vaultService = new VaultService({ registry: rootRegistry });
+const vaultService = new VaultService({ registry: rootRegistry, documents: markdownDocuments });
 const dayService = new DayService({
   registry: rootRegistry,
   resolveLinks: (from, targets) => linkIndex.resolve(from, targets),

@@ -2,21 +2,26 @@ import { randomUUID } from "crypto";
 import { constants } from "fs";
 import { link, lstat, mkdir, open, unlink } from "fs/promises";
 import path from "path";
+import { MarkdownConflictError, type MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
 import { filesystemMutationQueue } from "@/main/fs/MutationQueue";
 import { RootRegistry } from "@/main/fs/RootRegistry";
-import type { VaultInfo } from "@/types/vault";
+import type { DigestItemTick, VaultInfo } from "@/types/vault";
+import { digestCheckboxLine, parseDigest, splitFrontmatter } from "@/common/dayModel";
 import { defaultDailyPage, fillDailyTemplate, validDate } from "@/common/vaultModel";
 import {
   DAY_LAYOUT,
   LEGACY_DAY_LAYOUT,
   dailyName,
   inVault,
+  isDigestPath,
   missing,
   openedVault,
 } from "./vaultPaths";
 
 interface Dependencies {
   registry: RootRegistry;
+  /** Writes a digest's tick with the editor's queue and atomic replace. */
+  documents?: Pick<MarkdownDocumentService, "replaceLine">;
 }
 
 /** A template larger than this is not a daily template. */
@@ -137,5 +142,40 @@ export class VaultService {
       }
       return { path: page };
     });
+  }
+
+  /**
+   * Ticks or clears one checkbox in a digest, the file `/digest` writes:
+   * `Library/digests/<date> digest.md`, or until the cleanup commit
+   * `Inbox/Digests/<date>.md`. `line` and `raw` are where the day sidebar read
+   * the item, in the body after the frontmatter. The write changes only the
+   * character between that line's brackets, and is refused when the file no
+   * longer has that item on that line.
+   */
+  async checkDigestItem(
+    target: string,
+    file: string,
+    line: number,
+    raw: string,
+    checked: boolean,
+  ): Promise<DigestItemTick> {
+    const root = await openedVault(this.deps.registry, target);
+    const resolved = await inVault(root, file);
+    if (!isDigestPath(path.relative(root, resolved).split(path.sep).join("/")))
+      throw new Error("Only a digest's checkboxes can be ticked here.");
+    const next = digestCheckboxLine(raw, checked);
+    if (next === null) throw new Error("That line is not a digest checkbox.");
+    if (!this.deps.documents) throw new Error("Digests cannot be edited here.");
+    await this.deps.documents.replaceLine(resolved, (text) => {
+      const listed = parseDigest(text).groups.some((group) =>
+        group.items.some((item) => item.at?.line === line && item.at.raw === raw),
+      );
+      if (!listed)
+        throw new MarkdownConflictError("This item changed in the digest since it was read.");
+      const { body } = splitFrontmatter(text);
+      const above = text.slice(0, text.length - body.length).split("\n").length - 1;
+      return { index: above + line, expected: raw, replacement: next };
+    });
+    return { line, raw: next, checked };
   }
 }

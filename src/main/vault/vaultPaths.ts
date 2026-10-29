@@ -27,6 +27,20 @@ export const dailyName = (date: string) => `${date}.md`;
 export const logName = (date: string) => `${date} log.md`;
 export const digestName = (date: string) => `${date} digest.md`;
 
+/**
+ * Whether a path from the vault root, with forward slashes, names a digest:
+ * `Library/digests/<date> digest.md`, or until the cleanup commit
+ * `Inbox/Digests/<date>.md`.
+ */
+export function isDigestPath(relative: string): boolean {
+  const folder = path.posix.dirname(relative);
+  const name = path.posix.basename(relative);
+  const date = /^(\d{4}-\d\d-\d\d)(?: digest)?\.md$/.exec(name);
+  if (!date) return false;
+  if (folder === DAY_LAYOUT.digests) return name === digestName(date[1]);
+  return folder === LEGACY_DAY_LAYOUT.digests && name === dailyName(date[1]);
+}
+
 export const missing = (error: unknown) =>
   (error as NodeJS.ErrnoException).code === "ENOENT";
 

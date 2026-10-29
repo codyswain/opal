@@ -141,6 +141,8 @@ const vaultAPI: VaultAPI = {
   discover: () => ipcRenderer.invoke("vault:discover"),
   createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
   day: (root, date) => ipcRenderer.invoke("vault:day", root, date),
+  checkDigestItem: (root, path, line, raw, checked) =>
+    ipcRenderer.invoke("vault:check-digest-item", root, path, line, raw, checked),
   onDayChanged: (callback) => {
     const listener = (_event: IpcRendererEvent, change: VaultDayChange) =>
       callback(change);

@@ -152,8 +152,8 @@ describe("DayService", () => {
       path: path.join(root, `Library/digests/${DATE} digest.md`),
       title: "Digest, Wed 2026-10-28 (run 07:30, scheduled)",
       groups: [
-        { level: "high", items: [{ text: "Central processes the Oct 30 payroll at 2:00 PM today.", replyDrafted: false }] },
-        { level: "medium", items: [{ text: "Sourish has been quiet for 29 days.", replyDrafted: true }] },
+        { level: "high", items: [{ text: "Central processes the Oct 30 payroll at 2:00 PM today.", detail: null, replyDrafted: false, checked: null, at: null }] },
+        { level: "medium", items: [{ text: "Sourish has been quiet for 29 days.", detail: null, replyDrafted: true, checked: null, at: null }] },
       ],
       sections: ["Yesterday"],
     });

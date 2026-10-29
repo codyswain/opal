@@ -306,17 +306,27 @@ const PRIORITY_EMOJI: Record<string, DigestLevel> = {
 const PRIORITY_WORD: Record<string, DigestLevel> = { urgent: 'high', high: 'high', medium: 'medium', low: 'low' };
 const EMOJI_ITEM = new RegExp(`^[-*] (${Object.keys(PRIORITY_EMOJI).join('|')})\\uFE0F?\\s*(.+)$`, 'u');
 const LIST_ITEM = /^(?:[-*+]|\d+[.)]) +(.+)$/;
+/** A checkbox item at column 0, `- [ ] title`. The skill writes `- `; other markers still read. */
+export const DIGEST_CHECKBOX = /^(?:[-*+]|\d+[.)]) \[([ xX])\] (.+)$/;
+/** A line under a checkbox item: indented by two or more spaces or a tab. */
+const DETAIL_LINE = /^(?: {2,}|\t)\S/;
+const PRIORITY_LEAD = /^(urgent|high|medium|low)\s*:\s*/i;
 const SECTION = /^## +(.+?)(?: +#+)?\s*$/;
 const FOLDED_CALLOUT = /^> ?\[![^\]]+\][-+] *(.*)$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const REPLY_DRAFTED = /\s*\(reply drafted\)\s*$/i;
 
+/** Text without links, bold or code marks, on one line. */
+function plainText(value: string): string {
+  return readLinks(value).text.replace(/\*\*|__/g, '').replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
+}
+
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 function digestItem(value: string, capitalize = false): DayDigestItem {
-  let text = readLinks(value).text;
-  const replyDrafted = REPLY_DRAFTED.test(text);
-  text = text.replace(REPLY_DRAFTED, '').replace(/\*\*|__/g, '').replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
-  if (capitalize) text = text.charAt(0).toUpperCase() + text.slice(1);
-  return { text, replyDrafted };
+  const replyDrafted = REPLY_DRAFTED.test(value);
+  const text = plainText(value.replace(REPLY_DRAFTED, ''));
+  return { text: capitalize ? capitalized(text) : text, detail: null, replyDrafted, checked: null, at: null };
 }
 
 /** A folded callout's title: its bold lead, or the whole title without one. */
@@ -324,22 +334,66 @@ function calloutTitle(title: string): string {
   return (/^\*\*(.+?)\*\*/.exec(title)?.[1] ?? title).trim();
 }
 
+interface OpenCheckbox {
+  item: DayDigestItem;
+  /** The title as written, after the checkbox. */
+  title: string;
+  details: string[];
+  /** Set for Also worth doing, which sorts by the priority word. */
+  also: boolean;
+}
+
+/**
+ * A checkbox item with its detail. "(reply drafted)" is read from the end of
+ * the item's last line, the title's or the detail's. In Also worth doing the
+ * title starts with a priority word, which sets the group.
+ */
+function closeCheckbox(open: OpenCheckbox): { item: DayDigestItem; level: DigestLevel } {
+  const lastIsTitle = open.details.length === 0;
+  const last = lastIsTitle ? open.title : open.details[open.details.length - 1];
+  const replyDrafted = REPLY_DRAFTED.test(last);
+  if (replyDrafted) {
+    if (lastIsTitle) open.title = open.title.replace(REPLY_DRAFTED, '');
+    else open.details[open.details.length - 1] = last.replace(REPLY_DRAFTED, '');
+  }
+  let text = plainText(open.title);
+  let level: DigestLevel = 'medium';
+  const word = open.also ? PRIORITY_LEAD.exec(text) : null;
+  if (word) {
+    level = PRIORITY_WORD[word[1].toLowerCase()];
+    text = capitalized(text.slice(word[0].length));
+  }
+  const detail = plainText(open.details.join(' '));
+  return { item: { ...open.item, text, detail: detail || null, replyDrafted }, level };
+}
+
 /**
  * A morning digest, `Library/digests/<date> digest.md`. With a Top 3 section,
  * the top group is the Top 3 and "Also worth doing" fills the other groups by
- * its priority word (Urgent counts as high). Older digests mark each item with
- * a priority emoji instead. The emoji never reaches the output.
+ * its priority word (Urgent counts as high). Items there are checkboxes, each
+ * a title line with its detail indented below; a checkbox records its line,
+ * so a tick can be written back to that line alone. Older digests number
+ * their items, or mark each one with a priority emoji instead, and have no
+ * checkboxes. The emoji never reaches the output.
  */
 export function parseDigest(source: string): Omit<DayDigest, 'path'> {
   let title = '';
   let section: string | null = null;
   let fence: string | null = null;
+  let open: OpenCheckbox | null = null;
   const sections: string[] = [];
   const top: DayDigestItem[] = [];
   const also: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
   const marked: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
   let hasTop = false;
-  for (const line of lines(splitFrontmatter(source).body)) {
+  const close = () => {
+    if (!open) return;
+    const { item, level } = closeCheckbox(open);
+    if (open.also) also[level].push(item);
+    else top.push(item);
+    open = null;
+  };
+  for (const [index, line] of lines(splitFrontmatter(source).body).entries()) {
     const marker = FENCE.exec(line)?.[1];
     if (marker) {
       if (!fence) fence = marker;
@@ -347,6 +401,13 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
       continue;
     }
     if (fence) continue;
+    // Blank lines inside the list do not end an item; indented lines are its detail.
+    if (open && !line.trim()) continue;
+    if (open && DETAIL_LINE.test(line)) {
+      (open as OpenCheckbox).details.push(line.trim());
+      continue;
+    }
+    close();
     if (!title && line.startsWith('# ')) {
       title = line.slice(2).trim();
       continue;
@@ -369,16 +430,28 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
       marked[PRIORITY_EMOJI[emoji[1]]].push(digestItem(emoji[2]));
       continue;
     }
+    if (section !== 'top 3' && section !== 'also worth doing') continue;
+    const checkbox = DIGEST_CHECKBOX.exec(line);
+    if (checkbox) {
+      open = {
+        item: { text: '', detail: null, replyDrafted: false, checked: /x/i.test(checkbox[1]), at: { line: index, raw: line } },
+        title: checkbox[2],
+        details: [],
+        also: section === 'also worth doing',
+      };
+      continue;
+    }
     const item = LIST_ITEM.exec(line)?.[1];
     if (!item) continue;
     if (section === 'top 3') top.push(digestItem(item));
-    else if (section === 'also worth doing') {
-      const word = /^(urgent|high|medium|low)\s*:\s*/i.exec(item);
+    else {
+      const word = PRIORITY_LEAD.exec(item);
       // An item without a priority word is neither raised nor dropped.
       const level = word ? PRIORITY_WORD[word[1].toLowerCase()] : 'medium';
       also[level].push(digestItem(word ? item.slice(word[0].length) : item, Boolean(word)));
     }
   }
+  close();
   const levels = hasTop ? also : marked;
   const groups: DayDigestGroup[] = [];
   if (hasTop && top.length) groups.push({ level: 'top', items: top });
@@ -386,4 +459,15 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
     if (levels[level].length) groups.push({ level, items: levels[level] });
   }
   return { title, groups, sections };
+}
+
+/**
+ * The checkbox line `raw` ticked or cleared: only the character between the
+ * brackets changes. Null when `raw` is not a digest checkbox line.
+ */
+export function digestCheckboxLine(raw: string, checked: boolean): string | null {
+  const match = DIGEST_CHECKBOX.exec(raw);
+  if (!match) return null;
+  const at = raw.indexOf('[') + 1;
+  return `${raw.slice(0, at)}${checked ? 'x' : ' '}${raw.slice(at + 1)}`;
 }

@@ -1,11 +1,8 @@
 import * as React from 'react';
-import { User } from 'lucide-react';
-import { cn } from '@/renderer/shared/utils';
-import type { DayLink, DayRecording } from '@/types/day';
-import { RowTime, rowBaseStyles } from './DayCard';
-import { LinkList } from './DayLinks';
+import type { DayRecording } from '@/types/day';
+import { openTitle } from '../dayLinks';
+import { RowTime, rowStyles } from './DayCard';
 import { useDaySidebarContext, vaultRelative } from './daySidebarContext';
-import { closeOnEscape } from './LogEntry';
 
 const SOURCES: Record<string, string> = { meet: 'Google Meet', pocket: 'Pocket' };
 
@@ -20,52 +17,31 @@ export function recordingPeople(recording: Pick<DayRecording, 'speakers' | 'atte
   return [...new Set(recording.speakers.length ? recording.speakers : recording.attendees)];
 }
 
-interface RecordingRowProps {
-  recording: DayRecording;
-  open: boolean;
-  onToggle: () => void;
+/** The tooltip: where the row goes, then the source and who was there. */
+export function recordingTitle(recording: DayRecording, file: string): string {
+  const people = recordingPeople(recording);
+  return `${openTitle(file)}\n${recordingMeta(recording)}.${people.length ? `\n${people.join(', ')}` : ''}`;
 }
 
-/** A Meet or Pocket recording. It opens in place to who was there, the note and its Google links. */
-export function RecordingRow({ onToggle, open, recording }: RecordingRowProps) {
-  const { root } = useDaySidebarContext();
-  const head = React.useRef<HTMLButtonElement>(null);
-  const people = recordingPeople(recording);
-  const note: DayLink = {
-    label: 'Recording note',
-    target: vaultRelative(root, recording.path).replace(/\.md$/, ''),
-    external: false,
-    path: recording.path,
-  };
-
+/**
+ * A Meet or Pocket recording. A click opens its page, the summary note with
+ * its links, in this tab; Cmd-click opens a new tab.
+ */
+export function RecordingRow({ recording }: { recording: DayRecording }) {
+  const { openPath, root } = useDaySidebarContext();
   return (
-    <div onKeyDown={closeOnEscape(open, onToggle, head)}>
-      <button
-        ref={head}
-        type="button"
-        aria-expanded={open}
-        title={open ? 'Hide the details' : 'Show who was there and the links'}
-        onClick={onToggle}
-        className={cn(rowBaseStyles, open ? 'min-h-[28px] items-baseline py-[5px] text-foreground' : 'h-row-compact')}
-      >
-        <RowTime>{recording.time}</RowTime>
-        <span className={cn('min-w-0 flex-1', open ? 'whitespace-normal' : 'truncate')}>{recording.title}</span>
-        {recording.durationMin !== null ? (
-          <span className="flex-none text-2xs tabular-nums text-foreground-tertiary">{recording.durationMin} min</span>
-        ) : null}
-      </button>
-      {open ? (
-        <div className="pb-1.5 pl-12 pr-2">
-          <div className="pb-1 pt-0.5 text-2xs tabular-nums text-foreground-tertiary">{recordingMeta(recording)}</div>
-          {people.length ? (
-            <div className="flex items-start gap-1.5 pb-1 text-control text-foreground-secondary">
-              <User aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-icon" />
-              <span className="min-w-0 break-words">{people.join(', ')}</span>
-            </div>
-          ) : null}
-          <LinkList links={[note, ...recording.links]} />
-        </div>
+    <button
+      type="button"
+      title={recordingTitle(recording, vaultRelative(root, recording.path))}
+      onClick={(event) => openPath(recording.path, event)}
+      onAuxClick={(event) => event.button === 1 && openPath(recording.path, event)}
+      className={rowStyles}
+    >
+      <RowTime>{recording.time}</RowTime>
+      <span className="min-w-0 flex-1 truncate">{recording.title}</span>
+      {recording.durationMin !== null ? (
+        <span className="flex-none text-2xs tabular-nums text-foreground-tertiary">{recording.durationMin} min</span>
       ) : null}
-    </div>
+    </button>
   );
 }

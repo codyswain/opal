@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, Ellipsis, PanelRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { digestCheckboxLine } from '@/common/dayModel';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
 import { focusFile } from '@/renderer/features/disk-explorer/navigation';
 import {
@@ -18,7 +20,7 @@ import {
   MenuTrigger,
 } from '@/renderer/shared/ui';
 import { cn } from '@/renderer/shared/utils';
-import type { DayLogEntry, VaultDay } from '@/types/day';
+import type { DayDigest, DayDigestItem, DayLogEntry, VaultDay } from '@/types/day';
 import { addDays, dayName, pageDate, relativeDayName, shortDayName, shownDay, weekdayName } from '../dayRule';
 import { useDay, useToday } from '../hooks/useDay';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -37,7 +39,7 @@ import { HourGroup, LogEntry } from './LogEntry';
 import { RecordingRow } from './RecordingRow';
 
 /** What each card shows at rest; "Show N more" shows the rest. */
-export const AT_REST = { activity: 3, chats: 3, recordings: 4, digest: 3 } as const;
+export const AT_REST = { activity: 3, chats: 8, recordings: 4, digest: 3 } as const;
 /** Past this many entries the full log folds by hour. */
 const FLAT_LOG_LIMIT = 40;
 /** Below this width the header drops the weekday: "Oct 28 Yesterday". */
@@ -197,7 +199,6 @@ function ChatsCard({ day, more, onMore }: CardProps) {
 function RecordingsCard({ day, more, onMore }: CardProps) {
   const collapsed = useDaySidebarStore((state) => state.collapsed.recordings);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
-  const [open, toggleOpen] = useOpenSet();
   const count = day.recordings.length;
   if (count === 0) return <EmptyDayCard title={DAY_SECTION_TITLES.recordings} line="No recordings" />;
   const minutes = day.recordings.reduce((sum, recording) => sum + (recording.durationMin ?? 0), 0);
@@ -212,12 +213,7 @@ function RecordingsCard({ day, more, onMore }: CardProps) {
       onToggle={() => toggleCollapsed('recordings')}
     >
       {shown.map((recording) => (
-        <RecordingRow
-          key={recording.path}
-          recording={recording}
-          open={open.has(recording.path)}
-          onToggle={() => toggleOpen(recording.path)}
-        />
+        <RecordingRow key={recording.path} recording={recording} />
       ))}
       {count > AT_REST.recordings ? (
         <CardFoot>
@@ -228,12 +224,84 @@ function RecordingsCard({ day, more, onMore }: CardProps) {
   );
 }
 
+interface DigestTick {
+  /** The line as the day was read, which the tick applies to. */
+  from: string;
+  /** The line as the tick writes it. */
+  raw: string;
+  checked: boolean;
+}
+
+/**
+ * Ticks shown before the day is read again. Each is written through the main
+ * process, which changes only that line and refuses one that changed since
+ * the day was read. A tick applies while the item still reads as it did when
+ * ticked; once the new read arrives, the file speaks for itself.
+ */
+function useDigestTicks(digest: DayDigest | null, root: string) {
+  const [ticks, setTicks] = React.useState<Record<number, DigestTick>>({});
+  const [busy, setBusy] = React.useState<ReadonlySet<number>>(() => new Set());
+  const busyLines = React.useRef(new Set<number>());
+
+  const shown = React.useCallback(
+    (item: DayDigestItem): DayDigestItem => {
+      const tick = item.at ? ticks[item.at.line] : undefined;
+      if (!tick || !item.at || item.at.raw !== tick.from) return item;
+      return { ...item, checked: tick.checked, at: { line: item.at.line, raw: tick.raw } };
+    },
+    [ticks],
+  );
+
+  const check = React.useCallback(
+    async (item: DayDigestItem, checked: boolean) => {
+      const at = item.at;
+      if (!digest || !at || busyLines.current.has(at.line)) return;
+      const read = digest.groups.flatMap((group) => group.items).find((candidate) => candidate.at?.line === at.line);
+      const from = read?.at?.raw ?? at.raw;
+      const before = ticks[at.line];
+      const setBusyLine = (on: boolean) => {
+        if (on) busyLines.current.add(at.line);
+        else busyLines.current.delete(at.line);
+        setBusy(new Set(busyLines.current));
+      };
+      setBusyLine(true);
+      setTicks((current) => ({ ...current, [at.line]: { from, raw: digestCheckboxLine(at.raw, checked) ?? at.raw, checked } }));
+      let error: string | null = null;
+      try {
+        const result = await window.vaultAPI.checkDigestItem(root, digest.path, at.line, at.raw, checked);
+        if ('error' in result) {
+          error = result.error;
+        } else {
+          setTicks((current) => ({ ...current, [at.line]: { from, raw: result.data.raw, checked: result.data.checked } }));
+        }
+      } catch (thrown) {
+        error = thrown instanceof Error ? thrown.message : 'Could not change the digest.';
+      }
+      if (error) {
+        setTicks((current) => {
+          const next = { ...current };
+          if (before) next[at.line] = before;
+          else delete next[at.line];
+          return next;
+        });
+        toast.error(error);
+      }
+      setBusyLine(false);
+    },
+    [digest, root, ticks],
+  );
+
+  return { shown, check, busy };
+}
+
 function DigestCard({ day, more, onMore }: CardProps) {
   const { openPath, root } = useDaySidebarContext();
   const collapsed = useDaySidebarStore((state) => state.collapsed.digest);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
-  const digest = day.digest;
-  if (!digest) return <EmptyDayCard title={DAY_SECTION_TITLES.digest} line="No digest" />;
+  const ticks = useDigestTicks(day.digest, root);
+  const read = day.digest;
+  if (!read) return <EmptyDayCard title={DAY_SECTION_TITLES.digest} line="No digest" />;
+  const digest = { ...read, groups: read.groups.map((group) => ({ ...group, items: group.items.map(ticks.shown) })) };
   const file = vaultRelative(root, digest.path);
   const open = (event: React.MouseEvent) => openPath(digest.path, event);
   const total = digest.groups.reduce((sum, group) => sum + group.items.length, 0);
@@ -256,7 +324,15 @@ function DigestCard({ day, more, onMore }: CardProps) {
       onToggle={() => toggleCollapsed('digest')}
     >
       {shownGroups.map((group) => (
-        <DigestGroup key={group.level} level={group.level} items={group.items} file={file} onOpen={open} />
+        <DigestGroup
+          key={group.level}
+          level={group.level}
+          items={group.items}
+          file={file}
+          onOpen={open}
+          onCheck={(item, checked) => void ticks.check(item, checked)}
+          busy={ticks.busy}
+        />
       ))}
       <CardFoot>
         {total > shown || more ? (
@@ -332,8 +408,8 @@ interface DaySidebarProps {
 /**
  * The right sidebar: one day of the vault beside the page. Its header holds
  * the day, previous and next day, the options menu and the toggle. A column
- * of cards below shows the day's activity log, chats, recordings and digest,
- * and reads again when any of them change on disk.
+ * of cards below shows the day's chats, recordings, digest and activity
+ * log, and reads again when any of them change on disk.
  */
 export function DaySidebar({ width }: DaySidebarProps) {
   const { navigateFiles } = useShell();
@@ -434,7 +510,7 @@ export function DaySidebar({ width }: DaySidebarProps) {
 
       <div
         ref={column}
-        className="day-column scrollbar-on-hover flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
+        className="day-column flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
       >
         {pickedDay && pageDay && pickedDay !== pageDay ? (
           <Note>

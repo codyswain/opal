@@ -14,7 +14,8 @@ import {
 
 export const DAY_SIDEBAR_PREFERENCE_KEY = 'daySidebar';
 
-export const DAY_SECTIONS = ['activity', 'chats', 'recordings', 'digest'] as const;
+/** The cards top to bottom, and the options menu's order. The activity log is the least read, so it is last. */
+export const DAY_SECTIONS = ['chats', 'recordings', 'digest', 'activity'] as const;
 export type DaySection = (typeof DAY_SECTIONS)[number];
 
 export const DAY_SECTION_TITLES: Record<DaySection, string> = {

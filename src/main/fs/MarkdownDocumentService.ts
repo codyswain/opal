@@ -26,7 +26,14 @@ export class MarkdownError extends Error {
   constructor(message: string) { super(message); this.name = 'MarkdownError'; }
 }
 export class MarkdownConflictError extends MarkdownError {
-  constructor() { super('This file changed on disk since you opened it.'); this.name = 'MarkdownConflictError'; }
+  constructor(message = 'This file changed on disk since you opened it.') { super(message); this.name = 'MarkdownConflictError'; }
+}
+
+/** The line a `replaceLine` call changes: its 0-based index in the file, its text now and its new text. */
+export interface LineEdit {
+  index: number;
+  expected: string;
+  replacement: string;
 }
 
 export interface MarkdownDocumentServiceDependencies {
@@ -111,31 +118,65 @@ export class MarkdownDocumentService {
       if (typeof body !== 'string') throw new MarkdownError('Body must be text.');
       const loaded = await this.load(target);
       if (loaded.revision !== expectedRevision) throw new MarkdownConflictError();
-      const next = joinMarkdown(loaded, body.replace(/\r\n/g, '\n'));
-      // Saving text that matches the file leaves the file alone.
-      if (next.equals(loaded.bytes)) return { revision: loaded.revision };
-      if (next.length > MARKDOWN_DOCUMENT_LIMIT) throw new MarkdownError('This file is too large to save (16 MiB limit).');
-      const temporary = path.join(path.dirname(loaded.resolved), `.opal-edit-${randomUUID()}`);
-      let mode = 0o644;
-      try { mode = (await stat(loaded.resolved)).mode & 0o777; } catch { /* keep default */ }
-      // Held open across the rename, so lines appended to the old file after the check can still be read.
-      const original = await open(loaded.resolved, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const handle = await open(temporary, 'wx', mode);
-        try { await handle.writeFile(next); await handle.sync(); } finally { await handle.close(); }
-        const checked = await original.readFile();
-        if (revisionOf(checked) !== expectedRevision) throw new MarkdownConflictError();
-        await rename(temporary, loaded.resolved);
-        await carryOverAppend(original, checked, loaded.resolved);
-      } finally {
-        await original.close();
-        await unlink(temporary).catch(() => undefined);
-        this.deps.metadata?.invalidate();
-      }
-      await this.deps.activity?.noteEdited(loaded.resolved);
-      // The revision of what this save wrote: a carried-over append differs from it, so the page merges it in.
-      return { revision: revisionOf(next) };
+      return this.replace(loaded, joinMarkdown(loaded, body.replace(/\r\n/g, '\n')));
     });
+  }
+
+  /**
+   * Changes one line of a file and leaves every other byte as it is, under
+   * the same queue and atomic replace as `write`. `pick` sees the file's
+   * whole text as it is now, BOM and frontmatter included, and names the
+   * line; the write is refused when that line no longer reads `expected`.
+   */
+  replaceLine(target: string, pick: (text: string) => LineEdit): Promise<MarkdownWriteResult> {
+    return this.queue.run(async () => {
+      const loaded = await this.load(target);
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(loaded.bytes);
+      } catch {
+        throw new MarkdownError('This file is not valid UTF-8 text and cannot be edited here.');
+      }
+      const { index, expected, replacement } = pick(text);
+      if (/[\r\n]/.test(expected) || /[\r\n]/.test(replacement)) throw new MarkdownError('A line cannot hold a line break.');
+      const fileLines = text.split('\n');
+      const current = fileLines[index];
+      if (!Number.isInteger(index) || current === undefined || current.replace(/\r$/, '') !== expected) {
+        throw new MarkdownConflictError('This line changed on disk since it was read.');
+      }
+      fileLines[index] = current.endsWith('\r') ? `${replacement}\r` : replacement;
+      return this.replace(loaded, Buffer.from(fileLines.join('\n'), 'utf8'));
+    });
+  }
+
+  /**
+   * Replaces the loaded file with `next` atomically, and refuses when the
+   * file's bytes changed since it was loaded. Runs inside the queue.
+   */
+  private async replace(loaded: LoadedFile, next: Buffer): Promise<MarkdownWriteResult> {
+    // Saving text that matches the file leaves the file alone.
+    if (next.equals(loaded.bytes)) return { revision: loaded.revision };
+    if (next.length > MARKDOWN_DOCUMENT_LIMIT) throw new MarkdownError('This file is too large to save (16 MiB limit).');
+    const temporary = path.join(path.dirname(loaded.resolved), `.opal-edit-${randomUUID()}`);
+    let mode = 0o644;
+    try { mode = (await stat(loaded.resolved)).mode & 0o777; } catch { /* keep default */ }
+    // Held open across the rename, so lines appended to the old file after the check can still be read.
+    const original = await open(loaded.resolved, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const handle = await open(temporary, 'wx', mode);
+      try { await handle.writeFile(next); await handle.sync(); } finally { await handle.close(); }
+      const checked = await original.readFile();
+      if (revisionOf(checked) !== loaded.revision) throw new MarkdownConflictError();
+      await rename(temporary, loaded.resolved);
+      await carryOverAppend(original, checked, loaded.resolved);
+    } finally {
+      await original.close();
+      await unlink(temporary).catch(() => undefined);
+      this.deps.metadata?.invalidate();
+    }
+    await this.deps.activity?.noteEdited(loaded.resolved);
+    // The revision of what this save wrote: a carried-over append differs from it, so the page merges it in.
+    return { revision: revisionOf(next) };
   }
 
   create(parentDir: string, baseName = 'Untitled'): Promise<{ path: string }> {

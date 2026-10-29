@@ -3,6 +3,7 @@ import {
   LOG_LINE,
   chatsForDay,
   newestFirst,
+  digestCheckboxLine,
   parseDigest,
   parseLog,
   parseLogLine,
@@ -229,14 +230,14 @@ describe('digests', () => {
       {
         level: 'top',
         items: [
-          { text: "Orrick at 2:00: get answers on Tom's 409A price and early exercise. Tom's wait (CODY-209) expires at 5pm.", replyDrafted: false },
-          { text: 'Tell Richard Hurley that Friday 2:00pm PT works. He asked "let me know if that works for y\'all?"', replyDrafted: false },
-          { text: 'Give John the NUC or Mac Mini answer. due 0d', replyDrafted: false },
+          { text: "Orrick at 2:00: get answers on Tom's 409A price and early exercise. Tom's wait (CODY-209) expires at 5pm.", replyDrafted: false, detail: null, checked: null, at: null },
+          { text: 'Tell Richard Hurley that Friday 2:00pm PT works. He asked "let me know if that works for y\'all?"', replyDrafted: false, detail: null, checked: null, at: null },
+          { text: 'Give John the NUC or Mac Mini answer. due 0d', replyDrafted: false, detail: null, checked: null, at: null },
         ],
       },
-      { level: 'high', items: [{ text: 'SW-619, mount the 4 torsos. due 0d.', replyDrafted: false }, { text: 'Grant Sol access to the Onshape static-neck document.', replyDrafted: false }] },
-      { level: 'medium', items: [{ text: "RSVP to Said Aram's call, Fri Oct 30 11:00.", replyDrafted: false }, { text: 'Read the Capacity thread again.', replyDrafted: false }] },
-      { level: 'low', items: [{ text: 'Steven Peng asked about a summer 2027 internship. Email', replyDrafted: false }] },
+      { level: 'high', items: [{ text: 'SW-619, mount the 4 torsos. due 0d.', replyDrafted: false, detail: null, checked: null, at: null }, { text: 'Grant Sol access to the Onshape static-neck document.', replyDrafted: false, detail: null, checked: null, at: null }] },
+      { level: 'medium', items: [{ text: "RSVP to Said Aram's call, Fri Oct 30 11:00.", replyDrafted: false, detail: null, checked: null, at: null }, { text: 'Read the Capacity thread again.', replyDrafted: false, detail: null, checked: null, at: null }] },
+      { level: 'low', items: [{ text: 'Steven Peng asked about a summer 2027 internship. Email', replyDrafted: false, detail: null, checked: null, at: null }] },
     ]);
     noEmoji(digest);
   });
@@ -257,11 +258,99 @@ describe('digests', () => {
     ].join('\n'));
     expect(digest.sections).toEqual(['Yesterday', 'The work', 'Skills here']);
     expect(digest.groups).toEqual([
-      { level: 'high', items: [{ text: 'Central processes the Oct 30 payroll at 2:00 PM today.', replyDrafted: false }, { text: 'AWS ALB authentication certificates are due today.', replyDrafted: false }] },
-      { level: 'medium', items: [{ text: '11:00 Lucas 1:1: 750 Zipline boxes made in Kigali for $2,246.', replyDrafted: false }, { text: 'Sourish (PI) has been quiet on the teleop samples for 29 days.', replyDrafted: true }] },
-      { level: 'low', items: [{ text: 'Tom Compas said at 7:11 he will answer on the offer this morning.', replyDrafted: false }] },
+      { level: 'high', items: [{ text: 'Central processes the Oct 30 payroll at 2:00 PM today.', replyDrafted: false, detail: null, checked: null, at: null }, { text: 'AWS ALB authentication certificates are due today.', replyDrafted: false, detail: null, checked: null, at: null }] },
+      { level: 'medium', items: [{ text: '11:00 Lucas 1:1: 750 Zipline boxes made in Kigali for $2,246.', replyDrafted: false, detail: null, checked: null, at: null }, { text: 'Sourish (PI) has been quiet on the teleop samples for 29 days.', replyDrafted: true, detail: null, checked: null, at: null }] },
+      { level: 'low', items: [{ text: 'Tom Compas said at 7:11 he will answer on the offer this morning.', replyDrafted: false, detail: null, checked: null, at: null }] },
     ]);
     noEmoji(digest);
+  });
+
+  it('reads checkbox items with their detail, tick and line, and ignores checkboxes in other sections', () => {
+    const body = [
+      '# Digest, Thu 2026-10-29 (scheduled, 07:00)', '',
+      '## Yesterday', '', '- [ ] Not an item: Yesterday has no checkboxes.', '',
+      '## Top 3', '',
+      '- [ ] **Answer Tom on the 409A price and early exercise**',
+      '  Ask Orrick at the [2:00 monthly check-in](https://orrick.zoom.us/j/1), then reply before 3:30. [CODY-209](https://example.com/map#card=cody-209) expires at 5pm.',
+      '  Use the same call for [EXE-99](https://linear.app/parametricpbc/issue/EXE-99). (reply drafted)',
+      '- [x] **Tell Richard Hurley that Friday 2pm PT works**',
+      '  Only your own block overlaps. [Thread](https://mail.google.com/mail/u/0/#all/1a17) (reply drafted)',
+      '',
+      '- [ ] **Tell John Newsom whether SF Nest gets NUCs or Mac Minis**',
+      '',
+      '  HW-207 is `overdue 1d`.',
+      '\t- [ ] An indented checkbox is detail.', '',
+      '## Also worth doing', '',
+      '- [ ] **Urgent: Mount the 4 torsos and the mobile robot at the SF site**',
+      '  [SW-619](https://linear.app/parametricpbc/issue/SW-619) `due 0d`.',
+      '1. [X] **High: Grant Sol access to the Onshape static-neck document**',
+      '* [ ] **Medium: RSVP to Said Aram\'s Parametric & ACT call, Fri Oct 30 11:00**',
+      '  It is still unanswered. `untracked`',
+      '- [ ] **Low: Reply to Steven Peng about a summer 2027 internship** (reply drafted)',
+      '- [ ] **Read the Capacity thread again**',
+      ' One space is not detail, and ends the item.',
+      '',
+      '## Notes', '', '- [ ] Not an item either.',
+    ];
+    const digest = parseDigest(['---', 'written_by: ai', '---', ...body].join('\n'));
+    const at = (raw: string) => ({ line: body.indexOf(raw), raw });
+    expect(digest.sections).toEqual(['Yesterday', 'Top 3', 'Also worth doing', 'Notes']);
+    expect(digest.groups).toEqual([
+      {
+        level: 'top',
+        items: [
+          {
+            text: 'Answer Tom on the 409A price and early exercise',
+            detail: 'Ask Orrick at the 2:00 monthly check-in, then reply before 3:30. CODY-209 expires at 5pm. Use the same call for EXE-99.',
+            replyDrafted: true,
+            checked: false,
+            at: at('- [ ] **Answer Tom on the 409A price and early exercise**'),
+          },
+          {
+            text: 'Tell Richard Hurley that Friday 2pm PT works',
+            detail: 'Only your own block overlaps. Thread',
+            replyDrafted: true,
+            checked: true,
+            at: at('- [x] **Tell Richard Hurley that Friday 2pm PT works**'),
+          },
+          {
+            text: 'Tell John Newsom whether SF Nest gets NUCs or Mac Minis',
+            detail: 'HW-207 is overdue 1d. - [ ] An indented checkbox is detail.',
+            replyDrafted: false,
+            checked: false,
+            at: at('- [ ] **Tell John Newsom whether SF Nest gets NUCs or Mac Minis**'),
+          },
+        ],
+      },
+      {
+        level: 'high',
+        items: [
+          { text: 'Mount the 4 torsos and the mobile robot at the SF site', detail: 'SW-619 due 0d.', replyDrafted: false, checked: false, at: at('- [ ] **Urgent: Mount the 4 torsos and the mobile robot at the SF site**') },
+          { text: 'Grant Sol access to the Onshape static-neck document', detail: null, replyDrafted: false, checked: true, at: at('1. [X] **High: Grant Sol access to the Onshape static-neck document**') },
+        ],
+      },
+      {
+        level: 'medium',
+        items: [
+          { text: "RSVP to Said Aram's Parametric & ACT call, Fri Oct 30 11:00", detail: 'It is still unanswered. untracked', replyDrafted: false, checked: false, at: at("* [ ] **Medium: RSVP to Said Aram's Parametric & ACT call, Fri Oct 30 11:00**") },
+          { text: 'Read the Capacity thread again', detail: null, replyDrafted: false, checked: false, at: at('- [ ] **Read the Capacity thread again**') },
+        ],
+      },
+      {
+        level: 'low',
+        items: [
+          { text: 'Reply to Steven Peng about a summer 2027 internship', detail: null, replyDrafted: true, checked: false, at: at('- [ ] **Low: Reply to Steven Peng about a summer 2027 internship** (reply drafted)') },
+        ],
+      },
+    ]);
+  });
+
+  it('ticks or clears only the character between the brackets', () => {
+    expect(digestCheckboxLine('- [ ] **Answer Tom** [x](https://x.test)', true)).toBe('- [x] **Answer Tom** [x](https://x.test)');
+    expect(digestCheckboxLine('12. [X] **Done**', false)).toBe('12. [ ] **Done**');
+    expect(digestCheckboxLine('- [x] Already', true)).toBe('- [x] Already');
+    expect(digestCheckboxLine('  - [ ] indented', true)).toBeNull();
+    expect(digestCheckboxLine('- plain item', true)).toBeNull();
   });
 
   it('gives a digest with only sections no groups', () => {

@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   DAY_SIDEBAR_PREFERENCE_KEY,
   DEFAULT_DAY_SIDEBAR_PREFERENCES,
@@ -21,7 +22,7 @@ import {
 import { DEFAULT_SHELL_PREFERENCES, ShellProvider, useShellStore } from '@/renderer/features/shell';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
-import type { DayLogEntry, VaultDay, VaultDayChange } from '@/types/day';
+import type { DayChat, DayDigestItem, DayLogEntry, VaultDay, VaultDayChange } from '@/types/day';
 import type { VaultAPI } from '@/types/vault';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
@@ -40,6 +41,30 @@ const entry = (time: string, text: string, kind: string | null, links: DayLogEnt
   text,
   kind,
   links,
+});
+
+/** An item from a digest written before checkboxes. */
+const oldItem = (text: string, replyDrafted = false): DayDigestItem => ({ text, detail: null, replyDrafted, checked: null, at: null });
+
+/** A checkbox item on `line` of the digest's body. */
+const box = (line: number, text: string, detail: string | null, checked = false, replyDrafted = false): DayDigestItem => ({
+  text,
+  detail,
+  replyDrafted,
+  checked,
+  at: { line, raw: `- [${checked ? 'x' : ' '}] **${text}**` },
+});
+
+const chat = (slug: string, title: string, last: string, extra: Partial<DayChat> = {}): DayChat => ({
+  path: `${ROOT}/Library/chats/${slug}.md`,
+  title,
+  status: 'active',
+  tool: 'claude',
+  isNew: false,
+  created: null,
+  last,
+  prompts: 1,
+  ...extra,
 });
 
 function oct28(): VaultDay {
@@ -66,10 +91,12 @@ function oct28(): VaultDay {
       entry('08:54', 'The untethered SN1 ranked first for the SF mast and tether.', null),
     ],
     chats: [
-      { path: `${ROOT}/Library/chats/model-training.md`, title: 'Model Training', status: 'active', tool: 'claude', isNew: false, created: '2026-10-20 10:00', last: '23:31', prompts: 4 },
-      { path: `${ROOT}/Library/chats/opal-status.md`, title: 'Opal status', status: 'active', tool: 'claude', isNew: true, created: '2026-10-28 20:00', last: '23:07', prompts: 9 },
-      { path: `${ROOT}/Library/chats/bit-shell.md`, title: 'Bit0.2 Shell', status: 'active', tool: 'codex', isNew: false, created: null, last: '22:12', prompts: 1 },
-      { path: `${ROOT}/Library/chats/old.md`, title: 'Old thread', status: 'archived', tool: null, isNew: false, created: null, last: '09:00', prompts: 0 },
+      chat('model-training', 'Model Training', '23:31', { created: '2026-10-20 10:00', prompts: 4 }),
+      chat('opal-status', 'Opal status', '23:07', { isNew: true, created: '2026-10-28 20:00', prompts: 9 }),
+      chat('bit-shell', 'Bit0.2 Shell', '22:12', { tool: 'codex' }),
+      ...['21:00', '20:00', '19:00', '18:00', '17:00'].map((last, index) => chat(`thread-${index}`, `Thread ${index + 1}`, last)),
+      chat('old', 'Old thread', '09:00', { status: 'archived', tool: null, prompts: 0 }),
+      chat('older', 'Older thread', '08:00'),
     ],
     recordings: [
       ['13:04', 'John Cody Planning', 137],
@@ -95,13 +122,13 @@ function oct28(): VaultDay {
         {
           level: 'top',
           items: [
-            { text: 'Central processes the Oct 30 payroll at 2:00 PM today.', replyDrafted: false },
-            { text: 'AWS ALB authentication certificates are due today.', replyDrafted: true },
-            { text: 'Reply to Sol about the Brex request.', replyDrafted: false },
+            oldItem('Central processes the Oct 30 payroll at 2:00 PM today.'),
+            oldItem('AWS ALB authentication certificates are due today.', true),
+            oldItem('Reply to Sol about the Brex request.'),
           ],
         },
-        { level: 'high', items: [{ text: 'Check the SF nest rack.', replyDrafted: false }] },
-        { level: 'low', items: [{ text: 'Read the blog draft.', replyDrafted: false }] },
+        { level: 'high', items: [oldItem('Check the SF nest rack.')] },
+        { level: 'low', items: [oldItem('Read the blog draft.')] },
       ],
       sections: [],
     },
@@ -119,6 +146,10 @@ function installVaultApi() {
     discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT, name: 'Vault' }] })),
     createDay: vi.fn(async () => ({ success: true as const, data: { path: DAILY } })),
     day: vi.fn(async (_root: string, date: string) => ({ success: true as const, data: days[date] ?? empty(date) })),
+    checkDigestItem: vi.fn(async (_root: string, _path: string, line: number, raw: string, checked: boolean) => ({
+      success: true as const,
+      data: { line, raw: raw.replace(/\[[ xX]\]/, checked ? '[x]' : '[ ]'), checked },
+    })),
     onDayChanged: vi.fn((callback: (change: VaultDayChange) => void) => {
       changed = callback;
       return () => {
@@ -333,13 +364,23 @@ describe('DaySidebar', () => {
     expect(within(log).getByRole('button', { name: 'FedEx dataset note' })).toBeInTheDocument();
     expect(within(log).getByRole('button', { name: '+2' })).toBeInTheDocument();
 
+    // Chats first and the activity log last.
+    expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
+      'Chats',
+      'Recordings',
+      'Digest',
+      'Activity log',
+    ]);
+
     const chats = card('Chats');
-    expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent('1 new · 4');
+    expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent('1 new · 10');
     expect(within(chats).getByText('Model Training')).toBeInTheDocument();
     expect(within(chats).getByText('New')).toBeInTheDocument();
     expect(within(chats).getByText('Codex')).toBeInTheDocument();
+    // Eight at rest.
+    expect(within(chats).getByText('Thread 5')).toBeInTheDocument();
     expect(within(chats).queryByText('Old thread')).toBeNull();
-    expect(within(chats).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+    expect(within(chats).getByRole('button', { name: 'Show 2 more' })).toBeInTheDocument();
 
     const recordings = card('Recordings');
     expect(within(recordings).getByText('137 min')).toBeInTheDocument();
@@ -424,17 +465,96 @@ describe('DaySidebar', () => {
     open.mockRestore();
   });
 
-  it('opens a recording in place to who was there, the note and its links', async () => {
+  it('opens a recording page in this tab, and in a new tab on Cmd-click', async () => {
     const user = userEvent.setup();
     openTabs([DAILY]);
     renderSidebar();
     const recordings = await screen.findByRole('region', { name: 'Recordings' });
-    await user.click(within(recordings).getByRole('button', { name: /John Cody Planning/ }));
-    expect(within(recordings).getByText('Google Meet, no notes yet')).toBeInTheDocument();
-    expect(within(recordings).getByText('john@example.com')).toBeInTheDocument();
-    expect(within(recordings).getByRole('link', { name: /Notes by Gemini\s*Google Docs/ })).toBeInTheDocument();
-    await user.click(within(recordings).getByRole('button', { name: /Recording note/ }));
-    expect(openedPath()).toBe(recording('13:04', 'John Cody Planning'));
+    const row = within(recordings).getByRole('button', { name: /John Cody Planning/ });
+    expect(row).not.toHaveAttribute('aria-expanded');
+    expect(row.title).toContain('Google Meet, no notes yet.\njohn@example.com');
+    await user.click(row);
+    expect(tabPaths()).toEqual([recording('13:04', 'John Cody Planning')]);
+
+    await user.keyboard('{Meta>}');
+    await user.click(within(card('Recordings')).getByRole('button', { name: /Lucas x Cody/ }));
+    await user.keyboard('{/Meta}');
+    expect(tabPaths()).toEqual([recording('13:04', 'John Cody Planning'), recording('11:15', 'Lucas x Cody 1-1 Synch')]);
+  });
+
+  it('shows the digest as checkboxes with their detail, and writes a tick to the digest file', async () => {
+    const user = userEvent.setup();
+    const LONG = 'Ask Orrick at the 2:00 monthly check-in, then reply before your PTO starts at 3:30.';
+    days['2026-10-28'] = {
+      ...oct28(),
+      digest: {
+        path: DIGEST,
+        title: 'Digest',
+        groups: [
+          {
+            level: 'top',
+            items: [
+              box(4, 'Answer Tom on the 409A price and early exercise', LONG, false, true),
+              box(7, 'Tell Richard Hurley that Friday 2pm PT works', null, true),
+            ],
+          },
+          { level: 'high', items: [box(12, 'Grant Sol access to the Onshape static-neck document', 'He asked on HW-196.')] },
+        ],
+        sections: ['Yesterday', 'Top 3', 'Also worth doing'],
+      },
+    };
+    openTabs([DAILY]);
+    const api = window.vaultAPI;
+    renderSidebar();
+    const digest = await screen.findByRole('region', { name: 'Digest' });
+    const tom = within(digest).getByRole('checkbox', { name: 'Answer Tom on the 409A price and early exercise' });
+    const rich = within(digest).getByRole('checkbox', { name: 'Tell Richard Hurley that Friday 2pm PT works' });
+    expect(tom).toHaveAttribute('aria-checked', 'false');
+    expect(rich).toHaveAttribute('aria-checked', 'true');
+    expect(within(digest).getByText('Reply drafted')).toBeInTheDocument();
+
+    // The detail is muted and clamped; its tooltip has all of it, and a click shows it in place.
+    const detail = within(digest).getByText(LONG);
+    expect(detail).toHaveClass('line-clamp-2', 'text-foreground-tertiary');
+    const text = within(digest).getByRole('button', { name: /^Answer Tom/ });
+    expect(text).toHaveAttribute('title', LONG);
+    await user.click(text);
+    expect(text).toHaveAttribute('aria-expanded', 'true');
+    expect(detail).not.toHaveClass('line-clamp-2');
+    // Reading the detail never ticks the box or opens the digest.
+    expect(tom).toHaveAttribute('aria-checked', 'false');
+    expect(tabPaths()).toEqual([DAILY]);
+
+    await user.click(tom);
+    expect(api.checkDigestItem).toHaveBeenCalledWith(ROOT, DIGEST, 4, '- [ ] **Answer Tom on the 409A price and early exercise**', true);
+    await waitFor(() => expect(tom).toHaveAttribute('aria-checked', 'true'));
+    // A second click before the day is read again sends the line as it is now.
+    await user.click(tom);
+    await waitFor(() =>
+      expect(api.checkDigestItem).toHaveBeenLastCalledWith(ROOT, DIGEST, 4, '- [x] **Answer Tom on the 409A price and early exercise**', false),
+    );
+    await waitFor(() => expect(tom).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('puts a tick back and says why when the main process refuses it', async () => {
+    const user = userEvent.setup();
+    days['2026-10-28'] = {
+      ...oct28(),
+      digest: { path: DIGEST, title: 'Digest', groups: [{ level: 'top', items: [box(4, 'Answer Tom', null)] }], sections: [] },
+    };
+    vi.mocked(installVaultApi().checkDigestItem).mockResolvedValue({
+      success: false,
+      error: 'This item changed in the digest since it was read.',
+    });
+    const error = vi.spyOn(toast, 'error').mockImplementation(() => 0);
+    openTabs([DAILY]);
+    renderSidebar();
+    const tom = await screen.findByRole('checkbox', { name: 'Answer Tom' });
+    await user.click(tom);
+    await waitFor(() => expect(error).toHaveBeenCalledWith('This item changed in the digest since it was read.'));
+    expect(tom).toHaveAttribute('aria-checked', 'false');
+    expect(tom).toBeEnabled();
+    error.mockRestore();
   });
 
   it('folds a card to its summary and remembers it', async () => {

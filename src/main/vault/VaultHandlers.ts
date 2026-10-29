@@ -14,6 +14,11 @@ const target = (value: unknown): value is string =>
   nonempty(value) && path.isAbsolute(value);
 const date = (value: unknown): value is string =>
   typeof value === "string" && validDate(value);
+const lineIndex = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1_000_000;
+/** One line of text, as a checkbox line is read. */
+const oneLine = (value: unknown): value is string =>
+  nonempty(value, 8192) && !/[\r\n]/.test(value);
 const invalid = (): VaultResult<never> => ({
   success: false,
   error: "Invalid vault request.",
@@ -39,6 +44,13 @@ export class VaultHandlers {
       target(root) && date(day)
         ? this.respond(() => days.day(root, day))
         : invalid(),
+    );
+    ipc.handle(
+      "vault:check-digest-item",
+      (_, root: unknown, file: unknown, line: unknown, raw: unknown, checked: unknown) =>
+        target(root) && target(file) && lineIndex(line) && oneLine(raw) && typeof checked === "boolean"
+          ? this.respond(() => service.checkDigestItem(root, file, line, raw, checked))
+          : invalid(),
     );
   }
 

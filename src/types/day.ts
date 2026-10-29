@@ -60,9 +60,19 @@ export interface DayRecording {
 export type DigestLevel = 'high' | 'medium' | 'low';
 
 export interface DayDigestItem {
-  /** Plain text, with no priority emoji or priority word. */
+  /** Plain text, with no priority emoji or priority word. For a checkbox item, its one-line title. */
   text: string;
+  /** The lines indented under a checkbox item, as plain text, or null when it has none. */
+  detail: string | null;
   replyDrafted: boolean;
+  /** Whether a checkbox item is ticked; null for an item with no checkbox, as in older digests. */
+  checked: boolean | null;
+  /**
+   * Where a checkbox item is: its 0-based line in the body after the
+   * frontmatter, and that line exactly as read. A tick names both, so the
+   * main process can refuse a line that changed. Null with no checkbox.
+   */
+  at: { line: number; raw: string } | null;
 }
 
 export interface DayDigestGroup {
