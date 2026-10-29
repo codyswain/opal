@@ -61,18 +61,17 @@ describe('files router locations', () => {
   });
 
   it('builds intents and names the path a place shows', () => {
-    expect(browseRecent()).toEqual({ location: RECENT, history: 'push' });
-    expect(focusFile('/Vault/a.md', 'replace')).toEqual({ location: fileLocation('/Vault/a.md'), history: 'replace' });
+    expect(browseRecent()).toEqual({ location: RECENT });
+    expect(focusFile('/Vault/a.md')).toEqual({ location: fileLocation('/Vault/a.md') });
     expect(locationPath(RECENT)).toBeNull();
     expect(locationPath(fileLocation(FILE))).toBe(FILE);
   });
 
-  it('remaps a file with replace semantics and leaves Recent alone', () => {
-    expect(remapFilesLocation(fileLocation(FILE), '/Vault/Notes', '/Vault/Writing')).toEqual({
-      location: fileLocation('/Vault/Writing/Today #1%.md'),
-      history: 'replace',
-    });
-    expect(remapFilesLocation(fileLocation(FILE), '/Vault/Other', '/Vault/Moved').history).toBe('none');
-    expect(remapFilesLocation(RECENT, '/Vault/Notes', '/Vault/Writing')).toEqual({ location: RECENT, history: 'none' });
+  it('remaps a file under a moved folder and leaves the rest alone', () => {
+    expect(remapFilesLocation(fileLocation(FILE), '/Vault/Notes', '/Vault/Writing')).toEqual(
+      fileLocation('/Vault/Writing/Today #1%.md')
+    );
+    expect(remapFilesLocation(fileLocation(FILE), '/Vault/Other', '/Vault/Moved')).toEqual(fileLocation(FILE));
+    expect(remapFilesLocation(RECENT, '/Vault/Notes', '/Vault/Writing')).toEqual(RECENT);
   });
 });

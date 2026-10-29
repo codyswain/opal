@@ -3,12 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, useNavigationType, useRoutes, type RouteObject } from 'react-router-dom';
-import {
-  browseRecent,
-  fileLocation,
-  focusFile,
-} from '@/renderer/features/disk-explorer/navigation/filesLocation';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { browseRecent, focusFile } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import {
   DEFAULT_SHELL_PREFERENCES,
   SHELL_LIMITS,
@@ -171,15 +166,6 @@ function ShellConsumer() {
       >
         Note in a new tab
       </button>
-      <button type="button" onClick={() => shell.navigateFiles(focusFile('/Ignored/a.md', 'none'))}>
-        No route change
-      </button>
-      <button
-        type="button"
-        onClick={() => shell.navigateFiles(focusFile('/Vault/note.md', 'replace'))}
-      >
-        Replace with note
-      </button>
     </>
   );
 }
@@ -227,20 +213,9 @@ describe('shell navigation contract', () => {
     renderShell('/files');
     await user.click(screen.getByRole('button', { name: 'Recent' }));
     await user.click(screen.getByRole('button', { name: 'Note in a new tab' }));
-    await user.click(screen.getByRole('button', { name: 'No route change' }));
     expect(tabPaths()).toEqual([null, '/Vault/note.md']);
     // On the files route the route itself mirrors the tab into the URL.
     expect(screen.getByTestId('router-location')).toHaveTextContent(/^\/files$/);
-  });
-
-  it('swaps the shown entry for a replace intent instead of adding a step', async () => {
-    const user = userEvent.setup();
-    renderShell('/files');
-    await user.click(screen.getByRole('button', { name: 'Recent' }));
-    await user.click(screen.getByRole('button', { name: 'Replace with note' }));
-    expect(useTabsStore.getState().tabs[0].history).toEqual([
-      { location: fileLocation('/Vault/note.md') },
-    ]);
   });
 
   it('goes to the files route when an intent comes from another route, without a history step', async () => {

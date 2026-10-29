@@ -11,7 +11,10 @@ import {
   selectCanGoForward,
   selectCurrentLocation,
   selectLaunchLocation,
+  selectOpenedPath,
+  tabFile,
   useTabsStore,
+  type TabsStore,
 } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import { openTabs, openedPath, resetTabs, tabId, tabPaths } from '@/tests/helpers/tabs';
@@ -105,12 +108,10 @@ describe('history per tab', () => {
     expect(tabPaths()).toEqual([A, C]);
   });
 
-  it('adds no step for the place already shown, and swaps it with replace', () => {
+  it('adds no step for the place already shown', () => {
     open(A);
     open(A);
     expect(state().tabs[0].history).toHaveLength(1);
-    state().open(fileLocation(B), { replace: true });
-    expect(state().tabs[0].history.map((entry) => entry.location)).toEqual([fileLocation(B)]);
   });
 
   it('remembers the scroll of one entry', () => {
@@ -212,43 +213,50 @@ describe('ordering and selection', () => {
   });
 });
 
+/** The tabs a fresh launch restores: the store module reads the saved session again. */
+async function relaunch(): Promise<TabsStore> {
+  vi.resetModules();
+  const launched = await import('@/renderer/features/disk-explorer/store/tabsStore');
+  return launched.useTabsStore.getState();
+}
+
 describe('persistence', () => {
-  it('restores the tabs, their history and the active tab', () => {
+  it('restores the tabs, their history and the active tab', async () => {
     open(A);
     open(B);
     open(C, true);
     state().activate(tabId(0));
-    const restored = state().hydrate();
+    const restored = await relaunch();
     expect(restored.tabs.map((tab) => tab.history.length)).toEqual([2, 1]);
     expect(restored.tabs[0].index).toBe(1);
-    expect(openedPath()).toBe(B);
+    expect(selectOpenedPath(restored)).toBe(B);
   });
 
-  it('records the day of the session, which launch compares with today', () => {
+  it('records the day of the session, which launch compares with today', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 27, 18));
     open(A);
     vi.setSystemTime(new Date(2026, 9, 28, 9));
-    expect(state().hydrate().lastSessionDate).toBe('2026-10-27');
+    expect((await relaunch()).lastSessionDate).toBe('2026-10-27');
   });
 
-  it('goes back to the restored tab on launch only on the same day', () => {
+  it('goes back to the restored tab on launch only on the same day', async () => {
     open(A);
-    const restored = state().hydrate();
+    const restored = await relaunch();
     expect(selectLaunchLocation(restored, restored.lastSessionDate ?? '')).toEqual(fileLocation(A));
     expect(selectLaunchLocation(restored, '2999-01-01')).toBeNull();
     resetTabs();
     expect(selectLaunchLocation(state(), '2026-10-28')).toBeNull();
   });
 
-  it('reads tabs saved before tabs had history', () => {
+  it('reads tabs saved before tabs had history', async () => {
     writePref('tabs.open', [A, 'not absolute', B]);
-    const restored = state().hydrate();
-    expect(tabPaths()).toEqual([A, B]);
+    const restored = await relaunch();
+    expect(restored.tabs.map(tabFile)).toEqual([A, B]);
     expect(restored.lastSessionDate).toBeNull();
   });
 
-  it('drops corrupt entries instead of failing the launch', () => {
+  it('drops corrupt entries instead of failing the launch', async () => {
     writePref('tabs.session', {
       date: '2026-10-28',
       active: 1,
@@ -257,13 +265,13 @@ describe('persistence', () => {
         { history: [{ location: fileLocation(A), scrollTop: -5 }, { location: RECENT }], index: 9 },
       ],
     });
-    state().hydrate();
-    expect(state().tabs).toHaveLength(1);
-    expect(state().tabs[0].index).toBe(1);
-    expect(state().tabs[0].history[0]).toEqual({ location: fileLocation(A) });
+    const restored = await relaunch();
+    expect(restored.tabs).toHaveLength(1);
+    expect(restored.tabs[0].index).toBe(1);
+    expect(restored.tabs[0].history[0]).toEqual({ location: fileLocation(A) });
   });
 
-  it('drops folder pages saved before they were removed, and reads files saved with their folder', () => {
+  it('drops folder pages saved before they were removed, and reads files saved with their folder', async () => {
     writePref('tabs.session', {
       date: '2026-10-28',
       active: 0,
@@ -278,9 +286,9 @@ describe('persistence', () => {
         { history: [{ location: { mode: 'browse', collection: { kind: 'directory', directory: '/V/Library' } } }], index: 0 },
       ],
     });
-    state().hydrate();
-    expect(state().tabs.map((tab) => tab.history.map((entry) => entry.location))).toEqual([[fileLocation(A)]]);
-    expect(state().tabs[0].index).toBe(0);
+    const restored = await relaunch();
+    expect(restored.tabs.map((tab) => tab.history.map((entry) => entry.location))).toEqual([[fileLocation(A)]]);
+    expect(restored.tabs[0].index).toBe(0);
   });
 
   it('keeps no more than fifty history entries per tab', () => {

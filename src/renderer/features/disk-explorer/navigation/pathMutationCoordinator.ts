@@ -2,7 +2,6 @@ import {
   isAbsoluteFsPath,
   isFsPathAtOrBelow,
   normalizeFsPath,
-  remapFsPath,
 } from '@/common/fsPaths';
 
 export type AppPathMutationKind = 'rename' | 'move';
@@ -43,7 +42,6 @@ export interface PathMutationCoordinator {
   applyExternalRemoval(paths: readonly string[]): boolean;
   applyRootRemoval(rootPath: string): boolean;
   reconcileAllowedRoots(roots: readonly string[]): boolean;
-  getAllowedRoots(): readonly string[] | null;
 }
 
 function normalizedMutation(
@@ -87,7 +85,6 @@ function normalizedAllowedRoots(roots: readonly string[]): string[] | null {
 
 export function createPathMutationCoordinator(): PathMutationCoordinator {
   const participants = new Map<string, PathMutationParticipant>();
-  let allowedRoots: string[] | null = null;
 
   const prepare = (
     callback: (participant: PathMutationParticipant) =>
@@ -133,15 +130,6 @@ export function createPathMutationCoordinator(): PathMutationCoordinator {
       prepare((participant) =>
         participant.prepareAppMutation?.(normalized)
       );
-      if (allowedRoots) {
-        allowedRoots = [
-          ...new Set(
-            allowedRoots.map((root) =>
-              remapFsPath(root, normalized.oldPath, normalized.newPath)
-            )
-          ),
-        ];
-      }
       return true;
     },
     applyExternalRemoval(paths) {
@@ -155,15 +143,9 @@ export function createPathMutationCoordinator(): PathMutationCoordinator {
     applyRootRemoval(rootPath) {
       const normalized = normalizedRemovalPaths([rootPath]);
       if (normalized.length !== 1) return false;
-      const removedRoot = normalized[0];
       prepare((participant) =>
         participant.preparePathRemoval?.(normalized, 'root-removed')
       );
-      if (allowedRoots) {
-        allowedRoots = allowedRoots.filter(
-          (root) => !isFsPathAtOrBelow(removedRoot, root)
-        );
-      }
       return true;
     },
     reconcileAllowedRoots(roots) {
@@ -172,11 +154,7 @@ export function createPathMutationCoordinator(): PathMutationCoordinator {
       prepare((participant) =>
         participant.prepareAllowedRoots?.(normalized)
       );
-      allowedRoots = normalized;
       return true;
-    },
-    getAllowedRoots() {
-      return allowedRoots ? [...allowedRoots] : null;
     },
   };
 }

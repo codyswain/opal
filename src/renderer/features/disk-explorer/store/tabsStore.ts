@@ -62,8 +62,6 @@ export interface ClosedTab {
 export interface OpenOptions {
   /** Open beside the active tab instead of in it. */
   newTab?: boolean;
-  /** Swap the entry the tab shows instead of adding a history step. */
-  replace?: boolean;
 }
 
 export interface TabsActions {
@@ -90,7 +88,6 @@ export interface TabsActions {
   move: (from: number, to: number) => void;
   /** Remembers the scroll of one entry, so Back and switching tabs return to it. */
   saveScroll: (id: string, index: number, scrollTop: number) => void;
-  hydrate: () => TabsState;
 }
 
 export type TabsStore = TabsState & TabsActions;
@@ -262,12 +259,6 @@ function openState(
     return { tabs: insertBesideActive(state, tab), activeId: tab.id };
   }
   if (filesLocationKey(tabLocation(active)) === filesLocationKey(location)) return {};
-  if (options.replace) {
-    const history = active.history.map((entry, index) =>
-      index === active.index ? { location } : entry
-    );
-    return { tabs: replaceTab(state.tabs, { ...active, history }) };
-  }
   const history = [...active.history.slice(0, active.index + 1), { location }].slice(
     -HISTORY_LIMIT
   );
@@ -406,25 +397,11 @@ export const useTabsStore = create<TabsStore>((set, get) => {
         );
         return { tabs: replaceTab(state.tabs, { ...tab, history }) };
       }),
-
-    hydrate: () => {
-      const restored: TabsState = {
-        ...restoredSession(),
-        recentlyClosed: get().recentlyClosed,
-      };
-      const allowedRoots = pathMutationCoordinator.getAllowedRoots();
-      const next = allowedRoots
-        ? retainTabsWithinRoots(restored, allowedRoots)
-        : restored;
-      set(next);
-      return next;
-    },
   };
 });
 
 function remapEntry(entry: TabEntry, mutation: AppPathMutation): TabEntry {
-  const { location } = remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath);
-  return { ...entry, location };
+  return { ...entry, location: remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath) };
 }
 
 function remapTab(tab: Tab, mutation: AppPathMutation): Tab {

@@ -47,11 +47,7 @@ export function ShellProvider({ children }: ShellProviderProps) {
   );
   const navigateFiles = React.useCallback(
     (intent: FilesNavigationIntent, options: Pick<OpenOptions, 'newTab'> = {}) => {
-      if (intent.history === 'none') return;
-      useTabsStore.getState().open(intent.location, {
-        newTab: options.newTab,
-        replace: intent.history === 'replace',
-      });
+      useTabsStore.getState().open(intent.location, { newTab: options.newTab });
       if (pathname.current !== FILES_ROUTE_PATH)
         navigate(
           { pathname: FILES_ROUTE_PATH, search: serializeFilesLocation(intent.location) },

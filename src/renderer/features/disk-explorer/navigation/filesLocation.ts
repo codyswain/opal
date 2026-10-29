@@ -7,8 +7,6 @@ import {
 
 export const FILES_ROUTE_PATH = '/files';
 
-export type FilesHistoryMutation = 'push' | 'replace' | 'none';
-
 /** Recent is the one list a tab can browse; folders browse in the sidebar tree. */
 export interface FilesCollection {
   kind: 'recent';
@@ -31,7 +29,6 @@ export type FilesLocation = FilesBrowseLocation | FilesFocusLocation;
 
 export interface FilesNavigationIntent {
   location: FilesLocation;
-  history: FilesHistoryMutation;
 }
 
 /** The file a place shows; Recent has none. */
@@ -89,10 +86,8 @@ export function filesLocationKey(location: FilesLocation): string {
   return serializeFilesLocation(location);
 }
 
-export function browseRecent(
-  history: FilesHistoryMutation = 'push'
-): FilesNavigationIntent {
-  return { location: { mode: 'browse', collection: RECENT_COLLECTION }, history };
+export function browseRecent(): FilesNavigationIntent {
+  return { location: { mode: 'browse', collection: RECENT_COLLECTION } };
 }
 
 /** A file shown in a tab. */
@@ -100,22 +95,16 @@ export function fileLocation(file: string): FilesFocusLocation {
   return { mode: 'focus', file: normalizeFsPath(file) };
 }
 
-export function focusFile(
-  file: string,
-  history: FilesHistoryMutation = 'push'
-): FilesNavigationIntent {
-  return { location: fileLocation(file), history };
+export function focusFile(file: string): FilesNavigationIntent {
+  return { location: fileLocation(file) };
 }
 
+/** The place after a rename or move; Recent and files outside it stay as they are. */
 export function remapFilesLocation(
   location: FilesLocation,
   oldPath: string,
   newPath: string
-): FilesNavigationIntent {
-  if (location.mode === 'browse') return { location, history: 'none' };
-  const remapped = fileLocation(remapFsPath(location.file, oldPath, newPath));
-  return {
-    location: remapped,
-    history: remapped.file === location.file ? 'none' : 'replace',
-  };
+): FilesLocation {
+  if (location.mode === 'browse') return location;
+  return fileLocation(remapFsPath(location.file, oldPath, newPath));
 }

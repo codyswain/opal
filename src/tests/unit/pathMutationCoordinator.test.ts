@@ -5,7 +5,6 @@ import {
 } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
-import { writePref } from '@/renderer/shared/prefs/prefs';
 import { entry } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, tabPaths } from '@/tests/helpers/tabs';
 
@@ -150,14 +149,6 @@ describe('path mutation coordination', () => {
     expect(prepare).toHaveBeenCalledWith([NOTES], 'external');
   });
 
-  it('keeps its allowed-root authority aligned with root mutations', () => {
-    const coordinator = createPathMutationCoordinator();
-    coordinator.reconcileAllowedRoots([ROOT, '/Other']);
-    coordinator.applyRootRemoval(ROOT);
-
-    expect(coordinator.getAllowedRoots()).toEqual(['/Other']);
-  });
-
   it('atomically remaps disk state and tabs', () => {
     expect(
       pathMutationCoordinator.applyAppMutation({
@@ -218,11 +209,6 @@ describe('path mutation coordination', () => {
 
     expect(tabPaths()).toEqual([NOTE]);
     expect(openedPath()).toBe(NOTE);
-
-    window.localStorage.clear();
-    writePref('tabs.open', [NOTE, '/Removed/restored.md']);
-    useTabsStore.getState().hydrate();
-    expect(tabPaths()).toEqual([NOTE]);
   });
 
   it('does not treat a similarly prefixed sibling as part of the subtree', () => {
