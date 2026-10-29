@@ -33,6 +33,8 @@
 .opal-editor .cm-editor .cm-scroller {
   font-family: inherit;
   line-height: var(--editor-line);
+  /* The column holds still when a page starts or stops scrolling. */
+  scrollbar-gutter: stable;
 }
 
 .opal-editor .cm-editor .cm-content {
@@ -113,6 +115,7 @@
   text-underline-offset: 0.2em;
 }
 
+.opal-editor .cm-editor .cm-md-link,
 .opal-editor .cm-editor .cm-md-wikilink {
   cursor: pointer;
 }
@@ -131,7 +134,9 @@
 }
 
 /* Lists: the marker sits in a box as wide as the indent, so wrapped lines
-   hang under the item's text. --list-indent comes from the line. */
+   hang under the item's text. --list-indent comes from the line. A number
+   wider than the box, such as "10.", runs out to its left, as browsers draw
+   list numbers, and never wraps. */
 /* .cm-line raises these over the quote rules below, whose indent they add to. */
 .opal-editor .cm-editor .cm-line.cm-md-list,
 .opal-editor .cm-editor .cm-line.cm-md-list-cont {
@@ -151,6 +156,8 @@
   padding-right: 0.55em;
   text-indent: 0;
   color: var(--editor-muted);
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .opal-editor .cm-editor .cm-md-bullet {
@@ -163,7 +170,9 @@
 }
 
 .opal-editor .cm-editor .cm-md-number {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .opal-editor .cm-editor .cm-md-task {
@@ -283,6 +292,17 @@
   padding: 0.35em 0;
 }
 
+/* A table wider than the column keeps a scrollbar in view, so its cut edge
+   reads as one that scrolls. */
+.opal-editor .cm-editor .cm-md-table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.opal-editor .cm-editor .cm-md-table-scroll::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background-color: hsl(var(--foreground) / 0.18);
+}
+
 .opal-editor .cm-editor .cm-md-table table {
   border-collapse: collapse;
   font-size: 0.9375em;
@@ -302,6 +322,12 @@
 
 .opal-editor .cm-editor .cm-md-table th {
   font-weight: 700;
+}
+
+/* The cell a click put the caret in, while the table stays drawn. */
+.opal-editor .cm-editor .cm-md-table .cm-md-cell-caret {
+  outline: 2px solid hsl(var(--foreground) / 0.4);
+  outline-offset: -2px;
 }
 
 .opal-editor .cm-editor .cm-md-codeblock-widget {
@@ -329,10 +355,13 @@
   white-space: pre;
 }
 
+/* Source lines do not wrap, as the drawn blocks do not: a table row stays one line. */
 .opal-editor .cm-editor .cm-md-codeblock,
 .opal-editor .cm-editor .cm-md-table-source {
   font-family: var(--font-mono);
   font-size: 0.85em;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 
 .opal-editor .cm-editor .cm-md-codeblock {

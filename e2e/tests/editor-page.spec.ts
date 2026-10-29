@@ -65,3 +65,27 @@ test("a page stays mounted while other folders refresh, so typing lands", async 
   await expect.poll(() => readFile(person, "utf8")).toBe("# Alec Chen\n word1 word2 word3 word4");
 });
 
+test("list numbers of 10 and up stay on one line, and a click in a table leaves the page where it was", async ({ userDataDir }) => {
+  const note = path.join(root, "Lists.md");
+  const items = Array.from({ length: 12 }, (_, index) => `${index + 1}. item ${index + 1}`).join("\n");
+  const rows = Array.from({ length: 4 }, (_, index) => `| ${index} | ${"a long cell that wraps inside its column ".repeat(3)}|`).join("\n");
+  await writeFile(note, `${items}\n\n| # | Cell |\n|--|--|\n${rows}\n`);
+  const page = await launch(userDataDir);
+  await openNote(page, note);
+  const heights = await page.locator(".cm-md-list").evaluateAll((lines) => lines.map((line) => line.getBoundingClientRect().height));
+  expect(heights).toHaveLength(12);
+  expect(Math.max(...heights)).toBeLessThan(Math.min(...heights) * 1.2);
+  const table = page.locator(".cm-md-table");
+  await table.scrollIntoViewIfNeeded();
+  const box = () => table.evaluate((frame) => { const { top, height } = frame.getBoundingClientRect(); return { top, height }; });
+  const before = await box();
+  await page.locator(".cm-md-table td").nth(3).click();
+  await expect(page.locator(".cm-md-cell-caret")).toHaveCount(1);
+  expect(await box()).toEqual(before);
+  // Enter shows the source, one line per row.
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".cm-md-table-source")).toHaveCount(6);
+  const rowHeights = await page.locator(".cm-md-table-source").evaluateAll((lines) => lines.map((line) => line.getBoundingClientRect().height));
+  expect(Math.max(...rowHeights)).toBeLessThan(Math.min(...rowHeights) * 1.2);
+  expect(await readFile(note, "utf8")).toContain("| 0 |");
+});

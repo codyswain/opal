@@ -100,6 +100,17 @@ export class HorizontalRuleWidget extends WidgetType {
   }
 }
 
+/** Stands in for the hidden end of a long link target. */
+export class EllipsisWidget extends WidgetType {
+  eq() { return true; }
+
+  toDOM() {
+    const ellipsis = document.createElement('span');
+    ellipsis.textContent = '…';
+    return ellipsis;
+  }
+}
+
 /** An image, from the vault through opal-file:// or from the web. Its height lands after it loads. */
 export class ImageWidget extends WidgetType {
   constructor(readonly src: string, readonly alt: string, readonly width: number | null) { super(); }
@@ -178,12 +189,26 @@ function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
   }
 }
 
-/** A GFM table, shown as a table while no selection is in it. A click puts the caret in the clicked cell. */
+/**
+ * A GFM table, shown as a table while no selection is in it. A click puts a
+ * cell caret in the clicked cell, outlined, and the table stays drawn.
+ */
 export class TableWidget extends WidgetType {
-  constructor(readonly source: string, readonly model: TableModel, readonly context: BlockContext, readonly indent: number) { super(); }
+  constructor(
+    readonly source: string,
+    readonly model: TableModel,
+    readonly context: BlockContext,
+    readonly indent: number,
+    /** Where the cell with the cell caret starts, from the start of the table. */
+    readonly cellCaret: number | null = null,
+  ) { super(); }
+
+  withCellCaret(offset: number): TableWidget {
+    return new TableWidget(this.source, this.model, this.context, this.indent, offset);
+  }
 
   eq(other: TableWidget) {
-    return other.source === this.source && other.context === this.context && other.indent === this.indent;
+    return other.source === this.source && other.context === this.context && other.indent === this.indent && other.cellCaret === this.cellCaret;
   }
 
   toDOM() {
@@ -199,6 +224,7 @@ export class TableWidget extends WidgetType {
         if (align) cell.style.textAlign = align;
         if (source) {
           cell.dataset.offset = String(source.offset);
+          if (source.offset === this.cellCaret) cell.classList.add('cm-md-cell-caret');
           renderInline(source.content, cell);
         }
         tr.append(cell);

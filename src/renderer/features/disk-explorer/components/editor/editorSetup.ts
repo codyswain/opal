@@ -8,7 +8,7 @@ import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
 import { isDailyLog, readOnlyActivityLog } from './activityLog';
-import { livePreview } from './livePreview';
+import { linkMarkStyle, livePreview } from './livePreview';
 import { pageContext, wikiLinkSyntax, wikiLinks } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -74,7 +74,7 @@ export function markdownEditorExtensions(path: string, openNote: (path: string) 
     EditorState.lineSeparator.of('\n'),
     pageContext.of({ path, openNote }),
     history(),
-    markdown({ extensions: [GFM, wikiLinkSyntax], completeHTMLTags: false }),
+    markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle], completeHTMLTags: false }),
     syntaxHighlighting(highlight),
     wikiLinks,
     livePreview,

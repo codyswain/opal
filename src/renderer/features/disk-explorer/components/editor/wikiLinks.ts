@@ -163,3 +163,21 @@ export async function openWikiLink(view: EditorView, target: string): Promise<vo
   view.dispatch({ effects: linksResolved.of({ [target]: created.data.path }) });
   openNote(created.data.path);
 }
+
+/**
+ * Follows a Markdown link to a file by its path: relative to the page, or to
+ * the top of the opened folder when it starts with "/". The main process
+ * resolves it, so only files under the opened roots open.
+ */
+export async function openPathLink(view: EditorView, href: string): Promise<void> {
+  const { path, openNote } = view.state.facet(pageContext);
+  let written = href.replace(/[?#].*$/, '');
+  // A link to a heading on this page goes nowhere yet.
+  if (!written) return;
+  try { written = decodeURI(written); } catch { /* keep it as written */ }
+  const target = /^(\/|\.\.?\/)/.test(written) ? written : `./${written}`;
+  const response = await window.markdownAPI.resolveLinks(path, [target]).catch(() => null);
+  const resolved = response?.success ? response.data[target] : null;
+  if (resolved) openNote(resolved);
+  else toast.error(`Could not find ${written}.`);
+}
