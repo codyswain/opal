@@ -54,6 +54,11 @@ first: a file tree on the left and one clean page.
 - The open file is highlighted. When a file opens from outside the tree
   (Today, Recent, search, a link), its folders expand and it scrolls into view.
 - Expanded folders persist across launches.
+- File actions live on the tree now that the folder view is gone: a right-click
+  menu on rows (New note, New folder, Rename, Move to…, Reveal in Finder, Copy
+  path, Move to Trash with confirmation), inline rename, drag a row onto a
+  folder to move it, and Cmd+N for a new note in the active file's folder
+  (the vault root when nothing is open).
 - Footer: Settings only (no theme toggle; theme lives in Settings).
 - Default width about 260px, resizable.
 
