@@ -64,8 +64,8 @@ const isDevelopment = process.env.NODE_ENV === "development";
 // Always consider it development mode when VITE_DEV_SERVER_URL is defined
 const forceDevTools = typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined";
 const WINDOW_BACKGROUND = {
-  light: "#F4F4F5",
-  dark: "#08090A",
+  light: "#F4F4F4",
+  dark: "#090909",
 } as const;
 const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;

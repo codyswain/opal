@@ -13,8 +13,8 @@ import resolveConfig from 'tailwindcss/resolveConfig';
 const ROOT = path.resolve(__dirname, '../../..');
 const require = createRequire(__filename);
 
-/** Channel spread in 0-255. The spec's chrome greys (#f4f4f5, #08090a) spread by 1 to 2. */
-const MAX_SPREAD = 2;
+/** Channel spread in 0-255. Every token is a pure grey. */
+const MAX_SPREAD = 0;
 
 function hslSpread(saturation: number, lightness: number): number {
   return (1 - Math.abs(2 * lightness - 1)) * saturation * 255;
