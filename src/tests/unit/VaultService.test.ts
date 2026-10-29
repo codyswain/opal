@@ -134,6 +134,19 @@ describe("VaultService", () => {
     expect(await readFile(daily(), "utf8")).toContain("date: 2026-09-08");
   });
 
+  it("refuses an opened folder that is not a vault, and writes nothing there", async () => {
+    const notes = path.join(temporary, "notes");
+    await mkdir(notes);
+    await writeFile(path.join(notes, "a.md"), "A note\n");
+    const opened = await registry.add(notes);
+    await expect(service.createDay(opened, date)).rejects.toThrow("Choose an opened vault folder.");
+    expect(await readdir(opened)).toEqual(["a.md"]);
+    // A folder named Library/daily that is a file does not make a vault either.
+    await mkdir(path.join(opened, "Library"));
+    await writeFile(path.join(opened, "Library/daily"), "");
+    await expect(service.createDay(opened, date)).rejects.toThrow("Choose an opened vault folder.");
+  });
+
   it("refuses a directory occupying the exact daily filename", async () => {
     await mkdir(daily(), { recursive: true });
     await expect(service.createDay(root, date)).rejects.toThrow("not a file");

@@ -32,19 +32,26 @@ export class VaultService {
   }
 
   /** An opened folder is a vault when it has a daily, log or old Inbox/Logs folder. */
+  private async isVault(root: string): Promise<boolean> {
+    for (const folder of [DAY_LAYOUT.daily, DAY_LAYOUT.logs, LEGACY_DAY_LAYOUT.logs]) {
+      try {
+        const target = await inVault(root, path.join(root, folder));
+        if ((await lstat(target)).isDirectory()) return true;
+      } catch {
+        /* Not this folder. */
+      }
+    }
+    return false;
+  }
+
   async discover(): Promise<VaultInfo[]> {
     const result: VaultInfo[] = [];
     for (const root of this.deps.registry.list()) {
-      for (const folder of [DAY_LAYOUT.daily, DAY_LAYOUT.logs, LEGACY_DAY_LAYOUT.logs]) {
-        try {
-          const canonical = await openedVault(this.deps.registry, root);
-          const target = await inVault(canonical, path.join(canonical, folder));
-          if (!(await lstat(target)).isDirectory()) continue;
+      try {
+        if (await this.isVault(await openedVault(this.deps.registry, root)))
           result.push({ path: root, name: path.basename(root) || root });
-          break;
-        } catch {
-          /* A non-vault root remains available in Files. */
-        }
+      } catch {
+        /* A non-vault root remains available in Files. */
       }
     }
     return result;
@@ -91,6 +98,8 @@ export class VaultService {
   async createDay(target: string, date: string): Promise<{ path: string }> {
     this.checkDate(date);
     const root = await openedVault(this.deps.registry, target);
+    // Any other opened folder stays as it is; Today never adds Library/daily to it.
+    if (!(await this.isVault(root))) throw new Error("Choose an opened vault folder.");
     return filesystemMutationQueue.run(async () => {
       const page = path.join(root, DAY_LAYOUT.daily, dailyName(date));
       const found =

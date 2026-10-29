@@ -41,27 +41,48 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const two = (value: number) => String(value).padStart(2, "0");
 
-/** The Moment.js tokens a daily template uses, with [brackets] kept as written. */
+/** "1st", "2nd", "3rd", "4th", "11th", "21st", as Moment's English locale writes them. */
+function ordinal(value: number): string {
+  const tens = value % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ["th", "st", "nd", "rd"][value % 10] ?? "th";
+  return `${value}${suffix}`;
+}
+
+/**
+ * Formats a date with Moment.js tokens, as Obsidian's daily notes do:
+ * YYYY YY Q MMMM MMM MM M Do DD D dddd ddd d HH H hh h mm m ss s A a, with
+ * [brackets] kept as written. Any other run of letters, such as DDDD or ww,
+ * stays as written rather than being half formatted.
+ */
 function formatMoment(format: string, at: Date): string {
+  const hour12 = at.getHours() % 12 || 12;
   const tokens: Record<string, () => string> = {
     YYYY: () => String(at.getFullYear()),
     YY: () => two(at.getFullYear() % 100),
+    Q: () => String(Math.floor(at.getMonth() / 3) + 1),
     MMMM: () => MONTHS[at.getMonth()],
     MMM: () => MONTHS[at.getMonth()].slice(0, 3),
     MM: () => two(at.getMonth() + 1),
     M: () => String(at.getMonth() + 1),
+    Do: () => ordinal(at.getDate()),
     DD: () => two(at.getDate()),
     D: () => String(at.getDate()),
     dddd: () => WEEKDAYS[at.getDay()],
     ddd: () => WEEKDAYS[at.getDay()].slice(0, 3),
+    d: () => String(at.getDay()),
     HH: () => two(at.getHours()),
     H: () => String(at.getHours()),
+    hh: () => two(hour12),
+    h: () => String(hour12),
     mm: () => two(at.getMinutes()),
+    m: () => String(at.getMinutes()),
     ss: () => two(at.getSeconds()),
+    s: () => String(at.getSeconds()),
+    A: () => (at.getHours() < 12 ? "AM" : "PM"),
+    a: () => (at.getHours() < 12 ? "am" : "pm"),
   };
-  return format.replace(
-    /\[([^\]]*)\]|YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|HH|H|mm|ss/g,
-    (token, literal?: string) => literal ?? tokens[token](),
+  return format.replace(/\[([^\]]*)\]|Do|([A-Za-z])\2*/g, (token, literal?: string) =>
+    literal ?? tokens[token]?.() ?? token,
   );
 }
 

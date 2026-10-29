@@ -34,6 +34,22 @@ describe("daily template", () => {
     ).toBe("Fri 02 Jan 26 07:05:09 {{other}}");
   });
 
+  it("writes Moment's ordinal, 12-hour and quarter tokens, and leaves other letters as written", () => {
+    expect(fillDailyTemplate("{{date:dddd, MMMM Do YYYY [at] HH:mm}}", "2026-10-29", now)).toBe(
+      "Thursday, October 29th 2026 at 07:05",
+    );
+    const evening = new Date(2026, 9, 29, 19, 5, 9);
+    expect(fillDailyTemplate("{{time:h:mm A}} {{time:hh:mm:s a}} {{date:[Q]Q d}}", "2026-10-29", evening)).toBe(
+      "7:05 PM 07:05:9 pm Q4 4",
+    );
+    expect(fillDailyTemplate("{{time:h A}}", "2026-10-29", new Date(2026, 9, 29, 0, 30))).toBe("12 AM");
+    const ordinals = [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 31].map((day) =>
+      fillDailyTemplate("{{date:Do}}", `2026-10-${String(day).padStart(2, "0")}`, now),
+    );
+    expect(ordinals).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "31st"]);
+    expect(fillDailyTemplate("{{date:DDDD ww gggg}}", "2026-10-29", now)).toBe("DDDD ww gggg");
+  });
+
   it("writes the two properties when there is no template", () => {
     expect(defaultDailyPage("2026-10-29")).toBe(
       "---\ndate: 2026-10-29\ntags:\n  - daily\n---\n",
