@@ -22,15 +22,15 @@ export interface RecentItem {
 }
 
 export interface RecentResult {
+  /** Files only, most recently touched first. */
   items: RecentItem[];
-  /** Records considered before missing/closed/replaced filtering and the limit. */
-  total: number;
-  truncated: boolean;
   warnings: string[];
 }
 
 export interface RecentQuery {
   limit?: number;
+  /** Leaves out anything last touched before this time, in epoch ms. */
+  since?: number;
 }
 
 export const RECENT_DEFAULT_LIMIT = 200;

@@ -124,12 +124,6 @@ contextBridge.exposeInMainWorld("activityAPI", {
 contextBridge.exposeInMainWorld("collectionsAPI", {
   query: (query: unknown, page?: { offset?: number; limit?: number }) =>
     ipcRenderer.invoke("collections:query", query, page ?? {}),
-  tags: () => ipcRenderer.invoke("collections:tags"),
-  onChanged: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on("collections:changed", listener);
-    return () => ipcRenderer.removeListener("collections:changed", listener);
-  },
 });
 
 contextBridge.exposeInMainWorld("markdownAPI", {

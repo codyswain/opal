@@ -44,8 +44,7 @@ const waitForFile = async (predicate, timeout = 10_000) => {
 };
 
 try {
-  await page.evaluate((dir) => { window.location.hash = `#/files?mode=browse&dir=${encodeURIComponent(dir)}`; }, `${vault}/Notes`);
-  await page.getByTestId(`disk-folder-entry-${NOTE}`).dblclick();
+  await page.evaluate((file) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(file)}`; }, NOTE);
   const editor = page.getByTestId('markdown-editor');
   await editor.waitFor();
   check('opens the note without showing frontmatter', (await editor.textContent()).includes('First line.') && !(await editor.textContent()).includes('tags:'));
@@ -90,12 +89,17 @@ try {
   const kept = await waitForFile((text) => text.includes('Mine.'));
   check('Keep mine overwrites with the editor text', kept.includes('Mine.') && kept.startsWith(FRONTMATTER));
 
-  // New note.
-  await page.getByRole('button', { name: 'Return to folder' }).click();
-  await page.getByTestId('toolbar-new-note').click();
+  // New note, from the File menu: it lands next to the open note.
+  await app.evaluate(({ Menu }) => {
+    for (const menu of Menu.getApplicationMenu()?.items ?? []) {
+      const item = menu.submenu?.items.find((candidate) => candidate.label === 'New Note');
+      if (item) return item.click();
+    }
+  });
   await page.getByTestId('markdown-editor').waitFor();
   const files = (await readdir(`${vault}/Notes`)).sort();
   check('New note creates Untitled.md and opens it', files.includes('Untitled.md') && (await page.evaluate(() => window.location.hash)).includes('Untitled.md'));
+  await page.getByTestId('markdown-editor').click();
   await page.keyboard.type('# Fresh note');
   await waitForState('saved');
   check('a new note autosaves', (await readFile(`${vault}/Notes/Untitled.md`, 'utf8')).includes('# Fresh note'));

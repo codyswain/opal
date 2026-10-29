@@ -89,19 +89,21 @@ export class ActivityService implements ActivityRecorder {
     if (await this.deps.store.clear()) this.emit();
   }
 
+  /** Recent lists files. Folders still get records when they are made or moved; they are skipped here. */
   async recent(query: RecentQuery = {}): Promise<RecentResult> {
     const limit = Math.min(RECENT_MAX_LIMIT, Math.max(1, Math.floor(query.limit ?? RECENT_DEFAULT_LIMIT)));
+    const since = query.since ?? -Infinity;
     const store = this.deps.store;
     const records = store.list().sort((left, right) =>
       store.touchedAt(right) - store.touchedAt(left) ||
       collator.compare(path.basename(left.path), path.basename(right.path)) ||
       (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
     const items: RecentItem[] = [];
-    let index = 0;
-    for (; index < records.length && items.length < limit; index++) {
-      const record = records[index];
+    for (const record of records) {
+      if (items.length >= limit || store.touchedAt(record) < since) break;
       let entry: DiskEntry;
       try { entry = await this.deps.statEntry(record.path); } catch { continue; }
+      if (entry.isDirectory) continue;
       if (record.id !== null) {
         // A different readable identity means the item was replaced. Unreadable
         // metadata is unknown, and an item that simply lost its identity is
@@ -118,7 +120,7 @@ export class ActivityService implements ActivityRecorder {
         editedAt: record.editedAt,
       });
     }
-    return { items, total: records.length, truncated: index < records.length, warnings: store.warnings() };
+    return { items, warnings: store.warnings() };
   }
 
   private async readId(target: string): Promise<string | null> {

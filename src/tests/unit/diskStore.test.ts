@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
-import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DiskEntry } from '@/types/disk';
 import { openedPath, openTabs, resetTabs, tabPaths } from '@/tests/helpers/tabs';
@@ -28,20 +27,11 @@ let removeRoot: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   useDiskStore.setState({
     roots: [],
+    rootsLoaded: false,
     listings: {},
     expanded: {},
-    currentDirectory: null,
-    currentCollection: null,
-    focusedPath: null,
-    selectedPath: null,
-    selectedPaths: [],
-    quickPreviewPath: null,
-    isQuickLookOpen: false,
     pendingAction: null,
     pendingDelete: null,
-    sort: { field: 'name', direction: 'asc' },
-    filter: '',
-    density: 'comfortable',
     loading: { isLoading: false, error: null },
   });
   resetTabs();
@@ -61,9 +51,16 @@ beforeEach(() => {
 });
 
 describe('useDiskStore', () => {
-  it('loads roots on demand', async () => {
+  it('loads roots on demand and says when they are known', async () => {
+    expect(useDiskStore.getState().rootsLoaded).toBe(false);
     await useDiskStore.getState().loadRoots();
-    expect(useDiskStore.getState().roots).toEqual([ROOT]);
+    expect(useDiskStore.getState()).toMatchObject({ roots: [ROOT], rootsLoaded: true });
+  });
+
+  it('counts a failed root listing as known, so the page can still offer Open folder', async () => {
+    listRoots.mockResolvedValueOnce({ success: false, error: 'Nope' });
+    await useDiskStore.getState().loadRoots();
+    expect(useDiskStore.getState()).toMatchObject({ roots: [], rootsLoaded: true, loading: { error: 'Nope' } });
   });
 
   it('drops hydrated tabs outside the roots returned at launch', async () => {
@@ -80,7 +77,7 @@ describe('useDiskStore', () => {
     const state = useDiskStore.getState();
     expect(state.roots).toContain(ROOT);
     expect(state.listings[ROOT]).toHaveLength(2);
-    expect(state.currentDirectory).toBe(ROOT);
+    expect(state.expanded[ROOT]).toBe(true);
   });
 
   it('does not add a duplicate root when the same folder is opened twice', async () => {
@@ -161,54 +158,6 @@ describe('useDiskStore', () => {
     expect(readDirectory).toHaveBeenCalledTimes(1);
   });
 
-  it('selects an entry', () => {
-    useDiskStore.getState().select('/Vault/note.md');
-    expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
-    expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
-  });
-
-  it('keeps browse directory independent from collection selection', () => {
-    useDiskStore.setState({ currentDirectory: ROOT });
-    useDiskStore.getState().select(PHOTOS);
-
-    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
-    expect(useDiskStore.getState().focusedPath).toBe(PHOTOS);
-  });
-
-  it('navigates explicitly and clears collection focus', () => {
-    useDiskStore.getState().select('/Vault/note.md');
-    useDiskStore.getState().navigateToDirectory(PHOTOS);
-
-    expect(useDiskStore.getState()).toMatchObject({
-      currentDirectory: PHOTOS,
-      focusedPath: null,
-      selectedPath: null,
-      selectedPaths: [],
-    });
-  });
-
-  it('tracks Quick Preview by path and follows focused selection', () => {
-    useDiskStore.getState().select('/Vault/note.md');
-    useDiskStore.getState().openQuickLook();
-    expect(useDiskStore.getState().quickPreviewPath).toBe('/Vault/note.md');
-
-    useDiskStore.getState().select('/Vault/other.md');
-    expect(useDiskStore.getState().quickPreviewPath).toBe('/Vault/other.md');
-
-    useDiskStore.getState().closeQuickLook();
-    expect(useDiskStore.getState().quickPreviewPath).toBeNull();
-  });
-
-  it('selects all visible entries through a canonical action', () => {
-    useDiskStore.getState().selectAll(rootEntries);
-
-    expect(useDiskStore.getState().selectedPaths).toEqual(
-      rootEntries.map((candidate) => candidate.path)
-    );
-    expect(useDiskStore.getState().focusedPath).toBe('/Vault/note.md');
-    expect(useDiskStore.getState().selectedPath).toBe('/Vault/note.md');
-  });
-
   it('starts a new-folder action for the current directory', () => {
     useDiskStore.getState().beginNewFolder(ROOT);
     expect(useDiskStore.getState().pendingAction).toEqual({
@@ -217,17 +166,9 @@ describe('useDiskStore', () => {
     });
   });
 
-  it('starts a rename action for the selected item', () => {
-    useDiskStore.getState().beginRename('/Vault/note.md');
-    expect(useDiskStore.getState().pendingAction).toEqual({
-      kind: 'rename',
-      target: '/Vault/note.md',
-    });
-  });
-
   it('cancels a pending action', () => {
     useDiskStore.setState({
-      pendingAction: { kind: 'rename', target: '/Vault/note.md' },
+      pendingAction: { kind: 'new-folder', target: ROOT },
     });
 
     useDiskStore.getState().cancelAction();
@@ -243,15 +184,15 @@ describe('useDiskStore', () => {
     expect(useDiskStore.getState().loading.error).toBeNull();
   });
 
-  it('closes a root and drops its cached listing and selection', async () => {
+  it('closes a root and drops its cached listing and pending actions', async () => {
     await useDiskStore.getState().openFolder();
-    useDiskStore.getState().select('/Vault/note.md');
+    useDiskStore.getState().beginDelete('/Vault/note.md');
     await useDiskStore.getState().closeRoot(ROOT);
 
     const state = useDiskStore.getState();
     expect(state.roots).toEqual([]);
     expect(state.listings[ROOT]).toBeUndefined();
-    expect(state.selectedPath).toBeNull();
+    expect(state.pendingDelete).toBeNull();
   });
 
   it('updates tab hydration authority when a root is closed', async () => {
@@ -263,46 +204,6 @@ describe('useDiskStore', () => {
     useTabsStore.getState().hydrate();
 
     expect(tabPaths()).toEqual([]);
-  });
-});
-
-describe('collections', () => {
-  it('navigateToDirectory and navigateToRecent keep currentDirectory consistent and clear selection', () => {
-    useDiskStore.getState().navigateToDirectory('/Vault/A');
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: '/Vault/A' });
-    useDiskStore.getState().select('/Vault/A/x.md');
-    useDiskStore.getState().navigateToRecent();
-    const state = useDiskStore.getState();
-    expect(state.currentCollection).toEqual({ kind: 'recent' });
-    expect(state.currentDirectory).toBeNull();
-    expect(state.selectedPaths).toEqual([]);
-    expect(state.focusedPath).toBeNull();
-  });
-
-  it('loadRoots keeps a recent collection current instead of substituting a root', async () => {
-    listRoots.mockResolvedValueOnce({ success: true, data: [ROOT] });
-    useDiskStore.getState().navigateToRecent();
-    await useDiskStore.getState().loadRoots();
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' });
-    expect(useDiskStore.getState().currentDirectory).toBeNull();
-    // Without a collection, the first root becomes current as before.
-    useDiskStore.setState({ currentCollection: null, currentDirectory: null });
-    listRoots.mockResolvedValueOnce({ success: true, data: [ROOT] });
-    await useDiskStore.getState().loadRoots();
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: ROOT });
-  });
-
-  it('remaps and removes the current directory collection with its path', () => {
-    useDiskStore.setState({ roots: [ROOT] });
-    useDiskStore.getState().navigateToDirectory('/Vault/Old');
-    pathMutationCoordinator.applyAppMutation({ kind: 'rename', oldPath: '/Vault/Old', newPath: '/Vault/New' });
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: '/Vault/New' });
-    pathMutationCoordinator.applyExternalRemoval(['/Vault/New']);
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'directory', directory: ROOT });
-    useDiskStore.getState().navigateToRecent();
-    pathMutationCoordinator.applyExternalRemoval(['/Vault/Photos']);
-    expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' });
-    expect(useDiskStore.getState().currentDirectory).toBeNull();
   });
 });
 

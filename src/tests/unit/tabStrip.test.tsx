@@ -6,7 +6,7 @@ import { TAB_DRAG_TYPE, TabStrip } from '@/renderer/features/disk-explorer/compo
 import { tabLabels, vaultRelativePath } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { usePaletteStore } from '@/renderer/features/commands/store/paletteStore';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { RECENT_COLLECTION, directoryCollection, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { RECENT_COLLECTION, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -192,13 +192,8 @@ describe('tab labels', () => {
     ]);
   });
 
-  it('names folders by their own name and leaves Recent alone', () => {
-    const labels = tabLabels(
-      [{ mode: 'browse', collection: directoryCollection('/V/Library') }, { mode: 'browse', collection: RECENT_COLLECTION }],
-      ['/V']
-    );
-    expect(labels).toEqual([
-      { name: 'Library', hint: null, title: 'Library' },
+  it('names Recent and leaves it alone', () => {
+    expect(tabLabels([{ mode: 'browse', collection: RECENT_COLLECTION }], ['/V'])).toEqual([
       { name: 'Recent', hint: null, title: 'Recent' },
     ]);
   });

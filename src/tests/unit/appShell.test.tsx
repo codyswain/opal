@@ -81,10 +81,6 @@ beforeEach(() => {
     roots: [],
     listings: {},
     expanded: {},
-    currentDirectory: null,
-    focusedPath: null,
-    selectedPath: null,
-    selectedPaths: [],
     loading: { isLoading: false, error: null },
   });
 });

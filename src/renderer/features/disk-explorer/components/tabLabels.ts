@@ -4,7 +4,7 @@ import { fileTreeLabel } from '@/renderer/features/shell/utils/flattenFileTree';
 import { locationPath, type FilesLocation } from '../navigation/filesLocation';
 
 export interface TabLabel {
-  /** The page name: a Markdown file without `.md`, a folder, or Recent. */
+  /** The page name: the file's name, Markdown without `.md`, or Recent. */
   name: string;
   /** The parent folders that tell same-name tabs apart, or null. */
   hint: string | null;
@@ -30,7 +30,7 @@ export function locationName(location: FilesLocation): string {
   const path = locationPath(location);
   if (!path) return 'Recent';
   const name = basenameFsPath(path);
-  return location.mode === 'focus' ? fileTreeLabel(name, classifyFile(name)) : name;
+  return fileTreeLabel(name, classifyFile(name));
 }
 
 /** The folders above a path, nearest first. */

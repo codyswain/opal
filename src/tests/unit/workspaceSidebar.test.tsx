@@ -76,13 +76,9 @@ beforeEach(() => {
   resetTabs();
   useDiskStore.setState({
     roots: [],
+    rootsLoaded: false,
     listings: {},
     expanded: {},
-    currentDirectory: null,
-    currentCollection: null,
-    focusedPath: null,
-    selectedPath: null,
-    selectedPaths: [],
     loading: { isLoading: false, error: null },
   });
 });
@@ -105,6 +101,8 @@ describe("WorkspaceSidebar", () => {
         `file=${encodeURIComponent(log)}`,
       ),
     );
+    // Today counts as an open, so it shows in Recent.
+    expect(window.activityAPI.record).toHaveBeenCalledWith(log, "opened");
 
     // Cmd+click opens Today in a new tab instead.
     await user.keyboard("{Meta>}");
@@ -177,19 +175,13 @@ describe("WorkspaceSidebar", () => {
 
   it("highlights Recent only while browsing Recent", async () => {
     const user = userEvent.setup();
+    useDiskStore.setState({ roots: [ROOT], rootsLoaded: true });
     renderSidebar(true);
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
-    );
     const recent = screen.getByRole("button", { name: "Recent" });
     expect(recent).not.toHaveClass("bg-surface-selected");
 
     await user.click(recent);
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentCollection).toEqual({
-        kind: "recent",
-      }),
-    );
+    expect(await screen.findByRole("heading", { name: "Recent" })).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/files?mode=browse&collection=recent",
     );

@@ -1,6 +1,7 @@
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { makePdf } from './pdfFixture';
 
 /**
  * A real 1x1 PNG. The bytes matter: the protocol handler streams them and
@@ -25,6 +26,8 @@ export async function createTempVault(): Promise<TempVault> {
   await writeFile(path.join(root, 'Photos', 'alpha.png'), PNG_1X1);
   await writeFile(path.join(root, 'Photos', 'beta.png'), PNG_1X1);
   await writeFile(path.join(root, 'readme.md'), '# Test Vault\n');
+  await mkdir(path.join(root, 'Papers'), { recursive: true });
+  await writeFile(path.join(root, 'Papers', 'brief.pdf'), makePdf(['A brief for the e2e vault']));
 
   return { root, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }

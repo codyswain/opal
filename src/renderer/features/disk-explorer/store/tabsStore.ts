@@ -8,7 +8,6 @@ import { localDate } from '@/common/vaultModel';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import {
   RECENT_COLLECTION,
-  directoryCollection,
   fileLocation,
   filesLocationKey,
   locationPath,
@@ -107,7 +106,7 @@ export function tabLocation(tab: Tab): FilesLocation {
   return tab.history[tab.index].location;
 }
 
-/** The file a tab shows, or null while it shows Recent or a folder. */
+/** The file a tab shows, or null while it shows Recent. */
 export function tabFile(tab: Tab): string | null {
   const location = tabLocation(tab);
   return location.mode === 'focus' ? location.file : null;
@@ -150,7 +149,7 @@ export function selectLaunchLocation(
   return state.lastSessionDate === today ? selectCurrentLocation(state) : null;
 }
 
-/** A file's location always names the folder that holds it. */
+/** Tabs compare places by key, so a file's path is kept normalized. */
 function canonical(location: FilesLocation): FilesLocation {
   return location.mode === 'focus' ? fileLocation(location.file) : location;
 }
@@ -173,23 +172,19 @@ function isStoredPath(value: unknown): value is string {
   return typeof value === 'string' && isAbsoluteFsPath(value);
 }
 
+/** Folder pages are gone; a stored one is dropped from the history. */
 function restoredLocation(value: unknown): FilesLocation | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as {
     mode?: unknown;
-    collection?: { kind?: unknown; directory?: unknown };
+    collection?: { kind?: unknown };
     file?: unknown;
   };
   if (candidate.mode === 'focus') {
     return isStoredPath(candidate.file) ? fileLocation(candidate.file) : null;
   }
-  if (candidate.mode !== 'browse') return null;
-  if (candidate.collection?.kind === 'recent') {
-    return { mode: 'browse', collection: RECENT_COLLECTION };
-  }
-  return candidate.collection?.kind === 'directory' &&
-    isStoredPath(candidate.collection.directory)
-    ? { mode: 'browse', collection: directoryCollection(candidate.collection.directory) }
+  return candidate.mode === 'browse' && candidate.collection?.kind === 'recent'
+    ? { mode: 'browse', collection: RECENT_COLLECTION }
     : null;
 }
 
@@ -429,7 +424,7 @@ export const useTabsStore = create<TabsStore>((set, get) => {
 
 function remapEntry(entry: TabEntry, mutation: AppPathMutation): TabEntry {
   const { location } = remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath);
-  return { ...entry, location: canonical(location) };
+  return { ...entry, location };
 }
 
 function remapTab(tab: Tab, mutation: AppPathMutation): Tab {

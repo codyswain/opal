@@ -52,29 +52,34 @@ describe('ActivityService', () => {
     expect((await metadata.read(item('b.pdf'))).id).toBeNull();
   });
 
-  it('lists recent items newest first with deterministic tie-breaks and readable reasons', async () => {
+  it('lists recent files newest first with deterministic tie-breaks and readable reasons', async () => {
     await service.recordOpened(item('b.pdf'));
     now += 60_000; await service.recordOpened(item('a.md'));
     now += 10_000; await service.recordOpened(item('a.md')); // within 30 s: coalesced, timestamp unchanged
     now += 50_000; await service.noteOrganized(item('Folder'));
+    now += 60_000; await service.noteOrganized(item('b.pdf'));
     const result = await service.recent();
+    // Folders keep their records but never show in Recent.
+    expect(store.get(item('Folder'))?.organizedAt).toBe(1_120_000);
     expect(result.items.map((row) => [row.entry.name, row.touchedKind, row.touchedAt])).toEqual([
-      ['Folder', 'organized', 1_120_000], ['a.md', 'opened', 1_060_000], ['b.pdf', 'opened', 1_000_000],
+      ['b.pdf', 'organized', 1_180_000], ['a.md', 'opened', 1_060_000],
     ]);
-    expect(result.items[0].entry.isDirectory).toBe(true);
-    expect(result).toMatchObject({ total: 3, truncated: false, warnings: [] });
-    // Equal timestamps fall back to case-insensitive name order, never folders first.
-    await service.noteOrganized(item('b.pdf'));
-    expect((await service.recent()).items.map((row) => row.entry.name)).toEqual(['b.pdf', 'Folder', 'a.md']);
+    expect(result).toEqual({ items: expect.any(Array), warnings: [] });
+    // Equal timestamps fall back to case-insensitive name order.
+    await writeFile(item('C.md'), '# c');
+    await service.noteOrganized(item('C.md'));
+    await service.noteOrganized(item('a.md'));
+    expect((await service.recent()).items.map((row) => row.entry.name)).toEqual(['a.md', 'b.pdf', 'C.md']);
   });
 
-  it('applies and caps the limit', async () => {
+  it('applies and caps the limit, and leaves out anything touched before `since`', async () => {
     for (const name of ['a.md', 'b.pdf', 'Folder']) { await service.recordOpened(item(name)); now += 60_000; }
-    const limited = await service.recent({ limit: 2 });
-    expect(limited.items).toHaveLength(2);
-    expect(limited.truncated).toBe(true);
+    const limited = await service.recent({ limit: 1 });
+    expect(limited.items.map((row) => row.entry.name)).toEqual(['b.pdf']);
     const capped = await service.recent({ limit: 5000 });
-    expect(capped.items).toHaveLength(3);
+    expect(capped.items).toHaveLength(2);
+    const since = await service.recent({ since: 1_060_000 });
+    expect(since.items.map((row) => row.entry.name)).toEqual(['b.pdf']);
   });
 
   it('omits missing items and items in closed roots without deleting their records', async () => {

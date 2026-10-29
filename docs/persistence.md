@@ -10,7 +10,8 @@ back up the personal workspace or update the installed application.
 | Recent activity | Application Support/Opal/library | Back up with the vault |
 | Journal recovery drafts | Application Support/Opal/journal-drafts | Back up with the vault |
 | UI preferences, legacy database | Remaining Application Support/Opal | Include the full profile for recovery |
-| Search indexes and thumbnails | Application Support/Opal | Rebuildable; currently included in full copies |
+| File name search index | Memory only | Rebuilt on the first search after launch |
+| Thumbnails from earlier versions | Application Support/Opal/thumbnails | No longer made or read; safe to delete |
 | API credentials | macOS Keychain | Not exported by workspace backup; reconnect on another Mac |
 | Unsent chat composer text and queued task handoffs | Application Support/Opal/library/chat/drafts.json | Atomic local saves; included in full profile recovery |
 

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, useNavigationType, useRoutes, type RouteObject } from 'react-router-dom';
 import {
-  browseFiles,
+  browseRecent,
   fileLocation,
   focusFile,
 } from '@/renderer/features/disk-explorer/navigation/filesLocation';
@@ -162,21 +162,21 @@ function ShellConsumer() {
       <button type="button" onClick={() => shell.navigateTo('/other')}>
         Other
       </button>
-      <button type="button" onClick={() => shell.navigateFiles(browseFiles('/Vault'))}>
-        Browse vault
+      <button type="button" onClick={() => shell.navigateFiles(browseRecent())}>
+        Recent
       </button>
       <button
         type="button"
-        onClick={() => shell.navigateFiles(focusFile('/Vault', '/Vault/note.md'), { newTab: true })}
+        onClick={() => shell.navigateFiles(focusFile('/Vault/note.md'), { newTab: true })}
       >
         Note in a new tab
       </button>
-      <button type="button" onClick={() => shell.navigateFiles(browseFiles('/Ignored', 'none'))}>
+      <button type="button" onClick={() => shell.navigateFiles(focusFile('/Ignored/a.md', 'none'))}>
         No route change
       </button>
       <button
         type="button"
-        onClick={() => shell.navigateFiles(focusFile('/Vault', '/Vault/note.md', 'replace'))}
+        onClick={() => shell.navigateFiles(focusFile('/Vault/note.md', 'replace'))}
       >
         Replace with note
       </button>
@@ -225,7 +225,7 @@ describe('shell navigation contract', () => {
   it('opens files intents in the active tab, or a new one, and ignores none', async () => {
     const user = userEvent.setup();
     renderShell('/files');
-    await user.click(screen.getByRole('button', { name: 'Browse vault' }));
+    await user.click(screen.getByRole('button', { name: 'Recent' }));
     await user.click(screen.getByRole('button', { name: 'Note in a new tab' }));
     await user.click(screen.getByRole('button', { name: 'No route change' }));
     expect(tabPaths()).toEqual([null, '/Vault/note.md']);
@@ -236,7 +236,7 @@ describe('shell navigation contract', () => {
   it('swaps the shown entry for a replace intent instead of adding a step', async () => {
     const user = userEvent.setup();
     renderShell('/files');
-    await user.click(screen.getByRole('button', { name: 'Browse vault' }));
+    await user.click(screen.getByRole('button', { name: 'Recent' }));
     await user.click(screen.getByRole('button', { name: 'Replace with note' }));
     expect(useTabsStore.getState().tabs[0].history).toEqual([
       { location: fileLocation('/Vault/note.md') },
@@ -246,9 +246,9 @@ describe('shell navigation contract', () => {
   it('goes to the files route when an intent comes from another route, without a history step', async () => {
     const user = userEvent.setup();
     renderShell('/other');
-    await user.click(screen.getByRole('button', { name: 'Browse vault' }));
+    await user.click(screen.getByRole('button', { name: 'Recent' }));
     expect(screen.getByTestId('router-location')).toHaveTextContent(
-      '/files?mode=browse&dir=%2FVault'
+      '/files?mode=browse&collection=recent'
     );
     expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
   });

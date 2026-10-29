@@ -4,7 +4,6 @@ import {
   normalizeFsPath,
   remapFsPath,
 } from '@/common/fsPaths';
-import { filesLocationSnapshots } from './filesLocationSnapshots';
 
 export type AppPathMutationKind = 'rename' | 'move';
 
@@ -183,28 +182,3 @@ export function createPathMutationCoordinator(): PathMutationCoordinator {
 }
 
 export const pathMutationCoordinator = createPathMutationCoordinator();
-
-pathMutationCoordinator.register({
-  id: 'files-location-snapshots',
-  prepareAppMutation: ({ oldPath, newPath }) => {
-    const rollback = filesLocationSnapshots.checkpoint();
-    return {
-      commit: () => filesLocationSnapshots.remapSubtree(oldPath, newPath),
-      rollback,
-    };
-  },
-  preparePathRemoval: (paths) => {
-    const rollback = filesLocationSnapshots.checkpoint();
-    return {
-      commit: () => filesLocationSnapshots.removeSubtrees(paths),
-      rollback,
-    };
-  },
-  prepareAllowedRoots: (roots) => {
-    const rollback = filesLocationSnapshots.checkpoint();
-    return {
-      commit: () => filesLocationSnapshots.retainRoots(roots),
-      rollback,
-    };
-  },
-});

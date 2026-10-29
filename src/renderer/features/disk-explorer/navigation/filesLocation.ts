@@ -2,7 +2,6 @@ import {
   isAbsoluteFsPath,
   isFsPathAtOrBelow,
   normalizeFsPath,
-  parentFsPath,
   remapFsPath,
 } from '@/common/fsPaths';
 
@@ -10,46 +9,12 @@ export const FILES_ROUTE_PATH = '/files';
 
 export type FilesHistoryMutation = 'push' | 'replace' | 'none';
 
-/**
- * The collection a browse surface shows. A directory lists its children; the
- * built-in Recent collection lists personal activity. A focus location
- * remembers the collection it was opened from,
- * so Return and Back land on the originating collection, never a substitute.
- */
-export type FilesCollection =
-  | { kind: 'directory'; directory: string }
-  | { kind: 'recent' };
+/** Recent is the one list a tab can browse; folders browse in the sidebar tree. */
+export interface FilesCollection {
+  kind: 'recent';
+}
 
 export const RECENT_COLLECTION: FilesCollection = { kind: 'recent' };
-
-export function directoryCollection(directory: string): FilesCollection {
-  return { kind: 'directory', directory: normalizeFsPath(directory) };
-}
-
-export function collectionDirectory(collection: FilesCollection): string | null {
-  return collection.kind === 'directory' ? collection.directory : null;
-}
-
-export function locationDirectory(location: FilesLocation): string | null {
-  return collectionDirectory(location.collection);
-}
-
-/** The file or folder a place shows; Recent has none. */
-export function locationPath(location: FilesLocation): string | null {
-  return location.mode === 'focus' ? location.file : collectionDirectory(location.collection);
-}
-
-export function collectionKey(collection: FilesCollection): string {
-  if (collection.kind === 'directory') return `directory:${normalizeFsPath(collection.directory)}`;
-  return collection.kind;
-}
-
-export function sameCollection(
-  a: FilesCollection | null | undefined,
-  b: FilesCollection | null | undefined
-): boolean {
-  return !!a && !!b && collectionKey(a) === collectionKey(b);
-}
 
 export interface FilesBrowseLocation {
   mode: 'browse';
@@ -58,10 +23,10 @@ export interface FilesBrowseLocation {
 
 export interface FilesFocusLocation {
   mode: 'focus';
-  collection: FilesCollection;
   file: string;
 }
 
+/** What a tab shows: Recent, or one file. */
 export type FilesLocation = FilesBrowseLocation | FilesFocusLocation;
 
 export interface FilesNavigationIntent {
@@ -69,25 +34,9 @@ export interface FilesNavigationIntent {
   history: FilesHistoryMutation;
 }
 
-function isWithinOneRoot(
-  paths: readonly string[],
-  roots: readonly string[]
-): boolean {
-  return roots.some((root) =>
-    paths.every((path) => isFsPathAtOrBelow(root, path))
-  );
-}
-
-function normalizeCollection(
-  candidate: FilesCollection,
-  roots: readonly string[]
-): FilesCollection | null {
-  if (candidate.kind === 'recent') return RECENT_COLLECTION;
-  const directory = normalizeFsPath(candidate.directory);
-  if (!isAbsoluteFsPath(directory) || !isWithinOneRoot([directory], roots)) {
-    return null;
-  }
-  return { kind: 'directory', directory };
+/** The file a place shows; Recent has none. */
+export function locationPath(location: FilesLocation): string | null {
+  return location.mode === 'focus' ? location.file : null;
 }
 
 export function normalizeFilesLocation(
@@ -95,34 +44,16 @@ export function normalizeFilesLocation(
   roots: readonly string[]
 ): FilesLocation | null {
   if (!candidate || roots.length === 0) return null;
-
-  const collection = normalizeCollection(candidate.collection, roots);
-  if (!collection) return null;
-
   if (candidate.mode === 'browse') {
-    return { mode: 'browse', collection };
+    return candidate.collection.kind === 'recent'
+      ? { mode: 'browse', collection: RECENT_COLLECTION }
+      : null;
   }
-
   const file = normalizeFsPath(candidate.file);
-  if (!isAbsoluteFsPath(file)) return null;
-  const directory = collectionDirectory(collection);
-  if (directory) {
-    if (file === directory || !isWithinOneRoot([directory, file], roots)) {
-      return null;
-    }
-  } else if (!isWithinOneRoot([file], roots)) {
+  if (!isAbsoluteFsPath(file) || !roots.some((root) => isFsPathAtOrBelow(root, file))) {
     return null;
   }
-  return { mode: 'focus', collection, file };
-}
-
-function parseCollection(params: URLSearchParams): FilesCollection | null {
-  const collection = params.get('collection');
-  if (collection !== null) {
-    return collection === 'recent' ? RECENT_COLLECTION : null;
-  }
-  const directory = params.get('dir');
-  return directory ? { kind: 'directory', directory } : null;
+  return { mode: 'focus', file };
 }
 
 export function parseFilesLocation(
@@ -133,28 +64,22 @@ export function parseFilesLocation(
     search.startsWith('?') ? search.slice(1) : search
   );
   const mode = params.get('mode');
-  if (mode !== 'browse' && mode !== 'focus') return null;
-  const collection = parseCollection(params);
-  if (!collection) return null;
-
   if (mode === 'browse') {
-    return normalizeFilesLocation({ mode, collection }, roots);
+    return params.get('collection') === 'recent'
+      ? normalizeFilesLocation({ mode, collection: RECENT_COLLECTION }, roots)
+      : null;
   }
-
   const file = params.get('file');
-  if (!file) return null;
-  return normalizeFilesLocation({ mode, collection, file }, roots);
+  if (mode !== 'focus' || !file) return null;
+  return normalizeFilesLocation({ mode, file }, roots);
 }
 
 export function serializeFilesLocation(location: FilesLocation): string {
   const params = new URLSearchParams();
   params.set('mode', location.mode);
-  if (location.collection.kind === 'directory') {
-    params.set('dir', normalizeFsPath(location.collection.directory));
-  } else {
+  if (location.mode === 'browse') {
     params.set('collection', location.collection.kind);
-  }
-  if (location.mode === 'focus') {
+  } else {
     params.set('file', normalizeFsPath(location.file));
   }
   return `?${params.toString()}`;
@@ -164,66 +89,22 @@ export function filesLocationKey(location: FilesLocation): string {
   return serializeFilesLocation(location);
 }
 
-export function browseCollection(
-  collection: FilesCollection,
-  history: FilesHistoryMutation = 'push'
-): FilesNavigationIntent {
-  return { location: { mode: 'browse', collection }, history };
-}
-
-export function browseFiles(
-  directory: string,
-  history: FilesHistoryMutation = 'push'
-): FilesNavigationIntent {
-  return browseCollection(directoryCollection(directory), history);
-}
-
 export function browseRecent(
   history: FilesHistoryMutation = 'push'
 ): FilesNavigationIntent {
-  return browseCollection(RECENT_COLLECTION, history);
+  return { location: { mode: 'browse', collection: RECENT_COLLECTION }, history };
 }
 
-export function focusInCollection(
-  collection: FilesCollection,
-  file: string,
-  history: FilesHistoryMutation = 'push'
-): FilesNavigationIntent {
-  return {
-    location: { mode: 'focus', collection, file: normalizeFsPath(file) },
-    history,
-  };
+/** A file shown in a tab. */
+export function fileLocation(file: string): FilesFocusLocation {
+  return { mode: 'focus', file: normalizeFsPath(file) };
 }
 
 export function focusFile(
-  directory: string,
   file: string,
   history: FilesHistoryMutation = 'push'
 ): FilesNavigationIntent {
-  return focusInCollection(directoryCollection(directory), file, history);
-}
-
-/** A file shown in a tab. Its collection is the folder that holds it. */
-export function fileLocation(file: string): FilesFocusLocation {
-  const path = normalizeFsPath(file);
-  return {
-    mode: 'focus',
-    collection: directoryCollection(parentFsPath(path) ?? path),
-    file: path,
-  };
-}
-
-function remapCollection(
-  collection: FilesCollection,
-  oldPath: string,
-  newPath: string
-): FilesCollection {
-  return collection.kind === 'directory'
-    ? {
-        kind: 'directory',
-        directory: remapFsPath(collection.directory, oldPath, newPath),
-      }
-    : collection;
+  return { location: fileLocation(file), history };
 }
 
 export function remapFilesLocation(
@@ -231,145 +112,10 @@ export function remapFilesLocation(
   oldPath: string,
   newPath: string
 ): FilesNavigationIntent {
-  const collection = remapCollection(location.collection, oldPath, newPath);
-  const remapped: FilesLocation =
-    location.mode === 'focus'
-      ? {
-          mode: 'focus',
-          collection,
-          file: remapFsPath(location.file, oldPath, newPath),
-        }
-      : { mode: 'browse', collection };
-
+  if (location.mode === 'browse') return { location, history: 'none' };
+  const remapped = fileLocation(remapFsPath(location.file, oldPath, newPath));
   return {
     location: remapped,
-    history:
-      filesLocationKey(remapped) === filesLocationKey(location)
-        ? 'none'
-        : 'replace',
+    history: remapped.file === location.file ? 'none' : 'replace',
   };
 }
-
-export function filesLocationFromState(input: {
-  currentDirectory: string | null;
-  openedPath: string | null;
-}): FilesLocation | null {
-  if (!input.currentDirectory) return null;
-  const collection = directoryCollection(input.currentDirectory);
-  return input.openedPath
-    ? { mode: 'focus', collection, file: normalizeFsPath(input.openedPath) }
-    : { mode: 'browse', collection };
-}
-
-export function stateFromFilesLocation(location: FilesLocation): {
-  currentDirectory: string | null;
-  openedPath: string | null;
-} {
-  return {
-    currentDirectory: locationDirectory(location),
-    openedPath: location.mode === 'focus' ? location.file : null,
-  };
-}
-
-export type FilesTargetKind =
-  | 'file'
-  | 'directory'
-  | 'sidebar-directory'
-  | 'open-file-tab';
-export type FilesActivation =
-  | 'single-click'
-  | 'double-click'
-  | 'return'
-  | 'open'
-  | 'space';
-
-export type FilesInteractionOutcome =
-  | { type: 'select'; path: string }
-  | { type: 'rename'; path: string }
-  | { type: 'quick-preview'; path: string }
-  | { type: 'activate-tab'; path: string }
-  | {
-      type: 'open-file';
-      path: string;
-      navigation: FilesNavigationIntent;
-    }
-  | {
-      type: 'navigate-directory';
-      path: string;
-      navigation: FilesNavigationIntent;
-    }
-  | { type: 'none' };
-
-/** Pure representation of the pointer/keyboard interaction matrix. */
-export function resolveFilesInteraction(input: {
-  targetKind: FilesTargetKind;
-  activation: FilesActivation;
-  path: string;
-  currentDirectory: string | null;
-}): FilesInteractionOutcome {
-  const path = normalizeFsPath(input.path);
-  const activation = input.activation;
-
-  if (input.targetKind === 'open-file-tab') {
-    return activation === 'single-click' || activation === 'double-click'
-      ? { type: 'activate-tab', path }
-      : { type: 'none' };
-  }
-
-  if (input.targetKind === 'sidebar-directory') {
-    return activation === 'single-click' ||
-      activation === 'double-click' ||
-      activation === 'open'
-      ? {
-          type: 'navigate-directory',
-          path,
-          navigation: browseFiles(path),
-        }
-      : { type: 'none' };
-  }
-
-  if (activation === 'single-click') {
-    return { type: 'select', path };
-  }
-  if (activation === 'return') {
-    return { type: 'rename', path };
-  }
-
-  if (input.targetKind === 'directory') {
-    return activation === 'double-click' || activation === 'open'
-      ? {
-          type: 'navigate-directory',
-          path,
-          navigation: browseFiles(path),
-        }
-      : { type: 'none' };
-  }
-
-  if (activation === 'space') {
-    return { type: 'quick-preview', path };
-  }
-  if (activation === 'double-click' || activation === 'open') {
-    const directory =
-      input.currentDirectory ?? parentFsPath(path);
-    return directory
-      ? {
-          type: 'open-file',
-          path,
-          navigation: focusFile(directory, path),
-        }
-      : { type: 'none' };
-  }
-  return { type: 'none' };
-}
-
-/**
- * Task 7 implements these semantics in the DOM. Both collection layouts use
- * one focus owner so virtualization never creates hundreds of tab stops.
- */
-export const FILES_ARIA_CONTRACT = {
-  directoryTreeRole: 'tree',
-  detailsCollectionRole: 'grid',
-  galleryCollectionRole: 'grid',
-  multiselectable: true,
-  focusStrategy: 'aria-activedescendant',
-} as const;

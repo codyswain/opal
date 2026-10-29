@@ -48,7 +48,7 @@ beforeEach(() => {
   (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined), closeWindow: vi.fn() };
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })) });
   installActivityApi({ recent: vi.fn(async () => ({ success: true as const, data: recentResult([{ entry: entry({ path: '/Vault/inbox.md', name: 'inbox.md', kind: 'markdown' }), touchedAt: Date.now() - 60_000, touchedKind: 'opened', openedAt: Date.now() - 60_000, organizedAt: null, editedAt: null }]) })) });
-  useDiskStore.setState({ roots: [ROOT], currentDirectory: ROOT });
+  useDiskStore.setState({ roots: [ROOT] });
 });
 
 describe('CommandPalette', () => {
@@ -140,7 +140,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 
-  it('searches files across the library as you type and opens the chosen one', async () => {
+  it('searches file names across the vault as you type, folders left out, and opens the chosen one', async () => {
     const api = installCollectionsApi({
       query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })),
     });
@@ -151,7 +151,10 @@ describe('CommandPalette', () => {
     await user.type(input, 'pla');
     const file = await screen.findByTestId(`palette-file-${PLAN}`);
     expect(file).toHaveTextContent('Vault › Projects › Atlas');
-    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({ filters: [{ field: 'name', op: 'contains', value: 'pla' }], scope: { kind: 'all-roots' } });
+    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      filters: [{ field: 'name', op: 'contains', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
+      scope: { kind: 'all-roots' },
+    });
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openedPath()).toBe(PLAN));
     expect(tabPaths()).toEqual([PLAN]);
@@ -199,7 +202,9 @@ describe('CommandPalette', () => {
     renderPalette();
     const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; accelerator?: string }[];
     expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newNote', 'theme.toggle', 'pane.toggleLeft', 'app.openSettings']));
-    expect(reported.map((command) => command.id)).not.toEqual(expect.arrayContaining(['privacy.toggle']));
+    expect(reported.map((command) => command.id)).not.toContain('privacy.toggle');
+    // The folder view is gone, and the command that opened it with it.
+    expect(reported.map((command) => command.id)).not.toContain('nav.files');
     expect(reported.map((command) => command.id).filter((id) => id.startsWith('pane.'))).toEqual(['pane.toggleLeft']);
     act(() => usePaletteStore.getState().show('>side'));
     const option = await screen.findByTestId('palette-command-pane.toggleLeft');

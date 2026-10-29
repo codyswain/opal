@@ -1,18 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { BUDGETS } from '@/renderer/shared/perf/marks';
-import { sortEntries } from '@/common/sortEntries';
-import { filterEntries } from '@/common/filterEntries';
+import { flattenFileTree } from '@/renderer/features/shell/utils/flattenFileTree';
+import { evaluateCollectionQuery } from '@/main/collections/evaluateQuery';
+import type { IndexedItem } from '@/main/collections/CollectionIndex';
+import type { CollectionQuery } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
+
+const ROOT = '/V';
 
 function makeEntries(count: number): DiskEntry[] {
   return Array.from({ length: count }, (_, index) => ({
-    path: `/V/file-${index}.txt`,
+    path: `${ROOT}/file-${index}.txt`,
     name: `file-${String(index).padStart(5, '0')}.txt`,
-    isDirectory: index % 100 === 0,
+    isDirectory: false,
     kind: 'text',
     size: index * 13,
     mtimeMs: 1_700_000_000_000 + index,
   })) as DiskEntry[];
+}
+
+function makeItems(count: number): IndexedItem[] {
+  return makeEntries(count).map((entry) => ({ ...entry, id: null }));
 }
 
 /** Median of several runs — a single timing on a shared CI runner is noise. */
@@ -37,43 +45,34 @@ describe('budget table', () => {
 });
 
 describe('listing budget', () => {
-  const entries = makeEntries(5000);
-
-  it('sorts 5,000 entries by name within the listing budget', () => {
-    const elapsed = medianMs(() => sortEntries(entries, 'name', 'asc'));
-    expect(elapsed).toBeLessThan(BUDGETS.listingMs);
-  });
-
-  it('sorts 5,000 entries by size within the listing budget', () => {
-    const elapsed = medianMs(() => sortEntries(entries, 'size', 'desc'));
-    expect(elapsed).toBeLessThan(BUDGETS.listingMs);
-  });
-
-  it('sorts 5,000 entries by modified date within the listing budget', () => {
-    const elapsed = medianMs(() => sortEntries(entries, 'modified', 'desc'));
+  it('lays out a 5,000-entry folder in the sidebar tree within the listing budget', () => {
+    const listings = { [ROOT]: makeEntries(5000) };
+    const elapsed = medianMs(() => flattenFileTree({ roots: [ROOT], listings, expanded: {} }));
     expect(elapsed).toBeLessThan(BUDGETS.listingMs);
   });
 });
 
 describe('keystroke budget', () => {
-  const entries = makeEntries(5000);
-
-  it('filters 5,000 entries within the keystroke budget', () => {
-    // Every keystroke in the filter box re-runs this. Exceeding 16ms means
-    // dropping a frame per character typed.
-    const elapsed = medianMs(() => filterEntries(entries, 'file-4'));
-    expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs);
+  const items = makeItems(5000);
+  const search = (value: string): CollectionQuery => ({
+    version: 1,
+    scope: { kind: 'all-roots' },
+    filters: [{ field: 'name', op: 'contains', value }],
+    sort: { field: 'touched', direction: 'desc' },
   });
 
-  it('filters with a no-match term within the keystroke budget', () => {
-    const elapsed = medianMs(() => filterEntries(entries, 'zzzzz-no-match'));
-    expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs);
-  });
-
-  it('runs filter then sort — the real per-keystroke path — within budget', () => {
+  it('searches 5,000 file names within the keystroke budget', () => {
+    // The palette runs this search as the name is typed. Exceeding 16ms means
+    // dropping a frame per character.
     const elapsed = medianMs(() =>
-      sortEntries(filterEntries(entries, 'file-1'), 'name', 'asc')
+      evaluateCollectionQuery({
+        items,
+        activity: () => null,
+        touchedAt: () => 0,
+        allowedRoots: [ROOT],
+        query: search('file-4'),
+      })
     );
-    expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs * 4);
+    expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs);
   });
 });

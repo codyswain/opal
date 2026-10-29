@@ -13,7 +13,7 @@ import {
   getActiveDragSourcePath,
   setActiveDragSourcePath,
 } from '@/renderer/features/disk-explorer/components/dragMoveState';
-import { FolderPickerDialog } from '@/renderer/features/disk-explorer/components/query/FolderPickerDialog';
+import { FolderPickerDialog } from '@/renderer/features/disk-explorer/components/dialogs/FolderPickerDialog';
 import { useElementSize } from '@/renderer/features/disk-explorer/hooks/useElementSize';
 import {
   focusFile,
@@ -237,7 +237,6 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   const roots = useDiskStore((state) => state.roots);
   const listings = useDiskStore((state) => state.listings);
   const expanded = useDiskStore((state) => state.expanded);
-  const currentDirectory = useDiskStore((state) => state.currentDirectory);
   const isLoading = useDiskStore((state) => state.loading.isLoading);
   const toggleExpanded = useDiskStore((state) => state.toggleExpanded);
   const revealPath = useDiskStore((state) => state.revealPath);
@@ -261,15 +260,13 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     [expanded, listings, roots]
   );
   const loneRoot = roots.length === 1 ? roots[0] : null;
-  // A browsed folder is highlighted only while no file is open over it.
-  const activePath = openedPath ?? currentDirectory;
   const tabStopPath = React.useMemo(() => {
     const has = (path: string | null) =>
       path !== null && nodes.some((node) => node.path === path);
     if (has(keyboardPath)) return keyboardPath;
-    if (has(activePath)) return activePath;
+    if (has(openedPath)) return openedPath;
     return nodes[0]?.path ?? null;
-  }, [activePath, keyboardPath, nodes]);
+  }, [keyboardPath, nodes, openedPath]);
 
   // A file opened anywhere but the tree (Today, Recent, the palette, a tab)
   // gets its folders expanded and scrolls into view.
@@ -293,7 +290,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     (path: string, inNewTab: boolean) => {
       openedFromTree.current = path;
       recordOpened(path);
-      navigateFiles(focusFile(parentFsPath(path) ?? path, path), { newTab: inNewTab });
+      navigateFiles(focusFile(path), { newTab: inNewTab });
       onNavigate?.();
     },
     [navigateFiles, onNavigate]
@@ -456,7 +453,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
 
   const itemData = React.useMemo<FileTreeRowData>(
     () => ({
-      activePath,
+      activePath: openedPath,
       tabStopPath,
       renamingPath,
       outlinedPath:
@@ -473,7 +470,6 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     }),
     [
       activate,
-      activePath,
       dragProps,
       dropTargetPath,
       focusPath,
@@ -481,6 +477,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
       menuOpen,
       menuTarget,
       nodes,
+      openedPath,
       renamingPath,
       tabStopPath,
     ]
@@ -566,7 +563,6 @@ export function FileTree({ onNavigate }: FileTreeProps) {
             role="tree"
             aria-label="Files"
             aria-busy={isLoading}
-            data-disk-shortcuts-ignore="true"
             className="h-full min-h-0"
             {...blankDragProps}
           >

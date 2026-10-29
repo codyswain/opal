@@ -71,7 +71,7 @@ export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, ro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-label="Choose a folder" data-disk-shortcuts-ignore="true" className="flex max-h-[min(80vh,600px)] max-w-lg flex-col" onEscapeKeyDown={(event) => event.stopPropagation()}>
+      <DialogContent aria-label="Choose a folder" className="flex max-h-[min(80vh,600px)] max-w-lg flex-col" onEscapeKeyDown={(event) => event.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Choose a folder</DialogTitle>
           <DialogDescription>Choose where to move it: an opened folder or one of its subfolders.</DialogDescription>

@@ -71,7 +71,6 @@ export const EditorBubbleMenu: React.FC<EditorBubbleMenuProps> = ({ editor, cont
       type="button"
       aria-label={label}
       aria-pressed={active}
-      data-disk-shortcuts-ignore="true"
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       className={cn(buttonStyles, active && 'bg-surface-selected text-foreground')}

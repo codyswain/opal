@@ -1,6 +1,6 @@
 /**
  * A minimal, uncompressed PDF with one Helvetica text line per page. Enough
- * for pdf.js to parse and extract, small enough to build inline in a test.
+ * for Chromium's viewer to open, small enough to build inline in a test.
  */
 export function makePdf(pages: string[]): Buffer {
   const objects: string[] = [];

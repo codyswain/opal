@@ -133,13 +133,19 @@ The page column's top row is one `h-header` row: tab pills, New tab, and a
 Same-name tabs add their folder in `text-foreground-tertiary`. The search
 field is `bg-surface-hover` and stays centred in the row until the tabs need
 the room.
+Recent sits in the page card in a `max-w-reading` column. Its day groups are
+`text-label` titles in `text-foreground-tertiary`; its rows are `h-row` with
+`rounded-row` and the neutral hover fill, the folder in
+`text-foreground-tertiary` and the time right-aligned in `text-metadata`
+`tabular-nums`.
 Rows and controls may use the compact or default value, but features must not
 invent their own density scale.
 
 ## Icons
 
-Use 14 px icons inside dense rows, 16 px icons in controls and nav items, and
-32 px icons in empty states. Icons inherit `currentColor` and default to
+Use 14 px icons inside dense rows and 16 px icons in controls and nav items.
+Empty states are one line of `text-ui` in `text-foreground-tertiary`, with at
+most one button and no icon. Icons inherit `currentColor` and default to
 `text-icon`. Use opacity or semantic content color for hierarchy instead of
 feature-specific blue, green, or gray classes.
 

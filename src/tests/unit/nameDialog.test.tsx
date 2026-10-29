@@ -24,16 +24,8 @@ describe('NameDialog', () => {
     useDiskStore.getState().beginNewFolder('/V');
     render(<NameDialog />);
 
-    expect(screen.getByTestId('name-dialog-title')).toHaveTextContent('New Folder');
+    expect(screen.getByTestId('name-dialog-title')).toHaveTextContent('New folder');
     expect(screen.getByTestId('name-dialog-input')).toHaveValue('');
-  });
-
-  it('pre-fills the current name when renaming', () => {
-    useDiskStore.getState().beginRename('/V/note.md');
-    render(<NameDialog />);
-
-    expect(screen.getByTestId('name-dialog-title')).toHaveTextContent('Rename');
-    expect(screen.getByTestId('name-dialog-input')).toHaveValue('note.md');
   });
 
   it('creates a folder on submit', async () => {
@@ -46,21 +38,6 @@ describe('NameDialog', () => {
 
     await waitFor(() =>
       expect(window.diskAPI.createDirectory).toHaveBeenCalledWith('/V', 'Rwanda')
-    );
-  });
-
-  it('renames on submit', async () => {
-    const user = userEvent.setup();
-    useDiskStore.getState().beginRename('/V/note.md');
-    render(<NameDialog />);
-
-    const input = screen.getByTestId('name-dialog-input');
-    await user.clear(input);
-    await user.type(input, 'renamed.md');
-    await user.click(screen.getByTestId('name-dialog-submit'));
-
-    await waitFor(() =>
-      expect(window.diskAPI.rename).toHaveBeenCalledWith('/V/note.md', 'renamed.md')
     );
   });
 

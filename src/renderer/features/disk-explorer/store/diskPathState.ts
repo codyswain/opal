@@ -2,27 +2,14 @@ import {
   basenameFsPath,
   isFsPathAtOrBelow,
   normalizeFsPath,
-  parentFsPath,
   remapFsPath,
 } from '@/common/fsPaths';
 import type { DiskEntry } from '@/types/disk';
-import {
-  directoryCollection,
-  type FilesCollection,
-} from '../navigation/filesLocation';
 import type {
   AppPathMutation,
   PathRemovalReason,
 } from '../navigation/pathMutationCoordinator';
 import type { DiskState } from './diskStore';
-
-function collectionFor(
-  previous: FilesCollection | null,
-  currentDirectory: string | null
-): FilesCollection | null {
-  if (previous && previous.kind !== 'directory') return previous;
-  return currentDirectory ? directoryCollection(currentDirectory) : null;
-}
 
 function remapNullablePath(
   path: string | null,
@@ -70,22 +57,11 @@ export function remapDiskState(
   mutation: AppPathMutation
 ): Partial<DiskState> {
   const { oldPath, newPath } = mutation;
-  const focusedPath = remapNullablePath(
-    state.focusedPath ?? state.selectedPath,
-    oldPath,
-    newPath
-  );
   const expanded: Record<string, boolean> = {};
   for (const [path, value] of Object.entries(state.expanded)) {
     const remappedPath = remapFsPath(path, oldPath, newPath);
     expanded[remappedPath] = Boolean(expanded[remappedPath] || value);
   }
-
-  const currentDirectory = remapNullablePath(
-    state.currentDirectory,
-    oldPath,
-    newPath
-  );
 
   return {
     roots: [
@@ -95,22 +71,6 @@ export function remapDiskState(
     ],
     listings: remapListings(state.listings, oldPath, newPath),
     expanded,
-    currentCollection: collectionFor(state.currentCollection, currentDirectory),
-    currentDirectory,
-    focusedPath,
-    selectedPath: focusedPath,
-    selectedPaths: [
-      ...new Set(
-        state.selectedPaths.map((path) =>
-          remapFsPath(path, oldPath, newPath)
-        )
-      ),
-    ],
-    quickPreviewPath: remapNullablePath(
-      state.quickPreviewPath,
-      oldPath,
-      newPath
-    ),
     pendingAction: state.pendingAction
       ? {
           ...state.pendingAction,
@@ -129,29 +89,6 @@ export function remapDiskState(
   };
 }
 
-function fallbackDirectoryAfterRemoval(
-  currentDirectory: string | null,
-  roots: readonly string[],
-  isRemoved: (path: string) => boolean
-): string | null {
-  if (!currentDirectory || !isRemoved(currentDirectory)) {
-    return currentDirectory;
-  }
-
-  let candidate = parentFsPath(currentDirectory);
-  while (candidate) {
-    const path = candidate;
-    if (
-      !isRemoved(path) &&
-      roots.some((root) => isFsPathAtOrBelow(root, path))
-    ) {
-      return path;
-    }
-    candidate = parentFsPath(path);
-  }
-  return roots[0] ?? null;
-}
-
 export function removePathsFromDiskState(
   state: DiskState,
   paths: readonly string[],
@@ -164,20 +101,6 @@ export function removePathsFromDiskState(
     reason === 'root-removed'
       ? state.roots.filter((root) => !isRemoved(root))
       : state.roots;
-  const selectedPaths = state.selectedPaths.filter((path) => !isRemoved(path));
-  const previousFocus = state.focusedPath ?? state.selectedPath;
-  const focusedPath =
-    previousFocus && !isRemoved(previousFocus)
-      ? previousFocus
-      : selectedPaths[selectedPaths.length - 1] ?? null;
-  const quickPreviewWasRemoved =
-    state.quickPreviewPath !== null &&
-    isRemoved(state.quickPreviewPath);
-  const currentDirectory = fallbackDirectoryAfterRemoval(
-    state.currentDirectory,
-    roots,
-    isRemoved
-  );
 
   return {
     roots,
@@ -192,17 +115,6 @@ export function removePathsFromDiskState(
     expanded: Object.fromEntries(
       Object.entries(state.expanded).filter(([path]) => !isRemoved(path))
     ),
-    currentCollection: collectionFor(state.currentCollection, currentDirectory),
-    currentDirectory,
-    focusedPath,
-    selectedPath: focusedPath,
-    selectedPaths,
-    quickPreviewPath: quickPreviewWasRemoved
-      ? null
-      : state.quickPreviewPath,
-    isQuickLookOpen: quickPreviewWasRemoved
-      ? false
-      : state.isQuickLookOpen,
     pendingAction:
       state.pendingAction && isRemoved(state.pendingAction.target)
         ? null

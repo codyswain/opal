@@ -8,11 +8,7 @@ type EntryInput = Partial<DiskEntry> & { path: string; name: string };
 
 export function collectionRow(over: Partial<Omit<CollectionRow, 'entry'>> & { entry: EntryInput }): CollectionRow {
   return {
-    tags: [],
-    descriptionEmpty: true,
     touchedAt: null,
-    touchedKind: null,
-    openedAt: null,
     ...over,
     entry: entry(over.entry),
   };
@@ -24,11 +20,7 @@ export function collectionResult(rows: CollectionRow[] = [], over: Partial<Colle
     total: rows.length,
     offset: 0,
     limit: 200,
-    incomplete: false,
     warnings: [],
-    indexState: 'ready',
-    unavailableScopes: [],
-    generation: 1,
     ...over,
   };
 }
@@ -37,8 +29,6 @@ export function collectionResult(rows: CollectionRow[] = [], over: Partial<Colle
 export function installCollectionsApi(overrides: Partial<CollectionsAPI> = {}): CollectionsAPI {
   const api: CollectionsAPI = {
     query: vi.fn(async () => ({ success: true as const, data: collectionResult() })),
-    tags: vi.fn(async () => ({ success: true as const, data: [] })),
-    onChanged: vi.fn(() => () => undefined),
     ...overrides,
   };
   (window as unknown as { collectionsAPI: CollectionsAPI }).collectionsAPI = api;

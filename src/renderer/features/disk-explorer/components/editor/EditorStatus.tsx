@@ -26,11 +26,11 @@ const LABELS: Record<MarkdownSaveState, string> = {
 const keepEditorFocus = (event: React.MouseEvent) => event.preventDefault();
 
 export const EditorStatus: React.FC<EditorStatusProps> = ({ saveState, error, hasFrontmatter, words, onReloadFromDisk, onKeepMine, onRetry }) => (
-  <div className="flex shrink-0 flex-col gap-1 border-t border-border/60 px-4 py-1.5 text-2xs text-muted-foreground" data-disk-shortcuts-ignore="true">
+  <div className="flex shrink-0 flex-col gap-1 border-t border-border/60 px-4 py-1.5 text-2xs text-muted-foreground">
     <div className="flex items-center gap-3">
       <span role="status" data-testid="editor-save-state" data-state={saveState}>{LABELS[saveState]}</span>
       <span>{words} {words === 1 ? 'word' : 'words'}</span>
-      {hasFrontmatter ? <span>Properties are edited in Details</span> : null}
+      {hasFrontmatter ? <span>Properties are hidden</span> : null}
       <span className="flex-1" />
       {saveState === 'error' ? (
         <Button size="compact" variant="outline" onMouseDown={keepEditorFocus} onClick={onRetry}>Retry</Button>

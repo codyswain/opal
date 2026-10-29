@@ -1,31 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useDiskStore } from '../../store/diskStore';
 
 export const ConfirmDeleteDialog: React.FC = () => {
   const pendingDelete = useDiskStore((state) => state.pendingDelete);
-  const selectedPaths = useDiskStore((state) => state.selectedPaths);
   const cancelDelete = useDiskStore((state) => state.cancelDelete);
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const deleteSnapshotRef = useRef<{ pendingDelete: string | null; paths: string[] }>({
-    pendingDelete: null,
-    paths: [],
-  });
-
-  if (!pendingDelete) {
-    deleteSnapshotRef.current = { pendingDelete: null, paths: [] };
-  } else if (deleteSnapshotRef.current.pendingDelete !== pendingDelete) {
-    // The tree trashes one row; only a delete from inside a multi-selection takes the whole selection.
-    deleteSnapshotRef.current = {
-      pendingDelete,
-      paths:
-        selectedPaths.length > 1 && selectedPaths.includes(pendingDelete)
-          ? [...selectedPaths]
-          : [pendingDelete],
-    };
-  }
 
   useEffect(() => {
     if (!pendingDelete) return;
@@ -45,8 +27,6 @@ export const ConfirmDeleteDialog: React.FC = () => {
 
   if (!pendingDelete) return null;
 
-  const deletePaths = deleteSnapshotRef.current.paths;
-  const isBulkDelete = deletePaths.length > 1;
   const name = pendingDelete.split('/').pop() ?? pendingDelete;
 
   const confirm = async () => {
@@ -55,16 +35,13 @@ export const ConfirmDeleteDialog: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
 
-    for (const targetPath of deletePaths) {
-      const result = await window.diskAPI.trash(targetPath);
-      if (!result.success) {
-        setError(result.error);
-        setIsSubmitting(false);
-        return;
-      }
+    const result = await window.diskAPI.trash(pendingDelete);
+    if (!result.success) {
+      setError(result.error);
+      setIsSubmitting(false);
+      return;
     }
 
-    useDiskStore.getState().clearSelection();
     cancelDelete();
   };
 
@@ -85,7 +62,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
           <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0">
             <h2 className="text-base font-medium">
-              {isBulkDelete ? `Move ${deletePaths.length} items to Trash?` : `Move "${name}" to Trash?`}
+              {`Move "${name}" to Trash?`}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               You can restore it from the Trash.

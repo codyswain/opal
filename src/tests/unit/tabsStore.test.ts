@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   RECENT_COLLECTION,
-  directoryCollection,
   fileLocation,
 } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import {
@@ -56,12 +55,12 @@ describe('opening', () => {
     expect(tabPaths()).toEqual([A, A]);
   });
 
-  it('names a file by the folder that holds it, whatever the caller passed', () => {
-    state().open({ mode: 'focus', collection: RECENT_COLLECTION, file: A });
+  it('keeps a file path normalized, whatever the caller passed', () => {
+    state().open({ mode: 'focus', file: '/V/x/../a.md' });
     expect(selectCurrentLocation(state())).toEqual(fileLocation(A));
   });
 
-  it('shows Recent and folders in a tab too', () => {
+  it('shows Recent in a tab too', () => {
     open(A);
     state().open(RECENT);
     expect(tabPaths()).toEqual([null]);
@@ -264,6 +263,26 @@ describe('persistence', () => {
     expect(state().tabs[0].history[0]).toEqual({ location: fileLocation(A) });
   });
 
+  it('drops folder pages saved before they were removed, and reads files saved with their folder', () => {
+    writePref('tabs.session', {
+      date: '2026-10-28',
+      active: 0,
+      tabs: [
+        {
+          history: [
+            { location: { mode: 'browse', collection: { kind: 'directory', directory: '/V' } } },
+            { location: { mode: 'focus', collection: { kind: 'directory', directory: '/V' }, file: A } },
+          ],
+          index: 1,
+        },
+        { history: [{ location: { mode: 'browse', collection: { kind: 'directory', directory: '/V/Library' } } }], index: 0 },
+      ],
+    });
+    state().hydrate();
+    expect(state().tabs.map((tab) => tab.history.map((entry) => entry.location))).toEqual([[fileLocation(A)]]);
+    expect(state().tabs[0].index).toBe(0);
+  });
+
   it('keeps no more than fifty history entries per tab', () => {
     for (let index = 0; index < 60; index += 1) open(`/V/${index}.md`);
     expect(state().tabs[0].history).toHaveLength(50);
@@ -272,16 +291,13 @@ describe('persistence', () => {
 });
 
 describe('path changes', () => {
-  it('remaps every entry, closed tabs too, and keeps a file under its new folder', () => {
+  it('remaps every entry, closed tabs too, and leaves Recent alone', () => {
     openTabs([A, B]);
-    state().open({ mode: 'browse', collection: directoryCollection('/V') });
+    state().open(RECENT);
     state().close(tabId(1));
     const next = remapTabsState(state(), { kind: 'move', oldPath: A, newPath: '/W/a.md' });
     expect(next.tabs[0].history[0].location).toEqual(fileLocation('/W/a.md'));
-    expect(next.tabs[0].history[1].location).toEqual({
-      mode: 'browse',
-      collection: directoryCollection('/V'),
-    });
+    expect(next.tabs[0].history[1].location).toEqual(RECENT);
     const moved = remapTabsState(state(), { kind: 'move', oldPath: '/V', newPath: '/X' });
     expect(moved.recentlyClosed[0].tab.history[0].location).toEqual(fileLocation('/X/b.png'));
   });

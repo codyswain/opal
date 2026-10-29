@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MemoryRouter,
@@ -9,16 +9,19 @@ import {
   useNavigationType,
 } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer';
-import { fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { RECENT_COLLECTION, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useRecentStore } from '@/renderer/features/disk-explorer/store/recentStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { ShellProvider } from '@/renderer/features/shell/context/ShellContext';
+import { installActivityApi } from '@/tests/helpers/activityApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const ROOT = '/Vault';
-const ALPHA = '/Vault/Alpha';
-const NOTE = '/Vault/brief.md';
-const OTHER = '/Vault/other.md';
+const NOTE = '/Vault/brief.txt';
+const OTHER = '/Vault/other.txt';
 
 function FilesHarness() {
   const location = useLocation();
@@ -41,63 +44,71 @@ function renderFilesRoute(initialEntry = '/files') {
       initialEntries={[initialEntry]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
-      <Routes>
-        <Route path="/files" element={<FilesHarness />} />
-      </Routes>
+      <ShellProvider>
+        <Routes>
+          <Route path="/files" element={<FilesHarness />} />
+        </Routes>
+      </ShellProvider>
     </MemoryRouter>
   );
 }
 
-const search = (path: string) => `/files?mode=focus&dir=%2FVault&file=${encodeURIComponent(path)}`;
+const search = (path: string) => `/files?mode=focus&file=${encodeURIComponent(path)}`;
+const listing = [
+  entry({ path: NOTE, name: 'brief.txt', kind: 'text' }),
+  entry({ path: OTHER, name: 'other.txt', kind: 'text' }),
+];
 
 beforeEach(() => {
   window.localStorage.clear();
+  installActivityApi();
   installDiskApi({
-    listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
-    readDirectory: vi.fn(async (path: string) => ({
+    listRoots: vi.fn(async () => ({ success: true as const, data: [] })),
+    readTextFile: vi.fn(async (path: string) => ({
       success: true as const,
-      data: {
-        path,
-        entries:
-          path === ROOT
-            ? [
-                entry({ path: ALPHA, name: 'Alpha', kind: 'directory', isDirectory: true }),
-                entry({ path: NOTE, name: 'brief.md', kind: 'text' }),
-                entry({ path: OTHER, name: 'other.md', kind: 'text' }),
-              ]
-            : [],
-      },
+      data: { path, text: `text of ${path}`, truncated: false, size: 1 },
     })),
   });
+  useRecentStore.getState().reset();
   useDiskStore.setState({
-    roots: [],
-    listings: {},
+    roots: [ROOT],
+    rootsLoaded: true,
+    listings: { [ROOT]: listing },
     expanded: {},
-    currentDirectory: null,
-    focusedPath: null,
-    selectedPath: null,
-    selectedPaths: [],
-    quickPreviewPath: null,
-    isQuickLookOpen: false,
+    pendingAction: null,
+    pendingDelete: null,
     loading: { isLoading: false, error: null },
   });
+  pathMutationCoordinator.reconcileAllowedRoots([ROOT]);
   resetTabs();
 });
 
 describe('FilesRoute', () => {
-  it('loads roots without a mounted sidebar and says no page is open when no tab is', async () => {
+  it('says no file is open when no tab is', () => {
     renderFilesRoute();
-    expect(await screen.findByTestId('no-page-open')).toHaveTextContent('No page is open');
-    expect(window.diskAPI.listRoots).toHaveBeenCalled();
+    expect(screen.getByTestId('no-page-open')).toHaveTextContent('No file is open.');
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/files$/);
   });
 
+  it('asks for a folder once none is known to be open, and shows nothing before that', async () => {
+    useDiskStore.setState({ roots: [], rootsLoaded: false, listings: {} });
+    renderFilesRoute();
+    expect(screen.queryByTestId('no-folder-open')).toBeNull();
+    expect(screen.queryByTestId('no-page-open')).toBeNull();
+    act(() => useDiskStore.setState({ rootsLoaded: true }));
+    expect(screen.getByTestId('no-folder-open')).toHaveTextContent('Open a folder of Markdown files to start.');
+    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+    await waitFor(() => expect(window.diskAPI.openFolder).toHaveBeenCalled());
+  });
+
   it('opens a URL it did not write in a tab once the roots are known', async () => {
+    useDiskStore.setState({ roots: [], rootsLoaded: false });
     renderFilesRoute(search(NOTE));
+    expect(tabPaths()).toEqual([]);
+    act(() => useDiskStore.setState({ roots: [ROOT], rootsLoaded: true }));
     await waitFor(() => expect(openedPath()).toBe(NOTE));
     expect(tabPaths()).toEqual([NOTE]);
-    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(ROOT));
-    expect(screen.getByTestId('files-focus')).toBeInTheDocument();
+    expect(await screen.findByTestId('text-viewer')).toHaveTextContent(`text of ${NOTE}`);
   });
 
   it('mirrors the active tab into the URL, always replacing', async () => {
@@ -113,25 +124,53 @@ describe('FilesRoute', () => {
     expect(screen.getByTestId('no-page-open')).toBeInTheDocument();
   });
 
-  it('follows Back within the active tab and loads what it shows', async () => {
-    useDiskStore.setState({ roots: [ROOT] });
+  it('follows Back within the active tab', async () => {
     renderFilesRoute(search(NOTE));
     await waitFor(() => expect(openedPath()).toBe(NOTE));
-    act(() =>
-      useTabsStore.getState().open({ mode: 'browse', collection: { kind: 'directory', directory: ALPHA } })
+    act(() => useTabsStore.getState().open({ mode: 'browse', collection: RECENT_COLLECTION }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent('/files?mode=browse&collection=recent')
     );
-    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(ALPHA));
+    expect(await screen.findByRole('heading', { name: 'Recent' })).toBeInTheDocument();
     act(() => useTabsStore.getState().back());
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(search(NOTE)));
-    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
     expect(tabPaths()).toEqual([NOTE]);
   });
 
   it('keeps a URL from outside the roots out of the tabs', async () => {
     openTabs([NOTE]);
-    renderFilesRoute('/files?mode=focus&dir=%2FElsewhere&file=%2FElsewhere%2Fsecret.md');
+    renderFilesRoute('/files?mode=focus&file=%2FElsewhere%2Fsecret.md');
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(search(NOTE)));
     expect(tabPaths()).toEqual([NOTE]);
     expect(useTabsStore.getState().tabs[0].history).toEqual([{ location: fileLocation(NOTE) }]);
+  });
+
+  it('follows a rename of the open file and falls back when it is removed', async () => {
+    openTabs([OTHER]);
+    act(() => useTabsStore.getState().open(fileLocation(NOTE)));
+    renderFilesRoute();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(search(NOTE)));
+    act(() => {
+      pathMutationCoordinator.applyAppMutation({ kind: 'rename', oldPath: NOTE, newPath: '/Vault/renamed.txt' });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(search('/Vault/renamed.txt'))
+    );
+    act(() => {
+      pathMutationCoordinator.applyExternalRemoval(['/Vault/renamed.txt']);
+    });
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(search(OTHER)));
+  });
+
+  it('asks for a folder again once the last one is closed', async () => {
+    openTabs([NOTE]);
+    act(() => useTabsStore.getState().open({ mode: 'browse', collection: RECENT_COLLECTION }, { newTab: true }));
+    renderFilesRoute();
+    await screen.findByRole('heading', { name: 'Recent' });
+    await act(async () => {
+      await useDiskStore.getState().closeRoot(ROOT);
+    });
+    expect(await screen.findByTestId('no-folder-open')).toBeInTheDocument();
+    expect(tabPaths()).toEqual([null]);
   });
 });

@@ -114,11 +114,6 @@ beforeEach(() => {
     roots: [ROOT],
     listings: { [ROOT]: LISTINGS[ROOT] },
     expanded: {},
-    currentDirectory: null,
-    currentCollection: null,
-    focusedPath: null,
-    selectedPath: null,
-    selectedPaths: [],
     pendingAction: null,
     pendingDelete: null,
     loading: { isLoading: false, error: null },
@@ -409,10 +404,5 @@ describe('FileTree', () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith('Something already exists')
     );
-  });
-
-  it('keeps folder-view shortcuts away from the tree', () => {
-    renderTree();
-    expect(screen.getByRole('tree')).toHaveAttribute('data-disk-shortcuts-ignore', 'true');
   });
 });

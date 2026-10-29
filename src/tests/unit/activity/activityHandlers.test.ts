@@ -26,7 +26,7 @@ describe('ActivityHandlers', () => {
     stub = ipcStub();
     service = {
       recordOpened: vi.fn(async () => undefined),
-      recent: vi.fn(async () => ({ items: [], total: 0, truncated: false, warnings: [] })),
+      recent: vi.fn(async () => ({ items: [], warnings: [] })),
       clear: vi.fn(async () => undefined),
     };
     new ActivityHandlers({ ipc: stub.ipc, service: service as unknown as ActivityService }).registerAll();
@@ -44,12 +44,16 @@ describe('ActivityHandlers', () => {
     expect(service.recordOpened).toHaveBeenCalledTimes(1);
   });
 
-  it('validates the recent limit and passes it through', async () => {
+  it('validates the recent limit and cutoff and passes them through', async () => {
     expect(await stub.invoke('activity:recent', { limit: 50 })).toMatchObject({ success: true });
     expect(service.recent).toHaveBeenCalledWith({ limit: 50 });
+    expect(await stub.invoke('activity:recent', { since: 1_000 })).toMatchObject({ success: true });
+    expect(service.recent).toHaveBeenLastCalledWith({ since: 1_000 });
     expect(await stub.invoke('activity:recent', undefined)).toMatchObject({ success: true });
     expect(await stub.invoke('activity:recent', { limit: -1 })).toMatchObject({ success: false });
     expect(await stub.invoke('activity:recent', { limit: 'lots' })).toMatchObject({ success: false });
+    expect(await stub.invoke('activity:recent', { since: Number.NaN })).toMatchObject({ success: false });
+    expect(await stub.invoke('activity:recent', { since: '2026-10-01' })).toMatchObject({ success: false });
   });
 
   it('surfaces allowed-root refusals and hides other failures', async () => {

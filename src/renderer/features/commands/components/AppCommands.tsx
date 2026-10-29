@@ -4,7 +4,6 @@ import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from "@/common/commandIds";
 import { parentFsPath } from "@/common/fsPaths";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
-  browseFiles,
   browseRecent,
   focusFile,
 } from "@/renderer/features/disk-explorer/navigation";
@@ -33,15 +32,11 @@ const tabs = () => useTabsStore.getState();
  * menu accelerators, which fire even while the editor has focus.
  */
 export const AppCommands: React.FC = () => {
-  const { navigateFiles, navigateTo } = useShell();
+  const { navigateFiles } = useShell();
   const { resolvedTheme, setTheme } = useTheme();
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
 
   useEffect(() => {
-    const currentFolder = () =>
-      useDiskStore.getState().currentDirectory ??
-      useDiskStore.getState().roots[0] ??
-      null;
     const commands: Command[] = [
       {
         id: "nav.today",
@@ -65,17 +60,6 @@ export const AppCommands: React.FC = () => {
         shortcut: ["CmdOrCtrl+K"],
         keywords: ["palette", "search", "find", "quick open"],
         perform: () => usePaletteStore.getState().show(),
-      },
-      {
-        id: "nav.files",
-        name: "Go to Library",
-        type: "navigation",
-        keywords: ["browse", "folder"],
-        perform: () => {
-          const folder = currentFolder();
-          if (folder) navigateFiles(browseFiles(folder));
-          else navigateTo("/files");
-        },
       },
       {
         id: "nav.recent",
@@ -142,12 +126,7 @@ export const AppCommands: React.FC = () => {
             }
             void useDiskStore.getState().loadDirectory(folder, { force: true });
             recordOpened(result.data.path);
-            navigateFiles(
-              focusFile(
-                parentFsPath(result.data.path) ?? folder,
-                result.data.path,
-              ),
-            );
+            navigateFiles(focusFile(result.data.path));
           });
         },
       },
@@ -259,7 +238,6 @@ export const AppCommands: React.FC = () => {
     };
   }, [
     navigateFiles,
-    navigateTo,
     toggleSidebar,
     resolvedTheme,
     setTheme,

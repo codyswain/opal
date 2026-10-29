@@ -7,7 +7,6 @@ import {
   ipcMain,
   dialog,
   shell,
-  nativeImage,
   nativeTheme,
   screen,
   Menu,
@@ -34,7 +33,6 @@ import { DiskReader } from "@/main/fs/DiskReader";
 import { DiskHandlers } from "@/main/fs/DiskHandlers";
 import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { FileWriter } from "@/main/fs/FileWriter";
-import { ThumbnailService } from "@/main/fs/ThumbnailService";
 import { MetadataService } from "@/main/fs/MetadataService";
 import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
 import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
@@ -48,10 +46,8 @@ import { CollectionQueryService } from "@/main/collections/CollectionQueryServic
 import { CollectionHandlers } from "@/main/collections/CollectionHandlers";
 import {
   OPAL_FILE_SCHEME,
-  OPAL_THUMB_SCHEME,
   registerOpalFileScheme,
   registerOpalFileProtocol,
-  registerOpalThumbProtocol,
 } from "@/main/protocol/opalFile";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -78,7 +74,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}: ${OPAL_THUMB_SCHEME}:`,
+  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
   "font-src 'self' data:",
   `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
@@ -185,8 +181,14 @@ const createWindow = () => {
     });
   });
 
+  // Chromium's PDF viewer is an extension page with its own policy; the app's
+  // policy would block its scripts and leave an embedded PDF blank.
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     (details, callback) => {
+      if (/^chrome(-extension)?:/.test(details.url)) {
+        callback({});
+        return;
+      }
       callback({
         responseHeaders: {
           ...details.responseHeaders,
@@ -366,27 +368,12 @@ const diskReader = new DiskReader({ registry: rootRegistry });
 const activityStore = new ActivityStore({
   storePath: activityStorePath(userDataDir),
 });
-// Collections re-evaluate after index, root or activity changes; one coalesced
-// event covers all three so the renderer never reloads twice for one cause.
-let collectionsChangedTimer: NodeJS.Timeout | null = null;
-const notifyCollectionsChanged = () => {
-  if (collectionsChangedTimer) return;
-  collectionsChangedTimer = setTimeout(() => {
-    collectionsChangedTimer = null;
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send("collections:changed", {});
-  }, 150);
-};
-const collectionIndex = new CollectionIndex({
-  registry: rootRegistry,
-  onChanged: notifyCollectionsChanged,
-});
+const collectionIndex = new CollectionIndex({ registry: rootRegistry });
 const activityService = new ActivityService({
   registry: rootRegistry,
   store: activityStore,
   statEntry: (target) => diskReader.statEntry(target),
   onChanged: () => {
-    notifyCollectionsChanged();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("activity:changed", {});
   },
@@ -427,12 +414,6 @@ const fileWriter = new FileWriter({
   activity: activityService,
   trashItem: (fullPath) => shell.trashItem(fullPath),
 });
-const thumbnailService = new ThumbnailService({
-  registry: rootRegistry,
-  cacheDir: path.join(userDataDir, "thumbnails"),
-  createThumbnail: (sourcePath, maxSize) =>
-    nativeImage.createThumbnailFromPath(sourcePath, maxSize),
-});
 const diskHandlers = new DiskHandlers({
   ipc: ipcMain,
   registry: rootRegistry,
@@ -450,10 +431,7 @@ const diskHandlers = new DiskHandlers({
   },
   watcher: diskWatcher,
   writer: fileWriter,
-  onRootsChanged: () => {
-    collectionIndex.invalidateAll();
-    notifyCollectionsChanged();
-  },
+  onRootsChanged: () => collectionIndex.invalidateAll(),
 });
 const metadataHandlers = new MetadataHandlers({
   ipc: ipcMain,
@@ -496,7 +474,6 @@ app.whenReady().then(async () => {
       }
     }
     registerOpalFileProtocol({ registry: rootRegistry });
-    registerOpalThumbProtocol({ thumbnails: thumbnailService });
     diskHandlers.registerAll();
     metadataHandlers.registerAll();
     activityHandlers.registerAll();

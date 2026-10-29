@@ -1,8 +1,7 @@
 import type { FileKind } from '@/common/fileKind';
 import type { DiskEntry } from './disk';
-import type { ActivityKind } from './activity';
 
-export type CollectionSortField = 'touched' | 'opened' | 'modified' | 'name' | 'size' | 'kind';
+export type CollectionSortField = 'touched' | 'name';
 export type SortDirection = 'asc' | 'desc';
 
 export interface CollectionSort {
@@ -10,27 +9,18 @@ export interface CollectionSort {
   direction: SortDirection;
 }
 
-export type CollectionScope =
-  | { kind: 'all-roots' }
-  | { kind: 'folders'; folders: string[]; includeDescendants: boolean };
-
-export type ActivityField = 'touched' | 'opened';
+/** Every opened folder; the palette's file search is the one caller. */
+export interface CollectionScope {
+  kind: 'all-roots';
+}
 
 export type CollectionFilter =
   | { field: 'name'; op: 'contains' | 'not-contains'; value: string }
-  | { field: 'kind'; op: 'in' | 'not-in'; values: FileKind[] }
-  | { field: 'tags'; op: 'has-any' | 'has-all' | 'has-none'; values: string[] }
-  | { field: 'tags'; op: 'is-empty' }
-  | { field: 'description'; op: 'is-empty' | 'is-not-empty' }
-  | { field: ActivityField; op: 'within'; durationMs: number }
-  | { field: ActivityField; op: 'before' | 'after'; at: number }
-  | { field: ActivityField; op: 'never' }
-  | { field: 'modified'; op: 'within'; durationMs: number }
-  | { field: 'modified'; op: 'before' | 'after'; at: number };
+  | { field: 'kind'; op: 'in' | 'not-in'; values: FileKind[] };
 
 export type CollectionFilterField = CollectionFilter['field'];
 
-/** Every chip must match; multi-value operations are OR within one chip. */
+/** Every filter must match; a kind filter matches any of its kinds. */
 export interface CollectionQuery {
   version: 1;
   scope: CollectionScope;
@@ -45,33 +35,17 @@ export interface CollectionPage {
 
 export interface CollectionRow {
   entry: DiskEntry;
-  /** Null when the item's metadata could not be read. */
-  tags: string[] | null;
-  descriptionEmpty: boolean | null;
+  /** When Opal last opened, edited or organized the item, or null. */
   touchedAt: number | null;
-  touchedKind: ActivityKind | null;
-  openedAt: number | null;
 }
-
-export type CollectionIndexState = 'building' | 'ready';
 
 export interface CollectionQueryResult {
   rows: CollectionRow[];
   total: number;
   offset: number;
   limit: number;
-  /** True when items were excluded because a predicate needed unreadable metadata. */
-  incomplete: boolean;
+  /** Directories that could not be scanned; the rows may be missing items under them. */
   warnings: string[];
-  indexState: CollectionIndexState;
-  /** Scoped folders that are not inside any opened root. The query never widens past them. */
-  unavailableScopes: string[];
-  generation: number;
-}
-
-export interface TagCount {
-  tag: string;
-  count: number;
 }
 
 export const COLLECTION_PAGE_DEFAULT = 200;

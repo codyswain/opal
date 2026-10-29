@@ -8,8 +8,8 @@ import { realpath } from 'fs/promises';
  * sets no baseURL, so page.goto('#/files') cannot resolve. Setting the hash
  * directly is the reliable way to navigate.
  */
-async function gotoFiles(page: Page, search = ''): Promise<void> {
-  await page.evaluate((hash) => { window.location.hash = hash; }, `#/files${search}`);
+async function gotoFiles(page: Page): Promise<void> {
+  await page.evaluate(() => { window.location.hash = '#/files'; });
   await page.waitForSelector('[role="tree"]');
 }
 
@@ -34,22 +34,21 @@ test.beforeEach(async ({ userDataDir }) => {
 });
 
 test.describe('disk explorer', () => {
-  test('browses a real folder and streams images over opal-thumb://', async ({ page }) => {
+  test('opens an image and a PDF from the tree, streamed over opal-file://', async ({ page, electronApp }) => {
     const violations: string[] = [];
     page.on('console', (message) => {
       if (/Content Security Policy/i.test(message.text())) violations.push(message.text());
     });
 
-    const photosPath = `${vaultRoot}/Photos`;
-    await gotoFiles(page, `?mode=browse&dir=${encodeURIComponent(photosPath)}`);
+    await gotoFiles(page);
+    await page.getByTestId(`disk-tree-item-${vaultRoot}/Photos`).click();
+    await page.getByTestId(`disk-tree-item-${vaultRoot}/Photos/alpha.png`).click();
 
-    await expect(page.getByTestId('disk-folder-gallery')).toBeVisible();
-
-    const alpha = page.getByAltText('alpha.png');
+    const alpha = page.getByTestId('image-viewer');
     await expect(alpha).toBeVisible();
 
     // The src must be a streamed protocol URL, never a base64 data URL.
-    await expect(alpha).toHaveAttribute('src', /^opal-thumb:\/\//);
+    await expect(alpha).toHaveAttribute('src', /^opal-file:\/\//);
 
     // And the bytes must have actually decoded. A broken image still renders an
     // <img> element and still reports "visible", but naturalWidth stays 0 — this
@@ -57,6 +56,24 @@ test.describe('disk explorer', () => {
     await expect
       .poll(() => alpha.evaluate((img) => (img as HTMLImageElement).naturalWidth))
       .toBeGreaterThan(0);
+
+    // Chromium's PDF viewer is an extension page. If the app's policy reaches
+    // it, its scripts never run and the embed stays an empty grey box.
+    await page.getByTestId(`disk-tree-item-${vaultRoot}/Papers`).click();
+    await page.getByTestId(`disk-tree-item-${vaultRoot}/Papers/brief.pdf`).click();
+    await expect(page.getByTestId('pdf-viewer')).toHaveAttribute('src', /^opal-file:\/\//);
+    await expect
+      .poll(() =>
+        electronApp.evaluate(async ({ webContents }) => {
+          const viewer = webContents
+            .getAllWebContents()
+            .find((contents) => contents.getURL().startsWith('chrome-extension://'));
+          return viewer
+            ? viewer.executeJavaScript('!!document.querySelector("pdf-viewer")?.shadowRoot')
+            : false;
+        })
+      )
+      .toBe(true);
 
     expect(violations).toEqual([]);
   });

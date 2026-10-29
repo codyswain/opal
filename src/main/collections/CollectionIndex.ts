@@ -1,13 +1,10 @@
 import { stat } from 'fs/promises';
 import path from 'path';
 import { classifyFile, type FileKind } from '@/common/fileKind';
-import { meaningfulTags } from '@/common/collectionQuery';
 import { readMetadata } from '@/main/fs/MetadataCodec';
 import { isInsideRoot, normalizePath } from '@/main/fs/paths';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { listChildren, scanRootsFor, walkRoot } from '@/main/fs/rootTraversal';
-
-export type IndexState = 'idle' | 'building' | 'ready';
 
 export interface IndexedItem {
   path: string;
@@ -16,24 +13,18 @@ export interface IndexedItem {
   isDirectory: boolean;
   size: number;
   mtimeMs: number;
+  /** The metadata UUID, so a replaced file does not inherit the old one's activity; null when unreadable. */
   id: string | null;
-  /** Meaningful (non-blank) tags, or null when metadata was unreadable. */
-  tags: string[] | null;
-  descriptionEmpty: boolean | null;
-  metadataWarning: string | null;
 }
 
 export interface IndexSnapshot {
   items: readonly IndexedItem[];
-  generation: number;
   /** Directories that could not be scanned; results built from this snapshot are partial. */
   warnings: string[];
 }
 
 export interface CollectionIndexDependencies {
   registry: RootRegistry;
-  onChanged?: () => void;
-  changeDebounceMs?: number;
   updateDebounceMs?: number;
 }
 
@@ -46,23 +37,17 @@ export interface CollectionIndexDependencies {
 export class CollectionIndex {
   private items = new Map<string, IndexedItem>();
   private scanWarnings = new Map<string, string>();
-  private generation = 0;
   private rootKey: string | null = null;
-  private status: IndexState = 'idle';
   private queue: Promise<void> = Promise.resolve();
   private pending = new Set<string>();
   private updateTimer: NodeJS.Timeout | null = null;
-  private changeTimer: NodeJS.Timeout | null = null;
 
   constructor(private deps: CollectionIndexDependencies) {}
-
-  state(): IndexState { return this.status; }
 
   async get(): Promise<IndexSnapshot> {
     const rootKey = JSON.stringify(this.deps.registry.list().sort());
     if (rootKey !== this.rootKey) {
       this.rootKey = rootKey;
-      this.status = 'building';
       this.enqueue(() => this.rebuild());
     } else if (this.pending.size > 0) {
       this.flushPending();
@@ -86,7 +71,7 @@ export class CollectionIndex {
   }
 
   private snapshot(): IndexSnapshot {
-    return { items: [...this.items.values()], generation: this.generation, warnings: [...this.scanWarnings.values()] };
+    return { items: [...this.items.values()], warnings: [...this.scanWarnings.values()] };
   }
 
   private enqueue(operation: () => Promise<void>): void {
@@ -100,12 +85,10 @@ export class CollectionIndex {
     if (directories.length === 0) return;
     this.enqueue(async () => {
       for (const directory of directories) await this.refreshDirectory(directory);
-      this.bump();
     });
   }
 
   private async rebuild(): Promise<void> {
-    this.status = 'building';
     const items = new Map<string, IndexedItem>();
     const warnings = new Map<string, string>();
     for (const root of scanRootsFor(this.deps.registry.list())) {
@@ -117,8 +100,6 @@ export class CollectionIndex {
     }
     this.items = items;
     this.scanWarnings = warnings;
-    this.status = 'ready';
-    this.bump();
   }
 
   private async refreshDirectory(directory: string): Promise<void> {
@@ -184,36 +165,13 @@ export class CollectionIndex {
     } catch {
       // A vanished item is dropped by the next directory refresh; keep a stub until then.
     }
-    const item: IndexedItem = {
-      path: target,
-      name,
-      kind: isDirectory ? 'directory' : classifyFile(name),
-      isDirectory,
-      size,
-      mtimeMs,
-      id: null,
-      tags: null,
-      descriptionEmpty: null,
-      metadataWarning: null,
-    };
+    let id: string | null = null;
     try {
-      const state = await readMetadata(this.deps.registry, target);
-      item.id = state.id;
-      item.tags = meaningfulTags(state.properties.tags);
-      item.descriptionEmpty = state.properties.description.trim().length === 0;
-    } catch (error) {
-      item.metadataWarning = describe(target, error);
+      id = (await readMetadata(this.deps.registry, target)).id;
+    } catch {
+      // Unreadable metadata only means the identity check is skipped.
     }
-    return item;
-  }
-
-  private bump(): void {
-    this.generation++;
-    if (!this.deps.onChanged || this.changeTimer) return;
-    this.changeTimer = setTimeout(() => {
-      this.changeTimer = null;
-      this.deps.onChanged?.();
-    }, this.deps.changeDebounceMs ?? 150);
+    return { path: target, name, kind: isDirectory ? 'directory' : classifyFile(name), isDirectory, size, mtimeMs, id };
   }
 }
 

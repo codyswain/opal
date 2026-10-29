@@ -1,20 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Clock, FolderOpen, RotateCw, Search, X } from 'lucide-react';
-import { activityReason } from '@/common/relativeTime';
-import { filterEntries } from '@/common/filterEntries';
-import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
-import type { DiskEntry } from '@/types/disk';
+import { parentFsPath } from '@/common/fsPaths';
+import type { RecentItem } from '@/types/activity';
+import { useShell } from '@/renderer/features/shell/context/ShellContext';
+import { fileTreeLabel } from '@/renderer/features/shell/utils/flattenFileTree';
 import { Button } from '@/renderer/shared/ui';
+import { recordOpened } from '../activity/recordActivity';
+import { groupRecent, recentTime } from '../activity/recentGroups';
+import { focusFile } from '../navigation/filesLocation';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
-import { RECENT_COLLECTION, directoryCollection } from '../navigation/filesLocation';
-import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
-import { useFilesNavigation } from '../navigation/FilesNavigationContext';
-import { CollectionView, type CollectionRowDecoration } from './CollectionView';
-import { EmptyState } from './EmptyState';
-import { GallerySkeleton } from './Skeleton';
+import { vaultRelativePath } from './tabLabels';
 
-/** Re-renders relative labels so "10 minutes ago" keeps pace with the clock. */
+/** Re-renders so the day groups move on at midnight. */
 function useNow(intervalMs = 60_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -24,150 +21,128 @@ function useNow(intervalMs = 60_000): number {
   return now;
 }
 
-interface RecentViewProps {
-  /** Header controls owned by the explorer, such as the Preview toggle. */
-  trailing?: React.ReactNode;
+/** The folder a row names; files at the top of a lone vault have none. */
+function folderOf(path: string, roots: readonly string[]): string {
+  const parent = parentFsPath(path);
+  if (!parent || (roots.length === 1 && parent === roots[0])) return '';
+  return vaultRelativePath(parent, roots);
 }
 
-export const RecentView: React.FC<RecentViewProps> = ({ trailing }) => {
-  const navigation = useFilesNavigation();
+/** Up and Down move between rows, Home and End jump to the ends. */
+function moveFocus(event: React.KeyboardEvent<HTMLElement>) {
+  const rows = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-recent-row]')];
+  const at = rows.indexOf(document.activeElement as HTMLElement);
+  const next =
+    event.key === 'ArrowDown' ? at + 1
+    : event.key === 'ArrowUp' ? at - 1
+    : event.key === 'Home' ? 0
+    : event.key === 'End' ? rows.length - 1
+    : null;
+  if (next === null || !rows[next]) return;
+  event.preventDefault();
+  rows[next].focus();
+}
+
+/** Files opened or edited in the last 30 days, newest first, grouped by day. */
+export const RecentView: React.FC = () => {
+  const { navigateFiles } = useShell();
+  const roots = useDiskStore((state) => state.roots);
   const result = useRecentStore((state) => state.result);
   const loading = useRecentStore((state) => state.loading);
   const error = useRecentStore((state) => state.error);
   const load = useRecentStore((state) => state.load);
-  const filter = useDiskStore((state) => state.filter);
-  const setFilter = useDiskStore((state) => state.setFilter);
-  const selectedPaths = useDiskStore((state) => state.selectedPaths);
-  const [dismissedWarnings, setDismissedWarnings] = useState<string[]>([]);
   const now = useNow();
 
-  // Activity and disk changes both alter membership; reload while visible.
+  // Activity and disk changes both alter the list; reload while it shows.
   useEffect(() => {
-    const api = window.activityAPI;
-    if (!api?.onChanged) return undefined;
-    return api.onChanged(() => { void load(); });
+    void load();
+    const offActivity = window.activityAPI.onChanged(() => { void load(); });
+    const offDisk = window.diskAPI.onChanged(() => { void load(); });
+    return () => {
+      offActivity();
+      offDisk();
+    };
   }, [load]);
-  useEffect(() => window.diskAPI.onChanged(() => { void load(); }), [load]);
 
-  const byPath = useMemo(
-    () => new Map((result?.items ?? []).map((item) => [item.entry.path, item])),
-    [result]
-  );
-  const entries = useMemo(
-    () => filterEntries((result?.items ?? []).map((item) => item.entry), filter),
-    [result, filter]
-  );
-  const decorate = useMemo(
-    () => (entry: DiskEntry): CollectionRowDecoration | null => {
-      const item = byPath.get(entry.path);
-      if (!item) return null;
-      const parent = parentFsPath(entry.path);
-      return {
-        detail: activityReason(item.touchedKind, item.touchedAt, now),
-        secondary: parent ? basenameFsPath(parent) : undefined,
-      };
-    },
-    [byPath, now]
-  );
+  const groups = useMemo(() => groupRecent(result?.items ?? [], now), [result, now]);
 
-  const selectedTarget = selectedPaths.length === 1 ? selectedPaths[0] : null;
-  const showInFolder = () => {
-    const parent = selectedTarget ? parentFsPath(selectedTarget) : null;
-    if (!selectedTarget || !parent) return;
-    // Arriving in the folder restores this snapshot, so the item lands selected.
-    filesLocationSnapshots.patch(
-      { mode: 'browse', collection: directoryCollection(parent) },
-      { selectedPaths: [selectedTarget], focusedPath: selectedTarget }
-    );
-    navigation.navigateDirectory(parent);
+  const open = (item: RecentItem, newTab: boolean) => {
+    recordOpened(item.entry.path);
+    navigateFiles(focusFile(item.entry.path), { newTab });
   };
 
-  const warnings = (result?.warnings ?? []).filter((warning) => !dismissedWarnings.includes(warning));
+  let body: React.ReactNode;
+  if (error && !result) {
+    body = (
+      <div className="flex items-center gap-3 px-2">
+        <p role="alert" className="text-ui text-foreground-secondary">{error}</p>
+        <Button size="compact" variant="outline" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
+  } else if (!result) {
+    body = loading ? <p role="status" className="px-2 text-ui text-foreground-tertiary">Loading…</p> : null;
+  } else if (groups.length === 0) {
+    body = <p className="px-2 text-ui text-foreground-tertiary">Files you open or edit show up here.</p>;
+  } else {
+    body = (
+      <div onKeyDown={moveFocus}>
+        {groups.map((group) => (
+          <section key={group.label} aria-label={group.label} className="pb-4">
+            <h2 className="px-2 pb-1 text-label text-foreground-tertiary">{group.label}</h2>
+            <ul className="flex flex-col gap-0.5">
+              {group.items.map((item) => (
+                <li key={item.entry.path}>
+                  <RecentRow item={item} roots={roots} now={now} onOpen={open} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div
-        data-disk-shortcuts-ignore="true"
-        data-testid="recent-header"
-        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2"
-      >
-        <Clock aria-hidden className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-medium">Recent</h2>
-        <div className="relative ml-2">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Escape') setFilter(''); }}
-            placeholder="Filter"
-            aria-label="Filter recent items"
-            data-testid="filter-input"
-            className="w-40 rounded-md border border-transparent bg-muted/50 py-1 pl-7 pr-6 text-xs focus:border-ring focus:outline-none"
-          />
-          {filter ? (
-            <button
-              type="button"
-              onClick={() => setFilter('')}
-              aria-label="Clear filter"
-              data-testid="filter-clear"
-              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-hover hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          ) : null}
-        </div>
-        <div className="min-w-0 flex-1" />
-        <Button size="compact" variant="ghost" disabled={!selectedTarget} onClick={showInFolder}>
-          Show in folder
-        </Button>
-        {trailing}
-      </div>
-
-      {warnings.length > 0 ? (
-        <div role="status" className="flex shrink-0 items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
-          <div className="flex-1">
-            {warnings.map((warning) => <p key={warning}>{warning}</p>)}
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            onClick={() => setDismissedWarnings((previous) => [...previous, ...warnings])}
-            className="rounded p-1"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      ) : null}
-
-      {error && !result ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <p role="alert" className="text-sm text-destructive">{error}</p>
-          <Button variant="outline" onClick={() => void load()}>
-            <RotateCw aria-hidden className="h-4 w-4" />
-            Retry
-          </Button>
-        </div>
-      ) : !result && loading ? (
-        <GallerySkeleton />
-      ) : (
-        <CollectionView
-          location={{ mode: 'browse', collection: RECENT_COLLECTION }}
-          entries={entries}
-          suggestedMode="list"
-          filter={filter}
-          onClearFilter={() => setFilter('')}
-          decorate={decorate}
-          countLabel={result?.truncated ? `${entries.length} of ${result.total} items` : undefined}
-          emptyState={(
-            <EmptyState
-              Icon={FolderOpen}
-              title="Nothing recent yet"
-              description="Items you open or work on will appear here."
-            />
-          )}
-        />
-      )}
+    <div data-testid="recent" className="mx-auto max-w-reading px-6 pb-24 pt-10">
+      <h1 className="px-2 pb-6 text-xl font-semibold text-foreground">Recent</h1>
+      {result?.warnings.map((warning) => (
+        <p key={warning} role="status" className="px-2 pb-4 text-ui text-foreground-secondary">
+          {warning}
+        </p>
+      ))}
+      {body}
     </div>
+  );
+};
+
+interface RecentRowProps {
+  item: RecentItem;
+  roots: readonly string[];
+  now: number;
+  onOpen: (item: RecentItem, newTab: boolean) => void;
+}
+
+const RecentRow: React.FC<RecentRowProps> = ({ item, roots, now, onOpen }) => {
+  const { path, name, kind } = item.entry;
+  return (
+    <button
+      type="button"
+      data-recent-row
+      data-testid={`recent-row-${path}`}
+      title={vaultRelativePath(path, roots)}
+      onClick={(event) => onOpen(item, event.metaKey || event.ctrlKey)}
+      onAuxClick={(event) => {
+        if (event.button === 1) onOpen(item, true);
+      }}
+      className="flex h-row w-full min-w-0 items-center gap-3 rounded-row px-2 text-left text-ui outline-none transition-hover hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+    >
+      <span className="min-w-0 truncate text-foreground">{fileTreeLabel(name, kind)}</span>
+      <span className="min-w-0 flex-1 truncate text-foreground-tertiary">{folderOf(path, roots)}</span>
+      <span className="shrink-0 text-metadata tabular-nums text-foreground-tertiary">
+        {recentTime(item.touchedAt, now)}
+      </span>
+    </button>
   );
 };

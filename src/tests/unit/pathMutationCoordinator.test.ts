@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { directoryCollection } from '@/renderer/features/disk-explorer/navigation/filesLocation';
-import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import {
   createPathMutationCoordinator,
   pathMutationCoordinator,
@@ -19,7 +17,6 @@ const REMAPPED_NOTE = '/Vault/Writing/today.md';
 
 beforeEach(() => {
   window.localStorage.clear();
-  filesLocationSnapshots.clear();
   useDiskStore.setState({
     roots: [ROOT],
     listings: {
@@ -40,13 +37,7 @@ beforeEach(() => {
       [NOTES]: [entry({ path: NOTE, name: 'today.md', kind: 'markdown' })],
     },
     expanded: { [ROOT]: true, [NOTES]: true },
-    currentDirectory: NOTES,
-    focusedPath: NOTE,
-    selectedPath: NOTE,
-    selectedPaths: [NOTE],
-    quickPreviewPath: NOTE,
-    isQuickLookOpen: true,
-    pendingAction: { kind: 'rename', target: NOTE },
+    pendingAction: { kind: 'new-folder', target: NOTES },
     pendingDelete: NOTE,
   });
   openTabs([NOTE, '/Vault/keep.md']);
@@ -167,16 +158,7 @@ describe('path mutation coordination', () => {
     expect(coordinator.getAllowedRoots()).toEqual(['/Other']);
   });
 
-  it('atomically remaps disk state, tabs, and location snapshots', () => {
-    filesLocationSnapshots.capture(
-      { mode: 'browse', collection: directoryCollection(NOTES)},
-      {
-        selectedPaths: [NOTE],
-        focusedPath: NOTE,
-        scroll: { view: 'details', offset: 120 },
-      }
-    );
-
+  it('atomically remaps disk state and tabs', () => {
     expect(
       pathMutationCoordinator.applyAppMutation({
         kind: 'rename',
@@ -186,42 +168,27 @@ describe('path mutation coordination', () => {
     ).toBe(true);
 
     const disk = useDiskStore.getState();
-    expect(disk.currentDirectory).toBe(WRITING);
-    expect(disk.focusedPath).toBe(REMAPPED_NOTE);
-    expect(disk.selectedPath).toBe(REMAPPED_NOTE);
-    expect(disk.selectedPaths).toEqual([REMAPPED_NOTE]);
-    expect(disk.quickPreviewPath).toBe(REMAPPED_NOTE);
+    expect(disk.expanded).toEqual({ [ROOT]: true, [WRITING]: true });
     expect(disk.listings[NOTES]).toBeUndefined();
     expect(disk.listings[WRITING]?.[0]?.path).toBe(REMAPPED_NOTE);
     expect(disk.listings[ROOT]?.[0]).toMatchObject({
       path: WRITING,
       name: 'Writing',
     });
-    expect(disk.pendingAction?.target).toBe(REMAPPED_NOTE);
+    expect(disk.pendingAction?.target).toBe(WRITING);
     expect(disk.pendingDelete).toBe(REMAPPED_NOTE);
 
     expect(tabPaths()).toEqual([REMAPPED_NOTE, '/Vault/keep.md']);
     expect(openedPath()).toBe(REMAPPED_NOTE);
-    expect(
-      filesLocationSnapshots.read({
-        mode: 'browse',
-        collection: directoryCollection(WRITING),
-      })
-    ).toMatchObject({
-      selectedPaths: [REMAPPED_NOTE],
-      focusedPath: REMAPPED_NOTE,
-    });
   });
 
   it('conservatively clears removed state without guessing a remap', () => {
     pathMutationCoordinator.applyExternalRemoval([NOTES]);
 
     const disk = useDiskStore.getState();
-    expect(disk.currentDirectory).toBe(ROOT);
-    expect(disk.focusedPath).toBeNull();
-    expect(disk.selectedPaths).toEqual([]);
-    expect(disk.quickPreviewPath).toBeNull();
-    expect(disk.isQuickLookOpen).toBe(false);
+    expect(disk.pendingAction).toBeNull();
+    expect(disk.pendingDelete).toBeNull();
+    expect(disk.expanded).toEqual({ [ROOT]: true });
     expect(disk.listings[NOTES]).toBeUndefined();
     expect(disk.listings[ROOT]?.map((item) => item.path)).toEqual([
       '/Vault/Photos-backup',
@@ -237,9 +204,8 @@ describe('path mutation coordination', () => {
       roots: [],
       listings: {},
       expanded: {},
-      currentDirectory: null,
-      focusedPath: null,
-      selectedPaths: [],
+      pendingAction: null,
+      pendingDelete: null,
     });
     expect(tabPaths()).toEqual([]);
     expect(useTabsStore.getState().activeId).toBeNull();
@@ -275,12 +241,12 @@ describe('path mutation coordination', () => {
     };
     pathMutationCoordinator.applyAppMutation(mutation);
     const afterFirst = {
-      disk: useDiskStore.getState().selectedPaths,
+      disk: useDiskStore.getState().listings,
       tabs: tabPaths(),
     };
     pathMutationCoordinator.applyAppMutation(mutation);
 
-    expect(useDiskStore.getState().selectedPaths).toEqual(afterFirst.disk);
+    expect(useDiskStore.getState().listings).toEqual(afterFirst.disk);
     expect(tabPaths()).toEqual(afterFirst.tabs);
   });
 });

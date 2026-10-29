@@ -24,7 +24,7 @@ export function openTabs(places: readonly (string | FilesLocation)[], active = 0
   if (tab) useTabsStore.getState().activate(tab.id);
 }
 
-/** The file each tab shows, left to right; null for Recent or a folder. */
+/** The file each tab shows, left to right; null for Recent. */
 export function tabPaths(): (string | null)[] {
   return useTabsStore.getState().tabs.map(tabFile);
 }

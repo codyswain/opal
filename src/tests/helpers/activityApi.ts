@@ -19,7 +19,7 @@ export function recentItem(over: Partial<Omit<RecentItem, 'entry'>> & { entry: E
 }
 
 export function recentResult(items: RecentItem[] = [], over: Partial<RecentResult> = {}): RecentResult {
-  return { items, total: items.length, truncated: false, warnings: [], ...over };
+  return { items, warnings: [], ...over };
 }
 
 /** Installs a fake activityAPI on the real `window`; see installDiskApi for why. */

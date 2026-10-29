@@ -74,7 +74,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ document,
   useEffect(() => () => { void actions.current.flush(); }, []);
 
   return (
-    <div className="opal-editor flex h-full min-h-0 flex-col" data-disk-shortcuts-ignore="true">
+    <div className="opal-editor flex h-full min-h-0 flex-col">
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-auto">
         {editor ? <EditorBubbleMenu editor={editor} container={scroller.current} /> : null}
         <EditorContent editor={editor} className="h-full" />

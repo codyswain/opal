@@ -67,8 +67,15 @@ export class ActivityHandlers {
 function parseRecentQuery(query: unknown): RecentQuery | null {
   if (query === undefined || query === null) return {};
   if (typeof query !== 'object') return null;
-  const limit = (query as { limit?: unknown }).limit;
-  if (limit === undefined) return {};
-  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 1) return null;
-  return { limit };
+  const { limit, since } = query as { limit?: unknown; since?: unknown };
+  const request: RecentQuery = {};
+  if (limit !== undefined) {
+    if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 1) return null;
+    request.limit = limit;
+  }
+  if (since !== undefined) {
+    if (typeof since !== 'number' || !Number.isFinite(since)) return null;
+    request.since = since;
+  }
+  return request;
 }

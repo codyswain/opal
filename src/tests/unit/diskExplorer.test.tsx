@@ -1,12 +1,17 @@
-import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { MemoryRouter } from 'react-router-dom';
 import { DiskExplorer } from '@/renderer/features/disk-explorer/components/DiskExplorer';
+import { RECENT_COLLECTION, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useRecentStore } from '@/renderer/features/disk-explorer/store/recentStore';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { ShellProvider } from '@/renderer/features/shell/context/ShellContext';
+import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
-import { openedPath, resetTabs } from '@/tests/helpers/tabs';
+import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { openTabs, resetTabs } from '@/tests/helpers/tabs';
 
 const { toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
@@ -19,298 +24,94 @@ vi.mock('sonner', () => ({
 }));
 
 const ROOT = '/Vault';
-const PHOTOS = '/Vault/Photos';
-let readDirectory: ReturnType<typeof vi.fn>;
+const PHOTO = '/Vault/cover.png';
+const NOTE = '/Vault/note.md';
+
+type StatResult = Awaited<ReturnType<typeof window.diskAPI.stat>>;
+
+function renderPage() {
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <ShellProvider>
+        <DiskExplorer />
+      </ShellProvider>
+    </MemoryRouter>
+  );
+}
 
 beforeEach(() => {
-  filesLocationSnapshots.clear();
   resetTabs();
   toastError.mockClear();
-  readDirectory = vi.fn(async (p: string) => ({
-    success: true as const,
-    data: {
-      path: p,
-      entries: p === PHOTOS
-        ? [entry({ path: `${PHOTOS}/a.jpg`, name: 'a.jpg', kind: 'image' })]
-        : [],
-    },
-  }));
-
+  installActivityApi();
+  installMarkdownApi({ [NOTE]: '# Note\n' });
   installDiskApi({
-    readDirectory,
-    openFolder: vi.fn(async () => ({ success: true as const, data: { root: ROOT } })),
-    listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })),
+    stat: vi.fn(async () => ({ success: false as const, error: 'Missing' })),
   });
-
+  useRecentStore.getState().reset();
   useDiskStore.setState({
     roots: [ROOT],
+    rootsLoaded: true,
     listings: {
-      [ROOT]: [entry({ path: PHOTOS, name: 'Photos', kind: 'directory', isDirectory: true })],
+      [ROOT]: [
+        entry({ path: PHOTO, name: 'cover.png', kind: 'image' }),
+        entry({ path: NOTE, name: 'note.md', kind: 'markdown' }),
+      ],
     },
     expanded: {},
-    currentDirectory: ROOT,
-    focusedPath: null,
-    isQuickLookOpen: false,
-    quickPreviewPath: null,
-    selectedPath: null,
-    selectedPaths: [],
     pendingAction: null,
     pendingDelete: null,
-    sort: { field: 'name', direction: 'asc' },
     loading: { isLoading: false, error: null },
   });
 });
 
 describe('DiskExplorer', () => {
-  const NOTE = `${ROOT}/note.md`;
-  const entryOf = (path: string) => screen.getByTestId(`disk-folder-entry-${path}`);
-  /** A modified click only selects, as in Finder; a plain click opens. */
-  const select = (path: string) => fireEvent.click(entryOf(path), { metaKey: true });
-  const withNote = () =>
-    useDiskStore.setState({
-      listings: {
-        [ROOT]: [entry({ path: NOTE, name: 'note.md', kind: 'markdown' })],
-      },
-    });
-
-  it('shows the folder without a tree of its own; the shell sidebar has the tree', () => {
-    render(<DiskExplorer />);
-    expect(screen.queryByRole('tree')).toBeNull();
-    expect(entryOf(PHOTOS)).toBeInTheDocument();
+  it('shows a file the tree already listed at once', () => {
+    openTabs([PHOTO]);
+    renderPage();
+    expect(screen.getByAltText('cover.png')).toBeInTheDocument();
+    expect(window.diskAPI.stat).not.toHaveBeenCalled();
   });
 
-  it('opens a folder from its entry', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
+  it('opens Markdown in the editor', async () => {
+    openTabs([NOTE]);
+    renderPage();
+    await waitFor(() => expect(window.markdownAPI.read).toHaveBeenCalledWith(NOTE));
+    expect(screen.queryByTestId('open-in-default-app')).toBeNull();
+  });
 
-    await user.click(entryOf(PHOTOS));
+  it('looks up any other file, and drops a late answer for a file left behind', async () => {
+    let finish: (result: StatResult) => void = () => undefined;
+    window.diskAPI.stat = vi.fn((path: string) =>
+      path === '/Vault/Deep/a.txt'
+        ? new Promise<StatResult>((resolve) => { finish = resolve; })
+        : Promise.resolve({ success: false as const, error: 'Missing' })
+    );
+    openTabs(['/Vault/Deep/a.txt']);
+    renderPage();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading file…');
+    act(() => useTabsStore.getState().open(fileLocation('/Vault/Deep/b.txt')));
+    expect(await screen.findByText('File unavailable')).toBeInTheDocument();
+    act(() =>
+      finish({ success: true, data: entry({ path: '/Vault/Deep/a.txt', name: 'a.txt', kind: 'text' }) })
+    );
+    await waitFor(() => expect(screen.getByText('File unavailable')).toBeInTheDocument());
+    expect(screen.queryByTestId('text-viewer')).toBeNull();
+  });
 
-    await waitFor(() => expect(screen.getByAltText('a.jpg')).toBeInTheDocument());
+  it('shows Recent when the tab does', async () => {
+    useTabsStore.getState().open({ mode: 'browse', collection: RECENT_COLLECTION });
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Recent' })).toBeInTheDocument();
+    expect(window.activityAPI.recent).toHaveBeenCalled();
   });
 
   it('shows a toast and keeps the error banner for a store error', async () => {
+    openTabs([PHOTO]);
     useDiskStore.setState({ loading: { isLoading: false, error: 'Permission denied' } });
-    render(<DiskExplorer />);
-
+    renderPage();
     await waitFor(() =>
       expect(screen.getByTestId('disk-explorer-error')).toHaveTextContent('Permission denied')
     );
     expect(toastError).toHaveBeenCalledWith('Permission denied');
-  });
-
-  it('only toggles quick look on Space for a previewable selected entry', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
-
-    fireEvent.keyDown(window, { code: 'Space' });
-    expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
-    expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();
-
-    select(PHOTOS);
-    fireEvent.keyDown(window, { code: 'Space' });
-    expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
-    expect(screen.queryByTestId('quick-look')).not.toBeInTheDocument();
-
-    await user.click(entryOf(PHOTOS));
-    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
-    fireEvent.keyDown(window, { code: 'Space' });
-
-    expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
-    expect(screen.getByTestId('quick-look')).toBeInTheDocument();
-  });
-
-  it('opens the selected file in the main surface on Cmd+Down', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
-
-    await user.click(entryOf(PHOTOS));
-    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
-    fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
-
-    expect(openedPath()).toBe(`${PHOTOS}/a.jpg`);
-    expect(screen.getByTestId('files-focus')).toBeInTheDocument();
-  });
-
-  it('navigates into the selected collection folder on Cmd+Down', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
-    await user.click(entryOf(PHOTOS));
-    fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
-    await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(PHOTOS));
-  });
-
-  it('navigates to the parent folder on Cmd+Up and stops at a root', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
-
-    await user.click(entryOf(PHOTOS));
-    fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
-    fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
-    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
-
-    fireEvent.keyDown(window, { key: 'ArrowUp', metaKey: true });
-    expect(useDiskStore.getState().currentDirectory).toBe(ROOT);
-  });
-
-  it('starts rename on bare Enter for the selected item', () => {
-    withNote();
-    render(<DiskExplorer />);
-    select(NOTE);
-    fireEvent.keyDown(window, { key: 'Enter' });
-
-    expect(useDiskStore.getState().pendingAction).toEqual({
-      kind: 'rename',
-      target: NOTE,
-    });
-  });
-
-  it('keeps Enter and Delete working after clicking a gallery tile', async () => {
-    const user = userEvent.setup();
-    render(<DiskExplorer />);
-
-    await user.click(entryOf(PHOTOS));
-    const tile = await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg');
-    fireEvent.click(tile, { metaKey: true });
-
-    fireEvent.keyDown(window, { key: 'Enter' });
-    expect(useDiskStore.getState().pendingAction).toEqual({
-      kind: 'rename',
-      target: '/Vault/Photos/a.jpg',
-    });
-
-    useDiskStore.setState({ pendingAction: null });
-    fireEvent.keyDown(window, { key: 'Delete' });
-    expect(useDiskStore.getState().pendingDelete).toBe('/Vault/Photos/a.jpg');
-  });
-
-  it('keeps Enter and Delete working after clicking a list row', () => {
-    withNote();
-    render(<DiskExplorer />);
-    select(NOTE);
-    expect(useDiskStore.getState().focusedPath).toBe(NOTE);
-
-    fireEvent.keyDown(window, { key: 'Enter' });
-    expect(useDiskStore.getState().pendingAction).toEqual({
-      kind: 'rename',
-      target: NOTE,
-    });
-
-    useDiskStore.setState({ pendingAction: null });
-    fireEvent.keyDown(window, { key: 'Delete' });
-    expect(useDiskStore.getState().pendingDelete).toBe(NOTE);
-  });
-
-  it('does not start rename when Enter activates the new-folder button', async () => {
-    const user = userEvent.setup();
-    withNote();
-    render(<DiskExplorer />);
-    select(NOTE);
-
-    const newButton = screen.getByTestId('toolbar-new');
-    newButton.focus();
-    expect(newButton).toHaveFocus();
-
-    // Enter on the New button opens its menu rather than renaming the selection.
-    await user.keyboard('{Enter}');
-    expect(useDiskStore.getState().pendingAction?.kind).not.toBe('rename');
-    await user.click(await screen.findByTestId('toolbar-new-folder'));
-
-    expect(useDiskStore.getState().pendingAction).toEqual({
-      kind: 'new-folder',
-      target: ROOT,
-    });
-  });
-
-  it('starts delete confirmation on Delete for the selected item', () => {
-    withNote();
-    render(<DiskExplorer />);
-    select(NOTE);
-    fireEvent.keyDown(window, { key: 'Delete' });
-
-    expect(useDiskStore.getState().pendingDelete).toBe(NOTE);
-  });
-
-  it('does not start delete when Delete targets a button or a pending action exists', () => {
-    withNote();
-    render(<DiskExplorer />);
-    select(NOTE);
-
-    const newFolderButton = screen.getByTestId('toolbar-new');
-    newFolderButton.focus();
-    fireEvent.keyDown(newFolderButton, { key: 'Delete' });
-    expect(useDiskStore.getState().pendingDelete).toBeNull();
-
-    useDiskStore.setState({
-      pendingAction: { kind: 'rename', target: NOTE },
-      pendingDelete: null,
-    });
-    fireEvent.keyDown(window, { key: 'Backspace' });
-    expect(useDiskStore.getState().pendingDelete).toBeNull();
-  });
-
-  it('selects every visible entry on Cmd+A', () => {
-    useDiskStore.setState({
-      listings: {
-        [ROOT]: [
-          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
-          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
-        ],
-      },
-      selectedPath: `${ROOT}/alpha.md`,
-      selectedPaths: [`${ROOT}/alpha.md`],
-    });
-
-    render(<DiskExplorer />);
-    fireEvent.keyDown(window, { key: 'a', metaKey: true });
-
-    expect(useDiskStore.getState().selectedPath).toBe(`${ROOT}/beta.md`);
-    expect(useDiskStore.getState().selectedPaths).toEqual([
-      `${ROOT}/alpha.md`,
-      `${ROOT}/beta.md`,
-    ]);
-  });
-
-  it('does not hijack Cmd+A while typing', () => {
-    useDiskStore.setState({
-      listings: {
-        [ROOT]: [
-          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
-          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
-        ],
-      },
-      selectedPath: `${ROOT}/alpha.md`,
-      selectedPaths: [`${ROOT}/alpha.md`],
-    });
-
-    render(<DiskExplorer />);
-
-    const input = document.createElement('input');
-    document.body.appendChild(input);
-    input.focus();
-
-    fireEvent.keyDown(input, { key: 'a', metaKey: true });
-
-    expect(useDiskStore.getState().selectedPaths).toEqual([`${ROOT}/alpha.md`]);
-    input.remove();
-  });
-
-  it('ignores Cmd+A while delete confirmation is open', () => {
-    useDiskStore.setState({
-      listings: {
-        [ROOT]: [
-          entry({ path: `${ROOT}/alpha.md`, name: 'alpha.md', kind: 'markdown' }),
-          entry({ path: `${ROOT}/beta.md`, name: 'beta.md', kind: 'markdown' }),
-        ],
-      },
-      pendingDelete: `${ROOT}/alpha.md`,
-      selectedPath: `${ROOT}/alpha.md`,
-      selectedPaths: [`${ROOT}/alpha.md`],
-    });
-
-    render(<DiskExplorer />);
-    fireEvent.keyDown(window, { key: 'a', metaKey: true });
-
-    expect(useDiskStore.getState().selectedPath).toBe(`${ROOT}/alpha.md`);
-    expect(useDiskStore.getState().selectedPaths).toEqual([`${ROOT}/alpha.md`]);
   });
 });

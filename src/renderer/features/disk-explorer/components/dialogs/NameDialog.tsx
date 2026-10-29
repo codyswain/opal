@@ -1,4 +1,3 @@
-import { pathMutationCoordinator } from '../../navigation/pathMutationCoordinator';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDiskStore } from '../../store/diskStore';
 
@@ -14,6 +13,7 @@ export function isValidName(name: string): boolean {
   );
 }
 
+/** Names a new folder; renames happen inline in the tree. */
 export const NameDialog: React.FC = () => {
   const pendingAction = useDiskStore((state) => state.pendingAction);
   const cancelAction = useDiskStore((state) => state.cancelAction);
@@ -23,26 +23,13 @@ export const NameDialog: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isRename = pendingAction?.kind === 'rename';
-
   useEffect(() => {
     if (!pendingAction) return;
-
-    const initial = isRename ? pendingAction.target.split('/').pop() ?? '' : '';
-    setName(initial);
+    setName('');
     setError(null);
     setIsSubmitting(false);
-
-    // Select the basename but not the extension, so typing replaces the name
-    // and keeps ".md" - the behavior Finder has trained everyone to expect.
-    requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) return;
-      input.focus();
-      const dot = initial.lastIndexOf('.');
-      input.setSelectionRange(0, dot > 0 ? dot : initial.length);
-    });
-  }, [isRename, pendingAction]);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [pendingAction]);
 
   if (!pendingAction) return null;
 
@@ -51,10 +38,7 @@ export const NameDialog: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
 
-    const trimmed = name.trim();
-    const result = isRename
-      ? await window.diskAPI.rename(pendingAction.target, trimmed)
-      : await window.diskAPI.createDirectory(pendingAction.target, trimmed);
+    const result = await window.diskAPI.createDirectory(pendingAction.target, name.trim());
 
     if (!result.success) {
       // Keep the dialog open so the user can correct the name in place rather
@@ -64,7 +48,6 @@ export const NameDialog: React.FC = () => {
       return;
     }
 
-    if (isRename) pathMutationCoordinator.applyAppMutation({kind: 'rename', oldPath: pendingAction.target, newPath: result.data.path});
     cancelAction();
   };
 
@@ -79,7 +62,7 @@ export const NameDialog: React.FC = () => {
         className="relative flex w-[min(90vw,400px)] flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-2xl"
       >
         <h2 data-testid="name-dialog-title" className="text-base font-medium">
-          {isRename ? 'Rename' : 'New Folder'}
+          New folder
         </h2>
 
         <input
@@ -97,7 +80,7 @@ export const NameDialog: React.FC = () => {
               cancelAction();
             }
           }}
-          aria-label={isRename ? 'New name' : 'Folder name'}
+          aria-label="Folder name"
           data-testid="name-dialog-input"
           className="rounded-md border border-border bg-muted/50 px-2 py-2 text-sm focus:border-ring focus:outline-none"
         />
@@ -130,7 +113,7 @@ export const NameDialog: React.FC = () => {
             data-testid="name-dialog-submit"
             className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
           >
-            {isRename ? 'Rename' : 'Create'}
+            Create
           </button>
         </div>
       </div>

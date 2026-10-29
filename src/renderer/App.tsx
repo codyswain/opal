@@ -90,7 +90,7 @@ const App: React.FC = () => {
             <AppCommands />
             <CommandPalette />
             <SettingsDialog />
-            {/* File actions start from the sidebar tree and the folder view alike. */}
+            {/* The sidebar tree starts these file actions. */}
             <NameDialog />
             <ConfirmDeleteDialog />
             <AppShell>

@@ -10,7 +10,7 @@ export const BUDGETS = {
   coldLaunchMs: 400,
   /** Switching between /files and /explorer. */
   routeSwitchMs: 50,
-  /** Sorting and rendering a 5,000-entry directory listing. */
+  /** Laying out a 5,000-entry folder in the sidebar tree. */
   listingMs: 150,
   /** One keystroke in a filter or search box — one 60fps frame. */
   keystrokeMs: 16,

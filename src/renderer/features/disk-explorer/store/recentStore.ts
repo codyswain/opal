@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { RecentResult } from '@/types/activity';
+import { recentSince } from '../activity/recentGroups';
 
 export interface RecentState {
   result: RecentResult | null;
@@ -31,7 +32,7 @@ export const useRecentStore = create<RecentStore>((set, get) => ({
     set({ loading: true });
     let response: RecentResponse;
     try {
-      response = await window.activityAPI.recent({});
+      response = await window.activityAPI.recent({ since: recentSince(Date.now()) });
     } catch {
       response = { success: false, error: 'Could not load recent activity.' };
     }

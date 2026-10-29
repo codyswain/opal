@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Folder, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   Badge,
@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  EmptyState,
   IconButton,
   Kbd,
   Menu,
@@ -26,7 +25,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   SegmentedControl,
-  Skeleton,
   Switch,
   TooltipProvider,
 } from '@/renderer/shared/ui';
@@ -323,32 +321,14 @@ describe('overlays', () => {
 });
 
 describe('feedback primitives', () => {
-  it('keeps empty-state copy specific and its icon decorative', () => {
-    render(
-      <EmptyState
-        Icon={Folder}
-        title="No folders yet"
-        description="Open a folder to start browsing."
-        action={<Button>Open folder</Button>}
-      />
-    );
-
-    expect(screen.getByText('No folders yet')).toBeInTheDocument();
-    expect(screen.getByText('Open a folder to start browsing.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open folder' })).toBeInTheDocument();
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
-  });
-
-  it('marks skeletons as decorative while badges and shortcuts stay readable', () => {
+  it('keeps badges and shortcuts readable', () => {
     render(
       <>
-        <Skeleton />
         <Badge tone="success">Synced</Badge>
         <Kbd>⌘K</Kbd>
       </>
     );
 
-    expect(screen.getByTestId('skeleton')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByText('Synced')).toBeInTheDocument();
     expect(screen.getByText('⌘K')).toBeInTheDocument();
   });

@@ -25,6 +25,10 @@ that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
     `activityAPI`, `collectionsAPI`, `markdownAPI`, `vaultAPI`
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame)
+- **Main area:** each tab shows one file or Recent. Markdown opens in the
+  editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
+  plain text, otherwise "Open in default app"). There is no folder view:
+  folders are browsed in the sidebar tree, which also holds the file actions
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
   every path that crosses IPC is resolved and checked against opened folders
 - **Path alias:** `@/*` maps to `src/*`
@@ -39,7 +43,7 @@ src/
   main/                # Main process
     fs/                # Roots, listings, watcher, metadata, file mutations
     activity/          # Personal activity behind Recent
-    collections/       # Disposable index and query evaluation (folder Filter, palette file search)
+    collections/       # Disposable index of file names behind the palette's file search
     library/           # The <userData>/library layout
     services/          # Credentials, system
     window/            # Window state, navigation guard

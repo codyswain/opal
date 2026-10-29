@@ -4,8 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { CornerDownLeft, Search, Terminal } from 'lucide-react';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
-import { formatRelativeTime } from '@/common/relativeTime';
-import { browseFiles, focusFile } from '@/renderer/features/disk-explorer/navigation';
+import { activityReason } from '@/common/relativeTime';
+import { focusFile } from '@/renderer/features/disk-explorer/navigation';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
 import { FileKindIcon } from '@/renderer/features/disk-explorer/components/fileKindIcon';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -79,13 +79,10 @@ export const CommandPalette: React.FC = () => {
     setActiveKey(null);
     setFiles([]);
     const token = ++request.current;
-    void window.activityAPI.recent({ limit: RECENT_LIMIT * 2 }).then((response) => {
+    void window.activityAPI.recent({ limit: RECENT_LIMIT }).then((response) => {
       if (token !== request.current || !response.success) return;
       const now = Date.now();
-      setRecent(response.data.items
-        .filter((item) => !item.entry.isDirectory)
-        .slice(0, RECENT_LIMIT)
-        .map((item) => ({ kind: 'file', entry: item.entry, hint: `${item.touchedKind === 'edited' ? 'Edited' : item.touchedKind === 'organized' ? 'Organized' : 'Opened'} ${formatRelativeTime(item.touchedAt, now)}` })));
+      setRecent(response.data.items.map((item) => ({ kind: 'file', entry: item.entry, hint: activityReason(item.touchedKind, item.touchedAt, now) })));
     }).catch(() => undefined);
   }, [open, initialQuery]);
 
@@ -97,7 +94,8 @@ export const CommandPalette: React.FC = () => {
     setFiles([]);
     const timer = setTimeout(() => {
       void window.collectionsAPI.query(
-        { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'contains', value: term.slice(0, 200) }], sort: { field: 'touched', direction: 'desc' } },
+        // Files only, as in Obsidian's quick switcher; folders open in the tree.
+        { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'contains', value: term.slice(0, 200) }, { field: 'kind', op: 'not-in', values: ['directory'] }], sort: { field: 'touched', direction: 'desc' } },
         { limit: FILE_LIMIT }
       ).then((response) => {
         if (token !== request.current) return;
@@ -146,12 +144,8 @@ export const CommandPalette: React.FC = () => {
   const run = (item: PaletteItem, newTab = newTabMode) => {
     hide();
     if (item.kind === 'command') { commandRegistry.executeCommand(item.command.id); return; }
-    const { path, isDirectory } = item.entry;
-    if (isDirectory) { navigateFiles(browseFiles(path), { newTab }); return; }
-    const folder = parentFsPath(path);
-    if (!folder) return;
-    recordOpened(path);
-    navigateFiles(focusFile(folder, path), { newTab });
+    recordOpened(item.entry.path);
+    navigateFiles(focusFile(item.entry.path), { newTab });
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {

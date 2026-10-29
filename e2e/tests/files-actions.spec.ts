@@ -35,13 +35,12 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
   expect(results.open.success).toBe(false);
 
   // The newer namespaces cross the same boundary with the same guard: activity
-  // refuses paths outside opened roots, and a collection scoped outside them
-  // reports the scope instead of searching elsewhere.
+  // refuses paths outside opened roots, and file search never reaches past them.
   const boundary = await page.evaluate(async () => {
     const query = {
       version: 1 as const,
-      scope: { kind: 'folders' as const, folders: ['/etc'], includeDescendants: true },
-      filters: [] as never[],
+      scope: { kind: 'all-roots' as const },
+      filters: [{ field: 'name' as const, op: 'contains' as const, value: 'hosts' }],
       sort: { field: 'name' as const, direction: 'asc' as const },
     };
     return {
@@ -52,6 +51,5 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
 
   expect(boundary.activity.success).toBe(false);
   expect(boundary.collection.success).toBe(true);
-  expect(boundary.collection.data?.unavailableScopes).toEqual(['/etc']);
   expect(boundary.collection.data?.rows).toEqual([]);
 });
