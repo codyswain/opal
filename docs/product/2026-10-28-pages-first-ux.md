@@ -121,6 +121,20 @@ A modal dialog (Cmd+, and the sidebar gear): Appearance (theme), Folders
 
 ## Look
 
+**Black and white first (Cody, 2026-10-28):** "I don't think we should add in
+any strong colors. I don't like how the tabs are purple and there are some sort
+of purple highlights. We need to make sure the app looks beautiful with black
+and white first before we branch out and add in any color." So the UI has no
+hue anywhere. Every token is a neutral grey from white to black: no indigo,
+purple, blue or any tinted accent, including focus rings, the caret, selection,
+the active tab, links, checkboxes, toggles, buttons, callouts, badges, errors
+and destructive actions. Emphasis comes from contrast, weight, size and
+spacing. Links are text-coloured with a subtle underline. Focus rings are a
+neutral dark ring in light mode and a neutral light ring in dark mode.
+Errors and destructive actions use wording, weight and an icon, not red. The
+only colour on screen comes from images inside notes. This overrides the
+accent notes below.
+
 Tokens follow the design brief from Bastion and Linear:
 
 - UI font: Inter Variable, bundled (no network), 13px UI text, weight 510 for
