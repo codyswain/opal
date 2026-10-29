@@ -59,7 +59,6 @@ export const CommandPalette: React.FC = () => {
   const [query, setQuery] = useState('');
   const [files, setFiles] = useState<PaletteItem[]>([]);
   const [content, setContent] = useState<PaletteItem[]>([]);
-  const [deep, setDeep] = useState(false);
   const [contentStatus, setContentStatus] = useState('');
   const [recent, setRecent] = useState<PaletteItem[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -77,7 +76,6 @@ export const CommandPalette: React.FC = () => {
     if (!open) return;
     setQuery(initialQuery);
     setActiveKey(null);
-    setDeep(false);
     setFiles([]);
     const token = ++request.current;
     void window.activityAPI.recent({ limit: RECENT_LIMIT * 2 }).then((response) => {
@@ -116,25 +114,25 @@ export const CommandPalette: React.FC = () => {
     setContentStatus('');
     setContentError(false);
     if (!open || commandMode || term.length < 2) return;
-    setContentStatus(deep ? 'Searching current text files…' : 'Searching indexed contents…');
+    setContentStatus('Searching inside files…');
     const timer = setTimeout(() => {
-      void window.chatAPI.searchContent(term.slice(0, 200), deep).then((response) => {
+      void window.diskAPI.searchContent(term.slice(0, 200)).then((response) => {
         if (!current) return;
         if (!response.success) { setContentStatus('Content search failed. Try again.'); setContentError(true); return; }
         setContent(response.data.hits.map((hit) => ({ kind: 'file', entry: { path: hit.path, name: hit.name, kind: classifyFile(hit.name), isDirectory: false, size: 0, mtimeMs: 0 }, hint: locate(hit.path, roots), excerpt: hit.excerpt })));
-        setContentStatus(`${deep ? 'Current Markdown and text files' : 'Indexed contents · may exclude new changes'}${response.data.incomplete ? ' · partial results (search limits or unreadable files)' : ''}`);
+        setContentStatus(response.data.incomplete ? 'Partial results: search limits reached or some files were unreadable' : '');
       }).catch(() => { if (current) { setContentStatus('Content search failed. Try again.'); setContentError(true); } });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [open, commandMode, term, deep, roots, searchRevision]);
+  }, [open, commandMode, term, roots, searchRevision]);
 
   const sections = useMemo((): { title: string; items: PaletteItem[] }[] => {
     const matched = rankCommands(commands, term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
       .map((command): PaletteItem => ({ kind: 'command', command }));
     if (commandMode) return [{ title: 'Commands', items: matched }];
     if (!term) return [{ title: 'Recent', items: recent }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
-    return [{ title: 'Files', items: files.map((item) => item.kind === 'file' ? (content.find((hit) => hit.kind === 'file' && hit.entry.path === item.entry.path) ?? item) : item) }, { title: deep ? 'Inside current text files' : 'Inside indexed files', items: content.filter((item) => item.kind === 'file' && !files.some((file) => file.kind === 'file' && file.entry.path === item.entry.path)) }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
-  }, [commands, term, commandMode, recent, files, content, deep]);
+    return [{ title: 'Files', items: files.map((item) => item.kind === 'file' ? (content.find((hit) => hit.kind === 'file' && hit.entry.path === item.entry.path) ?? item) : item) }, { title: 'Inside files', items: content.filter((item) => item.kind === 'file' && !files.some((file) => file.kind === 'file' && file.entry.path === item.entry.path)) }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
+  }, [commands, term, commandMode, recent, files, content]);
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 
   const active = Math.max(0, flat.findIndex((item) => itemKey(item) === activeKey));
@@ -178,7 +176,7 @@ export const CommandPalette: React.FC = () => {
             <input
               autoFocus
               value={query}
-              onChange={(event) => { setQuery(event.target.value); setDeep(false); }}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search names and contents, or > for commands"
               aria-label="Search files and commands"
               aria-activedescendant={flat[active] ? `palette-item-${active}` : undefined}
@@ -244,9 +242,8 @@ export const CommandPalette: React.FC = () => {
             <span role="alert" className="text-muted-foreground">{namesError ? 'Filename search could not finish.' : 'Content search could not finish.'}</span>
             <button type="button" className="shrink-0 text-focus hover:underline" onKeyDown={(event) => event.stopPropagation()} onClick={() => setSearchRevision((value) => value + 1)}>Retry search</button>
           </div>}
-          {!commandMode && term.length >= 2 && <div className="flex items-center justify-between gap-3 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
+          {!commandMode && term.length >= 2 && contentStatus && <div className="border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
             <span role="status">{contentStatus}</span>
-            <button type="button" className="shrink-0 text-focus hover:underline" disabled={deep} onKeyDown={(event) => event.stopPropagation()} onClick={() => setDeep(true)}>{deep ? 'Local search' : 'Search current text files'}</button>
           </div>}
           <div className="flex items-center gap-4 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
             <span><kbd className="font-sans">↑↓</kbd> navigate</span>

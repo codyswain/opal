@@ -18,6 +18,7 @@ import { installCollectionsApi } from "@/tests/helpers/collectionsApi";
 import { installViewsApi, savedView } from "@/tests/helpers/viewsApi";
 import { useSavedViewsStore } from "@/renderer/features/disk-explorer/store/savedViewsStore";
 import { useViewDraftsStore } from "@/renderer/features/disk-explorer/store/viewDraftsStore";
+import { localDate } from "@/common/vaultModel";
 
 const ROOT = "/Vault";
 const DESIGN = "/Vault/Design";
@@ -118,12 +119,30 @@ beforeEach(() => {
 });
 
 describe("WorkspaceSidebar", () => {
-  it("keeps Today quiet while leaving the library one click away", async () => {
-    renderSidebar(false, "/today");
+  it("opens today's log page from the Today shortcut, creating it first", async () => {
+    const createDay = vi.fn(async () => ({ success: true as const, data: undefined }));
+    (window as unknown as { vaultAPI: unknown }).vaultAPI = {
+      discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT, name: "Vault" }] })),
+      createDay,
+    };
+    const user = userEvent.setup();
+    renderSidebar(false, "/settings");
+    await user.click(screen.getByRole("button", { name: "Today" }));
+    const today = localDate();
+    expect(createDay).toHaveBeenCalledWith(ROOT, today);
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        `file=${encodeURIComponent(`${ROOT}/Inbox/Logs/${today}.md`)}`,
+      ),
+    );
+  });
+
+  it("keeps the sidebar quiet outside the library", async () => {
+    renderSidebar(false, "/settings");
     await waitFor(() =>
       expect(useSavedViewsStore.getState().loaded).toBe(true),
     );
-    expect(screen.getByRole("link", { name: "Today" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
     expect(screen.queryByText("Open folders")).toBeNull();
     expect(screen.queryByText("Views")).toBeNull();
@@ -135,10 +154,7 @@ describe("WorkspaceSidebar", () => {
     renderSidebar();
 
     expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Threads" })).toHaveAttribute(
-      "href",
-      "/chat",
-    );
+    expect(screen.queryByRole("link", { name: "Threads" })).toBeNull();
     expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByText("Favorites")).toBeNull();

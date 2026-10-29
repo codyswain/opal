@@ -1,6 +1,6 @@
 import type { IpcMain, OpenDialogReturnValue } from 'electron';
 import type { IPCResponse } from '@/types/ipc';
-import type { DiskEntry, DirectoryListing, TextFileContents } from '@/types/disk';
+import type { ContentSearchResult, DiskEntry, DirectoryListing, TextFileContents } from '@/types/disk';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { DiskReader } from '@/main/fs/DiskReader';
@@ -8,6 +8,7 @@ import type { FileWriter } from '@/main/fs/FileWriter';
 import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
 import logger from '@/main/logger';
 import { MetadataError } from '@/main/fs/MetadataCodec';
+import { searchCurrentText } from '@/main/fs/contentSearch';
 
 export interface DiskShell {
   showItemInFolder: (fullPath: string) => void;
@@ -51,6 +52,7 @@ export class DiskHandlers {
     this.registerReveal();
     this.registerOpenExternal();
     this.registerStat();
+    this.registerSearchContent();
   }
 
   private registerOpenFolder(): void {
@@ -146,6 +148,22 @@ export class DiskHandlers {
           return { success: true, data: entry };
         } catch (error) {
           return { success: false, error: describeError(error, 'Failed to read file') };
+        }
+      }
+    );
+  }
+
+  private registerSearchContent(): void {
+    this.deps.ipc.handle(
+      'disk:search-content',
+      async (_, query: unknown): Promise<IPCResponse<ContentSearchResult>> => {
+        if (typeof query !== 'string' || !query.trim() || query.length > 200) {
+          return { success: false, error: 'Invalid content search.' };
+        }
+        try {
+          return { success: true, data: await searchCurrentText(this.deps.registry, query.trim()) };
+        } catch (error) {
+          return { success: false, error: describeError(error, 'Failed to search file contents') };
         }
       }
     );

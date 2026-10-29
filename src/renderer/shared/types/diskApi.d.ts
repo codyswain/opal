@@ -1,4 +1,4 @@
-import type { DiskEntry, DirectoryListing, DiskResult, TextFileContents } from '@/types/disk';
+import type { ContentSearchResult, DiskEntry, DirectoryListing, DiskResult, TextFileContents } from '@/types/disk';
 
 export interface DiskAPI {
   openFolder: () => Promise<DiskResult<{ root: string | null }>>;
@@ -13,6 +13,7 @@ export interface DiskAPI {
   reveal: (target: string) => Promise<DiskResult>;
   openExternal: (target: string) => Promise<DiskResult>;
   stat: (target: string) => Promise<DiskResult<DiskEntry>>;
+  searchContent: (query: string) => Promise<DiskResult<ContentSearchResult>>;
   onChanged: (callback: (payload: { directories: string[] }) => void) => () => void;
 }
 

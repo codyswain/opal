@@ -12,7 +12,6 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { installActivityApi, recentResult } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
-import { installChatApi } from '@/tests/helpers/chatApi';
 
 const ROOT = '/Vault';
 const PLAN = '/Vault/Projects/Atlas/plan.md';
@@ -27,7 +26,7 @@ function renderPalette() {
     <MemoryRouter initialEntries={['/files']}>
       <ThemeProvider>
         <TooltipProvider>
-          <ShellProvider routes={[{ path: '/files', element: null, handle: { shell: { id: 'files', header: { title: 'Files' } } } }, { path: '/chat', element: null, handle: { shell: { id: 'chat', header: { title: 'Chat' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
+          <ShellProvider routes={[{ path: '/files', element: null, handle: { shell: { id: 'files', header: { title: 'Files' } } } }, { path: '/settings', element: null, handle: { shell: { id: 'settings', header: { title: 'Settings' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
             <AppCommands />
             <CommandPalette />
             <LocationProbe />
@@ -44,22 +43,20 @@ beforeEach(() => {
   (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined) };
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })) });
   installActivityApi({ recent: vi.fn(async () => ({ success: true as const, data: recentResult([{ entry: entry({ path: '/Vault/inbox.md', name: 'inbox.md', kind: 'markdown' }), touchedAt: Date.now() - 60_000, touchedKind: 'opened', openedAt: Date.now() - 60_000, organizedAt: null, editedAt: null }]) })) });
-  installChatApi();
   useDiskStore.setState({ roots: [ROOT], currentDirectory: ROOT });
 });
 
 describe('CommandPalette', () => {
-  it('adds body matches with snippets and offers a deeper local search', async () => {
+  it('adds body matches with snippets from a scan of the files', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
     const searchContent = vi.fn(async () => ({ success: true as const, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Plant foxglove in the garden.' }], incomplete: false } }));
-    window.chatAPI.searchContent = searchContent;
+    window.diskAPI.searchContent = searchContent;
     const user = userEvent.setup();
     renderPalette();
     act(() => usePaletteStore.getState().show());
     await user.type(await screen.findByRole('combobox'), 'foxglove');
     expect(await screen.findByRole('option', { name: /Plant foxglove in the garden/ })).toHaveTextContent('Plant foxglove in the garden.');
-    await user.click(screen.getByRole('button', { name: 'Search current text files' }));
-    await waitFor(() => expect(searchContent).toHaveBeenLastCalledWith('foxglove', true));
+    expect(searchContent).toHaveBeenLastCalledWith('foxglove');
     await user.click(screen.getByTestId(`palette-file-${PLAN}`));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`file=${encodeURIComponent(PLAN)}`));
   });
@@ -68,17 +65,17 @@ describe('CommandPalette', () => {
     const search = vi.fn().mockResolvedValueOnce({ success: true, data: { hits: [], incomplete: false } })
       .mockRejectedValueOnce(new Error('Temporary read failure'))
       .mockResolvedValue({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Found foxglove' }], incomplete: false } });
-    window.chatAPI.searchContent = search;
+    window.diskAPI.searchContent = search;
     const user = userEvent.setup();
     renderPalette();
     act(() => usePaletteStore.getState().show());
     await user.type(await screen.findByRole('combobox'), 'foxglove');
-    await waitFor(() => expect(search).toHaveBeenCalledWith('foxglove', false));
-    await user.click(screen.getByRole('button', { name: 'Search current text files' }));
+    await waitFor(() => expect(search).toHaveBeenCalledWith('foxglove'));
+    await user.type(screen.getByRole('combobox'), 's');
     await user.click(await screen.findByRole('button', { name: 'Retry search' }));
     expect(await screen.findByRole('option', { name: /Found foxglove/ })).toBeVisible();
-    expect(search).toHaveBeenLastCalledWith('foxglove', true);
-    expect(screen.getByRole('combobox')).toHaveValue('foxglove');
+    expect(search).toHaveBeenLastCalledWith('foxgloves');
+    expect(screen.getByRole('combobox')).toHaveValue('foxgloves');
   });
   it('distinguishes failed filename search from no matches and allows retry', async () => {
     const query = vi.fn().mockResolvedValueOnce({ success: false, error: 'Unavailable' })
@@ -97,13 +94,13 @@ describe('CommandPalette', () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
     let finish!: (value: unknown) => void;
     const searchContent = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; })).mockResolvedValue({ success: true, data: { hits: [], incomplete: false } });
-    window.chatAPI.searchContent = searchContent;
+    window.diskAPI.searchContent = searchContent;
     const user = userEvent.setup();
     renderPalette();
     act(() => usePaletteStore.getState().show());
     const input = await screen.findByRole('combobox');
     await user.type(input, 'old');
-    await waitFor(() => expect(searchContent).toHaveBeenCalledWith('old', false));
+    await waitFor(() => expect(searchContent).toHaveBeenCalledWith('old'));
     await user.clear(input);
     await user.type(input, 'new');
     await act(async () => finish({ success: true, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Obsolete result' }], incomplete: false } }));
@@ -112,12 +109,12 @@ describe('CommandPalette', () => {
   it('keeps the keyboard-selected command selected when body results arrive', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
     let finish!: (value: unknown) => void;
-    window.chatAPI.searchContent = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof window.chatAPI.searchContent;
+    window.diskAPI.searchContent = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof window.diskAPI.searchContent;
     const user = userEvent.setup();
     renderPalette();
     act(() => usePaletteStore.getState().show());
-    await user.type(await screen.findByRole('combobox'), 'chat');
-    await waitFor(() => expect(window.chatAPI.searchContent).toHaveBeenCalled());
+    await user.type(await screen.findByRole('combobox'), 'today');
+    await waitFor(() => expect(window.diskAPI.searchContent).toHaveBeenCalled());
     await user.keyboard('{ArrowDown}{ArrowUp}');
     const selected = screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
     const identity = selected?.getAttribute('data-testid');
@@ -132,7 +129,7 @@ describe('CommandPalette', () => {
     await user.keyboard('{Meta>}k{/Meta}');
     const palette = await screen.findByTestId('command-palette');
     expect(await within(palette).findByTestId('palette-file-/Vault/inbox.md')).toHaveTextContent('Opened 1 minute ago');
-    expect(within(palette).getByTestId('palette-command-nav.chat')).toBeInTheDocument();
+    expect(within(palette).getByTestId('palette-command-nav.today')).toBeInTheDocument();
     expect(within(palette).getByRole('group', { name: 'Recent' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
@@ -162,11 +159,11 @@ describe('CommandPalette', () => {
     await user.keyboard('{Meta>}{Shift>}p{/Shift}{/Meta}');
     const palette = await screen.findByTestId('command-palette');
     expect(within(palette).getByRole('group', { name: 'Commands' })).toBeInTheDocument();
-    await user.type(within(palette).getByRole('combobox'), 'chat');
-    await waitFor(() => expect(within(palette).getAllByRole('option')[0]).toHaveTextContent('Go to Threads'));
+    await user.type(within(palette).getByRole('combobox'), 'settings');
+    await waitFor(() => expect(within(palette).getAllByRole('option')[0]).toHaveTextContent('Settings…'));
     expect(within(palette).queryByRole('group', { name: 'Files' })).toBeNull();
     await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/settings'));
   });
 
   it('reports every command to main and shows shortcuts', async () => {

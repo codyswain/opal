@@ -10,13 +10,7 @@ describe("Vault IPC validation", () => {
       (...args: unknown[]) => Promise<unknown>
     >();
     const service = {
-      readDay: vi.fn(),
       createDay: vi.fn(),
-      saveJournal: vi.fn(),
-      addFocus: vi.fn(),
-      updateFocus: vi.fn(),
-      putDraft: vi.fn(),
-      clearDraft: vi.fn(),
     };
     new VaultHandlers({
       ipc: {
@@ -28,16 +22,9 @@ describe("Vault IPC validation", () => {
       service: service as unknown as VaultService,
     }).registerAll();
     for (const [channel, args] of [
-      ["read-day", ["/vault", "2026-02-30"]],
       ["create-day", [null, "2026-09-08"]],
-      ["save-journal", ["/vault/a.md", {}, "text"]],
-      ["add-focus", ["/vault", "2026-09-08", { title: " " }]],
-      ["update-focus", ["/vault", "2026-09-08", "id", { completed: "yes" }]],
-      ["update-focus", ["/vault", "2026-09-08", "id", {}]],
-      ...[" ", "x".repeat(2001), 42, "bad\0title"].map(title =>
-        ["update-focus", ["/vault", "2026-09-08", "id", { title }]]),
-      ["put-draft", [{ path: "/x", text: "x", version: "v" }]],
-      ["clear-draft", ["/x", ""]],
+      ["create-day", ["relative", "2026-09-08"]],
+      ["create-day", ["/vault", "2026-02-30"]],
     ] as Array<[string, unknown[]]>) {
       expect(
         await handlers.get(`vault:${channel}`)?.({}, ...args),
@@ -46,7 +33,7 @@ describe("Vault IPC validation", () => {
     Object.values(service).forEach((method) =>
       expect(method).not.toHaveBeenCalled(),
     );
-    await handlers.get("vault:update-focus")?.({}, "/vault", "2026-09-08", "id", { title: "Revised task" });
-    expect(service.updateFocus).toHaveBeenCalledWith("/vault", "2026-09-08", "id", expect.objectContaining({ title: "Revised task" }));
+    await handlers.get("vault:create-day")?.({}, "/vault", "2026-09-08");
+    expect(service.createDay).toHaveBeenCalledWith("/vault", "2026-09-08");
   });
 });

@@ -3,7 +3,7 @@ import { readFile, stat } from 'fs/promises';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { scanRootsFor, walkRoot } from '@/main/fs/rootTraversal';
 import { assertNoSymlinks } from '@/main/fs/MetadataCodec';
-import type { ContentSearchResult } from '@/types/chat';
+import type { ContentSearchResult } from '@/types/disk';
 
 export function matchingSnippet(text: string, query: string): string | null {
   const at = text.toLowerCase().indexOf(query.toLowerCase());

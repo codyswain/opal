@@ -113,6 +113,7 @@ describe('DiskHandlers', () => {
       'disk:remove-root',
       'disk:rename',
       'disk:reveal',
+      'disk:search-content',
       'disk:stat',
       'disk:trash',
     ]);
@@ -273,6 +274,17 @@ describe('DiskHandlers', () => {
       const result = await stub.invoke(channel, ...args) as { success: boolean };
       expect(result.success, `${channel} must reject a path outside every root`).toBe(false);
     }
+  });
+
+  it('finds files by their text and rejects an empty query', async () => {
+    await registry.add(root);
+    await writeFile(path.join(root, 'garden.md'), 'Plant foxglove by the fence.');
+    const found = await stub.invoke('disk:search-content', 'foxglove') as {
+      success: boolean; data: { hits: { name: string; excerpt: string }[] };
+    };
+    expect(found.success).toBe(true);
+    expect(found.data.hits.map((hit) => hit.name)).toEqual(['garden.md']);
+    expect(await stub.invoke('disk:search-content', '  ')).toMatchObject({ success: false });
   });
 
   it('stats a single file', async () => {

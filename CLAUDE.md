@@ -1,8 +1,8 @@
 # Project: Opal
 
-A desktop information workspace over folders on disk: browse files, edit
-Markdown, organize items with tags, descriptions and connections, gather them
-in Recent and saved views, and chat over the library.
+A desktop app for reading and editing the Markdown pages in a folder on disk.
+Pages come first. There is no chat and no Today screen: "Today" is a shortcut
+that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
 
 ## Stack
 
@@ -11,9 +11,8 @@ in Recent and saved views, and chat over the library.
 - **State:** Zustand for global state, React hooks for local state
 - **Editor:** TipTap with `tiptap-markdown` (Markdown files on disk)
 - **Storage:** the user's folders are the store; authored metadata lives in
-  frontmatter or `.opal.yaml` sidecars; personal state (activity, saved views,
-  chat index) lives under `<userData>/library/` as JSON and YAML
-- **AI:** OpenAI SDK for chat over the library (key in the system keychain)
+  frontmatter or `.opal.yaml` sidecars; personal state (activity, saved views)
+  lives under `<userData>/library/` as JSON and YAML
 - **Build:** Vite (3 configs: main, preload, renderer) + Electron Forge
 - **Testing:** Vitest + Testing Library + Happy DOM
 - **Linting:** ESLint with TypeScript plugin
@@ -23,7 +22,7 @@ in Recent and saved views, and chat over the library.
 
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `metadataAPI`,
-    `activityAPI`, `collectionsAPI`, `viewsAPI`
+    `activityAPI`, `collectionsAPI`, `viewsAPI`, `markdownAPI`, `vaultAPI`
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame)
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;

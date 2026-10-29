@@ -17,6 +17,7 @@ import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore"
 import { useViewDraftsStore } from "@/renderer/features/disk-explorer/store/viewDraftsStore";
 import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
+import { openToday } from "@/renderer/features/shell/utils/openToday";
 import { useTheme } from "@/renderer/features/theme";
 import { usePref } from "@/renderer/shared/prefs/usePref";
 import { commandRegistry, type Command } from "../services/commandRegistry";
@@ -50,7 +51,15 @@ export const AppCommands: React.FC = () => {
         name: "Go to Today",
         type: "navigation",
         keywords: ["home", "journal", "daily"],
-        perform: () => navigateTo("/today"),
+        perform: () => {
+          void openToday(navigateFiles)
+            .then((opened) => {
+              if (!opened) toast.error("Open your vault folder first.");
+            })
+            .catch((error: unknown) =>
+              toast.error(error instanceof Error ? error.message : "Could not open today's page."),
+            );
+        },
       },
       {
         id: COMMAND_IDS.togglePrivacy,
@@ -85,13 +94,6 @@ export const AppCommands: React.FC = () => {
         type: "navigation",
         keywords: ["history", "activity"],
         perform: () => navigateFiles(browseRecent()),
-      },
-      {
-        id: "nav.chat",
-        name: "Go to Threads",
-        type: "navigation",
-        keywords: ["chat", "conversation", "ask", "ai", "question"],
-        perform: () => navigateTo("/chat"),
       },
       {
         id: COMMAND_IDS.openSettings,
@@ -152,17 +154,6 @@ export const AppCommands: React.FC = () => {
               folder ? { scope: folderScope(folder), origin: folder } : {},
             );
           navigateFiles(browseCollection(queryCollection(id)));
-        },
-      },
-      {
-        id: "chat.indexLibrary",
-        name: "Index Library for Threads",
-        type: "action",
-        keywords: ["embed", "openai", "update index"],
-        perform: () => {
-          void window.chatAPI.indexUpdate().then((result) => {
-            if (!result.success) toast.error(result.error);
-          });
         },
       },
       {

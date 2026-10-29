@@ -1,5 +1,10 @@
 # Basecamp in Opal: handoff
 
+**Superseded 2026-10-28.** Cody cut the Today screen and chat: Opal is now
+pages first, with Today as a shortcut to the day's log page. The feed, the
+Basecamp server and threads-as-files below are not the plan anymore. Kept for
+the history of the decision.
+
 Date: 2026-09-11. Status: direction approved, design sections 1–3 approved,
 sections 4–5 still to be designed. Nothing implemented yet.
 

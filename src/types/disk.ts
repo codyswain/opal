@@ -15,6 +15,12 @@ export interface DiskEntry {
   mtimeMs: number;
 }
 
+/** Files whose text contains a search term, with a short excerpt around the first match. */
+export interface ContentSearchResult {
+  hits: { path: string; name: string; excerpt: string }[];
+  incomplete: boolean;
+}
+
 export interface DirectoryListing {
   path: string;
   entries: DiskEntry[];

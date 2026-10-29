@@ -1,4 +1,3 @@
-import type { ChatDraftState, CreateConversationOptions, ConversationPatch } from './types/chat';
 import type { VaultAPI } from "./types/vault";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
@@ -66,6 +65,7 @@ contextBridge.exposeInMainWorld("diskAPI", {
   openExternal: (target: string) =>
     ipcRenderer.invoke("disk:open-external", target),
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
+  searchContent: (query: string) => ipcRenderer.invoke("disk:search-content", query),
   onChanged: (callback: (payload: { directories: string[] }) => void) => {
     const listener = (
       _event: IpcRendererEvent,
@@ -144,70 +144,8 @@ contextBridge.exposeInMainWorld("markdownAPI", {
     ipcRenderer.invoke("markdown:create", parentDir, baseName),
 });
 
-contextBridge.exposeInMainWorld("chatAPI", {
-  list: () => ipcRenderer.invoke("chat:list"),
-  get: (id: string) => ipcRenderer.invoke("chat:get", id),
-  create: (options?: CreateConversationOptions) => ipcRenderer.invoke("chat:create", options),
-  update: (id: string, patch: ConversationPatch) => ipcRenderer.invoke("chat:update", id, patch),
-  getDraftState: () => ipcRenderer.invoke("chat:drafts-get"),
-  saveDraftState: (state: ChatDraftState) => ipcRenderer.invoke("chat:drafts-save", state),
-  remove: (id: string) => ipcRenderer.invoke("chat:remove", id),
-  searchMessages: (query: string, archived?: boolean) => ipcRenderer.invoke("chat:search-messages", query, archived),
-  searchContent: (query: string, deep?: boolean) => ipcRenderer.invoke("chat:search-content", query, deep),
-  indexStatus: () => ipcRenderer.invoke("chat:index-status"),
-  indexUpdate: () => ipcRenderer.invoke("chat:index-update"),
-  indexCancel: () => ipcRenderer.invoke("chat:index-cancel"),
-  onIndexChanged: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on("chat:index-changed", listener);
-    return () => ipcRenderer.removeListener("chat:index-changed", listener);
-  },
-  // One response channel per question; `null` ends the stream.
-  ask: (
-    conversationId: string,
-    question: string,
-    onDelta: (delta: string) => void,
-    onError: (error: string) => void,
-  ) => {
-    const channel = `chat:answer:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    const listener = (
-      _event: IpcRendererEvent,
-      payload: { delta?: string; error?: string } | null,
-    ) => {
-      if (payload === null) {
-        ipcRenderer.removeListener(channel, listener);
-        return;
-      }
-      if (payload.error) onError(payload.error);
-      else if (payload.delta) onDelta(payload.delta);
-    };
-    ipcRenderer.on(channel, listener);
-    const result = ipcRenderer.invoke(
-      "chat:ask",
-      conversationId,
-      question,
-      channel,
-    ).finally(() => ipcRenderer.removeListener(channel, listener));
-    return {
-      result,
-      cancel: () => { void ipcRenderer.invoke("chat:cancel", channel).catch(() => undefined); },
-    };
-  },
-});
-
 const vaultAPI: VaultAPI = {
   discover: () => ipcRenderer.invoke("vault:discover"),
-  readDay: (root, date) => ipcRenderer.invoke("vault:read-day", root, date),
   createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
-  saveJournal: (path, original, next) =>
-    ipcRenderer.invoke("vault:save-journal", path, original, next),
-  addFocus: (root, date, input) =>
-    ipcRenderer.invoke("vault:add-focus", root, date, input),
-  updateFocus: (root, date, id, patch) =>
-    ipcRenderer.invoke("vault:update-focus", root, date, id, patch),
-  listDrafts: () => ipcRenderer.invoke("vault:list-drafts"),
-  putDraft: (draft) => ipcRenderer.invoke("vault:put-draft", draft),
-  clearDraft: (path, version) =>
-    ipcRenderer.invoke("vault:clear-draft", path, version),
 };
 contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);

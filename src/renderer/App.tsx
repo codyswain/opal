@@ -9,34 +9,22 @@ import { Settings } from "@/renderer/features/settings";
 import { AppCommands, CommandPalette } from "@/renderer/features/commands";
 import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
 import { FilesRoute } from "@/renderer/features/disk-explorer";
-import { ChatRoute } from "@/renderer/features/chat";
-import { TodayRoute } from "@/renderer/features/today/TodayRoute";
-import { ChatDraftGuard } from "@/renderer/features/chat/components/ChatDraftGuard";
-import { JournalDraftGuard } from "@/renderer/features/today/JournalDraftGuard";
+import { FILES_ROUTE_PATH } from "@/renderer/features/disk-explorer/navigation";
+import { openToday } from "@/renderer/features/shell/utils/openToday";
 import { PrivacyBoundary } from "@/renderer/features/privacy/PrivacyBoundary";
 import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
 import { COMMAND_IDS } from "@/common/commandIds";
 import {
   AppShell,
   ShellProvider,
+  useShell,
   type ShellRouteDescriptor,
   type ShellRouteObject,
 } from "@/renderer/features/shell";
-import { useSettingsStore } from "./store/settingsStore";
 
 const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
   header: { title: "Files" },
-};
-
-const TODAY_ROUTE: ShellRouteDescriptor = {
-  id: "today",
-  header: { title: "Today" },
-};
-
-const CHAT_ROUTE: ShellRouteDescriptor = {
-  id: "chat",
-  header: { title: "Threads" },
 };
 
 const SETTINGS_ROUTE: ShellRouteDescriptor = {
@@ -49,22 +37,31 @@ const FALLBACK_ROUTE: ShellRouteDescriptor = {
   header: { title: "Opal" },
 };
 
+/** Launch lands on today's page; without a vault it falls back to the Library. */
+const StartPage: React.FC = () => {
+  const { navigateFiles, navigateTo } = useShell();
+  useEffect(() => {
+    const library = () => navigateTo(FILES_ROUTE_PATH, { replace: true });
+    void openToday(navigateFiles, "replace")
+      .then((opened) => {
+        if (!opened) library();
+      })
+      .catch(library);
+    // Runs once per landing on "/"; navigation replaces this route.
+  }, []);
+  return null;
+};
+
 const APP_ROUTES: ShellRouteObject[] = [
   {
     path: "/",
-    element: <Navigate to="/today" replace />,
-    handle: { shell: TODAY_ROUTE },
+    element: <StartPage />,
+    handle: { shell: FALLBACK_ROUTE },
   },
-  { path: "/today", element: <TodayRoute />, handle: { shell: TODAY_ROUTE } },
   {
     path: "/files",
     element: <FilesRoute />,
     handle: { shell: FILES_ROUTE },
-  },
-  {
-    path: "/chat",
-    element: <ChatRoute />,
-    handle: { shell: CHAT_ROUTE },
   },
   {
     path: "/settings",
@@ -77,16 +74,14 @@ const APP_ROUTES: ShellRouteObject[] = [
   },
   {
     path: "*",
-    element: <Navigate to="/today" replace />,
-    handle: { shell: TODAY_ROUTE },
+    element: <Navigate to="/" replace />,
+    handle: { shell: FALLBACK_ROUTE },
   },
 ];
 
 const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 
 const App: React.FC = () => {
-  const loadSettings = useSettingsStore((state) => state.loadSettings);
-
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
       if (
@@ -102,10 +97,6 @@ const App: React.FC = () => {
     });
   }, []);
 
-  useEffect(() => {
-    loadSettings(); // load settings on app mount
-  }, [loadSettings]);
-
   return (
     <Router>
       <ThemeProvider>
@@ -114,8 +105,6 @@ const App: React.FC = () => {
             <Toaster />
             <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
               <AppCommands />
-              <JournalDraftGuard />
-              <ChatDraftGuard />
               <CommandPalette />
               <AppShell>
                 <AppRoutes />

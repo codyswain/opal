@@ -1,11 +1,11 @@
 import * as React from "react";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Bookmark,
   Clock,
   Files,
   FolderPlus,
-  MessageSquare,
   Plus,
   Settings,
   SlidersHorizontal,
@@ -28,6 +28,7 @@ import { useSavedViewsStore } from "@/renderer/features/disk-explorer/store/save
 import { ThemeToggle } from "@/renderer/features/theme";
 import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
+import { openToday } from "../utils/openToday";
 import { DirectoryTree } from "./DirectoryTree";
 import { SidebarItem } from "./SidebarItem";
 import { SidebarSection } from "./SidebarSection";
@@ -103,6 +104,15 @@ export function WorkspaceSidebar({
     onNavigate?.();
   };
 
+  const goToToday = async () => {
+    try {
+      if (await openToday(navigateFiles)) onNavigate?.();
+      else toast.error("Open your vault folder first.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not open today's page.");
+    }
+  };
+
   const handleOpenFolder = async () => {
     await openFolder();
     const directory = useDiskStore.getState().currentDirectory;
@@ -128,10 +138,9 @@ export function WorkspaceSidebar({
       <nav aria-label="Primary" className="shrink-0 py-2">
         <SidebarSection>
           <SidebarItem
-            to="/today"
             icon={Sun}
             label="Today"
-            onActivate={onNavigate}
+            onActivate={() => void goToToday()}
           />
           <SidebarItem
             to={filesDestination}
@@ -149,12 +158,6 @@ export function WorkspaceSidebar({
               onActivate={onNavigate}
             />
           )}
-          <SidebarItem
-            to="/chat"
-            icon={MessageSquare}
-            label="Threads"
-            onActivate={onNavigate}
-          />
         </SidebarSection>
       </nav>
 
