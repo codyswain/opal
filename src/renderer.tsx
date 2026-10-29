@@ -4,8 +4,11 @@ import App from "@/renderer/App";
 import "@/renderer/styles/index.css";
 import { mark, measure } from "@/renderer/shared/perf/marks";
 import { installDropGuard } from "@/renderer/shared/dropGuard";
+import { flushPendingSaves } from "@/renderer/features/disk-explorer/components/editor/pendingSaves";
 
 installDropGuard(window);
+// Closing the window or quitting waits for open pages to save.
+window.markdownAPI.setFlushHandler(flushPendingSaves);
 
 // The global interface is already declared in @/renderer/shared/types
 

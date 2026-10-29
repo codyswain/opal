@@ -1,6 +1,8 @@
 /**
  * The saves a window must finish before it closes or the app quits: a flush
- * for each open page, and the writes of pages closed a moment ago.
+ * for each open page, and the writes of pages closed a moment ago. The
+ * renderer entry hands `flushPendingSaves` to `markdownAPI.setFlushHandler`,
+ * and the main process holds the close until it settles.
  */
 const pageFlushes = new Set<() => Promise<void>>();
 const writes = new Set<Promise<void>>();

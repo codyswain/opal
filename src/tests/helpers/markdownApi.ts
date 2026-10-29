@@ -38,6 +38,7 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
       documents.set(candidate, { body: '', revision: `rev-${candidate}-1` });
       return { success: true as const, data: { path: candidate } };
     }),
+    setFlushHandler: vi.fn(),
     ...overrides,
   };
   (window as unknown as { markdownAPI: MarkdownAPI }).markdownAPI = api;

@@ -25,6 +25,7 @@ import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
 import { isAllowedNavigation } from "@/main/window/navigationGuard";
 import { AppMenu } from "@/main/menu/AppMenu";
+import { PendingSavesGuard } from "@/main/window/PendingSavesGuard";
 import {
   resolveBounds,
   MIN_WINDOW_WIDTH,
@@ -129,6 +130,8 @@ const createWindow = () => {
       spellcheck: false,
     },
   });
+
+  pendingSavesGuard.attach(mainWindow);
 
   if (saved?.isMaximized) mainWindow.maximize();
 
@@ -337,6 +340,9 @@ const appMenu = new AppMenu({
     );
   },
 });
+
+// Closing the window or quitting waits for the renderer's pending page saves.
+const pendingSavesGuard = new PendingSavesGuard({ ipc: ipcMain, app });
 
 // Install an empty menu immediately so the app never shows Electron's stock
 // developer menu, even for the moment before the renderer reports its commands.

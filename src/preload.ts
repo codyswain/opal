@@ -119,12 +119,25 @@ contextBridge.exposeInMainWorld("collectionsAPI", {
   },
 });
 
+// The main process holds a window's close until this answers, so it answers
+// even when no page registered anything to flush.
+let flushPendingSaves: (() => Promise<void>) | null = null;
+ipcRenderer.on("markdown:flush", (_event, requestId: number) => {
+  void Promise.resolve()
+    .then(() => flushPendingSaves?.())
+    .catch(() => undefined)
+    .finally(() => ipcRenderer.send("markdown:flushed", requestId));
+});
+
 contextBridge.exposeInMainWorld("markdownAPI", {
   read: (target: string) => ipcRenderer.invoke("markdown:read", target),
   write: (target: string, body: string, expectedRevision: string) =>
     ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
   create: (parentDir: string, baseName?: string) =>
     ipcRenderer.invoke("markdown:create", parentDir, baseName),
+  setFlushHandler: (flush: () => Promise<void>) => {
+    flushPendingSaves = flush;
+  },
 });
 
 const vaultAPI: VaultAPI = {
