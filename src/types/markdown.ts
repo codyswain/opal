@@ -18,3 +18,12 @@ export type MarkdownLinks = Record<string, string | null>;
 
 export const MARKDOWN_DOCUMENT_LIMIT = 16 * 1024 * 1024;
 export const LINK_TARGET_LIMIT = 500;
+
+/** What a copy of a page's text is called: "<name> (conflicted copy).md" or "<name> (unsaved copy).md". */
+export type MarkdownCopyLabel = 'conflicted copy' | 'unsaved copy';
+
+/** A page whose text did not reach its file when it closed or the app quit, and the copy that holds it, if any. */
+export interface UnsavedPage {
+  name: string;
+  copy: string | null;
+}

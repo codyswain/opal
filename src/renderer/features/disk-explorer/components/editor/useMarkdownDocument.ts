@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useDocumentStatusStore } from '../../store/documentStatusStore';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import type { MarkdownCopyLabel, UnsavedPage } from '@/types/markdown';
 import { mergeText, type MergeResult } from './mergeText';
 import { registerPageFlush, trackPendingWrite } from './pendingSaves';
 
@@ -44,6 +45,13 @@ const INITIAL: MarkdownDocumentState = {
 type ReadResponse = Awaited<ReturnType<typeof window.markdownAPI.read>>;
 type WriteResponse = Awaited<ReturnType<typeof window.markdownAPI.write>>;
 
+const noteName = (path: string) => basenameFsPath(path).replace(/\.md$/i, '');
+
+/** A copy next to the note goes by its name; one in the recovery folder by its full path. */
+function copyLocation(note: string, copy: string): string {
+  return parentFsPath(copy) === parentFsPath(note) ? noteName(copy) : copy;
+}
+
 /**
  * One Markdown file's edit lifecycle. `saved` is the text at `revision` on
  * disk and the base of every merge. Saves and disk checks run one at a time,
@@ -69,8 +77,8 @@ class MarkdownDocumentSession {
     this.revision = null;
     this.conflict = null;
     this.publish(INITIAL);
-    // Closing the window or quitting waits for this, and keeps both sides of an open conflict.
-    this.unregister = registerPageFlush(() => (this.conflict ? this.serial(() => this.keepBoth()) : this.flush()));
+    // Closing the window or quitting waits for this, and asks before dropping text that did not reach the file.
+    this.unregister = registerPageFlush(() => this.settle());
     void this.serial(() => this.load());
   }
 
@@ -79,7 +87,7 @@ class MarkdownDocumentSession {
     this.live = false;
     this.cancelTimer();
     this.unregister?.();
-    trackPendingWrite(this.serial(() => (this.conflict ? this.keepBoth() : this.write())).then(() => this.drain()));
+    trackPendingWrite(this.settle());
   }
 
   onChange = (text: string): void => {
@@ -134,6 +142,46 @@ class MarkdownDocumentSession {
       tail = this.queue;
       await tail;
     } while (tail !== this.queue);
+  }
+
+  /**
+   * The last save before the page closes or the app quits. An open conflict
+   * keeps both sides. Text that still cannot reach the file goes to an
+   * unsaved copy, so it is never only in memory. Reports the page when its
+   * text is not in its file.
+   */
+  private async settle(): Promise<UnsavedPage | null> {
+    const name = noteName(this.path);
+    try {
+      this.cancelTimer();
+      await this.serial(() => this.write());
+      await this.drain();
+      if (this.conflict) {
+        await this.serial(() => this.keepBoth());
+        // keepBoth said what happened; its copy failed in both places.
+        if (this.conflict) return { name, copy: null };
+      }
+      if (this.latest === this.saved) return null;
+      const unsaved = { name, copy: await this.saveCopy(this.latest, 'unsaved copy') };
+      // An open page shows the failure itself, and a quit asks about it.
+      if (!this.live) {
+        if (unsaved.copy) toast.error(`Could not save ${unsaved.name}. Your changes are in ${copyLocation(this.path, unsaved.copy)}.`);
+        else toast.error(`Could not save ${unsaved.name} or a copy of it. Your last changes are lost.`);
+      }
+      return unsaved;
+    } catch {
+      return { name, copy: null };
+    }
+  }
+
+  /** Writes text to a new copy next to the note, or in the recovery folder; null when neither took it. */
+  private async saveCopy(text: string, label: MarkdownCopyLabel): Promise<string | null> {
+    try {
+      const saved = await window.markdownAPI.saveCopy(this.path, text, label);
+      return saved.success ? saved.data.path : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Autosave about 800ms after the last change, and at least every 5s while typing goes on. */
@@ -238,7 +286,6 @@ class MarkdownDocumentSession {
     this.cancelTimer();
     this.show(merged.mine);
     this.conflict = { disk, revision };
-    if (!this.live) return this.keepBoth();
     this.publish({ saveState: 'conflict', conflict: { disk: merged.disk }, error: null, properties });
   }
 
@@ -248,22 +295,16 @@ class MarkdownDocumentSession {
    */
   private async keepBoth(): Promise<void> {
     const conflict = this.conflict;
-    const folder = parentFsPath(this.path);
-    if (!conflict || !folder) return;
-    const name = basenameFsPath(this.path).replace(/\.md$/i, '');
-    const text = this.latest;
-    try {
-      const created = await window.markdownAPI.create(folder, `${name} (conflicted copy)`);
-      if (!created.success) throw new Error(created.error);
-      const copy = await window.markdownAPI.read(created.data.path);
-      if (!copy.success) throw new Error(copy.error);
-      const written = await window.markdownAPI.write(created.data.path, text, copy.data.revision);
-      if (!written.success) throw new Error(written.error);
-      toast(`Your version of ${name} was saved as ${basenameFsPath(created.data.path).replace(/\.md$/i, '')}.`);
-    } catch {
-      toast.error(`Could not save your version of ${name}. It is still open in the page.`);
+    if (!conflict) return;
+    const name = noteName(this.path);
+    const copy = await this.saveCopy(this.latest, 'conflicted copy');
+    if (!copy) {
+      toast.error(this.live
+        ? `Could not save your version of ${name}. It is still open in the page.`
+        : `Could not save your version of ${name} or a copy of it. Your last changes are lost.`);
       return;
     }
+    toast(`Your version of ${name} was saved as ${copyLocation(this.path, copy)}.`);
     this.conflict = null;
     this.show(conflict.disk);
     this.saved = conflict.disk;

@@ -29,4 +29,14 @@ describe('mergeText', () => {
     expect(mergeText('a\nb', 'a\nmine\nb', 'a\ntheirs\nb')).toEqual({ clean: false, mine: 'a\nmine\nb', disk: 'a\ntheirs\nb' });
     expect(mergeText('a\nb\nc\nd', 'a\nX\nd', 'a\nb\nY\nd')).toEqual({ clean: false, mine: 'a\nX\nd', disk: 'a\nb\nY\nd' });
   });
+
+  it('merges an append into a long note full of blank lines at once, and keeps both sides of a change too large to line up', () => {
+    const long = Array.from({ length: 20000 }, (_, index) => (index % 2 ? '' : `Line ${index}`)).join('\n');
+    const mine = long.replace('Line 10\n', 'Line ten\n');
+    const started = performance.now();
+    expect(mergeText(long, mine, `${long}\n- 09:05 appended`)).toEqual({ clean: true, text: `${mine}\n- 09:05 appended` });
+    expect(performance.now() - started).toBeLessThan(1000);
+    const rewritten = long.replace(/Line/g, 'Row');
+    expect(mergeText(long, mine, rewritten)).toEqual({ clean: false, mine, disk: rewritten });
+  });
 });

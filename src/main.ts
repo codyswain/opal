@@ -347,7 +347,7 @@ const appMenu = new AppMenu({
 });
 
 // Closing the window or quitting waits for the renderer's pending page saves.
-const pendingSavesGuard = new PendingSavesGuard({ ipc: ipcMain, app });
+const pendingSavesGuard = new PendingSavesGuard({ ipc: ipcMain, app, dialog });
 
 // Install an empty menu immediately so the app never shows Electron's stock
 // developer menu, even for the moment before the renderer reports its commands.
@@ -414,6 +414,7 @@ const markdownDocuments = new MarkdownDocumentService({
   registry: rootRegistry,
   metadata: metadataService,
   activity: activityService,
+  recoveryDir: path.join(userDataDir, "Recovered"),
 });
 const vaultService = new VaultService({
   registry: rootRegistry,

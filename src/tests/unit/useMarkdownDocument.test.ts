@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTOSAVE_DELAY_MS,
@@ -41,7 +42,7 @@ beforeEach(() => {
     onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => { changed = null; }; }),
   });
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('useMarkdownDocument', () => {
   it('loads once and never writes a clean document, even after an edit that was undone', async () => {
@@ -162,7 +163,7 @@ describe('useMarkdownDocument', () => {
     diskChanged();
     await waitFor(() => expect(result.current.saveState).toBe('conflict'));
     unmount();
-    await act(async () => { await flushPendingSaves(); });
+    expect(await act(() => flushPendingSaves())).toEqual([]);
     expect(api.documents.get(NOTE)?.body).toBe('Title\nTheirs\n');
     expect(api.documents.get('/Vault/Notes/brief (conflicted copy).md')?.body).toBe('Title\nMine\n');
   });
@@ -174,6 +175,44 @@ describe('useMarkdownDocument', () => {
     await act(async () => { await flushPendingSaves(); });
     expect(api.write).toHaveBeenCalledWith(NOTE, 'ab', `rev-${NOTE}-1`);
     expect(api.documents.get(NOTE)?.body).toBe('ab');
+  });
+
+  it('keeps the text in an unsaved copy when the last save fails as the page closes', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const { api, editor, unmount } = await openDocument('# Brief\n');
+    (api.write as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false, error: 'Permission denied' });
+    editor.type('# Brief\n\nTyped before leaving.\n');
+    unmount();
+    expect(await act(() => flushPendingSaves())).toEqual([{ name: 'brief', copy: '/Vault/Notes/brief (unsaved copy).md' }]);
+    expect(api.documents.get('/Vault/Notes/brief (unsaved copy).md')?.body).toBe('# Brief\n\nTyped before leaving.\n');
+    expect(api.documents.get(NOTE)?.body).toBe('# Brief\n');
+    expect(error).toHaveBeenCalledWith('Could not save brief. Your changes are in brief (unsaved copy).');
+  });
+
+  it('reports an open page whose text reached no file to a quit, which asks before dropping it', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const { api, result, editor } = await openDocument('# Brief\n');
+    (api.write as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false, error: 'Permission denied' });
+    (api.saveCopy as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false, error: 'Permission denied' });
+    editor.type('# Brief, edited\n');
+    expect(await act(() => flushPendingSaves())).toEqual([{ name: 'brief', copy: null }]);
+    // The page is still open and says so itself; only a closed page toasts.
+    expect(result.current).toMatchObject({ saveState: 'error', error: 'Permission denied' });
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('says so when a closed page with a conflict could not keep its side anywhere', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const { api, result, editor, unmount } = await openDocument('Title\nShared\n');
+    (api.saveCopy as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false, error: 'Permission denied' });
+    editor.type('Title\nMine\n');
+    api.externalEdit(NOTE, 'Title\nTheirs\n');
+    diskChanged();
+    await waitFor(() => expect(result.current.saveState).toBe('conflict'));
+    unmount();
+    expect(await act(() => flushPendingSaves())).toEqual([{ name: 'brief', copy: null }]);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith('Could not save your version of brief or a copy of it. Your last changes are lost.');
   });
 
   it('flushes the open page when the window asks before closing or quitting', async () => {

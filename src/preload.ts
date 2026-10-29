@@ -1,6 +1,7 @@
 import type { VaultAPI } from "./types/vault";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
+import type { MarkdownCopyLabel, UnsavedPage } from "./types/markdown";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
@@ -121,12 +122,13 @@ contextBridge.exposeInMainWorld("collectionsAPI", {
 
 // The main process holds a window's close until this answers, so it answers
 // even when no page registered anything to flush.
-let flushPendingSaves: (() => Promise<void>) | null = null;
+// The answer lists the pages whose text did not reach their files.
+let flushPendingSaves: (() => Promise<UnsavedPage[]>) | null = null;
 ipcRenderer.on("markdown:flush", (_event, requestId: number) => {
   void Promise.resolve()
-    .then(() => flushPendingSaves?.())
-    .catch(() => undefined)
-    .finally(() => ipcRenderer.send("markdown:flushed", requestId));
+    .then(() => flushPendingSaves?.() ?? [])
+    .catch(() => [])
+    .then((unsaved) => ipcRenderer.send("markdown:flushed", requestId, unsaved));
 });
 
 contextBridge.exposeInMainWorld("markdownAPI", {
@@ -135,9 +137,11 @@ contextBridge.exposeInMainWorld("markdownAPI", {
     ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
   create: (parentDir: string, baseName?: string) =>
     ipcRenderer.invoke("markdown:create", parentDir, baseName),
+  saveCopy: (target: string, body: string, label: MarkdownCopyLabel) =>
+    ipcRenderer.invoke("markdown:save-copy", target, body, label),
   resolveLinks: (from: string, targets: string[]) =>
     ipcRenderer.invoke("markdown:resolve-links", from, targets),
-  setFlushHandler: (flush: () => Promise<void>) => {
+  setFlushHandler: (flush: () => Promise<UnsavedPage[]>) => {
     flushPendingSaves = flush;
   },
 });

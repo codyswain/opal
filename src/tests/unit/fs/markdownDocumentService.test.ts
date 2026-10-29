@@ -26,7 +26,7 @@ beforeEach(async () => {
   await mkdir(root);
   registry = new RootRegistry({ storePath: path.join(tmp, 'roots.json') });
   root = await registry.add(root);
-  service = new MarkdownDocumentService({ registry, metadata: { invalidate }, activity: { noteEdited } });
+  service = new MarkdownDocumentService({ registry, metadata: { invalidate }, activity: { noteEdited }, recoveryDir: path.join(tmp, 'Recovered') });
 });
 afterEach(async () => { await rm(tmp, { recursive: true, force: true }); });
 
@@ -59,8 +59,16 @@ describe('MarkdownDocumentService', () => {
     await writeFile(item('open.md'), '---\ntitle: never closed\nbody');
     const open = await service.read(item('open.md'));
     expect(open).toMatchObject({ body: '---\ntitle: never closed\nbody', properties: 0 });
+    // Only YAML properties hide; a block of anything else, such as rules typed around some text, stays in the page.
     await writeFile(item('list.md'), '---\n- not\n- a map\n---\nBody');
-    expect(await service.read(item('list.md'))).toMatchObject({ body: 'Body', properties: 0 });
+    expect(await service.read(item('list.md'))).toMatchObject({ body: '---\n- not\n- a map\n---\nBody', properties: 0 });
+    await writeFile(item('typed.md'), '---\nSome notes\n---\nBody');
+    const typed = await service.read(item('typed.md'));
+    expect(typed).toMatchObject({ body: '---\nSome notes\n---\nBody', properties: 0 });
+    await service.write(item('typed.md'), '---\nSome notes!\n---\nBody', typed.revision);
+    expect(await readFile(item('typed.md'), 'utf8')).toBe('---\nSome notes!\n---\nBody');
+    await writeFile(item('empty.md'), '---\n---\nBody');
+    expect(await service.read(item('empty.md'))).toMatchObject({ body: 'Body', properties: 0 });
   });
 
   it('refuses a stale revision without touching the file', async () => {
@@ -97,6 +105,27 @@ describe('MarkdownDocumentService', () => {
     await expect(service.create(path.join(tmp, 'elsewhere'))).rejects.toThrow(/not inside/i);
   });
 
+  it('saves a copy next to the note, or in the recovery folder when the note\'s folder cannot take it', async () => {
+    await writeFile(item('note.md'), '# note\n');
+    const first = await service.saveCopy(item('note.md'), 'mine', 'unsaved copy');
+    const second = await service.saveCopy(item('note.md'), 'mine again', 'unsaved copy');
+    const conflicted = await service.saveCopy(item('note.md'), 'theirs', 'conflicted copy');
+    expect([first, second, conflicted].map((copy) => copy.path)).toEqual([item('note (unsaved copy).md'), item('note (unsaved copy) 2.md'), item('note (conflicted copy).md')]);
+    expect(await readFile(second.path, 'utf8')).toBe('mine again');
+    expect(invalidate).toHaveBeenCalled();
+    await chmod(root, 0o555);
+    try {
+      const recovered = await service.saveCopy(item('note.md'), 'locked out', 'unsaved copy');
+      expect(recovered.path).toBe(path.join(tmp, 'Recovered', 'note (unsaved copy).md'));
+      expect(await readFile(recovered.path, 'utf8')).toBe('locked out');
+    } finally {
+      await chmod(root, 0o755);
+    }
+    // A note whose root was closed still gets its copy, never next to it.
+    const outside = await service.saveCopy(path.join(tmp, 'elsewhere', 'gone.md'), 'kept', 'unsaved copy');
+    expect(outside.path).toBe(path.join(tmp, 'Recovered', 'gone (unsaved copy).md'));
+  });
+
   it('reports a read-only file as a save failure and leaves it intact', async () => {
     await writeFile(item('ro.md'), '# locked\n');
     const document = await service.read(item('ro.md'));
@@ -120,7 +149,7 @@ describe('MarkdownHandlers', () => {
       if (!handler) throw new Error(`Missing ${channel}`);
       return handler({}, ...args);
     };
-    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:read', 'markdown:resolve-links', 'markdown:write']);
+    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:read', 'markdown:resolve-links', 'markdown:save-copy', 'markdown:write']);
     await writeFile(item('note.md'), '# one\n');
     const read = await invoke('markdown:read', item('note.md')) as { success: true; data: { revision: string } };
     expect(read.success).toBe(true);
@@ -130,6 +159,8 @@ describe('MarkdownHandlers', () => {
     expect(await invoke('markdown:write', item('note.md'), '# mine\n', read.data.revision)).toEqual({ success: false, error: expect.stringMatching(/changed on disk/), conflict: true });
     expect(await invoke('markdown:create', root)).toMatchObject({ success: true, data: { path: item('Untitled.md') } });
     expect(await invoke('markdown:create', root, 7)).toMatchObject({ success: false });
+    expect(await invoke('markdown:save-copy', item('note.md'), 'mine', 'unsaved copy')).toMatchObject({ success: true, data: { path: item('note (unsaved copy).md') } });
+    expect(await invoke('markdown:save-copy', item('note.md'), 'mine', '../escape')).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', item('note.md'), ['NOTE', 'missing'])).toEqual({ success: true, data: { NOTE: item('note.md'), missing: null } });
     expect(await invoke('markdown:resolve-links', item('note.md'), 'note')).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', item('note.md'), Array(501).fill('x'))).toMatchObject({ success: false, error: /Invalid/ });

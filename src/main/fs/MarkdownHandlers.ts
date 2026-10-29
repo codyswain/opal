@@ -1,7 +1,7 @@
 import type { IpcMain } from 'electron';
 import logger from '@/main/logger';
 import type { IPCResponse } from '@/types/ipc';
-import { LINK_TARGET_LIMIT, type MarkdownDocument, type MarkdownLinks, type MarkdownWriteResult } from '@/types/markdown';
+import { LINK_TARGET_LIMIT, type MarkdownCopyLabel, type MarkdownDocument, type MarkdownLinks, type MarkdownWriteResult } from '@/types/markdown';
 import { PathNotAllowedError } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
 import { MarkdownConflictError, MarkdownError, type MarkdownDocumentService } from './MarkdownDocumentService';
@@ -17,6 +17,10 @@ export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isCopyLabel(value: unknown): value is MarkdownCopyLabel {
+  return value === 'conflicted copy' || value === 'unsaved copy';
 }
 
 /** One page's link targets: at most a few hundred short names. */
@@ -41,6 +45,10 @@ export class MarkdownHandlers {
     ipc.handle('markdown:create', async (_, parentDir: unknown, baseName: unknown): Promise<MarkdownResponse<{ path: string }>> => {
       if (!isNonEmptyString(parentDir) || (baseName !== undefined && typeof baseName !== 'string')) return invalid();
       return this.respond(() => service.create(parentDir, baseName as string | undefined), 'Failed to create the note');
+    });
+    ipc.handle('markdown:save-copy', async (_, target: unknown, body: unknown, label: unknown): Promise<MarkdownResponse<{ path: string }>> => {
+      if (!isNonEmptyString(target) || typeof body !== 'string' || !isCopyLabel(label)) return invalid();
+      return this.respond(() => service.saveCopy(target, body, label), 'Failed to save a copy of the note');
     });
     ipc.handle('markdown:resolve-links', async (_, from: unknown, targets: unknown): Promise<MarkdownResponse<MarkdownLinks>> => {
       if (!isNonEmptyString(from) || !isLinkTargets(targets)) return invalid();
