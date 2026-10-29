@@ -327,6 +327,7 @@ describe('the properties block', () => {
   it('writes times as "Oct 28, 2026 at 06:38" and sizes in bytes, KB or MB', () => {
     expect(formatFileTime(new Date(2026, 9, 28, 6, 38).getTime())).toBe('Oct 28, 2026 at 06:38');
     expect(formatFileTime(new Date(2026, 0, 2, 23, 5).getTime())).toBe('Jan 2, 2026 at 23:05');
+    expect(formatFileTime(new Date(2026, 9, 28).getTime(), true)).toBe('Oct 28, 2026');
     expect(formatFileSize(1)).toBe('1 byte');
     expect(formatFileSize(41)).toBe('41 bytes');
     expect(formatFileSize(1023)).toBe('1,023 bytes');

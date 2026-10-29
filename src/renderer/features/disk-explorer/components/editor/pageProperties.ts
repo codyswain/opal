@@ -10,10 +10,11 @@ export const setPageProperties = StateEffect.define<MarkdownProperties | null>()
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const twoDigits = (value: number) => String(value).padStart(2, '0');
 
-/** "Oct 28, 2026 at 06:38", in local time. */
-export function formatFileTime(ms: number): string {
+/** "Oct 28, 2026 at 06:38" in local time, or "Oct 28, 2026" when only the day is known. */
+export function formatFileTime(ms: number, dayOnly = false): string {
   const at = new Date(ms);
-  return `${MONTHS[at.getMonth()]} ${at.getDate()}, ${at.getFullYear()} at ${twoDigits(at.getHours())}:${twoDigits(at.getMinutes())}`;
+  const day = `${MONTHS[at.getMonth()]} ${at.getDate()}, ${at.getFullYear()}`;
+  return dayOnly ? day : `${day} at ${twoDigits(at.getHours())}:${twoDigits(at.getMinutes())}`;
 }
 
 /** "1 byte", "41 bytes", "12.4 KB", "3.1 MB". */
@@ -90,7 +91,7 @@ class PagePropertiesWidget extends WidgetType {
     // The word count is already in the footer, so the block leaves it out.
     block.append(list([
       ['Path', [facts.relativePath]],
-      ...(facts.createdMs === null ? [] : [['Created', [formatFileTime(facts.createdMs)]] as [string, string[]]]),
+      ...(facts.created === null ? [] : [['Created', [formatFileTime(facts.created.ms, facts.created.dayOnly)]] as [string, string[]]]),
       ['Modified', [formatFileTime(facts.modifiedMs)]],
       ['Size', [formatFileSize(facts.size)]],
     ], 'cm-md-properties-list cm-md-properties-file'));

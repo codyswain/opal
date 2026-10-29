@@ -226,8 +226,12 @@ A tucked-away view of a page's metadata, for the rare time it is wanted.
 - The block sits under the inline title, in the small UI sans: the
   frontmatter keys and values, a hairline, then Path (from the top of the
   opened folder), Created, Modified and Size. `markdown:properties` reads them
-  in the main process, the times and size from `fs.stat`. The word count stays
-  in the footer.
+  in the main process. Modified and Size come from `fs.stat`. Created is the
+  frontmatter's `created`, else a daily page's or log's `date` (a day, no
+  time), else the time of the commit that added the file, following renames.
+  Otherwise the row is left out. The file's birth time is never used: every
+  save replaces the file, and a pull writes it anew. The word count stays in
+  the footer.
 - Read-only, like the rest of Opal's property handling. A value that is a
   wiki link, such as a chat session's `thread`, opens its note.
 - Opening it scrolls the page to the top so the block shows; closing keeps

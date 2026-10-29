@@ -35,7 +35,7 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
           path: target,
           relativePath: target.replace(/^\/Vault\//, ''),
           properties: [],
-          createdMs: new Date(2026, 9, 28, 6, 38).getTime(),
+          created: { ms: new Date(2026, 9, 28, 6, 38).getTime(), dayOnly: false },
           modifiedMs: new Date(2026, 9, 28, 6, 38).getTime(),
           size: new TextEncoder().encode(document.body).length,
         },

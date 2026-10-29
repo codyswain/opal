@@ -56,7 +56,7 @@ async function openNote(page: Page, file: string) {
   await expect(page.locator(".cm-md-inline-title")).toHaveText(path.basename(file, ".md"));
 }
 
-/** The menu item, the IPC call and fs.stat together: the block shows the file facts the main process read. */
+/** The menu item, the IPC call and the main process together: the block shows the file facts the main process read. */
 test("View > Show Properties opens the block under the title, and it stays open on a log page", async ({ electronApp, page }) => {
   const daily = path.join(root, "Library/daily/2026-10-28.md");
   // Launch opens Today in a vault with Library/daily; the test's page comes after it.
@@ -76,7 +76,8 @@ test("View > Show Properties opens the block under the title, and it stays open 
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   const { size } = await stat(daily);
   await expect(block.locator("dt")).toHaveText(["date", "tags", "Path", "Created", "Modified", "Size"]);
-  await expect(block.locator("dd")).toContainText(["2026-10-28", "daily", "Library/daily/2026-10-28.md", /2026 at \d\d:\d\d/, /2026 at \d\d:\d\d/, `${size} bytes`]);
+  // A daily page's date is the day it was created.
+  await expect(block.locator("dd")).toHaveText(["2026-10-28", "daily", "Library/daily/2026-10-28.md", "Oct 28, 2026", /2026 at \d\d:\d\d$/, `${size} bytes`]);
   // The menu now offers to close it.
   await expect.poll(() => viewMenu(electronApp)).toContain("Hide Properties");
   expect(await viewMenu(electronApp)).not.toContain("Show Properties");
@@ -86,6 +87,7 @@ test("View > Show Properties opens the block under the title, and it stays open 
   await expect(toggle).toHaveText(/^Read-only · 3 properties · \d+ words$/);
   await expect(block.locator("dd").first()).toHaveText("ai");
   await expect(block.locator("dt")).toHaveText(["written_by", "type", "date", "Path", "Created", "Modified", "Size"]);
+  await expect(block.locator("dd").nth(4)).toHaveText("Oct 28, 2026");
 
   // Escape in the block closes it; the menu reads Show Properties again.
   await block.focus();

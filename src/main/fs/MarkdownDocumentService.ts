@@ -10,6 +10,7 @@ import type { RootRegistry } from './RootRegistry';
 import { MetadataError, assertNoSymlinks, splitMarkdown } from './MetadataCodec';
 import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import type { MetadataService } from './MetadataService';
+import { type PageHistory, pageCreated } from './pageCreated';
 import { normalizePath } from './paths';
 import {
   MARKDOWN_DOCUMENT_LIMIT,
@@ -35,6 +36,8 @@ export interface MarkdownDocumentServiceDependencies {
   activity?: Pick<ActivityRecorder, 'noteEdited'>;
   /** Where a copy of a page's text goes when the note's own folder cannot take it. */
   recoveryDir?: string;
+  /** Git history, for when a page without a stated time was created. */
+  history?: Pick<PageHistory, 'addedAt'>;
 }
 
 /** A Markdown file split the way the editor sees it. */
@@ -92,12 +95,12 @@ export class MarkdownDocumentService {
   async properties(target: string): Promise<MarkdownProperties> {
     const loaded = await this.load(target);
     const info = await stat(loaded.resolved);
+    const { root, relativePath } = this.place(loaded.resolved);
     return {
       path: loaded.resolved,
-      relativePath: this.relativePath(loaded.resolved),
+      relativePath,
       properties: loaded.frontmatter,
-      // Some file systems report no creation time; Node gives 0 for it.
-      createdMs: info.birthtimeMs > 0 ? info.birthtimeMs : null,
+      created: await pageCreated(loaded.frontmatter, root, relativePath, this.deps.history),
       modifiedMs: info.mtimeMs,
       size: info.size,
     };
@@ -169,12 +172,14 @@ export class MarkdownDocumentService {
     });
   }
 
-  /** The path below the innermost opened folder that holds `resolved`. */
-  private relativePath(resolved: string): string {
+  /** The innermost opened folder that holds `resolved`, and the path below it. */
+  private place(resolved: string): { root: string | null; relativePath: string } {
     const root = this.deps.registry.list()
       .filter((candidate) => isFsPathAtOrBelow(candidate, resolved))
       .sort((a, b) => b.length - a.length)[0];
-    return root ? path.relative(root, resolved).split(path.sep).join('/') : resolved;
+    return root
+      ? { root, relativePath: path.relative(root, resolved).split(path.sep).join('/') }
+      : { root: null, relativePath: resolved };
   }
 
   private async load(target: string): Promise<LoadedFile> {

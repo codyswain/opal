@@ -15,14 +15,20 @@ export interface PageProperty {
   values: string[];
 }
 
+/** A creation time, or only a day when that is all the page records. */
+export interface PageCreated {
+  ms: number;
+  dayOnly: boolean;
+}
+
 /** What a page's properties block shows: its frontmatter, then facts about its file. */
 export interface MarkdownProperties {
   path: string;
   /** The path below the opened folder that holds the file, such as "Library/daily/2026-10-28.md". */
   relativePath: string;
   properties: PageProperty[];
-  /** When the file was created, or null where the file system does not record it. */
-  createdMs: number | null;
+  /** When the page was created, or null when nothing records it. */
+  created: PageCreated | null;
   modifiedMs: number;
   /** Bytes on disk, frontmatter included. */
   size: number;

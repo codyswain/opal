@@ -37,6 +37,7 @@ import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { FileWriter } from "@/main/fs/FileWriter";
 import { MetadataService } from "@/main/fs/MetadataService";
 import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
+import { PageHistory } from "@/main/fs/pageCreated";
 import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
 import { LinkIndex } from "@/main/fs/LinkIndex";
 import { ActivityStore } from "@/main/activity/ActivityStore";
@@ -416,6 +417,7 @@ const markdownDocuments = new MarkdownDocumentService({
   metadata: metadataService,
   activity: activityService,
   recoveryDir: path.join(userDataDir, "Recovered"),
+  history: new PageHistory(),
 });
 const vaultService = new VaultService({ registry: rootRegistry });
 const dayService = new DayService({
