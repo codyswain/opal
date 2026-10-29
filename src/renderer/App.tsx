@@ -8,7 +8,11 @@ import { Toaster } from "@/renderer/shared/components/Toast";
 import { SettingsDialog } from "@/renderer/features/settings";
 import { AppCommands, CommandPalette } from "@/renderer/features/commands";
 import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
-import { FilesRoute } from "@/renderer/features/disk-explorer";
+import {
+  ConfirmDeleteDialog,
+  FilesRoute,
+  NameDialog,
+} from "@/renderer/features/disk-explorer";
 import { FILES_ROUTE_PATH } from "@/renderer/features/disk-explorer/navigation";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
 import {
@@ -84,6 +88,9 @@ const App: React.FC = () => {
             <AppCommands />
             <CommandPalette />
             <SettingsDialog />
+            {/* File actions start from the sidebar tree and the folder view alike. */}
+            <NameDialog />
+            <ConfirmDeleteDialog />
             <AppShell>
               <AppRoutes />
             </AppShell>

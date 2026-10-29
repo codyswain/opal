@@ -3,6 +3,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DiskEntry } from '@/types/disk';
 
 const ROOT = '/Vault';
@@ -324,5 +325,58 @@ describe('collections', () => {
     pathMutationCoordinator.applyExternalRemoval(['/Vault/Photos']);
     expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' });
     expect(useDiskStore.getState().currentDirectory).toBeNull();
+  });
+});
+
+describe('tree expansion', () => {
+  it('collapses and reopens one of several roots, which start open', async () => {
+    useDiskStore.setState({ roots: [ROOT, OTHER_ROOT] });
+    await useDiskStore.getState().toggleExpanded(ROOT);
+    expect(useDiskStore.getState().expanded[ROOT]).toBe(false);
+    await useDiskStore.getState().toggleExpanded(ROOT);
+    expect(useDiskStore.getState().expanded[ROOT]).toBe(true);
+  });
+
+  it('loads open roots and the expanded folders they show, and nothing hidden', async () => {
+    useDiskStore.setState({
+      roots: [ROOT],
+      expanded: { [PHOTOS]: true, '/Vault/Closed/Deep': true },
+    });
+    await useDiskStore.getState().loadTree();
+    expect(readDirectory.mock.calls.map(([path]) => path).sort()).toEqual([ROOT, PHOTOS]);
+  });
+
+  it('expands and loads every folder above a revealed path', async () => {
+    useDiskStore.setState({ roots: [ROOT] });
+    await useDiskStore.getState().revealPath('/Vault/Photos/a.jpg');
+    expect(useDiskStore.getState().expanded[PHOTOS]).toBe(true);
+    expect(useDiskStore.getState().listings[PHOTOS]).toHaveLength(1);
+    expect(useDiskStore.getState().listings[ROOT]).toHaveLength(2);
+
+    readDirectory.mockClear();
+    await useDiskStore.getState().revealPath('/Outside/file.md');
+    expect(readDirectory).not.toHaveBeenCalled();
+  });
+
+  it('persists expanded folders and a collapsed root, but not collapsed folders', async () => {
+    useDiskStore.setState({ roots: [ROOT, OTHER_ROOT] });
+    await useDiskStore.getState().toggleExpanded(PHOTOS);
+    await useDiskStore.getState().toggleExpanded(OTHER_ROOT);
+    expect(readPref('tree.expanded', null)).toEqual({ [PHOTOS]: true, [OTHER_ROOT]: false });
+
+    await useDiskStore.getState().toggleExpanded(PHOTOS);
+    expect(readPref('tree.expanded', null)).toEqual({ [OTHER_ROOT]: false });
+  });
+
+  it('restores expanded folders at launch and forgets those outside the opened roots', async () => {
+    writePref('tree.expanded', { [PHOTOS]: true, '/Gone/A': true, '/Vault/bad': 'yes' });
+    vi.resetModules();
+    const { useDiskStore: launched } = await import(
+      '@/renderer/features/disk-explorer/store/diskStore'
+    );
+    expect(launched.getState().expanded).toEqual({ [PHOTOS]: true, '/Gone/A': true });
+
+    await launched.getState().loadRoots();
+    expect(launched.getState().expanded).toEqual({ [PHOTOS]: true });
   });
 });

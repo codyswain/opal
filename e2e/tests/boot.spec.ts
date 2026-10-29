@@ -5,14 +5,15 @@ import { expect, test } from "../fixtures/electronApp";
 import { createTempVault, seedRoots, type TempVault } from "../helpers/tempVault";
 
 /** Real-process launch and vault IPC check; page behavior is covered by unit tests. */
-test("app without a vault launches into the Library", async ({
+test("app without a vault launches with the sidebar", async ({
   page,
   userDataDir,
 }) => {
   await expect(page.getByTestId("app-shell")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
   await expect(page.getByRole("button", { name: "Today" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Library" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Recent" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Library" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Threads" })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.location.hash)).toMatch(/^#\/files/);
   // The UI font ships in the bundle; the CSP must let the page load it.

@@ -68,6 +68,15 @@ describe('shell preferences', () => {
     );
   });
 
+  it('widens a sidebar left at the old 220px default to the new default', () => {
+    writePref(SHELL_PREFERENCE_KEY, { sidebarOpen: true, sidebarWidth: 220 });
+
+    expect(useShellStore.getState().hydrate().sidebarWidth).toBe(
+      DEFAULT_SHELL_PREFERENCES.sidebarWidth
+    );
+    expect(DEFAULT_SHELL_PREFERENCES.sidebarWidth).toBe(260);
+  });
+
   it('restores validated cosmetic preferences', () => {
     const saved = {
       sidebarOpen: false,

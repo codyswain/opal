@@ -314,7 +314,7 @@ export function FilesRoute() {
       {key && key !== readyKey ? (
         <div role="status">Loading…</div>
       ) : (
-        <DiskExplorer showNavigationPane={false} />
+        <DiskExplorer />
       )}
     </FilesNavigationContext.Provider>
   );

@@ -135,9 +135,9 @@ export class DiskReader {
   }
 }
 
-const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
-/** Directories first, then case-insensitive name order — Finder's convention. */
+/** Directories first, then case-insensitive name order with numbers by value (2 before 10), as Finder sorts. */
 function compareEntries(a: DiskEntry, b: DiskEntry): number {
   if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
   return collator.compare(a.name, b.name);

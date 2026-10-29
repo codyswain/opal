@@ -34,6 +34,11 @@ export interface TabsState {
 export interface TabsActions {
   /** Canonical explicit open action. Real opened files are the only target model. */
   openFile: (path: string) => void;
+  /**
+   * Shows a file in the active tab, replacing the file it held. A file that is
+   * already open is activated instead, and with no tab open it opens a new one.
+   */
+  openInPlace: (path: string) => void;
   /** Opens a file in the preview slot, replacing whatever previewed before. */
   openPreview: (path: string) => void;
   /** @deprecated Task 7: use openFile. */
@@ -157,6 +162,27 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
   openFile: (path) =>
     set((state) => {
       const next = openFileState(state, path);
+      persist({ ...state, ...next });
+      return next;
+    }),
+
+  openInPlace: (path) =>
+    set((state) => {
+      const normalizedPath = normalizeFsPath(path);
+      const current = selectOpenedPath(state);
+      if (state.openPaths.includes(normalizedPath) || !current) {
+        const next = openFileState(state, normalizedPath);
+        persist({ ...state, ...next });
+        return next;
+      }
+      const next = {
+        openPaths: state.openPaths.map((open) =>
+          open === current ? normalizedPath : open
+        ),
+        openedPath: normalizedPath,
+        activePath: normalizedPath,
+        previewPath: state.previewPath === current ? null : state.previewPath,
+      };
       persist({ ...state, ...next });
       return next;
     }),

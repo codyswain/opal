@@ -5,10 +5,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings";
 import {
   ShellProvider,
   WorkspaceSidebar,
+  useShellStore,
   type ShellRouteObject,
 } from "@/renderer/features/shell";
 import { ThemeProvider } from "@/renderer/features/theme";
@@ -20,6 +22,10 @@ import { localDate } from "@/common/vaultModel";
 
 const ROOT = "/Vault";
 const DESIGN = "/Vault/Design";
+const ROOT_ENTRIES = [
+  entry({ path: DESIGN, name: "Design", kind: "directory", isDirectory: true }),
+  entry({ path: "/Vault/readme.md", name: "readme.md", kind: "markdown" }),
+];
 
 const ROUTES: ShellRouteObject[] = [
   {
@@ -79,27 +85,10 @@ beforeEach(() => {
     })),
     readDirectory: vi.fn(async (path: string) => ({
       success: true as const,
-      data: {
-        path,
-        entries:
-          path === ROOT
-            ? [
-                entry({
-                  path: DESIGN,
-                  name: "Design",
-                  kind: "directory",
-                  isDirectory: true,
-                }),
-                entry({
-                  path: "/Vault/readme.md",
-                  name: "readme.md",
-                  kind: "markdown",
-                }),
-              ]
-            : [],
-      },
+      data: { path, entries: path === ROOT ? ROOT_ENTRIES : [] },
     })),
   });
+  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null });
   useDiskStore.setState({
     roots: [],
     listings: {},
@@ -141,84 +130,66 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/files");
   });
 
-  it("keeps the sidebar quiet outside the library", async () => {
+  it("marks Today active while today's log is open", () => {
+    const log = `${ROOT}/Inbox/Logs/${localDate()}.md`;
+    useDiskStore.setState({ roots: [ROOT] });
+    useTabsStore.setState({ openPaths: [log], openedPath: log, activePath: log });
+    renderSidebar();
+    expect(screen.getByRole("button", { name: "Today" })).toHaveClass("bg-surface-selected");
+
+    act(() => useTabsStore.setState({ openedPath: `${ROOT}/readme.md`, openPaths: [`${ROOT}/readme.md`] }));
+    expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
+  });
+
+  it("shows the same nav and file tree on every route, without Library", async () => {
+    useDiskStore.setState({
+      roots: [ROOT],
+      listings: { [ROOT]: ROOT_ENTRIES },
+    });
     renderSidebar(false, "/");
+
     expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Recent" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Library" })).toBeNull();
     expect(screen.queryByText("Open folders")).toBeNull();
-    expect(screen.queryByText("Views")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Recent" })).toBeNull();
-  });
-
-  it("shows only real destinations and a lazy directory-only tree", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-
-    expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Threads" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /workspace folder/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /theme/i })).toBeNull();
-    expect(screen.queryByText("Favorites")).toBeNull();
-    expect(screen.queryByText("Search")).toBeNull();
-    expect(screen.queryByText("Views")).toBeNull();
-    expect(screen.queryByRole("button", { name: "New view" })).toBeNull();
-
-    const root = await screen.findByTestId(`disk-tree-item-${ROOT}`);
-    expect(root).toHaveAttribute("aria-level", "1");
-    expect(window.diskAPI.readDirectory).not.toHaveBeenCalled();
-
-    await user.click(screen.getByTestId(`disk-tree-toggle-${ROOT}`));
-    const design = await screen.findByTestId(`disk-tree-item-${DESIGN}`);
-    expect(design).toHaveAttribute("aria-level", "2");
-    expect(screen.queryByText("readme.md")).toBeNull();
-    expect(window.diskAPI.readDirectory).toHaveBeenCalledWith(ROOT);
+    expect(screen.getByRole("tree", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByTestId(`disk-tree-item-${DESIGN}`)).toBeInTheDocument();
+    expect(screen.getByTestId("disk-tree-item-/Vault/readme.md")).toHaveTextContent("readme");
   });
 
-  it("navigates a directory through React Router and canonical disk state", async () => {
+  it("holds the sidebar toggle, Back and Forward in its top row", async () => {
+    const onToggleSidebar = vi.fn();
     const user = userEvent.setup();
-    renderSidebar(true);
-    await screen.findByTestId(`disk-tree-item-${ROOT}`);
-    await user.click(screen.getByTestId(`disk-tree-toggle-${ROOT}`));
-    const design = await screen.findByTestId(`disk-tree-item-${DESIGN}`);
-
-    await user.click(design);
-
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentDirectory).toBe(DESIGN),
+    render(
+      <MemoryRouter initialEntries={["/files"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <TooltipProvider>
+          <ShellProvider routes={ROUTES} fallbackRoute={{ id: "opal", header: { title: "Opal" } }}>
+            <WorkspaceSidebar onToggleSidebar={onToggleSidebar} />
+          </ShellProvider>
+        </TooltipProvider>
+      </MemoryRouter>,
     );
-    expect(useDiskStore.getState().selectedPaths).toEqual([]);
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/files?mode=browse&dir=%2FVault%2FDesign",
-      ),
-    );
+
+    expect(screen.getByRole("button", { name: "Go back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Go forward" })).toBeInTheDocument();
+    expect(screen.getByTestId("traffic-light-spacer")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+
+    act(() => useShellStore.getState().setFullScreen(true));
+    expect(screen.queryByTestId("traffic-light-spacer")).toBeNull();
+    act(() => useShellStore.getState().setFullScreen(false));
   });
 
-  it("provides roving tree focus and arrow-key navigation", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-    const root = await screen.findByTestId(`disk-tree-item-${ROOT}`);
-    await user.click(screen.getByTestId(`disk-tree-toggle-${ROOT}`));
-    const design = await screen.findByTestId(`disk-tree-item-${DESIGN}`);
-
-    act(() => root.focus());
-    await user.keyboard("{ArrowDown}");
-
-    await waitFor(() => expect(design).toHaveFocus());
-    expect(root).toHaveAttribute("tabindex", "-1");
-    expect(design).toHaveAttribute("tabindex", "0");
-  });
-
-  it("offers Recent and highlights it instead of Files while browsing Recent", async () => {
+  it("highlights Recent only while browsing Recent", async () => {
     const user = userEvent.setup();
     renderSidebar(true);
     await waitFor(() =>
       expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
     );
-    const files = screen.getByRole("link", { name: "Library" });
     const recent = screen.getByRole("link", { name: "Recent" });
-    expect(files).toHaveClass("bg-surface-selected");
     expect(recent).not.toHaveClass("bg-surface-selected");
 
     await user.click(recent);
@@ -231,13 +202,6 @@ describe("WorkspaceSidebar", () => {
       "/files?mode=browse&collection=recent",
     );
     expect(recent).toHaveClass("bg-surface-selected");
-    expect(files).not.toHaveClass("bg-surface-selected");
     expect(window.activityAPI.record).not.toHaveBeenCalled();
-
-    await user.click(files);
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
-    );
-    expect(files).toHaveClass("bg-surface-selected");
   });
 });

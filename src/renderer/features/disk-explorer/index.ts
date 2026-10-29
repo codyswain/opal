@@ -1,5 +1,6 @@
 export { DiskExplorer } from './components/DiskExplorer';
 export { FilesRoute } from './components/FilesRoute';
-export { DiskTree } from './components/DiskTree';
+export { ConfirmDeleteDialog } from './components/dialogs/ConfirmDeleteDialog';
+export { NameDialog } from './components/dialogs/NameDialog';
 export { DiskFolderView } from './components/DiskFolderView';
 export { useDiskStore } from './store/diskStore';

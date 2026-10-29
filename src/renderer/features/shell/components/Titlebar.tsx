@@ -1,13 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowRight,
-  ChevronRight,
-  MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+import { ChevronRight, MoreHorizontal } from "lucide-react";
 import {
   IconButton,
   Popover,
@@ -15,6 +8,7 @@ import {
   PopoverTrigger,
 } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
+import { FrameControls, TrafficLightInset } from "./FrameControls";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -78,7 +72,7 @@ export function Titlebar({
   sidebarOpen,
   sidebarToggleRef,
 }: TitlebarProps) {
-  const { goBack, goForward, route } = useShell();
+  const { route } = useShell();
   const { actions, leadingActions, tabs } = route.header;
 
   return (
@@ -87,35 +81,17 @@ export function Titlebar({
       className="drag-handle shrink-0 bg-chrome"
     >
       <div className="flex h-header min-w-0 items-center gap-1 px-2">
+        {/* With the sidebar open, its own top row holds these. */}
         {!sidebarOpen ? (
-          <span
-            aria-hidden
-            data-testid="traffic-light-spacer"
-            className="w-[68px] shrink-0"
-          />
+          <>
+            <TrafficLightInset />
+            <FrameControls
+              sidebarOpen={false}
+              toggleRef={sidebarToggleRef}
+              onToggleSidebar={onToggleSidebar}
+            />
+          </>
         ) : null}
-        <div className="no-drag flex shrink-0 items-center">
-          <IconButton label="Go back" onClick={goBack}>
-            <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton label="Go forward" onClick={goForward}>
-            <ArrowRight aria-hidden className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton
-            ref={sidebarToggleRef}
-            label={
-              sidebarOpen ? "Hide workspace sidebar" : "Show workspace sidebar"
-            }
-            active={sidebarOpen}
-            onClick={onToggleSidebar}
-          >
-            {sidebarOpen ? (
-              <PanelLeftClose aria-hidden className="h-3.5 w-3.5" />
-            ) : (
-              <PanelLeftOpen aria-hidden className="h-3.5 w-3.5" />
-            )}
-          </IconButton>
-        </div>
 
         {leadingActions ? (
           <div className="no-drag flex shrink-0 items-center">

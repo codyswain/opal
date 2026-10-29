@@ -70,6 +70,7 @@ const WINDOW_BACKGROUND = {
   light: "#F4F4F5",
   dark: "#08090A",
 } as const;
+const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;
 
 // CSP Configuration
@@ -120,6 +121,8 @@ const createWindow = () => {
     show: false,
     backgroundColor: WINDOW_BACKGROUND[resolvedTheme],
     titleBarStyle: "hiddenInset",
+    // Centers the 14px buttons in the renderer's 40px top row.
+    trafficLightPosition: TRAFFIC_LIGHT_POSITION,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -155,6 +158,14 @@ const createWindow = () => {
       });
     }, 400);
   };
+
+  // The traffic lights hide in full screen, so the renderer drops their inset.
+  const reportFullScreen = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("system:full-screen", mainWindow.isFullScreen());
+  };
+  mainWindow.on("enter-full-screen", reportFullScreen);
+  mainWindow.on("leave-full-screen", reportFullScreen);
 
   mainWindow.on("resize", scheduleSave);
   mainWindow.on("move", scheduleSave);

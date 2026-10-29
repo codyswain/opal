@@ -11,7 +11,10 @@ import {
   RECENT_COLLECTION,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
-import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore";
+import {
+  selectOpenedPath,
+  useTabsStore,
+} from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
@@ -105,7 +108,12 @@ export const AppCommands: React.FC = () => {
         shortcut: ["CmdOrCtrl+N"],
         keywords: ["create", "markdown", "write"],
         perform: () => {
-          const folder = currentFolder();
+          // Next to the open page, or at the top of the vault.
+          const opened = selectOpenedPath(useTabsStore.getState());
+          const folder =
+            (opened && parentFsPath(opened)) ??
+            useDiskStore.getState().roots[0] ??
+            null;
           if (!folder) {
             toast.error("Open a folder first.");
             return;

@@ -158,4 +158,20 @@ describe('ConfirmDeleteDialog', () => {
     ]);
     expect(useDiskStore.getState().pendingDelete).toBe('/V/a.md');
   });
+
+  it('trashes only the row a delete came from when it is outside the selection', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({
+      selectedPath: '/V/b.md',
+      selectedPaths: ['/V/a.md', '/V/b.md'],
+      pendingDelete: '/V/tree-row.md',
+    });
+    render(<ConfirmDeleteDialog />);
+
+    expect(screen.getByTestId('confirm-delete')).toHaveTextContent('tree-row.md');
+    await user.click(screen.getByTestId('confirm-delete-confirm'));
+    await waitFor(() => expect(useDiskStore.getState().pendingDelete).toBeNull());
+    expect(window.diskAPI.trash).toHaveBeenCalledTimes(1);
+    expect(window.diskAPI.trash).toHaveBeenCalledWith('/V/tree-row.md');
+  });
 });

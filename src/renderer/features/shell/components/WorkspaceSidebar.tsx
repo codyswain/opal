@@ -1,74 +1,48 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Clock, Files, FolderPlus, Settings, Sun } from "lucide-react";
-import { isFsPathAtOrBelow } from "@/common/fsPaths";
+import { Clock, Settings, Sun } from "lucide-react";
+import { localDate } from "@/common/vaultModel";
 import {
   FILES_ROUTE_PATH,
   RECENT_COLLECTION,
-  browseFiles,
-  directoryCollection,
   serializeFilesLocation,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import {
+  selectOpenedPath,
+  useTabsStore,
+} from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
-import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
 import { openToday } from "../utils/openToday";
-import { DirectoryTree } from "./DirectoryTree";
+import { FileTree } from "./FileTree";
+import { FrameControls, TrafficLightInset } from "./FrameControls";
 import { SidebarItem } from "./SidebarItem";
 import { SidebarSection } from "./SidebarSection";
-import { WorkspaceHeader } from "./WorkspaceHeader";
 
 interface WorkspaceSidebarProps {
   onNavigate?: () => void;
-  onClose?: () => void;
+  /** Hides the sidebar, or closes it in the narrow layout. */
+  onToggleSidebar?: () => void;
 }
 
-function rootForDirectory(
-  roots: readonly string[],
-  directory: string | null,
-): string | null {
-  if (!directory) return roots[0] ?? null;
-  return (
-    [...roots]
-      .sort((left, right) => right.length - left.length)
-      .find((root) => isFsPathAtOrBelow(root, directory)) ?? null
-  );
-}
+const RECENT_DESTINATION = {
+  pathname: FILES_ROUTE_PATH,
+  search: serializeFilesLocation({ mode: "browse", collection: RECENT_COLLECTION }),
+};
 
 export function WorkspaceSidebar({
-  onClose,
   onNavigate,
+  onToggleSidebar,
 }: WorkspaceSidebarProps) {
   const roots = useDiskStore((state) => state.roots);
-  const currentDirectory = useDiskStore((state) => state.currentDirectory);
-  const currentCollection = useDiskStore((state) => state.currentCollection);
-  const openFolder = useDiskStore((state) => state.openFolder);
-  const { navigateFiles, location } = useShell();
-  const currentRoot = rootForDirectory(roots, currentDirectory);
-  const onFiles = location.pathname === FILES_ROUTE_PATH;
-  const isRecent = currentCollection?.kind === "recent";
-  const recentDestination = {
-    pathname: FILES_ROUTE_PATH,
-    search: serializeFilesLocation({
-      mode: "browse",
-      collection: RECENT_COLLECTION,
-    }),
-  };
-  const filesDestination = currentDirectory
-    ? {
-        pathname: FILES_ROUTE_PATH,
-        search: serializeFilesLocation({
-          mode: "browse",
-          collection: directoryCollection(currentDirectory),
-        }),
-      }
-    : FILES_ROUTE_PATH;
-
-  const navigateToRoot = (path: string) => {
-    navigateFiles(browseFiles(path));
-    onNavigate?.();
-  };
+  const isRecent = useDiskStore(
+    (state) => state.currentCollection?.kind === "recent",
+  );
+  const openedPath = useTabsStore(selectOpenedPath);
+  const { navigateFiles } = useShell();
+  const todayLog = `/Inbox/Logs/${localDate()}.md`;
+  const isToday = roots.some((root) => openedPath === `${root}${todayLog}`);
 
   const goToToday = async () => {
     try {
@@ -77,14 +51,6 @@ export function WorkspaceSidebar({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not open today's page.");
     }
-  };
-
-  const handleOpenFolder = async () => {
-    await openFolder();
-    const directory = useDiskStore.getState().currentDirectory;
-    if (!directory) return;
-    navigateFiles(browseFiles(directory));
-    onNavigate?.();
   };
 
   const openSettings = () => {
@@ -98,62 +64,32 @@ export function WorkspaceSidebar({
       aria-label="Workspace"
       className="scrollbar-on-hover flex h-full min-h-0 w-full flex-col bg-chrome text-foreground"
     >
-      <WorkspaceHeader
-        roots={roots}
-        currentRoot={currentRoot}
-        onSelectRoot={navigateToRoot}
-        onOpenFolder={() => void handleOpenFolder()}
-        onClose={onClose}
-      />
+      <div className="drag-handle flex h-header shrink-0 items-center gap-1 px-2">
+        <TrafficLightInset />
+        <FrameControls sidebarOpen onToggleSidebar={() => onToggleSidebar?.()} />
+      </div>
 
-      <nav aria-label="Primary" className="shrink-0 py-2">
+      <nav aria-label="Primary" className="shrink-0 pt-1">
         <SidebarSection>
           <SidebarItem
             icon={Sun}
             label="Today"
+            active={isToday}
             onActivate={() => void goToToday()}
           />
           <SidebarItem
-            to={filesDestination}
-            icon={Files}
-            label="Library"
-            active={onFiles && !isRecent}
+            to={RECENT_DESTINATION}
+            icon={Clock}
+            label="Recent"
+            active={isRecent && !openedPath}
             onActivate={onNavigate}
           />
-          {onFiles && (
-            <SidebarItem
-              to={recentDestination}
-              icon={Clock}
-              label="Recent"
-              active={onFiles && isRecent}
-              onActivate={onNavigate}
-            />
-          )}
         </SidebarSection>
       </nav>
 
-      {onFiles ? (
-        <>
-          <SidebarSection
-            title="Open folders"
-            className="flex min-h-0 flex-1 flex-col pt-3"
-            contentClassName="min-h-0 flex-1 px-0"
-            action={
-              <IconButton
-                label="Open folder"
-                onClick={() => void handleOpenFolder()}
-                size="compact"
-              >
-                <FolderPlus aria-hidden className="h-3.5 w-3.5" />
-              </IconButton>
-            }
-          >
-            <DirectoryTree onNavigate={onNavigate} />
-          </SidebarSection>
-        </>
-      ) : (
-        <div className="flex-1" />
-      )}
+      <div className="min-h-0 flex-1 pt-4">
+        <FileTree onNavigate={onNavigate} />
+      </div>
 
       <div className="shrink-0 p-2">
         <SidebarItem icon={Settings} label="Settings" onActivate={openSettings} />

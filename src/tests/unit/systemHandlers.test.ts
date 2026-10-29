@@ -75,3 +75,27 @@ describe('SystemHandlers theme report', () => {
     expect(onThemeChangedSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('SystemHandlers full screen', () => {
+  it('answers whether the asking window is in full screen', async () => {
+    const handlers = new Map<string, (event: unknown) => unknown>();
+    const ipc = {
+      handle: (channel: string, handler: (event: unknown) => unknown) => handlers.set(channel, handler),
+      on: vi.fn(),
+    } as unknown as IpcMain;
+    const sender = {};
+    const fromWebContents = vi.fn((contents: unknown) =>
+      contents === sender ? { isFullScreen: () => true } : null
+    );
+    new SystemHandlers({
+      ipc,
+      dialog: {} as Dialog,
+      browserWindow: { fromWebContents } as unknown as typeof BrowserWindow,
+      onThemeChanged: vi.fn(),
+    }).registerAll();
+
+    const isFullScreen = handlers.get('system:is-full-screen');
+    expect(isFullScreen?.({ sender })).toBe(true);
+    expect(isFullScreen?.({ sender: {} })).toBe(false);
+  });
+});

@@ -18,8 +18,11 @@ export interface ShellPreferences {
 
 export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   sidebarOpen: true,
-  sidebarWidth: 220,
+  sidebarWidth: 260,
 };
+
+/** The default before the tree listed files; a sidebar left at it widens to the new one. */
+const PREVIOUS_DEFAULT_SIDEBAR_WIDTH = 220;
 
 export interface ShellActions {
   setSidebarOpen(open: boolean): void;
@@ -27,6 +30,7 @@ export interface ShellActions {
   setNarrowLayout(narrow: boolean): void;
   closeNarrowSidebar(): void;
   setSidebarWidth(width: number): void;
+  setFullScreen(fullScreen: boolean): void;
   hydrate(): ShellPreferences;
   reset(): void;
 }
@@ -34,6 +38,8 @@ export interface ShellActions {
 export interface ShellRuntimeState {
   narrowLayout: boolean;
   narrowSidebarOpen: boolean;
+  /** The window is in macOS full screen, where the traffic lights are hidden. */
+  fullScreen: boolean;
 }
 
 export type ShellStore = ShellPreferences & ShellRuntimeState & ShellActions;
@@ -75,11 +81,12 @@ export function sanitizeShellPreferences(
 
 function readShellPreferences(): ShellPreferences {
   if (hasPref(SHELL_PREFERENCE_KEY)) {
-    const stored = readPref<unknown>(
-      SHELL_PREFERENCE_KEY,
-      DEFAULT_SHELL_PREFERENCES
+    const stored = sanitizeShellPreferences(
+      readPref<unknown>(SHELL_PREFERENCE_KEY, DEFAULT_SHELL_PREFERENCES)
     );
-    return sanitizeShellPreferences(stored);
+    return stored.sidebarWidth === PREVIOUS_DEFAULT_SIDEBAR_WIDTH
+      ? { ...stored, sidebarWidth: DEFAULT_SHELL_PREFERENCES.sidebarWidth }
+      : stored;
   }
 
   // One-cycle compatibility with App.tsx's pre-shell preference keys.
@@ -105,6 +112,7 @@ export const useShellStore = create<ShellStore>((set) => ({
   ...readShellPreferences(),
   narrowLayout: false,
   narrowSidebarOpen: false,
+  fullScreen: false,
 
   setSidebarOpen: (sidebarOpen) =>
     set((state) => {
@@ -144,6 +152,7 @@ export const useShellStore = create<ShellStore>((set) => ({
       persist(next);
       return next;
     }),
+  setFullScreen: (fullScreen) => set({ fullScreen }),
   hydrate: () => {
     const next = readShellPreferences();
     set(next);

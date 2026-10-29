@@ -1,6 +1,8 @@
 import * as React from 'react';
+import { useDiskSync } from '@/renderer/features/disk-explorer/hooks/useDiskSync';
 import { useShell } from '../context/ShellContext';
 import {
+  DEFAULT_SHELL_PREFERENCES,
   SHELL_LIMITS,
   useShellStore,
 } from '../store/shellStore';
@@ -43,7 +45,8 @@ interface SidebarResizeHandleProps {
   onChange: (width: number) => void;
 }
 
-const DEFAULT_SIDEBAR_WIDTH = 220;
+/** The medium layout keeps at least about 560px for the page. */
+const MEDIUM_SIDEBAR_MAX = 240;
 
 function SidebarResizeHandle({
   max,
@@ -94,7 +97,7 @@ function SidebarResizeHandle({
       aria-valuemin={SHELL_LIMITS.sidebar.min}
       aria-valuemax={max}
       aria-valuenow={value}
-      onDoubleClick={() => onChange(DEFAULT_SIDEBAR_WIDTH)}
+      onDoubleClick={() => onChange(DEFAULT_SHELL_PREFERENCES.sidebarWidth)}
       onKeyDown={onKeyDown}
       onPointerDown={beginResize}
       className="no-drag absolute inset-y-0 right-[-2px] z-10 w-1 cursor-col-resize bg-transparent outline-none transition-hover hover:bg-focus/40 focus-visible:bg-focus"
@@ -133,10 +136,18 @@ export function AppShell({ children }: AppShellProps) {
   const effectiveSidebarWidth = isNarrow
     ? Math.min(sidebarWidth, Math.max(0, viewport - 48))
     : layout === 'medium'
-      ? Math.min(sidebarWidth, 200)
+      ? Math.min(sidebarWidth, MEDIUM_SIDEBAR_MAX)
       : sidebarWidth;
   const sidebarMax =
-    layout === 'medium' ? 200 : SHELL_LIMITS.sidebar.max;
+    layout === 'medium' ? MEDIUM_SIDEBAR_MAX : SHELL_LIMITS.sidebar.max;
+
+  useDiskSync();
+
+  React.useEffect(() => {
+    const { setFullScreen } = useShellStore.getState();
+    void window.systemAPI?.isFullScreen?.().then(setFullScreen);
+    return window.systemAPI?.onFullScreenChange?.(setFullScreen);
+  }, []);
 
   const closeNarrowSidebar = React.useCallback(
     (focusTarget: 'toggle' | 'workspace' | 'none' = 'toggle') => {
@@ -256,8 +267,8 @@ export function AppShell({ children }: AppShellProps) {
         >
           <WorkspaceSidebar
             onNavigate={() => closeNarrowSidebar('workspace')}
-            onClose={
-              isNarrow ? () => closeNarrowSidebar() : undefined
+            onToggleSidebar={
+              isNarrow ? () => closeNarrowSidebar() : handleToggleSidebar
             }
           />
           {!isNarrow ? (

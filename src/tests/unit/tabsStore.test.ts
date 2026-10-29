@@ -286,3 +286,32 @@ describe('bulk closing and reopening', () => {
     expect(useTabsStore.getState().reopenClosed()).toBe(B);
   });
 });
+
+describe('opening in place', () => {
+  it('replaces the active tab in its position, and opens one when none is open', () => {
+    state().openInPlace(A);
+    expect(state().openPaths).toEqual([A]);
+
+    state().openFile(B);
+    state().activate(A);
+    state().openInPlace(C);
+    expect(state().openPaths).toEqual([C, B]);
+    expect(state().openedPath).toBe(C);
+    expect(state().activePath).toBe(C);
+  });
+
+  it('activates a file that is already open instead of duplicating it', () => {
+    state().openFile(A);
+    state().openFile(B);
+    state().openInPlace(A);
+    expect(state().openPaths).toEqual([A, B]);
+    expect(state().openedPath).toBe(A);
+  });
+
+  it('turns a replaced preview tab into a regular one', () => {
+    state().openPreview(A);
+    state().openInPlace(B);
+    expect(state().openPaths).toEqual([B]);
+    expect(state().previewPath).toBeNull();
+  });
+});

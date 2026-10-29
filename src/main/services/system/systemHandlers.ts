@@ -21,6 +21,7 @@ export class SystemHandlers {
     this.registerCreateDirectoryOnDisk();
     this.registerOpenFolderDialog();
     this.registerReportTheme();
+    this.registerFullScreenState();
   }
 
   private registerCreateDirectoryOnDisk(): void {
@@ -51,6 +52,13 @@ export class SystemHandlers {
       
       return result;
     });
+  }
+
+  /** The renderer asks once at startup; main.ts pushes every later change. */
+  private registerFullScreenState(): void {
+    this.deps.ipc.handle('system:is-full-screen', (event) =>
+      this.deps.browserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
+    );
   }
 
   private registerReportTheme(): void {

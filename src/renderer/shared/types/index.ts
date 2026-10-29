@@ -10,6 +10,8 @@ declare global {
       createDirectoryOnDisk: (dirPath: string) => Promise<{ success: boolean, error?: string }>;
       reportCommands: (commands: Array<{ id: string; label: string; accelerator?: string }>) => void;
       onMenuCommand: (handler: (commandId: string) => void) => () => void;
+      isFullScreen: () => Promise<boolean>;
+      onFullScreenChange: (handler: (fullScreen: boolean) => void) => () => void;
     };
 
     credentialAPI: {

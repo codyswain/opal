@@ -119,10 +119,12 @@ both classes.
 | `--row-height-compact` | `h-row-compact` | 28 px |
 | `--row-height` | `h-row` | 32 px |
 | `--header-height` | `h-header` | 40 px |
-| `--sidebar-width` | `w-sidebar` | 220 px |
+| `--sidebar-width` | `w-sidebar` | 260 px |
 | `--reading-width` | `max-w-reading` | 720 px |
 
 Sidebar and tree rows are 28 px tall with a 6 px radius and 2 px between rows.
+The tree indents 16 px per level; a folder's chevron sits where a nav icon
+does, so top-level labels line up with Today and Recent.
 Rows and controls may use the compact or default value, but features must not
 invent their own density scale.
 

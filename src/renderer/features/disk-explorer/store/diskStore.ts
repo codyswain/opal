@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import {
   isFsPathAtOrBelow,
   normalizeFsPath,
+  parentFsPath,
 } from '@/common/fsPaths';
+import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { SortDirection } from '@/common/sortEntries';
 import type { CollectionSortField as SortField } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
@@ -17,6 +19,9 @@ import {
   directoryCollection,
   type FilesCollection,
 } from '../navigation/filesLocation';
+import { isTreeExpanded } from './treeExpansion';
+
+const EXPANDED_PREF_KEY = 'tree.expanded';
 
 export interface PendingAction {
   /** The parent directory for new-folder; the item being renamed for rename. */
@@ -29,7 +34,10 @@ export interface DiskState {
   roots: string[];
   /** Directory path -> its immediate children. Populated lazily. */
   listings: Record<string, DiskEntry[]>;
-  /** Directory path -> whether it is expanded in the tree. */
+  /**
+   * Directory path -> whether it is expanded in the tree; see isTreeExpanded
+   * for roots. Persisted across launches.
+   */
   expanded: Record<string, boolean>;
   /** The collection occupying the browse surface: a folder or built-in Recent. */
   currentCollection: FilesCollection | null;
@@ -62,6 +70,10 @@ export interface DiskActions {
   /** Drop cached listings for directories that changed on disk, and reload the visible ones. */
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
+  /** Loads what the tree shows at launch: open roots and the expanded folders inside them. */
+  loadTree: () => Promise<void>;
+  /** Expands and loads every folder above a path, so the tree can scroll to it. */
+  revealPath: (targetPath: string) => Promise<void>;
   navigateToDirectory: (dirPath: string) => void;
   /** Recent and query collections have no directory; selection resets either way. */
   navigateToCollection: (collection: FilesCollection) => void;
@@ -93,7 +105,7 @@ export type DiskStore = DiskState & DiskActions;
 export const useDiskStore = create<DiskStore>((set, get) => ({
   roots: [],
   listings: {},
-  expanded: {},
+  expanded: restoredExpanded(),
   currentCollection: null,
   currentDirectory: null,
   focusedPath: null,
@@ -130,10 +142,12 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       const roots = samePaths(state.roots, response.data)
         ? state.roots
         : response.data;
+      const expanded = expandedWithinRoots(state.expanded, roots);
       // Recent and query collections are not tied to a root; never substitute one.
       if (state.currentCollection && state.currentCollection.kind !== 'directory') {
         return {
           roots,
+          expanded,
           currentDirectory: null,
           loading: { isLoading: false, error: null },
         };
@@ -149,6 +163,7 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
 
       return {
         roots,
+        expanded,
         currentDirectory,
         currentCollection: currentDirectory
           ? directoryCollection(currentDirectory)
@@ -231,12 +246,53 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   },
 
   toggleExpanded: async (dirPath) => {
-    const willExpand = !get().expanded[dirPath];
+    const { roots, expanded } = get();
+    const willExpand = !isTreeExpanded(roots, expanded, dirPath);
     set((state) => ({ expanded: { ...state.expanded, [dirPath]: willExpand } }));
 
     // Read children on first expand only; collapsing keeps the cache so
     // re-expanding is instant.
     if (willExpand) await get().loadDirectory(dirPath);
+  },
+
+  loadTree: async () => {
+    const { roots, expanded } = get();
+    const isOpen = (path: string) => isTreeExpanded(roots, expanded, path);
+    const isShown = (path: string) => {
+      const root = roots.find((candidate) => isFsPathAtOrBelow(candidate, path));
+      if (!root) return false;
+      for (let folder: string | null = path; folder && folder !== root; folder = parentFsPath(folder)) {
+        if (!isOpen(folder)) return false;
+      }
+      return isOpen(root);
+    };
+    const folders = [...new Set([...roots, ...Object.keys(expanded)])].filter(isShown);
+    await Promise.all(folders.map((folder) => get().loadDirectory(folder)));
+  },
+
+  revealPath: async (targetPath) => {
+    const root = [...get().roots]
+      .sort((left, right) => right.length - left.length)
+      .find((candidate) => isFsPathAtOrBelow(candidate, targetPath));
+    if (!root) return;
+    const folders: string[] = [];
+    for (
+      let folder = parentFsPath(targetPath);
+      folder && isFsPathAtOrBelow(root, folder);
+      folder = parentFsPath(folder)
+    ) {
+      folders.push(folder);
+    }
+    const { expanded, roots } = get();
+    if (folders.some((folder) => !isTreeExpanded(roots, expanded, folder))) {
+      set((state) => ({
+        expanded: {
+          ...state.expanded,
+          ...Object.fromEntries(folders.map((folder) => [folder, true])),
+        },
+      }));
+    }
+    await Promise.all(folders.map((folder) => get().loadDirectory(folder)));
   },
 
   navigateToDirectory: (dirPath) =>
@@ -412,10 +468,46 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   clearError: () => set({ loading: { isLoading: false, error: null } }),
 }));
 
+function restoredExpanded(): Record<string, boolean> {
+  const stored = readPref<unknown>(EXPANDED_PREF_KEY, null);
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return {};
+  return Object.fromEntries(
+    Object.entries(stored).filter(
+      (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
+    )
+  );
+}
+
+function expandedWithinRoots(
+  expanded: Record<string, boolean>,
+  roots: readonly string[]
+): Record<string, boolean> {
+  const kept = Object.entries(expanded).filter(([path]) =>
+    roots.some((root) => isFsPathAtOrBelow(root, path))
+  );
+  return kept.length === Object.keys(expanded).length
+    ? expanded
+    : Object.fromEntries(kept);
+}
+
 function samePaths(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
 }
+
+// Collapsed folders are dropped rather than stored; only a collapsed root
+// differs from its default.
+useDiskStore.subscribe((state, previous) => {
+  if (state.expanded === previous.expanded) return;
+  writePref(
+    EXPANDED_PREF_KEY,
+    Object.fromEntries(
+      Object.entries(state.expanded).filter(
+        ([path, open]) => open || state.roots.includes(path)
+      )
+    )
+  );
+});
 
 pathMutationCoordinator.register({
   id: 'disk-store',

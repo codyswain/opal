@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useNavigate, useRoutes } from 'react-router-dom';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import {
@@ -108,31 +108,82 @@ beforeEach(() => {
 
 describe('AppShell', () => {
   it('keeps one frame mounted while route content and context change', async () => {
-    const user = userEvent.setup();
-    renderShell(['/other']);
+    renderShell(['/files']);
     const shell = screen.getByTestId('app-shell');
 
     expect(shell).toHaveAttribute('data-layout', 'wide');
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Other' })).toBeInTheDocument();
-    expect(screen.getByText('Other content')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('link', { name: 'Library' }));
-
-    expect(screen.getByTestId('app-shell')).toBe(shell);
     expect(screen.getByRole('heading', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByText('Files content')).toBeInTheDocument();
+
+    act(() => screen.getByTestId('native-route-command').click());
+
+    expect(screen.getByTestId('app-shell')).toBe(shell);
+    expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Other' })).toBeInTheDocument();
+    expect(screen.getByText('Other content')).toBeInTheDocument();
   });
 
-  it('uses router history for universal Back and Forward controls', async () => {
+  it('keeps Back and Forward in the sidebar, or in the titlebar when the sidebar is hidden', async () => {
     const user = userEvent.setup();
+    renderShell(['/files']);
+    act(() => screen.getByTestId('native-route-command').click());
+
+    const sidebar = screen.getByTestId('workspace-sidebar');
+    expect(within(screen.getByTestId('titlebar')).queryByRole('button', { name: 'Go back' })).toBeNull();
+    await user.click(within(sidebar).getByRole('button', { name: 'Go back' }));
+    expect(screen.getByText('Files content')).toBeInTheDocument();
+    await user.click(within(sidebar).getByRole('button', { name: 'Go forward' }));
+    expect(screen.getByText('Other content')).toBeInTheDocument();
+
+    await user.click(within(sidebar).getByRole('button', { name: 'Hide sidebar' }));
+    const titlebar = screen.getByTestId('titlebar');
+    await user.click(within(titlebar).getByRole('button', { name: 'Go back' }));
+    expect(screen.getByText('Files content')).toBeInTheDocument();
+    expect(within(titlebar).getByRole('button', { name: 'Show sidebar' })).toBeInTheDocument();
+  });
+
+  it('drops the traffic-light inset in full screen', async () => {
+    let report: ((fullScreen: boolean) => void) | undefined;
+    (window as unknown as { systemAPI: unknown }).systemAPI = {
+      isFullScreen: vi.fn(async () => false),
+      onFullScreenChange: vi.fn((handler: (fullScreen: boolean) => void) => {
+        report = handler;
+        return () => undefined;
+      }),
+    };
+    renderShell();
+    expect(screen.getByTestId('traffic-light-spacer')).toBeInTheDocument();
+
+    act(() => report?.(true));
+    expect(screen.queryByTestId('traffic-light-spacer')).toBeNull();
+    act(() => report?.(false));
+    expect(screen.getByTestId('traffic-light-spacer')).toBeInTheDocument();
+    delete (window as unknown as { systemAPI?: unknown }).systemAPI;
+  });
+
+  it('loads the opened folders for the tree and keeps cached listings live on every route', async () => {
+    let changed: ((payload: { directories: string[] }) => void) | undefined;
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
+        changed = callback;
+        return () => undefined;
+      }),
+    });
+    useDiskStore.setState({ expanded: { '/Vault/Inbox': true } });
     renderShell(['/other']);
 
-    await user.click(screen.getByRole('link', { name: 'Library' }));
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
-    expect(screen.getByText('Other content')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Go forward' }));
-    expect(screen.getByText('Files content')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault')
+    );
+    expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault/Inbox');
+
+    await waitFor(() => expect(useDiskStore.getState().listings['/Vault']).toBeDefined());
+    vi.mocked(window.diskAPI.readDirectory).mockClear();
+    act(() => changed?.({ directories: ['/Vault', '/Vault/Uncached'] }));
+    await waitFor(() => expect(window.diskAPI.readDirectory).toHaveBeenCalledTimes(1));
+    expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault');
   });
 
   it('sets the page in the chrome as a card, inset on every free side', async () => {
@@ -142,7 +193,7 @@ describe('AppShell', () => {
     expect(page).toHaveClass('rounded-card', 'border-page-ring', 'mr-page', 'mb-page');
     expect(page).not.toHaveClass('ml-page');
 
-    await user.click(screen.getByRole('button', { name: 'Hide workspace sidebar' }));
+    await user.click(screen.getByRole('button', { name: 'Hide sidebar' }));
     expect(page).toHaveClass('ml-page');
   });
 
@@ -154,9 +205,7 @@ describe('AppShell', () => {
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
     expect(screen.getByTestId('traffic-light-spacer')).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole('button', { name: 'Show workspace sidebar' })
-    );
+    await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
     expect(useShellStore.getState().sidebarOpen).toBe(true);
   });
@@ -172,7 +221,7 @@ describe('AppShell', () => {
       'medium'
     );
     expect(screen.getByTestId('workspace-sidebar').parentElement).toHaveStyle({
-      width: '200px',
+      width: '240px',
     });
 
     const separator = screen.getByRole('separator', {
@@ -180,7 +229,7 @@ describe('AppShell', () => {
     });
     separator.focus();
     await user.keyboard('{ArrowLeft}');
-    expect(useShellStore.getState().sidebarWidth).toBe(192);
+    expect(useShellStore.getState().sidebarWidth).toBe(232);
   });
 
   it('starts narrow with an off-canvas sidebar and overflows page actions', async () => {
@@ -205,18 +254,18 @@ describe('AppShell', () => {
     await user.keyboard('{Escape}');
 
     await user.click(
-      screen.getByRole('button', { name: 'Show workspace sidebar' })
+      screen.getByRole('button', { name: 'Show sidebar' })
     );
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Close workspace sidebar' })
+      screen.getByRole('button', { name: 'Hide sidebar' })
     ).toBeInTheDocument();
     const workspace = screen.getByTestId('workspace-surface').parentElement;
     expect(workspace).toHaveAttribute('inert');
     expect(workspace).toHaveAttribute('aria-hidden', 'true');
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Choose workspace folder' })
+        screen.getByRole('button', { name: 'Hide sidebar' })
       ).toHaveFocus()
     );
 
@@ -225,13 +274,13 @@ describe('AppShell', () => {
     expect(workspace).not.toHaveAttribute('inert');
     expect(workspace).not.toHaveAttribute('aria-hidden');
     expect(
-      screen.getByRole('button', { name: 'Show workspace sidebar' })
+      screen.getByRole('button', { name: 'Show sidebar' })
     ).toHaveFocus();
 
     await user.click(
-      screen.getByRole('button', { name: 'Show workspace sidebar' })
+      screen.getByRole('button', { name: 'Show sidebar' })
     );
-    await user.click(screen.getByRole('link', { name: 'Library' }));
+    await user.click(screen.getByRole('link', { name: 'Recent' }));
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
     expect(screen.getByText('Files content')).toBeInTheDocument();
     await waitFor(() =>
@@ -245,11 +294,11 @@ describe('AppShell', () => {
     renderShell();
 
     await user.click(
-      screen.getByRole('button', { name: 'Show workspace sidebar' })
+      screen.getByRole('button', { name: 'Show sidebar' })
     );
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Choose workspace folder' })
+        screen.getByRole('button', { name: 'Hide sidebar' })
       ).toHaveFocus()
     );
 

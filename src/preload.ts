@@ -35,6 +35,13 @@ contextBridge.exposeInMainWorld("systemAPI", {
     ipcRenderer.on("menu:invoke", listener);
     return () => ipcRenderer.removeListener("menu:invoke", listener);
   },
+  isFullScreen: () => ipcRenderer.invoke("system:is-full-screen"),
+  onFullScreenChange: (handler: (fullScreen: boolean) => void) => {
+    const listener = (_event: IpcRendererEvent, fullScreen: boolean) =>
+      handler(fullScreen);
+    ipcRenderer.on("system:full-screen", listener);
+    return () => ipcRenderer.removeListener("system:full-screen", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("credentialAPI", {

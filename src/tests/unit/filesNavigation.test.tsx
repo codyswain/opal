@@ -10,6 +10,7 @@ import {
 import { beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
+import { NameDialog } from '@/renderer/features/disk-explorer/components/dialogs/NameDialog';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
@@ -43,6 +44,7 @@ function Harness() {
       <button onClick={() => navigate(1)}>Forward</button>
       <output data-testid="location">{location.search}</output>
       <FilesRoute />
+      <NameDialog />
     </>
   );
 }

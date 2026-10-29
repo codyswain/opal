@@ -17,9 +17,13 @@ export const ConfirmDeleteDialog: React.FC = () => {
   if (!pendingDelete) {
     deleteSnapshotRef.current = { pendingDelete: null, paths: [] };
   } else if (deleteSnapshotRef.current.pendingDelete !== pendingDelete) {
+    // The tree trashes one row; only a delete from inside a multi-selection takes the whole selection.
     deleteSnapshotRef.current = {
       pendingDelete,
-      paths: selectedPaths.length > 1 ? [...selectedPaths] : [pendingDelete],
+      paths:
+        selectedPaths.length > 1 && selectedPaths.includes(pendingDelete)
+          ? [...selectedPaths]
+          : [pendingDelete],
     };
   }
 

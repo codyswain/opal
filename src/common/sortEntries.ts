@@ -12,7 +12,7 @@ export type SortDirection = 'asc' | 'desc';
  */
 // A shared collator: localeCompare with options rebuilds one per comparison,
 // which dominated sorting a few thousand entries.
-const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 export function sortEntries(
   entries: DiskEntry[],

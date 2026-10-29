@@ -20,8 +20,9 @@ interface FolderPickerDialogProps {
 }
 
 /**
- * Browses the opened roots one level at a time so any subfolder can become a
- * scope. Listings come from main through the existing guarded channel.
+ * Browses the opened roots one level at a time so any subfolder can be the
+ * destination of a move. Listings come from main through the existing guarded
+ * channel.
  */
 export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, roots, onOpenChange, onChoose }) => {
   const [current, setCurrent] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, ro
       <DialogContent aria-label="Choose a folder" data-disk-shortcuts-ignore="true" className="flex max-h-[min(80vh,600px)] max-w-lg flex-col" onEscapeKeyDown={(event) => event.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Choose a folder</DialogTitle>
-          <DialogDescription>Browse an opened folder and choose it or one of its subfolders as scope.</DialogDescription>
+          <DialogDescription>Choose where to move it: an opened folder or one of its subfolders.</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2 text-xs">
           <Button size="compact" variant="ghost" disabled={!canGoUp} onClick={() => { if (parent) void browse(parent); }}>

@@ -4,7 +4,7 @@ import { Button } from '@/renderer/shared/ui';
 import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
-import { FolderPlus, X, ArrowLeft, ChevronRight } from 'lucide-react';
+import { X, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
 import { sortEntries, type SortField } from '@/common/sortEntries';
@@ -18,10 +18,7 @@ import { RecentView } from './RecentView';
 import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { MarkdownEditor } from './editor/MarkdownEditor';
-import { DiskTree } from './DiskTree';
 import { DiskFolderView } from './DiskFolderView';
-import { ConfirmDeleteDialog } from './dialogs/ConfirmDeleteDialog';
-import { NameDialog } from './dialogs/NameDialog';
 import { TabStrip } from './TabStrip';
 import { WelcomePanel } from './WelcomePanel';
 import { Breadcrumb } from './Breadcrumb';
@@ -35,15 +32,10 @@ import {
   sizesFor,
 } from '@/renderer/shared/components/panes';
 
-interface DiskExplorerProps {
-  showNavigationPane?: boolean;
-}
-
 const NO_RECENT_ITEMS: RecentItem[] = [];
 
-export const DiskExplorer: React.FC<DiskExplorerProps> = ({
-  showNavigationPane = true,
-}) => {
+/** The main pane: tabs, then a page, a folder or Recent. The sidebar tree lives in the shell. */
+export const DiskExplorer: React.FC = () => {
   const navigation = useFilesNavigation();
   const previewPaneId = useId();
   const isPreviewPaneOpen = useDiskStore((state) => state.isPreviewPaneOpen);
@@ -57,15 +49,10 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   const sort = useDiskStore((state) => state.sort);
   const filter = useDiskStore((state) => state.filter);
   const error = useDiskStore((state) => state.loading.error);
-  const openFolder = useDiskStore((state) => state.openFolder);
-  const invalidate = useDiskStore((state) => state.invalidate);
   const toggleQuickLook = useDiskStore((state) => state.toggleQuickLook);
 
-  const layoutKey = showNavigationPane ? 'files' : 'files-shell';
-  const { sizes, onLayout } = usePaneLayout(
-    layoutKey,
-    showNavigationPane ? [20, 55, 25] : [72, 28]
-  );
+  const layoutKey = 'files-shell';
+  const { sizes, onLayout } = usePaneLayout(layoutKey, [72, 28]);
 
   const openedPath = useTabsStore((state) => state.openedPath);
   const activeDirectory = currentDirectory;
@@ -88,7 +75,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   }, [activeDirectory, filter, folderRows, isRecent, listings, recentItems, sort.direction, sort.field]);
 
   // The selected entry object, found in whichever cached listing contains it,
-  // or among Recent rows. The tree can only surface a path it has already
+  // or among Recent rows. A collection can only select a path it has already
   // listed, so no IPC is needed.
   // A selected item whose row stops matching a live collection keeps its
   // preview and Details until the selection changes; the last known entry is
@@ -230,12 +217,6 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   }, [navigation]);
 
   useEffect(() => {
-    return window.diskAPI.onChanged(({ directories }) => {
-      void invalidate(directories);
-    });
-  }, [invalidate]);
-
-  useEffect(() => {
     if (!error) return;
     toast.error(error);
   }, [error]);
@@ -357,45 +338,8 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
   return (
     <div className="flex h-full w-full overflow-hidden">
       <PaneGroup layoutKey={layoutKey} onLayout={onLayout} className="flex-1">
-        {showNavigationPane ? (
-          <>
-            <Pane
-              defaultSize={sizesFor(sizes, 0, 20)}
-              minSize={12}
-              maxSize={40}
-              collapsible
-              className="flex flex-col overflow-hidden border-r border-border/60"
-            >
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
-                <span className="text-label text-foreground-tertiary">
-                  Files
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void openFolder()}
-                  aria-label="Open folder"
-                  data-testid="disk-explorer-open-folder"
-                  data-disk-shortcuts-ignore="true"
-                  className="rounded p-1 text-muted-foreground transition-hover hover:bg-muted"
-                >
-                  <FolderPlus className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-auto">
-                <DiskTree />
-              </div>
-            </Pane>
-
-            <PaneHandle />
-          </>
-        ) : null}
-
         <Pane
-          defaultSize={sizesFor(
-            sizes,
-            showNavigationPane ? 1 : 0,
-            showNavigationPane ? 55 : showDetailPane ? 72 : 100
-          )}
+          defaultSize={sizesFor(sizes, 0, showDetailPane ? 72 : 100)}
           minSize={30}
           className="flex min-w-0 flex-col overflow-hidden"
         >
@@ -495,11 +439,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
             <PaneHandle />
 
             <Pane
-              defaultSize={sizesFor(
-                sizes,
-                showNavigationPane ? 2 : 1,
-                showNavigationPane ? 25 : 28
-              )}
+              defaultSize={sizesFor(sizes, 1, 28)}
               minSize={15}
               maxSize={50}
               collapsible
@@ -532,8 +472,6 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       </PaneGroup>
 
       <QuickLook entry={selectedEntry} />
-      <NameDialog />
-      <ConfirmDeleteDialog />
     </div>
   );
 };

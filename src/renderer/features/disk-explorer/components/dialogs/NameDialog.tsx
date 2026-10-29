@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useDiskStore } from '../../store/diskStore';
 
 /** Mirrors FileWriter.assertValidName so the user gets feedback before submitting. */
-function isValidName(name: string): boolean {
+export function isValidName(name: string): boolean {
   const trimmed = name.trim();
   return (
     trimmed.length > 0 &&
