@@ -32,7 +32,6 @@ export default defineConfig((env) => {
           /^@\/renderer/,
           /^react/,
           /^@radix-ui/,
-          /^@tiptap/,
           'keytar',
           // ESM-only; loaded at run time by Node, see src/main/chat/pdfText.ts.
           /^pdfjs-dist/,

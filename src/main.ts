@@ -125,6 +125,8 @@ const createWindow = () => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      // Notes are full of names, ids and hostnames; underlining them is noise.
+      spellcheck: false,
     },
   });
 

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { EditorContent, useEditor } from '@tiptap/react';
-import { markdownExtensions } from './editorExtensions';
-import { EditorBubbleMenu } from './EditorBubbleMenu';
+import { getChunks, unifiedMergeView } from '@codemirror/merge';
+import { Compartment, EditorState, Transaction, type Text } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
 import { EditorStatus } from './EditorStatus';
+import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import './editor.css';
 
@@ -10,14 +11,26 @@ interface MarkdownEditorProps {
   path: string;
 }
 
-function countWords(text: string): number {
-  return text.split(/\s+/).filter((word) => word.length > 0).length;
+/** Words are runs of text with a letter or digit, so list markers, `#` and `|` do not count. */
+function countWords(doc: Text): number {
+  return doc.toString().match(/\S*[\p{L}\p{N}]\S*/gu)?.length ?? 0;
+}
+
+/**
+ * While a conflict is open, the page shows the disk's side of each
+ * conflicting change above its own, with a button to keep either.
+ */
+function conflictView(disk: string) {
+  return [
+    unifiedMergeView({ original: disk, gutter: false, syntaxHighlightDeletions: false }),
+    EditorState.phrases.of({ Accept: 'Keep mine', Reject: 'Keep disk version' }),
+  ];
 }
 
 /**
  * The focused-file editor for Markdown. The document hook owns disk state;
- * the surface below mounts once the text is loaded and is re-keyed only when
- * the hook re-seeds (reload from disk), so the editor is created once per seed.
+ * the surface below mounts once the text is loaded and creates one
+ * CodeMirror view for the life of the page.
  */
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ path }) => {
   const document = useMarkdownDocument(path);
@@ -32,60 +45,85 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ path }) => {
   if (document.status !== 'ready' || document.body === null) {
     return <div role="status" className="p-8 text-sm text-muted-foreground">Opening note…</div>;
   }
-  return <MarkdownEditorSurface key={`${path}:${document.seed}`} document={document} initialBody={document.body} />;
+  return <MarkdownEditorSurface path={path} document={document} initialBody={document.body} />;
 };
 
 interface MarkdownEditorSurfaceProps {
+  path: string;
   document: MarkdownDocumentState & MarkdownDocumentActions;
   initialBody: string;
 }
 
-const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ document, initialBody }) => {
+const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, document, initialBody }) => {
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
+  const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState(0);
-  const scroller = useRef<HTMLDivElement>(null);
-  const extensions = useMemo(() => markdownExtensions(), []);
-  // The hook's callbacks change identity across renders; the editor reads the latest.
+  // The hook's state changes identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
 
-  const editor = useEditor({
-    extensions,
-    content: initialBody,
-    autofocus: 'end',
-    editorProps: {
-      attributes: { class: 'opal-editor-content', spellcheck: 'true', 'data-testid': 'markdown-editor' },
-      handleKeyDown: (_view, event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-          event.preventDefault();
-          void actions.current.flush();
-          return true;
-        }
-        return false;
-      },
-    },
-    onCreate: ({ editor: created }) => setWords(countWords(created.getText())),
-    onUpdate: ({ editor: updated }) => {
-      setWords(countWords(updated.getText()));
-      actions.current.onChange(updated.storage.markdown.getMarkdown());
-    },
-    onBlur: () => { void actions.current.flush(); },
-  });
+  useEffect(() => {
+    const created = new EditorView({
+      parent: host.current as HTMLDivElement,
+      state: EditorState.create({
+        doc: initialBody,
+        extensions: [
+          markdownEditorExtensions(path),
+          keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
+          conflict.of([]),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              setWords(countWords(update.state.doc));
+              if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(Transaction.remote))) {
+                actions.current.onChange(update.state.doc.toString());
+              }
+            }
+            // Every conflicting change has a pick once the merge view has no chunks left.
+            if (getChunks(update.state)?.chunks.length === 0) actions.current.resolveConflict();
+            if (update.focusChanged && !update.view.hasFocus) void actions.current.flush();
+          }),
+        ],
+      }),
+    });
+    view.current = created;
+    setWords(countWords(created.state.doc));
+    // A page opens at the top without taking focus; an empty one gets the caret.
+    if (created.state.doc.length === 0) created.focus();
+    const detach = actions.current.attach({
+      getText: () => created.state.doc.toString(),
+      setText: (text) => replaceText(created, text),
+    });
+    return () => {
+      detach();
+      created.destroy();
+      view.current = null;
+    };
+    // One view per page: later text arrives through the document's handle.
+  }, []);
 
-  useEffect(() => () => { void actions.current.flush(); }, []);
+  useEffect(() => {
+    view.current?.dispatch({ effects: conflict.reconfigure(document.conflict ? conflictView(document.conflict.disk) : []) });
+  }, [conflict, document.conflict]);
+
+  const keepDiskVersion = () => {
+    const current = view.current;
+    if (!current || !document.conflict) return;
+    // An ordinary, undoable edit, so Cmd+Z brings the page's side back.
+    current.dispatch({ changes: textChanges(current.state.doc.toString(), document.conflict.disk), userEvent: 'revert', filter: false });
+    document.resolveConflict();
+  };
 
   return (
     <div className="opal-editor flex h-full min-h-0 flex-col" data-disk-shortcuts-ignore="true">
-      <div ref={scroller} className="relative min-h-0 flex-1 overflow-auto">
-        {editor ? <EditorBubbleMenu editor={editor} container={scroller.current} /> : null}
-        <EditorContent editor={editor} className="h-full" />
-      </div>
+      <div ref={host} className="relative min-h-0 flex-1" />
       <EditorStatus
         saveState={document.saveState}
         error={document.error}
         hasFrontmatter={document.hasFrontmatter}
         words={words}
-        onReloadFromDisk={() => void document.reloadFromDisk()}
-        onKeepMine={() => void document.keepMine()}
+        onKeepMine={document.resolveConflict}
+        onKeepDisk={keepDiskVersion}
         onRetry={() => void document.flush()}
       />
     </div>

@@ -7,8 +7,8 @@ interface EditorStatusProps {
   error: string | null;
   hasFrontmatter: boolean;
   words: number;
-  onReloadFromDisk: () => void;
   onKeepMine: () => void;
+  onKeepDisk: () => void;
   onRetry: () => void;
 }
 
@@ -25,11 +25,11 @@ const LABELS: Record<MarkdownSaveState, string> = {
 // swap this status line mid-click, and lose the click.
 const keepEditorFocus = (event: React.MouseEvent) => event.preventDefault();
 
-export const EditorStatus: React.FC<EditorStatusProps> = ({ saveState, error, hasFrontmatter, words, onReloadFromDisk, onKeepMine, onRetry }) => (
+export const EditorStatus: React.FC<EditorStatusProps> = ({ saveState, error, hasFrontmatter, words, onKeepMine, onKeepDisk, onRetry }) => (
   <div className="flex shrink-0 flex-col gap-1 border-t border-border/60 px-4 py-1.5 text-2xs text-muted-foreground" data-disk-shortcuts-ignore="true">
     <div className="flex items-center gap-3">
       <span role="status" data-testid="editor-save-state" data-state={saveState}>{LABELS[saveState]}</span>
-      <span>{words} {words === 1 ? 'word' : 'words'}</span>
+      <span>{words.toLocaleString()} {words === 1 ? 'word' : 'words'}</span>
       {hasFrontmatter ? <span>Properties are edited in Details</span> : null}
       <span className="flex-1" />
       {saveState === 'error' ? (
@@ -38,8 +38,8 @@ export const EditorStatus: React.FC<EditorStatusProps> = ({ saveState, error, ha
     </div>
     {saveState === 'conflict' ? (
       <div role="alert" data-testid="editor-conflict" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-2 py-1.5 text-xs text-foreground">
-        <span className="flex-1">This note changed on disk since you opened it. Reload it to take the disk version, or keep your text and overwrite it.</span>
-        <Button size="compact" variant="outline" onMouseDown={keepEditorFocus} onClick={onReloadFromDisk}>Reload from disk</Button>
+        <span className="flex-1">This note changed on disk in the lines you were editing. Both versions are shown in the page: pick one for each change, or for all of them here.</span>
+        <Button size="compact" variant="outline" onMouseDown={keepEditorFocus} onClick={onKeepDisk}>Keep disk version</Button>
         <Button size="compact" onMouseDown={keepEditorFocus} onClick={onKeepMine}>Keep mine</Button>
       </div>
     ) : saveState === 'error' && error ? (

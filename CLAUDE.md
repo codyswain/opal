@@ -9,7 +9,8 @@ that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
 - **Runtime:** Electron 31 (main + preload + renderer processes)
 - **Frontend:** React 18 + TypeScript + Tailwind CSS
 - **State:** Zustand for global state, React hooks for local state
-- **Editor:** TipTap with `tiptap-markdown` (Markdown files on disk)
+- **Editor:** CodeMirror 6; the file's Markdown body is the document, so
+  untouched bytes never change (`components/editor/` in `disk-explorer`)
 - **Storage:** the user's folders are the store; authored metadata lives in
   frontmatter or `.opal.yaml` sidecars; personal state (activity)
   lives under `<userData>/library/` as JSON
@@ -107,5 +108,6 @@ Traces and screenshots are captured on failure. Run
 - Filesystem work stays in main behind `RootRegistry`; the renderer never touches paths it has not been handed
 - New IPC channels must be registered in `preload.ts`, exposed via the appropriate API namespace, validated in main, and typed under `src/renderer/shared/types/*.d.ts`
 - Use Zustand for global state that spans components; use the prefs helpers for UI preferences
-- Use TipTap extensions for editor enhancements
+- Editor features are CodeMirror extensions that keep the text as written;
+  never re-serialize a note
 - Keep main process and renderer process code strictly separated

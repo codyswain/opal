@@ -38,7 +38,8 @@ describe('MarkdownDocumentService', () => {
     const written = await service.write(item('note.md'), '# Title\n\nEdited body\n\n- item', document.revision);
     const bytes = await readFile(item('note.md'));
     expect(bytes.subarray(0, 3)).toEqual(Buffer.from('﻿'));
-    expect(bytes.toString('utf8')).toBe('﻿---\r\ntags: [a]\r\ncustom: keep # comment\r\n---\r\n# Title\r\n\r\nEdited body\r\n\r\n- item\r\n');
+    // The body is written as given; only new line breaks take the file's CRLF.
+    expect(bytes.toString('utf8')).toBe('﻿---\r\ntags: [a]\r\ncustom: keep # comment\r\n---\r\n# Title\r\n\r\nEdited body\r\n\r\n- item');
     expect(written.revision).not.toBe(document.revision);
     expect((await service.read(item('note.md'))).revision).toBe(written.revision);
     expect(noteEdited).toHaveBeenCalledWith(item('note.md'));

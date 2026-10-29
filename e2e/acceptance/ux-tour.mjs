@@ -44,7 +44,7 @@ try {
   await page.waitForTimeout(300);
   await shot('02-files-projects');
   await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);
-  await page.locator('.ProseMirror').waitFor();
+  await page.locator('.cm-content').waitFor();
   await page.waitForTimeout(500);
   await shot('03-editor');
   // Open a few more files so the strip has several tabs, then leave one unsaved.
@@ -52,7 +52,7 @@ try {
     await page.evaluate(([v, f]) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/' + f.split('/').slice(0, -1).join('/'))}&file=${encodeURIComponent(v + '/' + f)}`; }, [vault, file]);
     await page.waitForTimeout(350);
   }
-  await page.locator('.ProseMirror').click();
+  await page.locator('.cm-content').click();
   await page.keyboard.press('Control+End');
   await page.keyboard.type('\n\nEdited from the tour.');
   await page.waitForTimeout(150);
@@ -90,7 +90,7 @@ try {
   // Dark theme pass on the two densest screens.
   await page.evaluate(() => { document.documentElement.classList.add('dark'); localStorage.setItem('opal.theme', JSON.stringify({ version: 1, value: 'dark' })); });
   await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);
-  await page.locator('.ProseMirror').waitFor();
+  await page.locator('.cm-content').waitFor();
   await shot('10-editor-dark');
   await page.evaluate(() => { window.location.hash = '#/files'; });
   await page.waitForTimeout(500);
