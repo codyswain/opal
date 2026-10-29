@@ -24,8 +24,11 @@ export const DAY_SECTION_TITLES: Record<DaySection, string> = {
   digest: 'Digest',
 };
 
-/** Below this window width only one sidebar stays open, so the page keeps about 560px. */
-export const ONE_SIDEBAR_BELOW = 1000;
+/**
+ * Below this window width only one sidebar stays open, so the page keeps
+ * about 580px beside a 240px left sidebar and the widest right one.
+ */
+export const ONE_SIDEBAR_BELOW = 1120;
 /** At and above this width the sidebar is wider, as the left one is. */
 const WIDE_FROM = 1200;
 
@@ -92,21 +95,30 @@ export function daySidebarMaxWidth(viewport: number): number {
 }
 
 /**
- * Whether the sidebar shows beside the page. Below 1000px it gives way to an
- * open left sidebar; the narrow layout's left sidebar is an overlay, so there
- * both can show.
+ * Whether the sidebar shows. Below ONE_SIDEBAR_BELOW it gives way to an open
+ * left sidebar. In the narrow layout it is an overlay, as the left one is,
+ * and shows only while asked for there.
  */
-export function daySidebarShown(open: boolean, leftOpen: boolean, narrow: boolean, viewport: number): boolean {
-  return open && (narrow || !leftOpen || viewport >= ONE_SIDEBAR_BELOW);
+export function daySidebarShown(
+  state: Pick<DaySidebarStore, 'open' | 'narrowOpen'>,
+  leftOpen: boolean,
+  narrow: boolean,
+  viewport: number,
+): boolean {
+  if (narrow) return state.narrowOpen;
+  return state.open && (!leftOpen || viewport >= ONE_SIDEBAR_BELOW);
 }
 
 interface DaySidebarRuntime extends DayRuleState {
   /** The page the day rule last saw. */
   seenPath: string | null;
+  /** The overlay in the narrow layout, which starts closed and is never saved. */
+  narrowOpen: boolean;
 }
 
 interface DaySidebarActions {
   setOpen(open: boolean): void;
+  setNarrowOpen(open: boolean): void;
   toggleSection(section: DaySection): void;
   toggleCollapsed(section: DaySection): void;
   setWidth(width: number | null): void;
@@ -149,8 +161,10 @@ export const useDaySidebarStore = create<DaySidebarStore>((set) => {
     pickedDay: null,
     lastDay: null,
     seenPath: openedPath(),
+    narrowOpen: false,
 
     setOpen: (open) => update(() => ({ open })),
+    setNarrowOpen: (narrowOpen) => set({ narrowOpen }),
     toggleSection: (section) =>
       update((state) => ({ sections: { ...state.sections, [section]: !state.sections[section] } })),
     toggleCollapsed: (section) =>
@@ -171,20 +185,34 @@ useTabsStore.subscribe((tabs) => {
   const path = selectOpenedPath(tabs);
   const state = useDaySidebarStore.getState();
   if (path === state.seenPath) return;
-  useDaySidebarStore.setState({ ...afterPageOpened(state, state.seenPath, path), seenPath: path });
+  useDaySidebarStore.setState({ ...afterPageOpened(state, state.seenPath, path, localDate()), seenPath: path });
+});
+
+// Only one overlay at a time, and a change of layout starts the overlay closed.
+useShellStore.subscribe((shell, before) => {
+  const opened = shell.narrowSidebarOpen && !before.narrowSidebarOpen;
+  if ((opened || shell.narrowLayout !== before.narrowLayout) && useDaySidebarStore.getState().narrowOpen) {
+    useDaySidebarStore.getState().setNarrowOpen(false);
+  }
 });
 
 /**
  * The menu command, the shortcut and both toggle buttons. It acts on what
- * shows, and below 1000px opening it closes the left sidebar.
+ * shows. Below ONE_SIDEBAR_BELOW opening it closes the left sidebar, and in
+ * the narrow layout it opens or closes the overlay.
  */
 export function toggleDaySidebar(viewport = window.innerWidth): void {
   const shell = useShellStore.getState();
   const state = useDaySidebarStore.getState();
-  if (daySidebarShown(state.open, shell.sidebarOpen, shell.narrowLayout, viewport)) {
+  if (shell.narrowLayout) {
+    if (!state.narrowOpen) shell.closeNarrowSidebar();
+    state.setNarrowOpen(!state.narrowOpen);
+    return;
+  }
+  if (daySidebarShown(state, shell.sidebarOpen, false, viewport)) {
     state.setOpen(false);
     return;
   }
   state.setOpen(true);
-  if (!shell.narrowLayout && viewport < ONE_SIDEBAR_BELOW && shell.sidebarOpen) shell.setSidebarOpen(false);
+  if (viewport < ONE_SIDEBAR_BELOW && shell.sidebarOpen) shell.setSidebarOpen(false);
 }

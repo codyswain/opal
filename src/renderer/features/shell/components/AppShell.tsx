@@ -56,6 +56,37 @@ function useShellViewport(): { layout: ShellLayout; width: number } {
 /** The medium layout keeps at least about 560px for the page. */
 const MEDIUM_SIDEBAR_MAX = 240;
 
+const FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+/** Escape closes an overlay, and Tab stays inside it. */
+function overlayKeyDown(
+  overlay: React.RefObject<HTMLElement>,
+  close: () => void
+): (event: React.KeyboardEvent<HTMLDivElement>) => void {
+  return (event) => {
+    // A menu opened from the overlay portals out of it and closes on its own Escape.
+    if (!overlay.current?.contains(event.target as Node)) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = [...overlay.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+}
+
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -97,10 +128,19 @@ export function AppShell({ children }: AppShellProps) {
   const sidebarMax =
     layout === 'medium' ? MEDIUM_SIDEBAR_MAX : SHELL_LIMITS.sidebar.max;
   const daySidebarOpen = useDaySidebarStore((state) => state.open);
+  const daySidebarNarrowOpen = useDaySidebarStore((state) => state.narrowOpen);
   const daySidebarPreferredWidth = useDaySidebarStore((state) => state.width);
   const setDaySidebarWidth = useDaySidebarStore((state) => state.setWidth);
-  const rightOpen = daySidebarShown(daySidebarOpen, sidebarOpen, isNarrow, viewport);
-  const rightWidth = daySidebarWidth(daySidebarPreferredWidth, viewport);
+  const rightOpen = daySidebarShown(
+    { open: daySidebarOpen, narrowOpen: daySidebarNarrowOpen },
+    sidebarOpen,
+    isNarrow,
+    viewport
+  );
+  const rightWidth = isNarrow
+    ? Math.min(daySidebarWidth(daySidebarPreferredWidth, viewport), Math.max(0, viewport - 48))
+    : daySidebarWidth(daySidebarPreferredWidth, viewport);
+  const rightToggleRef = React.useRef<HTMLButtonElement>(null);
 
   useDiskSync();
 
@@ -131,6 +171,23 @@ export function AppShell({ children }: AppShellProps) {
     [closeNarrowSidebarState]
   );
 
+  const closeDayOverlay = React.useCallback((focusWorkspace = false) => {
+    useDaySidebarStore.getState().setNarrowOpen(false);
+    if (focusWorkspace) {
+      window.requestAnimationFrame(() => workspaceMainRef.current?.focus());
+    }
+  }, []);
+
+  // However the right overlay closes, focus that was in it goes back to its toggle.
+  const wasDayOverlay = React.useRef(false);
+  React.useEffect(() => {
+    const overlay = isNarrow && rightOpen;
+    if (wasDayOverlay.current && !overlay && document.activeElement === document.body) {
+      rightToggleRef.current?.focus();
+    }
+    wasDayOverlay.current = overlay;
+  }, [isNarrow, rightOpen]);
+
   React.useEffect(() => {
     setNarrowLayout(isNarrow);
   }, [isNarrow, setNarrowLayout]);
@@ -138,19 +195,28 @@ export function AppShell({ children }: AppShellProps) {
   React.useEffect(() => {
     const routeChanged = previousLocationKey.current !== locationKey;
     previousLocationKey.current = locationKey;
-    if (
-      routeChanged &&
-      isNarrow &&
-      useShellStore.getState().narrowSidebarOpen
-    ) {
+    if (!routeChanged || !isNarrow) return;
+    if (useShellStore.getState().narrowSidebarOpen) {
       closeNarrowSidebar('workspace');
     }
-  }, [closeNarrowSidebar, isNarrow, locationKey]);
+    if (useDaySidebarStore.getState().narrowOpen) {
+      closeDayOverlay(true);
+    }
+  }, [closeDayOverlay, closeNarrowSidebar, isNarrow, locationKey]);
 
   React.useLayoutEffect(() => {
-    // The right sidebar sits outside the page column, so the overlay shuts it too.
+    // An overlay shuts everything beside it; the right sidebar sits outside
+    // the page column, so the left overlay shuts it too.
+    const overlay = !isNarrow
+      ? null
+      : narrowSidebarOpen
+        ? narrowSidebarRef.current
+        : rightOpen
+          ? daySidebarRef.current
+          : null;
     const behind = [workspaceRef.current, daySidebarRef.current].filter(
-      (element): element is HTMLElement => element !== null
+      (element): element is HTMLElement =>
+        element !== null && element !== overlay
     );
     const release = () => {
       for (const element of behind) {
@@ -160,16 +226,12 @@ export function AppShell({ children }: AppShellProps) {
     };
     if (behind.length === 0) return;
 
-    if (!isNarrow || !narrowSidebarOpen) {
+    if (!overlay) {
       release();
       return;
     }
 
-    narrowSidebarRef.current
-      ?.querySelector<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-      )
-      ?.focus();
+    overlay.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     for (const element of behind) {
       element.setAttribute('inert', '');
       element.setAttribute('aria-hidden', 'true');
@@ -182,43 +244,16 @@ export function AppShell({ children }: AppShellProps) {
     toggleSidebar();
   };
 
-  const handleNarrowSidebarKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>
-  ) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeNarrowSidebar();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-
-    const focusable = [
-      ...(narrowSidebarRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-      ) ?? []),
-    ];
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
   return (
     <div
       data-testid="app-shell"
       data-layout={layout}
       className="relative flex h-screen w-screen overflow-hidden bg-chrome text-foreground"
     >
-      {isNarrow && sidebarOpen ? (
+      {isNarrow && (sidebarOpen || rightOpen) ? (
         <div
           aria-hidden
-          onClick={() => closeNarrowSidebar()}
+          onClick={() => (sidebarOpen ? closeNarrowSidebar() : closeDayOverlay())}
           className="fixed inset-0 z-30 bg-black/20 animate-in fade-in-0 duration-disclosure"
         />
       ) : null}
@@ -229,7 +264,7 @@ export function AppShell({ children }: AppShellProps) {
           role={isNarrow ? 'dialog' : undefined}
           aria-modal={isNarrow ? true : undefined}
           aria-label={isNarrow ? 'Workspace navigation' : undefined}
-          onKeyDown={isNarrow ? handleNarrowSidebarKeyDown : undefined}
+          onKeyDown={isNarrow ? overlayKeyDown(narrowSidebarRef, () => closeNarrowSidebar()) : undefined}
           className={cn(
             'relative h-full shrink-0',
             isNarrow
@@ -269,6 +304,7 @@ export function AppShell({ children }: AppShellProps) {
           sidebarOpen={sidebarOpen}
           rightSidebarOpen={rightOpen}
           sidebarToggleRef={sidebarToggleRef}
+          rightSidebarToggleRef={rightToggleRef}
           onToggleSidebar={handleToggleSidebar}
         />
         <main
@@ -279,8 +315,8 @@ export function AppShell({ children }: AppShellProps) {
           className={cn(
             'mb-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
             (isNarrow || !sidebarOpen) && 'ml-page',
-            // The right sidebar's column keeps its own gap to the page.
-            !rightOpen && 'mr-page'
+            // The right sidebar's column keeps its own gap to the page; its overlay does not.
+            (isNarrow || !rightOpen) && 'mr-page'
           )}
         >
           {children}
@@ -288,17 +324,32 @@ export function AppShell({ children }: AppShellProps) {
       </section>
 
       {rightOpen ? (
-        <div ref={daySidebarRef} className="relative z-10 h-full shrink-0" style={{ width: rightWidth }}>
-          <SidebarResizeHandle
-            edge="start"
-            label="Resize right sidebar"
-            value={rightWidth}
-            min={DAY_SIDEBAR_LIMITS.min}
-            max={daySidebarMaxWidth(viewport)}
-            defaultValue={daySidebarWidth(null, viewport)}
-            onChange={setDaySidebarWidth}
-            onReset={() => setDaySidebarWidth(null)}
-          />
+        <div
+          ref={daySidebarRef}
+          role={isNarrow ? 'dialog' : undefined}
+          aria-modal={isNarrow ? true : undefined}
+          aria-label={isNarrow ? 'Day sidebar' : undefined}
+          onKeyDown={isNarrow ? overlayKeyDown(daySidebarRef, () => closeDayOverlay()) : undefined}
+          className={cn(
+            'relative h-full shrink-0',
+            isNarrow
+              ? 'fixed inset-y-0 right-0 z-40 shadow-dialog animate-in slide-in-from-right-2 duration-disclosure ease-emphasized'
+              : 'z-10'
+          )}
+          style={{ width: rightWidth }}
+        >
+          {!isNarrow ? (
+            <SidebarResizeHandle
+              edge="start"
+              label="Resize right sidebar"
+              value={rightWidth}
+              min={DAY_SIDEBAR_LIMITS.min}
+              max={daySidebarMaxWidth(viewport)}
+              defaultValue={daySidebarWidth(null, viewport)}
+              onChange={setDaySidebarWidth}
+              onReset={() => setDaySidebarWidth(null)}
+            />
+          ) : null}
           <DaySidebar width={rightWidth} />
         </div>
       ) : null}

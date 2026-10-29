@@ -45,24 +45,6 @@ const WEEKDAY_FROM = 280;
 
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString()} ${count === 1 ? one : many}`;
 
-/** Lines from before the move that say what a recording or digest card already shows. */
-const OLD_REPEAT_LINE = /^(?:Google Meet (?:transcript|notes) from|Pocket recording|Digest:)/;
-
-/**
- * Log lines that only repeat a card below: a sync or digest run whose link is
- * a recording or the digest on show. They come back when that card is hidden.
- */
-export function cardRepeats(day: VaultDay, sections: Record<DaySection, boolean>): (entry: DayLogEntry) => boolean {
-  const recordings = new Set(sections.recordings ? day.recordings.map((recording) => recording.path) : []);
-  const digest = sections.digest ? day.digest?.path ?? null : null;
-  return (entry) => {
-    if (entry.kind !== null && entry.kind !== 'routine run') return false;
-    if (entry.links.some((link) => link.path !== null && (recordings.has(link.path) || link.path === digest))) return true;
-    if (entry.kind !== null || !OLD_REPEAT_LINE.test(entry.text)) return false;
-    return entry.text.startsWith('Digest:') ? digest !== null : recordings.size > 0;
-  };
-}
-
 /** Entries grouped by the hour they were written, newest hour first. */
 function byHour(entries: readonly DayLogEntry[]): { hour: string; entries: DayLogEntry[] }[] {
   const groups: { hour: string; entries: DayLogEntry[] }[] = [];
@@ -111,28 +93,21 @@ interface CardProps {
 
 function ActivityCard({ day, more, onMore }: CardProps) {
   const { openPath, root } = useDaySidebarContext();
-  const sections = useDaySidebarStore((state) => state.sections);
   const collapsed = useDaySidebarStore((state) => state.collapsed.activity);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
   const [open, toggleOpen] = useOpenSet();
   const [hours, toggleHour] = useOpenSet();
-  const entries = React.useMemo(() => {
-    const repeats = cardRepeats(day, sections);
-    return day.entries.filter((entry) => !repeats(entry));
-  }, [day, sections]);
+  const entries = day.entries;
   const keys = React.useMemo(() => entryKeys(entries), [entries]);
-  if (day.entries.length === 0) return <EmptyDayCard title={DAY_SECTION_TITLES.activity} line="Nothing logged" />;
+  if (entries.length === 0) return <EmptyDayCard title={DAY_SECTION_TITLES.activity} line="Nothing logged" />;
 
   const count = entries.length;
-  const hidden = day.entries.length - count;
   const entryView = (entry: DayLogEntry) => {
     const key = keys.get(entry) ?? entry.time;
     return <LogEntry key={key} entry={entry} open={open.has(key)} onToggle={() => toggleOpen(key)} />;
   };
   let body: React.ReactNode;
-  if (count === 0) {
-    body = <div className="px-2 py-1 text-control text-foreground-tertiary">Every line repeats a card below.</div>;
-  } else if (!more) {
+  if (!more) {
     body = entries.slice(0, AT_REST.activity).map(entryView);
   } else if (count > FLAT_LOG_LIMIT) {
     body = (
@@ -155,14 +130,13 @@ function ActivityCard({ day, more, onMore }: CardProps) {
   } else {
     body = entries.map(entryView);
   }
-  const notShown = hidden ? ` Not shown: ${plural(hidden, 'line', 'lines')} that repeat the cards below.` : '';
   const log = day.log;
   return (
     <DayCard
       id="activity"
       title={DAY_SECTION_TITLES.activity}
       value={count.toLocaleString()}
-      summary={count ? `${plural(count, 'entry', 'entries')}, last ${entries[0].time}` : 'All hidden'}
+      summary={`${plural(count, 'entry', 'entries')}, last ${entries[0].time}`}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed('activity')}
     >
@@ -171,7 +145,7 @@ function ActivityCard({ day, more, onMore }: CardProps) {
         {count > AT_REST.activity ? (
           <FootButton
             aria-expanded={more}
-            title={more ? 'Show the latest 3' : `Show all ${count} entries.${notShown}`}
+            title={more ? 'Show the latest 3' : `Show all ${count} entries`}
             onClick={onMore}
           >
             {more ? 'Show fewer' : `Show ${(count - AT_REST.activity).toLocaleString()} more`}

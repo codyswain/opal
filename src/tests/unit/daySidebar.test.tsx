@@ -9,10 +9,10 @@ import {
   DaySidebar,
   afterDayPicked,
   afterPageOpened,
+  dailyPageDate,
   daySidebarShown,
   daySidebarWidth,
   pageDate,
-  cardRepeats,
   sanitizeDaySidebarPreferences,
   shownDay,
   toggleDaySidebar,
@@ -155,7 +155,7 @@ beforeEach(() => {
   installVaultApi();
   resetTabs();
   useShellStore.setState({ ...DEFAULT_SHELL_PREFERENCES, narrowLayout: false, narrowSidebarOpen: false });
-  useDaySidebarStore.setState({ ...DEFAULT_DAY_SIDEBAR_PREFERENCES, pickedDay: null, lastDay: null, seenPath: null });
+  useDaySidebarStore.setState({ ...DEFAULT_DAY_SIDEBAR_PREFERENCES, pickedDay: null, lastDay: null, seenPath: null, narrowOpen: false });
 });
 
 afterEach(() => {
@@ -185,10 +185,31 @@ describe('the day rule', () => {
   });
 
   it('keeps the last day across undated pages, and lets today move on when nothing set a day', () => {
-    expect(afterPageOpened({ pickedDay: null, lastDay: null }, null, TASTE)).toEqual({ pickedDay: null, lastDay: null });
-    expect(afterPageOpened({ pickedDay: null, lastDay: null }, DAILY, TASTE)).toEqual({ pickedDay: null, lastDay: '2026-10-28' });
-    expect(afterPageOpened({ pickedDay: '2026-10-25', lastDay: null }, DAILY, TASTE)).toEqual({ pickedDay: null, lastDay: '2026-10-25' });
-    expect(afterPageOpened({ pickedDay: '2026-10-25', lastDay: null }, TASTE, LOG)).toEqual({ pickedDay: null, lastDay: '2026-10-28' });
+    const today = '2026-10-29';
+    expect(afterPageOpened({ pickedDay: null, lastDay: null }, null, TASTE, today)).toEqual({ pickedDay: null, lastDay: null });
+    expect(afterPageOpened({ pickedDay: null, lastDay: null }, DAILY, TASTE, today)).toEqual({ pickedDay: null, lastDay: '2026-10-28' });
+    expect(afterPageOpened({ pickedDay: '2026-10-25', lastDay: null }, DAILY, TASTE, today)).toEqual({ pickedDay: null, lastDay: '2026-10-25' });
+    expect(afterPageOpened({ pickedDay: '2026-10-25', lastDay: null }, TASTE, LOG, today)).toEqual({ pickedDay: null, lastDay: '2026-10-28' });
+    // Today's page keeps no day, so the sidebar follows today.
+    expect(afterPageOpened({ pickedDay: null, lastDay: null }, `${ROOT}/Library/daily/${today}.md`, TASTE, today)).toEqual({ pickedDay: null, lastDay: null });
+  });
+
+  it('moves on at midnight on an undated page opened from today’s page', () => {
+    vi.setSystemTime(new Date(2026, 9, 29, 23, 59));
+    openTabs([`${ROOT}/Library/daily/2026-10-29.md`]);
+    openTabs([TASTE]);
+    const state = useDaySidebarStore.getState();
+    expect(shownDay(state, openedPath(), '2026-10-29')).toBe('2026-10-29');
+    expect(shownDay(state, openedPath(), '2026-10-30')).toBe('2026-10-30');
+  });
+
+  it('reads the day Today opens from daily pages only', () => {
+    expect(dailyPageDate(DAILY)).toBe('2026-10-28');
+    expect(dailyPageDate(`${ROOT}/Inbox/Logs/2026-10-27.md`)).toBe('2026-10-27');
+    expect(dailyPageDate(LOG)).toBeNull();
+    expect(dailyPageDate(DIGEST)).toBeNull();
+    expect(dailyPageDate(`${ROOT}/Library/daily/2026-02-30.md`)).toBeNull();
+    expect(dailyPageDate(null)).toBeNull();
   });
 
   it('holds a picked day on a dated page until the page’s own day is picked again', () => {
@@ -254,21 +275,42 @@ describe('day sidebar preferences', () => {
     expect(daySidebarWidth(380, 1100)).toBe(300);
   });
 
-  it('gives way to the left sidebar below 1000px, and opening it there closes the left one', () => {
-    expect(daySidebarShown(true, true, false, 1440)).toBe(true);
-    expect(daySidebarShown(true, true, false, 900)).toBe(false);
-    expect(daySidebarShown(true, false, false, 900)).toBe(true);
-    expect(daySidebarShown(true, true, true, 700)).toBe(true);
+  it('gives way to the left sidebar below 1120px, and opening it there closes the left one', () => {
+    const open = { open: true, narrowOpen: false };
+    expect(daySidebarShown(open, true, false, 1440)).toBe(true);
+    expect(daySidebarShown(open, true, false, 1120)).toBe(true);
+    expect(daySidebarShown(open, true, false, 1100)).toBe(false);
+    expect(daySidebarShown(open, false, false, 1100)).toBe(true);
 
     useShellStore.setState({ sidebarOpen: true });
-    toggleDaySidebar(900);
+    toggleDaySidebar(1100);
     expect(useDaySidebarStore.getState().open).toBe(true);
     expect(useShellStore.getState().sidebarOpen).toBe(false);
-    toggleDaySidebar(900);
+    toggleDaySidebar(1100);
     expect(useDaySidebarStore.getState().open).toBe(false);
     useShellStore.setState({ sidebarOpen: true });
     toggleDaySidebar(1440);
     expect(useShellStore.getState().sidebarOpen).toBe(true);
+  });
+
+  it('is an overlay in the narrow layout that shows only while asked for, one overlay at a time', () => {
+    expect(daySidebarShown({ open: true, narrowOpen: false }, false, true, 700)).toBe(false);
+    expect(daySidebarShown({ open: false, narrowOpen: true }, false, true, 700)).toBe(true);
+
+    useShellStore.setState({ narrowLayout: true, narrowSidebarOpen: true });
+    toggleDaySidebar(700);
+    expect(useDaySidebarStore.getState().narrowOpen).toBe(true);
+    expect(useShellStore.getState().narrowSidebarOpen).toBe(false);
+    // The saved open state is for wider windows, and the overlay is never saved.
+    expect(useDaySidebarStore.getState().open).toBe(true);
+    expect(readPref(DAY_SIDEBAR_PREFERENCE_KEY, null)).toBeNull();
+
+    act(() => useShellStore.getState().toggleSidebar());
+    expect(useDaySidebarStore.getState().narrowOpen).toBe(false);
+    toggleDaySidebar(700);
+    expect(useDaySidebarStore.getState().narrowOpen).toBe(true);
+    act(() => useShellStore.getState().setNarrowLayout(false));
+    expect(useDaySidebarStore.getState().narrowOpen).toBe(false);
   });
 });
 
@@ -281,11 +323,11 @@ describe('DaySidebar', () => {
     expect(screen.getByText('Yesterday')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled();
 
-    // The sync line repeats the recording below, so the log counts 4 and shows 3.
+    // Every line of the log counts, the sync line for a recording below too.
     const log = card('Activity log');
-    expect(within(log).getByRole('button', { name: /^Activity log/ })).toHaveTextContent('Activity log4');
+    expect(within(log).getByRole('button', { name: /^Activity log/ })).toHaveTextContent('Activity log5');
     expect(within(log).getAllByRole('button', { expanded: false }).filter((button) => /^\d\d:\d\d/.test(button.textContent ?? ''))).toHaveLength(3);
-    expect(within(log).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+    expect(within(log).getByRole('button', { name: 'Show 2 more' })).toBeInTheDocument();
     expect(within(log).getByRole('button', { name: 'Open full log' })).toBeInTheDocument();
     // The first link at rest is the note, not the source chat.
     expect(within(log).getByRole('button', { name: 'FedEx dataset note' })).toBeInTheDocument();
@@ -449,15 +491,4 @@ describe('DaySidebar', () => {
     expect(screen.getByText('Oct 28')).toBeInTheDocument();
   });
 
-  it('hides a sync line only while the card it repeats is shown', () => {
-    const day = oct28();
-    const sync = day.entries[3];
-    const sections = { activity: true, chats: true, recordings: true, digest: true };
-    const repeats = cardRepeats(day, sections);
-    expect(repeats(sync)).toBe(true);
-    expect(cardRepeats(day, { ...sections, recordings: false })(sync)).toBe(false);
-    expect(repeats(day.entries[0])).toBe(false);
-    expect(repeats(entry('07:37', 'Digest: payroll and certificates due today', null))).toBe(true);
-    expect(cardRepeats({ ...day, digest: null }, sections)(entry('07:37', 'Digest: payroll', null))).toBe(false);
-  });
 });

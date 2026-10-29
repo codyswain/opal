@@ -19,6 +19,15 @@ export function pageDate(path: string | null): string | null {
   return match && validDate(match[1]) ? match[1] : null;
 }
 
+/** The pages Today opens: daily pages, and old Inbox/Logs pages until the cleanup commit. */
+const DAILY_PAGE = /(?:^|\/)(?:Library\/daily|Inbox\/Logs)\/(\d{4}-\d{2}-\d{2})\.md$/;
+
+/** The date of a daily page, or null for any other page. */
+export function dailyPageDate(path: string | null): string | null {
+  const match = path ? DAILY_PAGE.exec(path) : null;
+  return match && validDate(match[1]) ? match[1] : null;
+}
+
 export interface DayRuleState {
   /** A day picked with the arrows or Go to today, until another page opens. */
   pickedDay: string | null;
@@ -32,11 +41,12 @@ export function shownDay(state: DayRuleState, openedPath: string | null, today: 
 
 /**
  * A different page opened. A dated page takes over; an undated one keeps
- * the day that was showing, unless that day was only today by default.
+ * the day that was showing. Today is not kept, so on an undated page the
+ * sidebar moves on at midnight.
  */
-export function afterPageOpened(state: DayRuleState, previousPath: string | null, nextPath: string | null): DayRuleState {
-  const before = state.pickedDay ?? pageDate(previousPath) ?? state.lastDay;
-  return { pickedDay: null, lastDay: pageDate(nextPath) ?? before };
+export function afterPageOpened(state: DayRuleState, previousPath: string | null, nextPath: string | null, today: string): DayRuleState {
+  const kept = pageDate(nextPath) ?? state.pickedDay ?? pageDate(previousPath) ?? state.lastDay;
+  return { pickedDay: null, lastDay: kept === today ? null : kept };
 }
 
 /**

@@ -1,7 +1,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { Clock, Settings, Sun } from "lucide-react";
-import { localDate } from "@/common/vaultModel";
+import { dailyPageDate } from "@/renderer/features/day-sidebar/dayRule";
+import { useToday } from "@/renderer/features/day-sidebar/hooks/useDay";
 import { browseRecent } from "@/renderer/features/disk-explorer/navigation";
 import {
   selectCurrentLocation,
@@ -10,7 +11,6 @@ import {
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { useShell } from "../context/ShellContext";
-import { useTodayPage } from "../store/todayPageStore";
 import { openToday } from "../utils/openToday";
 import { FileTree } from "./FileTree";
 import { FrameControls, TrafficLightInset } from "./FrameControls";
@@ -38,8 +38,9 @@ export function WorkspaceSidebar({
   });
   const openedPath = useTabsStore(selectOpenedPath);
   const { navigateFiles } = useShell();
-  const today = useTodayPage();
-  const isToday = today.path !== null && today.date === localDate() && openedPath === today.path;
+  const today = useToday();
+  // A daily page restored on relaunch counts too, and the mark moves on at midnight.
+  const isToday = dailyPageDate(openedPath) === today;
 
   const goToToday = async (newTab: boolean) => {
     try {

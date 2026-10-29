@@ -15,6 +15,7 @@ interface TitlebarProps {
   compact: boolean;
   onToggleSidebar: () => void;
   sidebarToggleRef?: React.Ref<HTMLButtonElement>;
+  rightSidebarToggleRef?: React.Ref<HTMLButtonElement>;
 }
 
 const openPalette = () => usePaletteStore.getState().show();
@@ -54,6 +55,7 @@ export function Titlebar({
   compact,
   onToggleSidebar,
   rightSidebarOpen = false,
+  rightSidebarToggleRef,
   sidebarOpen,
   sidebarToggleRef,
 }: TitlebarProps) {
@@ -87,6 +89,7 @@ export function Titlebar({
       <div className="flex min-w-0 justify-end">
         {!rightSidebarOpen ? (
           <IconButton
+            ref={rightSidebarToggleRef}
             label="Show right sidebar"
             shortcut="⌘⇧\"
             aria-controls="day-sidebar"

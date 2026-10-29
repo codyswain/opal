@@ -84,8 +84,10 @@ digest. Code: `src/renderer/features/day-sidebar/`. Data: `vault:day`.
   the day ("Wed, Oct 28", then "Yesterday" or "Today"; below 280px the
   weekday goes), previous and next day, the options menu and the toggle.
 - Toggle: the panel-right button or View > Toggle Right Sidebar
-  (Cmd+Shift+\). Below 1000px only one sidebar stays open, so opening one
-  closes the other.
+  (Cmd+Shift+\). Below 1120px only one sidebar stays open, so opening one
+  closes the other and the page keeps about 580px. Below 800px it is an
+  overlay, as the left sidebar is: it opens only when asked for, one overlay
+  at a time, and Escape, a click beside it or opening a page closes it.
 - Which day: a dated page (a daily page, a log, a recording or a digest) sets
   the day. Any other page keeps the last day shown. With nothing set, it
   shows today. The arrows pick a day until another page opens.
@@ -95,8 +97,8 @@ digest. Code: `src/renderer/features/day-sidebar/`. Data: `vault:day`.
 - At rest: the latest 3 log entries, 3 chats, 4 recordings and up to 3 items
   of the digest's top group, each card with "Show N more". The log ends with
   Open full log and the digest with Open digest. A full log of more than 40
-  entries folds by hour. Log lines that only repeat a recording or the digest
-  shown below are left out.
+  entries folds by hour. The log card shows every line of the day's log, so
+  its count matches the file.
 - A chat row or digest item opens its note. A log entry or recording opens in
   place, with the full sentence and every link; Escape closes it. Links open
   in the current tab and Cmd+click opens a new tab; external links open the

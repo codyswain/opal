@@ -81,7 +81,7 @@ beforeEach(() => {
     narrowLayout: false,
     narrowSidebarOpen: false,
   });
-  useDaySidebarStore.setState({ ...DEFAULT_DAY_SIDEBAR_PREFERENCES, pickedDay: null, lastDay: null });
+  useDaySidebarStore.setState({ ...DEFAULT_DAY_SIDEBAR_PREFERENCES, pickedDay: null, lastDay: null, narrowOpen: false });
   useDiskStore.setState({
     roots: [],
     listings: {},
@@ -332,6 +332,39 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: 'Recent' }));
     await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     expect(screen.getByTestId('workspace-surface')).not.toHaveFocus();
+  });
+
+  it('shows the right sidebar as an overlay in the narrow layout, only while asked for', async () => {
+    const user = userEvent.setup();
+    setViewportWidth(640);
+    renderShell();
+    // Open in wider windows, but the narrow layout starts with it closed.
+    expect(useDaySidebarStore.getState().open).toBe(true);
+    expect(screen.queryByTestId('day-sidebar')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show right sidebar' }));
+    const overlay = screen.getByRole('dialog', { name: 'Day sidebar' });
+    expect(within(overlay).getByTestId('day-sidebar')).toBeInTheDocument();
+    expect(within(overlay).queryByRole('separator')).toBeNull();
+    const workspace = screen.getByTestId('workspace-surface').parentElement;
+    expect(workspace).toHaveAttribute('inert');
+    await waitFor(() => expect(within(overlay).getByRole('button', { name: 'Previous day' })).toHaveFocus());
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('day-sidebar')).toBeNull();
+    expect(workspace).not.toHaveAttribute('inert');
+    expect(screen.getByRole('button', { name: 'Show right sidebar' })).toHaveFocus();
+
+    // Its own toggle closes it too, and opening the left one closes it.
+    await user.click(screen.getByRole('button', { name: 'Show right sidebar' }));
+    await user.click(screen.getByRole('button', { name: 'Hide right sidebar' }));
+    expect(screen.queryByTestId('day-sidebar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show right sidebar' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Show right sidebar' }));
+    act(() => useShellStore.getState().toggleSidebar());
+    expect(screen.queryByTestId('day-sidebar')).toBeNull();
+    expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
+    expect(useDaySidebarStore.getState().open).toBe(true);
   });
 
   it('hands focus to the workspace when an external route closes the narrow sidebar', async () => {

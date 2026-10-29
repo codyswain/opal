@@ -20,7 +20,6 @@ import { installActivityApi } from "@/tests/helpers/activityApi";
 import { installCollectionsApi } from "@/tests/helpers/collectionsApi";
 import { localDate } from "@/common/vaultModel";
 import { openTabs, resetTabs, tabPaths } from "@/tests/helpers/tabs";
-import { useTodayPage } from "@/renderer/features/shell/store/todayPageStore";
 
 const ROOT = "/Vault";
 const DESIGN = "/Vault/Design";
@@ -75,7 +74,6 @@ beforeEach(() => {
     })),
   });
   resetTabs();
-  useTodayPage.setState({ date: null, path: null });
   useDiskStore.setState({
     roots: [],
     rootsLoaded: false,
@@ -122,20 +120,33 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/files");
   });
 
-  it("marks Today active while the page Today opened is open", () => {
-    const page = `${ROOT}/Library/daily/${localDate()}.md`;
-    useTodayPage.setState({ date: localDate(), path: page });
-    openTabs([page]);
-    renderSidebar();
-    expect(screen.getByRole("button", { name: "Today" })).toHaveClass("bg-surface-selected");
+  it("marks Today active while today's daily page is open, also when a relaunch restored it", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 29, 23, 59));
+      const today = () => screen.getByRole("button", { name: "Today" });
+      // A restored tab, which Today did not open.
+      openTabs([`${ROOT}/Library/daily/2026-10-29.md`]);
+      renderSidebar();
+      expect(today()).toHaveClass("bg-surface-selected");
 
-    act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
-    expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
+      act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
+      expect(today()).not.toHaveClass("bg-surface-selected");
+      // Until the cleanup commit, the old page counts too; the day's log does not.
+      act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Inbox/Logs/2026-10-29.md`)));
+      expect(today()).toHaveClass("bg-surface-selected");
+      act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Library/logs/2026-10-29 log.md`)));
+      expect(today()).not.toHaveClass("bg-surface-selected");
 
-    // Yesterday's page is not today's.
-    act(() => useTodayPage.setState({ date: "2026-01-01" }));
-    act(() => useTabsStore.getState().open(fileLocation(page)));
-    expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
+      // At midnight the page becomes yesterday's.
+      act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Library/daily/2026-10-29.md`)));
+      expect(today()).toHaveClass("bg-surface-selected");
+      vi.setSystemTime(new Date(2026, 9, 30, 0, 1));
+      act(() => { window.dispatchEvent(new Event("focus")); });
+      expect(today()).not.toHaveClass("bg-surface-selected");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the same nav and file tree on every route, without Library", async () => {
