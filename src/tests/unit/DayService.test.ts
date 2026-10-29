@@ -187,6 +187,21 @@ describe("DayService", () => {
     expect((await service.day(root, date)).log).toBeNull();
   });
 
+  it("lists a split recording once, by its summary file", async () => {
+    const stem = `${DATE} 1400 Split call (Meet)`;
+    const summary = await put(`Library/recordings/${stem}.md`, MEET.replace("## Transcript\n", ""));
+    const transcript = `---\nsource: meet\nrecording: "[[Library/recordings/${stem}]]"\n---\n## Transcript\n\nHello.\n`;
+    await put(`Library/recordings/transcripts/${stem} transcript.md`, transcript);
+    // A transcript left at the top level by hand is still not a second recording.
+    await put(`Library/recordings/${DATE} 1400 Split call (Meet) transcript.md`, transcript);
+    const day = await service.day(root, DATE);
+    expect(day.recordings.map((recording) => [recording.time, recording.path])).toEqual([
+      ["14:00", summary],
+      ["13:04", path.join(root, `Library/recordings/${DATE} 1304 Rig planning.md`)],
+      ["08:59", path.join(root, `Library/recordings/${DATE} 0859 Kigali Operators (Meet).md`)],
+    ]);
+  });
+
   it("does not follow a symlinked day folder", async () => {
     const outside = path.join(temporary, "outside");
     await mkdir(outside);

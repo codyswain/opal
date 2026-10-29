@@ -1,5 +1,5 @@
-import { STACK_KINDS, type StackKind } from '@/types/stack';
-import { splitFrontmatter } from './dayModel';
+import { STACK_KINDS, type StackKind, type StackSection } from '@/types/stack';
+import { recordingName, splitFrontmatter } from './dayModel';
 import { validDate } from './vaultModel';
 
 /*
@@ -10,10 +10,15 @@ import { validDate } from './vaultModel';
 const DAILY_PAGE = /(?:^|\/)Library\/daily\/(\d{4}-\d{2}-\d{2})\.md$/;
 const DAILY_NAME = /^(\d{4}-\d{2}-\d{2})\.md$/;
 
+const RECORDING_HEAD = /(?:^|\/)Library\/recordings\/([^/]+\.md)$/;
+const CHAT_HEAD = /(?:^|\/)Library\/chats\/[^/]+\.md$/;
+
 /** At most this many daily pages are listed in one stream. */
 export const DAILY_STREAM_LIMIT = 1000;
-/** Past daily pages are read only this far to tell whether their body is empty. */
-export const DAILY_PEEK_BYTES = 64 * 1024;
+/** A section's file is read only this far to tell whether its body is empty and how it starts. */
+export const PEEK_BYTES = 64 * 1024;
+/** A recording's transcript is in this folder beside its summary file. */
+export const TRANSCRIPTS_FOLDER = 'transcripts';
 
 export function isStackKind(value: unknown): value is StackKind {
   return typeof value === 'string' && (STACK_KINDS as readonly string[]).includes(value);
@@ -27,12 +32,70 @@ export function dailyHeadDate(path: string): string | null {
 
 /**
  * The kind of stack a plain open of `path` becomes, or null when the file
- * opens alone. Daily pages are never upgraded by path: only Today opens the
- * stream, so a daily page opened from anywhere else opens alone.
+ * opens alone. A recording's summary file (`Library/recordings/<date> HHMM
+ * <title>.md`) opens its recording page and a thread card
+ * (`Library/chats/<thread>.md`) its chat page. Daily pages are never
+ * upgraded by path: only Today opens the stream, so a daily page opened from
+ * anywhere else opens alone. Transcripts and sessions are one folder down,
+ * so they open alone too.
  */
 export function stackKindForPath(path: string): StackKind | null {
-  void path;
+  const recording = RECORDING_HEAD.exec(path);
+  if (recording && recordingName(recording[1])) return 'recording';
+  if (CHAT_HEAD.test(path)) return 'chat';
   return null;
+}
+
+/**
+ * The transcript file's name for a summary file's name: `<stem>.md` has its
+ * transcript at `transcripts/<stem> transcript.md`. The name rule is the
+ * contract with the vault's syncs; the `transcript` field is for Obsidian.
+ */
+export function transcriptName(summaryName: string): string {
+  return `${summaryName.replace(/\.md$/i, '')} transcript.md`;
+}
+
+const ATX_HEADING = /^ {0,3}(#{1,6})[ \t]+\S/;
+
+/** The heading a page's text starts with, after at most two blank lines, or null. */
+export function leadingHeading(source: string): StackSection['textHeading'] {
+  const lines = splitFrontmatter(source).body.split(/\r?\n/, 3);
+  for (const [line, text] of lines.entries()) {
+    const match = ATX_HEADING.exec(text);
+    if (match) return { level: match[1].length, line };
+    if (text.trim()) return null;
+  }
+  return null;
+}
+
+const text = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : typeof value === 'number' ? String(value) : null;
+
+const TOOLS: Record<string, string> = { claude: 'Claude', codex: 'Codex' };
+
+/** When a session started, from its `started` field or else the date its file name starts with. Sorts as text. */
+export function sessionStarted(fields: Record<string, unknown>, name: string): string {
+  return text(fields.started) ?? /^\d{4}-\d\d-\d\d/.exec(name)?.[0] ?? '';
+}
+
+/** "2026-10-21 · Claude", as the thread card lists a session. The file name when its fields say neither. */
+export function sessionLabel(fields: Record<string, unknown>, name: string): string {
+  const date = sessionStarted(fields, name).slice(0, 10);
+  const tool = text(fields.tool);
+  const shown = tool ? TOOLS[tool.toLowerCase()] ?? tool : null;
+  if (!date || !shown) return name.replace(/\.md$/i, '');
+  return `${date} · ${shown}`;
+}
+
+/** "62 prompts · last active 2026-10-28 13:14", as the thread card has it, or null. */
+export function sessionDetail(fields: Record<string, unknown>): string | null {
+  const prompts = typeof fields.prompts === 'number' && Number.isInteger(fields.prompts) && fields.prompts >= 0 ? fields.prompts : null;
+  const last = text(fields.last);
+  const parts = [
+    prompts === null ? null : `${prompts} ${prompts === 1 ? 'prompt' : 'prompts'}`,
+    last ? `last active ${last}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 /** Whether `path` can head a stack of `kind`. */

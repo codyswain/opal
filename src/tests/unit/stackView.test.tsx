@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { StackView } from '@/renderer/features/disk-explorer/components/stack/StackView';
 import { flushPendingSaves } from '@/renderer/features/disk-explorer/components/editor/pendingSaves';
+import { openWikiLink } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { stackLocation, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
 import { useStackFoldsStore, useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { readPref } from '@/renderer/shared/prefs/prefs';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import type { StackSection } from '@/types/stack';
 import type { VaultAPI } from '@/types/vault';
@@ -32,7 +34,7 @@ const VIEW_PX = 900;
 const label = (path: string) => path.slice(path.lastIndexOf('/') + 1, -3);
 const section = (path: string, index: number): StackSection => ({
   path, label: label(path), detail: index === 0 ? 'Today' : null, role: index === 0 ? 'head' : 'part',
-  defaultOpen: true, readOnly: false, size: 300, mtimeMs: 1,
+  defaultOpen: true, readOnly: false, textHeading: null, size: 300, mtimeMs: 1,
 });
 const paths = Array.from({ length: COUNT }, (_, index) => day(index));
 
@@ -80,12 +82,12 @@ const frames = async (count = 1) => {
   }
 };
 
-function renderStack() {
+function renderStack(location = stackLocation('daily', HEAD)) {
   const tab = useTabsStore.getState().tabs[0];
   return render(
     <TooltipProvider>
       <div style={{ height: VIEW_PX }}>
-        <StackView tabId={tab.id} index={tab.index} location={stackLocation('daily', HEAD)} />
+        <StackView tabId={tab.id} index={tab.index} location={location} />
       </div>
     </TooltipProvider>,
   );
@@ -263,5 +265,128 @@ describe('StackView', () => {
     await frames(3);
     expect(document.querySelectorAll('[data-stack-section]')).toHaveLength(1);
     expect(screen.queryByText('No earlier pages')).toBeInTheDocument();
+  });
+});
+
+describe('recording and chat pages', () => {
+  const RECORDINGS = '/Vault/Library/recordings';
+  const STEM = '2026-10-26 0930 Josh x Lucas (Meet)';
+  const SUMMARY = `${RECORDINGS}/${STEM}.md`;
+  const TRANSCRIPT = `${RECORDINGS}/transcripts/${STEM} transcript.md`;
+  const SUMMARY_BODY = '# Josh x Lucas\n\n## Summary\n\nPrinting timeline.\n';
+  const TRANSCRIPT_BODY = '## Transcript\n\n**[09:30:04] John Newsom:** Hey.\n';
+  const part = (path: string, label: string, defaultOpen: boolean, detail: string | null = null): StackSection => ({
+    path, label, detail, role: 'part', defaultOpen, readOnly: false, textHeading: { level: 2, line: 0 }, size: 300, mtimeMs: 1,
+  });
+  const head = (path: string): StackSection => ({ ...section(path, 0), detail: null });
+  const answer = (kind: 'recording' | 'chat', sections: StackSection[], folders: string[]) =>
+    vi.fn(async (_root: string, _kind: string, head: string) => ({ success: true as const, data: { kind, head, sections, folders } }));
+
+  it('shows the summary, then the transcript open, and saves each to its own file', async () => {
+    const api = installMarkdownApi({ [SUMMARY]: SUMMARY_BODY, [TRANSCRIPT]: TRANSCRIPT_BODY });
+    installVault(answer('recording', [head(SUMMARY), part(TRANSCRIPT, 'Transcript', true)], [RECORDINGS, `${RECORDINGS}/transcripts`]));
+    openTabs([stackLocation('recording', SUMMARY)]);
+    renderStack(stackLocation('recording', SUMMARY));
+    await waitFor(() => expect(viewOf(TRANSCRIPT)).toBeTruthy());
+    expect(within(article(SUMMARY)).getByRole('heading', { level: 2 })).toHaveTextContent(STEM);
+    // The transcript's own "## Transcript" is its title: the header draws none, only a heading for screen readers.
+    const quiet = article(TRANSCRIPT).querySelector('.opal-stack-header') as HTMLElement;
+    expect(quiet).toHaveAttribute('data-quiet');
+    expect(within(quiet).getByRole('heading', { name: 'Transcript' })).toHaveClass('sr-only');
+    expect(within(quiet).queryByRole('button', { name: 'Transcript' })).toBeNull();
+    expect(within(quiet).getByText(`${STEM} transcript`)).toBeInTheDocument();
+    expect(scroller()).not.toHaveAttribute('data-lone');
+
+    const transcript = viewOf(TRANSCRIPT) as EditorView;
+    act(() => transcript.dispatch({ changes: { from: transcript.state.doc.length, insert: 'Lucas: Fixed a speaker label.\n' } }));
+    expect(await act(() => flushPendingSaves())).toEqual([]);
+    expect(api.documents.get(TRANSCRIPT)?.body).toBe(`${TRANSCRIPT_BODY}Lucas: Fixed a speaker label.\n`);
+    expect(api.documents.get(SUMMARY)?.body).toBe(SUMMARY_BODY);
+    expect(api.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a folded transcript folded the next time the recording opens', async () => {
+    installMarkdownApi({ [SUMMARY]: SUMMARY_BODY, [TRANSCRIPT]: TRANSCRIPT_BODY });
+    installVault(answer('recording', [head(SUMMARY), part(TRANSCRIPT, 'Transcript', true)], [RECORDINGS]));
+    openTabs([stackLocation('recording', SUMMARY)]);
+    const first = renderStack(stackLocation('recording', SUMMARY));
+    await waitFor(() => expect(viewOf(TRANSCRIPT)).toBeTruthy());
+    fireEvent.click(within(article(TRANSCRIPT)).getByRole('button', { name: `Fold ${STEM} transcript` }));
+    await waitFor(() => expect(article(TRANSCRIPT).querySelector('.opal-stack-body')).toBeNull());
+    // Folded, the header shows its title again.
+    expect(within(article(TRANSCRIPT)).getByRole('button', { name: 'Transcript' })).toBeInTheDocument();
+    expect(readPref('stack.folds', {})).toEqual({ [TRANSCRIPT]: false });
+    first.unmount();
+    // A new launch starts from the saved preference.
+    useStackFoldsStore.setState({ folds: readPref('stack.folds', {}) });
+    renderStack(stackLocation('recording', SUMMARY));
+    await waitFor(() => expect(viewOf(SUMMARY)).toBeTruthy());
+    await frames(3);
+    expect(article(TRANSCRIPT)).not.toHaveAttribute('data-open');
+    expect(viewOf(TRANSCRIPT)).toBeNull();
+  });
+
+  it('shows a recording not split yet as one page, with nothing to fold or open alone', async () => {
+    const body = `${SUMMARY_BODY}\n${TRANSCRIPT_BODY}`;
+    installMarkdownApi({ [SUMMARY]: body });
+    installVault(answer('recording', [head(SUMMARY)], [RECORDINGS]));
+    // A fold left from before is not applied to a page on its own.
+    useStackFoldsStore.setState({ folds: { [SUMMARY]: false } });
+    openTabs([stackLocation('recording', SUMMARY)]);
+    renderStack(stackLocation('recording', SUMMARY));
+    await waitFor(() => expect(viewOf(SUMMARY)?.state.doc.toString()).toBe(body));
+    expect(document.querySelectorAll('[data-stack-section]')).toHaveLength(1);
+    expect(scroller()).toHaveAttribute('data-lone');
+    expect(within(article(SUMMARY)).queryByRole('button', { name: /Fold|Unfold/ })).toBeNull();
+    expect(within(article(SUMMARY)).queryByRole('button', { name: /on its own/ })).toBeNull();
+    expect(within(article(SUMMARY)).getByRole('heading', { level: 2 })).toHaveTextContent(STEM);
+    expect(screen.queryByText('No earlier pages')).toBeNull();
+  });
+
+  const CHATS = '/Vault/Library/chats';
+  const CARD = `${CHATS}/sf-site-one.md`;
+  const OLDER = `${CHATS}/sf-site-one/2026-10-16-claude-1486ab75.md`;
+  const NEWER = `${CHATS}/sf-site-one/2026-10-21-claude-f30001cd.md`;
+  const CARD_BODY = [
+    '# SF Site One', '', '## Sessions', '',
+    '- [[Library/chats/sf-site-one/2026-10-16-claude-1486ab75|2026-10-16 · Claude · 16 prompts]]',
+    '- [[Library/chats/sf-site-one/2026-10-21-claude-f30001cd|2026-10-21 · Claude · 62 prompts]]', '',
+  ].join('\n');
+
+  function renderChat() {
+    installVault(answer('chat', [
+      head(CARD),
+      part(NEWER, '2026-10-21 · Claude', true, '62 prompts · last active 2026-10-28 13:14'),
+      part(OLDER, '2026-10-16 · Claude', false, '16 prompts · last active 2026-10-19 15:57'),
+    ], [CHATS, `${CHATS}/sf-site-one`]));
+    openTabs([stackLocation('chat', CARD)]);
+    return renderStack(stackLocation('chat', CARD));
+  }
+
+  it('shows the thread card, the newest session open and the older one folded', async () => {
+    installMarkdownApi({ [CARD]: CARD_BODY, [NEWER]: '# SF Site One · Claude · 2026-10-21\n\nNewer.\n', [OLDER]: '# SF Site One · Claude · 2026-10-16\n\nOlder.\n' });
+    renderChat();
+    await waitFor(() => expect(viewOf(NEWER)).toBeTruthy());
+    expect([...document.querySelectorAll<HTMLElement>('[data-stack-section]')].map((element) => element.dataset.stackSection)).toEqual([CARD, NEWER, OLDER]);
+    expect(article(NEWER)).toHaveAttribute('data-open');
+    expect(article(OLDER)).not.toHaveAttribute('data-open');
+    await frames(3);
+    expect(viewOf(OLDER)).toBeNull();
+    // A folded session shows its label and detail, as the card lists it.
+    const folded = within(article(OLDER)).getByRole('heading', { level: 2 });
+    expect(folded).toHaveTextContent('2026-10-16 · Claude16 prompts · last active 2026-10-19 15:57');
+    expect(useStackStore.getState().viewed?.path).toBe(CARD);
+  });
+
+  it('scrolls to a session and opens it when its link in the card is followed', async () => {
+    installMarkdownApi({ [CARD]: CARD_BODY, [NEWER]: '# Newer\n', [OLDER]: '# Older\n' });
+    renderChat();
+    await waitFor(() => expect(viewOf(CARD)).toBeTruthy());
+    await act(() => openWikiLink(viewOf(CARD) as EditorView, 'Library/chats/sf-site-one/2026-10-16-claude-1486ab75'));
+    await waitFor(() => expect(viewOf(OLDER)).toBeTruthy());
+    await waitFor(() => expect(scroller().scrollTop).toBe(2 * SECTION_PX));
+    expect(useStackFoldsStore.getState().folds).toEqual({ [OLDER]: true });
+    // Following it stayed in the stack: no new history step.
+    expect(useTabsStore.getState().tabs[0].history).toHaveLength(1);
   });
 });

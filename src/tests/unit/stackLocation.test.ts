@@ -68,6 +68,24 @@ describe('stack locations', () => {
     expect(canonical(stackLocation('daily', TODAY))).toEqual(stackLocation('daily', TODAY));
   });
 
+  it('turn every plain open of a recording summary or a thread card into its page, and keep "alone" there', () => {
+    const recording = '/Vault/Library/recordings/2026-10-26 0930 Josh x Lucas (Meet).md';
+    const transcript = '/Vault/Library/recordings/transcripts/2026-10-26 0930 Josh x Lucas (Meet) transcript.md';
+    const card = '/Vault/Library/chats/sf-site-one.md';
+    const session = '/Vault/Library/chats/sf-site-one/2026-10-21-claude-f30001cd.md';
+    expect(canonical(fileLocation(recording))).toEqual(stackLocation('recording', recording));
+    expect(canonical(aloneLocation(recording))).toEqual(aloneLocation(recording));
+    expect(canonical(fileLocation(transcript))).toEqual(fileLocation(transcript));
+    expect(canonical(fileLocation(card))).toEqual(stackLocation('chat', card));
+    expect(canonical(aloneLocation(session))).toEqual(fileLocation(session));
+    // A plain open, as from the tree, a link or the right sidebar, shows the page.
+    useTabsStore.getState().open(fileLocation(recording));
+    expect(tabFile(useTabsStore.getState().tabs[0])).toBe(recording);
+    expect(useTabsStore.getState().tabs[0].history[0].location).toEqual(stackLocation('recording', recording));
+    expect(locationName(stackLocation('recording', recording))).toBe('2026-10-26 0930 Josh x Lucas (Meet)');
+    expect(locationName(stackLocation('chat', card))).toBe('sf-site-one');
+  });
+
   it('name Today’s stream "Today" while its head is today, and by its date after', () => {
     expect(locationName(stackLocation('daily', TODAY), '2026-10-29')).toBe('Today');
     expect(locationName(stackLocation('daily', TODAY), '2026-10-30')).toBe('2026-10-29');

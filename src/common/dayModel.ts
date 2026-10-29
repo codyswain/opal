@@ -261,6 +261,12 @@ export interface ParsedRecording {
   attendees: string[];
   hasSummary: boolean;
   links: WrittenLink[];
+  /**
+   * A transcript file, which links back to its summary file in a
+   * `recording` field. Transcripts live in `transcripts/` below the
+   * summaries, so a day lists each recording once, by its summary file.
+   */
+  isTranscript: boolean;
 }
 
 /** Whether a Summary section holds more than a placeholder such as "_Gemini has not written notes for this meeting yet._". */
@@ -277,7 +283,11 @@ function summaryHasText(body: string[]): boolean {
   return false;
 }
 
-/** A recording note, `Library/recordings/<date> HHMM <name>.md`. */
+/**
+ * A recording note, `Library/recordings/<date> HHMM <name>.md`: since the
+ * split, the summary file with the links and action items, whose transcript
+ * is `transcripts/<name> transcript.md`; before it, one file holding both.
+ */
 export function parseRecording(source: string): ParsedRecording {
   const { data, body } = splitFrontmatter(source);
   const bodyLines = lines(body);
@@ -292,6 +302,7 @@ export function parseRecording(source: string): ParsedRecording {
     attendees: listField(data.attendees),
     hasSummary: summaryHasText(bodyLines),
     links: readLinks(header.join('\n')).links.filter((link) => link.external),
+    isTranscript: textField(data.recording) !== null,
   };
 }
 

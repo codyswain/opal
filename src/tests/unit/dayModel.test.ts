@@ -188,6 +188,7 @@ describe('recordings', () => {
         { label: 'Notes by Gemini', target: 'https://docs.google.com/document/d/1cb5/edit?usp=drivesdk', external: true },
         { label: 'calendar event', target: 'https://www.google.com/calendar/event?eid=NmNx', external: true },
       ],
+      isTranscript: false,
     });
     expect(parseRecording(meet("A summary wasn't produced for this meeting because there wasn't enough conversation in a supported language.\n\nIf the meeting was transcribed, you can review the transcript.")).hasSummary).toBe(false);
     expect(parseRecording(meet('[Kyle Haynes](mailto:kyle@parametric.company) [John Newsom](mailto:john@parametric.company)\n\nThe team agreed to ship the rig.')).hasSummary).toBe(true);
@@ -200,6 +201,22 @@ describe('recordings', () => {
       '## Summary', '', 'The strategy centers on the San Francisco operator role.', '', '### Operational Pivot', 'More.', '', '## Action items', '- Do it',
     ].join('\n'));
     expect(pocket).toMatchObject({ source: 'pocket', durationMin: 20, speakers: [], attendees: [], hasSummary: true, links: [] });
+  });
+
+  it('reads a split recording from its summary file, and knows its transcript file', () => {
+    const summary = parseRecording([
+      '---', 'written_by: ai', 'source: meet', 'title: "Josh x Lucas"', 'duration_min: 1', 'speakers: ["John Newsom"]',
+      'summary_by: "gemini"', 'transcript: "[[Library/recordings/transcripts/2026-10-26 0930 Josh x Lucas (Meet) transcript]]"', 'sync_hash: 27cfd9643bd31cf8', '---',
+      '# Josh x Lucas', '', 'Met 2026-10-26, 09:30 to 09:31 (1 min), on Google Meet. Day: [[Library/logs/2026-10-26 log|2026-10-26]]', '',
+      'Google: [Notes by Gemini](https://docs.google.com/document/d/1rKp/edit)', '', '## Summary', '', 'Printing timeline assessment.', '',
+    ].join('\n'));
+    expect(summary).toMatchObject({ title: 'Josh x Lucas', durationMin: 1, speakers: ['John Newsom'], hasSummary: true, isTranscript: false });
+    expect(summary.links.map((link) => link.label)).toEqual(['Notes by Gemini']);
+    const transcript = parseRecording([
+      '---', 'written_by: ai', 'source: meet', 'recording: "[[Library/recordings/2026-10-26 0930 Josh x Lucas (Meet)]]"', 'sync_hash: dfb6a968341f6324', '---',
+      '## Details', '', 'Josh visited the Fab Lab.', '', '## Transcript', '', '**[09:30:04] John Newsom:** Hey, what\'s up?', '',
+    ].join('\n'));
+    expect(transcript.isTranscript).toBe(true);
   });
 });
 

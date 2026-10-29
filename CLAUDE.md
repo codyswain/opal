@@ -41,8 +41,10 @@ not exist.
 - **Stacks:** a tab can show several Markdown files in one scroll, each its
   own editor that saves and merges on its own (`components/stack/`). The
   main process lists the files (`StackService`, `vault:stack`); `canonical()`
-  in the tabs store decides by path which opens become stacks. Today's
-  stream is the first use; sections near the view have a live editor and the
+  in the tabs store decides by path which opens become stacks. Three kinds:
+  Today's stream of daily pages, a recording (the summary file, then
+  `transcripts/<stem> transcript.md`) and a chat (the thread card, then its
+  sessions, newest first). Sections near the view have a live editor and the
   rest are placeholders
 - **Main area:** each tab shows one file, a stack or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,

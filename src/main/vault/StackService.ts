@@ -3,15 +3,22 @@ import { lstat, open, readdir } from "fs/promises";
 import path from "path";
 import type { RootRegistry } from "@/main/fs/RootRegistry";
 import { normalizePath } from "@/main/fs/paths";
+import { splitFrontmatter } from "@/common/dayModel";
 import {
-  DAILY_PEEK_BYTES,
+  PEEK_BYTES,
+  TRANSCRIPTS_FOLDER,
   dailyDetail,
   dailyHeadDate,
   dailyStreamNames,
   isBlankPage,
   isStackHead,
   isStackKind,
+  leadingHeading,
   readOnlyRule,
+  sessionDetail,
+  sessionLabel,
+  sessionStarted,
+  transcriptName,
 } from "@/common/stackModel";
 import { localDate } from "@/common/vaultModel";
 import type { StackKind, StackSection, VaultStack } from "@/types/stack";
@@ -32,6 +39,9 @@ interface Peeked {
   mtimeMs: number;
   size: number;
   blank: boolean;
+  /** The frontmatter's fields, when the block closes within the peek. */
+  fields: Record<string, unknown>;
+  heading: StackSection["textHeading"];
 }
 
 interface FileFacts {
@@ -74,8 +84,10 @@ export class StackService {
     switch (kind) {
       case "daily":
         return this.daily(root, file);
-      default:
-        throw new Error("This kind of stack is not available yet.");
+      case "recording":
+        return this.recording(root, file);
+      case "chat":
+        return this.chat(root, file);
     }
   }
 
@@ -104,6 +116,7 @@ export class StackService {
         role,
         defaultOpen: true,
         readOnly: readOnlyRule(file),
+        textHeading: null,
         size: facts.size,
         mtimeMs: facts.mtimeMs,
       };
@@ -117,6 +130,89 @@ export class StackService {
         ...past.flatMap((found) => (found ? [section(found.file, found.facts, "part")] : [])),
       ],
       folders: [folder],
+    };
+  }
+
+  /**
+   * A recording page: the summary file, then its transcript file,
+   * `transcripts/<stem> transcript.md`, open by default. A recording not
+   * split yet is one file and shows alone.
+   */
+  private async recording(root: string, head: string): Promise<VaultStack> {
+    const folder = path.join(root, DAY_LAYOUT.recordings);
+    if (path.dirname(head) !== folder) throw new Error("This page does not start a stack.");
+    const transcripts = path.join(folder, TRANSCRIPTS_FOLDER);
+    const transcript = path.join(transcripts, transcriptName(path.basename(head)));
+    const [headFacts, peeked] = await Promise.all([this.facts(head), this.peek(transcript)]);
+    const sections = [this.head(head, headFacts)];
+    if (peeked) {
+      sections.push({
+        path: transcript,
+        label: "Transcript",
+        detail: null,
+        role: "part",
+        defaultOpen: true,
+        readOnly: readOnlyRule(transcript),
+        textHeading: peeked.heading,
+        size: peeked.size,
+        mtimeMs: peeked.mtimeMs,
+      });
+    }
+    return { kind: "recording", head, sections, folders: [folder, transcripts] };
+  }
+
+  /**
+   * A chat page: the thread card, then the sessions in
+   * `Library/chats/<thread>/`, newest first. The newest is open and the
+   * older ones start folded. A file there that is not a thread card shows
+   * alone.
+   */
+  private async chat(root: string, head: string): Promise<VaultStack> {
+    const folder = path.join(root, DAY_LAYOUT.chats);
+    if (path.dirname(head) !== folder) throw new Error("This page does not start a stack.");
+    const thread = path.join(folder, noteName(head));
+    const card = await this.peek(head);
+    const sections = [this.head(head, card)];
+    if (card?.fields.type !== "thread") return { kind: "chat", head, sections, folders: [folder] };
+    const names = (await this.entries(thread))
+      .filter((entry) => entry.isFile() && /\.md$/i.test(entry.name))
+      .map((entry) => entry.name);
+    const found = await mapLimited(names, READ_CONCURRENCY, async (name) => {
+      const file = path.join(thread, name);
+      const peeked = await this.peek(file);
+      return peeked ? { name, file, peeked, started: sessionStarted(peeked.fields, name) } : null;
+    });
+    const sessions = found
+      .filter((session): session is NonNullable<typeof session> => session !== null)
+      .sort((a, b) => b.started.localeCompare(a.started) || b.name.localeCompare(a.name));
+    sections.push(
+      ...sessions.map(({ name, file, peeked }, index): StackSection => ({
+        path: file,
+        label: sessionLabel(peeked.fields, name),
+        detail: sessionDetail(peeked.fields),
+        role: "part",
+        defaultOpen: index === 0,
+        readOnly: readOnlyRule(file),
+        textHeading: peeked.heading,
+        size: peeked.size,
+        mtimeMs: peeked.mtimeMs,
+      })),
+    );
+    return { kind: "chat", head, sections, folders: [folder, thread] };
+  }
+
+  /** A recording or chat page's head, titled by its file name as it is opened alone. */
+  private head(file: string, facts: FileFacts | null): StackSection {
+    return {
+      path: file,
+      label: noteName(file),
+      detail: null,
+      role: "head",
+      defaultOpen: true,
+      readOnly: readOnlyRule(file),
+      textHeading: null,
+      size: facts?.size ?? 0,
+      mtimeMs: facts?.mtimeMs ?? 0,
     };
   }
 
@@ -140,7 +236,11 @@ export class StackService {
     }
   }
 
-  /** A regular file's size and time, and whether its body is empty. Read again only when it changed. */
+  /**
+   * A regular file's size and time, whether its body is empty, its
+   * frontmatter and the heading it starts with. Read again only when it
+   * changed; links are refused.
+   */
   private async peek(file: string): Promise<Peeked | null> {
     try {
       const info = await lstat(file);
@@ -151,11 +251,17 @@ export class StackService {
       try {
         const opened = await handle.stat();
         if (!opened.isFile()) return null;
-        const buffer = Buffer.alloc(Math.min(opened.size, DAILY_PEEK_BYTES));
+        const buffer = Buffer.alloc(Math.min(opened.size, PEEK_BYTES));
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-        // A page longer than the peek has a body, whatever its frontmatter.
-        const blank = opened.size <= DAILY_PEEK_BYTES && isBlankPage(buffer.subarray(0, bytesRead).toString("utf8"));
-        const value = { mtimeMs: opened.mtimeMs, size: opened.size, blank };
+        const start = buffer.subarray(0, bytesRead).toString("utf8");
+        const value: Peeked = {
+          mtimeMs: opened.mtimeMs,
+          size: opened.size,
+          // A page longer than the peek has a body, whatever its frontmatter.
+          blank: opened.size <= PEEK_BYTES && isBlankPage(start),
+          fields: splitFrontmatter(start).data,
+          heading: leadingHeading(start),
+        };
         if (this.peeked.size >= CACHE_LIMIT) this.peeked.clear();
         this.peeked.set(file, value);
         return value;

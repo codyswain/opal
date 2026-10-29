@@ -49,14 +49,19 @@ function provisionalHead(location: FilesStackLocation): StackSection {
     role: 'head',
     defaultOpen: true,
     readOnly: readOnlyRule(location.file),
+    textHeading: null,
     size: 0,
     mtimeMs: 0,
   };
 }
 
+const sameHeading = (a: StackSection['textHeading'], b: StackSection['textHeading']) =>
+  a === b || (!!a && !!b && a.level === b.level && a.line === b.line);
+
 const sameSection = (a: StackSection, b: StackSection) =>
   a.path === b.path && a.label === b.label && a.detail === b.detail && a.role === b.role &&
-  a.defaultOpen === b.defaultOpen && a.readOnly === b.readOnly && a.size === b.size && a.mtimeMs === b.mtimeMs;
+  a.defaultOpen === b.defaultOpen && a.readOnly === b.readOnly && sameHeading(a.textHeading, b.textHeading) &&
+  a.size === b.size && a.mtimeMs === b.mtimeMs;
 
 /** The new list, keeping each unchanged section's object so its row stays memoized. */
 export function mergeSections(previous: readonly StackSection[], next: readonly StackSection[]): StackSection[] {
@@ -141,12 +146,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     () => (kind === 'daily' ? sections.slice(0, loadedCount) : sections),
     [kind, sections, loadedCount],
   );
+  // A recording not split yet, or a card that is not a thread, is the stack's only file and reads as a page.
+  const lone = kind !== 'daily' && sections.length === 1;
   // Event handlers and the planner read the latest render through refs, so they never go stale.
-  const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed });
-  latest.current = { sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed };
+  const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed, lone });
+  latest.current = { sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed, lone };
 
   const isOpen = useCallback(
-    (section: StackSection) => sectionOpen(latest.current.folds, section.path, section.defaultOpen),
+    (section: StackSection) => latest.current.lone || sectionOpen(latest.current.folds, section.path, section.defaultOpen),
     [],
   );
 
@@ -602,15 +609,13 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     if (kind === 'daily' && at >= state.shown.length) setLoadedCount((count) => Math.max(count, at + 4));
     const section = state.sections[at];
     if (!sectionOpen(state.folds, path, section.defaultOpen)) useStackFoldsStore.getState().setOpen([path], true);
-    // The section may only now be in the page; place it once it is.
-    window.requestAnimationFrame(() => {
-      const element = scroller.current;
-      const top = topOf(path);
-      if (!element || top === null) return;
-      element.scrollTop = top;
-      rememberAnchor();
-    });
-  }, [kind, rememberAnchor]);
+    // The section may only now be in the page, and the page may not yet be
+    // tall enough to bring it to the top until its text is drawn. The restore
+    // loop places it each frame until it holds, as on a return to a saved place.
+    const running = restore.current !== null;
+    restore.current = { view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0, refined: false };
+    if (!running) window.requestAnimationFrame(runRestore);
+  }, [kind, runRestore]);
 
   // View > Next Section and Previous Section, which work while an editor has focus.
   useEffect(() => {
@@ -758,13 +763,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       ref={scroller}
       data-testid="files-stack"
       data-stack-kind={kind}
+      data-lone={lone ? '' : undefined}
       className="opal-stack h-full min-h-0 overflow-y-auto"
       onFocus={onFocus}
       onBlur={onBlur}
     >
       <div ref={content} role="feed" aria-busy={loadingMore} aria-label={kind === 'daily' ? 'Daily pages' : noteName(head)} className="opal-stack-content">
         {shown.map((section, position) => {
-          const open = sectionOpen(folds, section.path, section.defaultOpen);
+          const open = lone || sectionOpen(folds, section.path, section.defaultOpen);
           const isLive = open && live.has(section.path);
           return (
             <StackSectionView
@@ -772,6 +778,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
               section={section}
               first={position === 0}
               large={kind === 'daily' || section.role === 'head'}
+              lone={lone}
               open={open}
               live={isLive}
               height={sectionHeights.get(section.path, section.size)}

@@ -25,7 +25,7 @@ export function recordingTitle(recording: DayRecording, file: string): string {
 
 /**
  * A Meet or Pocket recording. A click opens its page, the summary note with
- * its links, in this tab; Cmd-click opens a new tab.
+ * its links and its transcript below, in this tab; Cmd-click opens a new tab.
  */
 export function RecordingRow({ recording }: { recording: DayRecording }) {
   const { openPath, root } = useDaySidebarContext();

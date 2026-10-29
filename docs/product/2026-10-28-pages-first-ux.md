@@ -49,8 +49,9 @@ first: a file tree on the left and one clean page.
   drops out of the row before Search does.
 - No "Opal" workspace button, no "Open folders" heading, no open-folder
   buttons. Opening another folder stays in Settings only.
-- Nav: **Today** (opens `Library/daily/YYYY-MM-DD.md`, creating it from the
-  template if needed; the main process returns the path) and **Recent**. No
+- Nav: **Today** (opens the stream of daily pages headed by
+  `Library/daily/YYYY-MM-DD.md`, creating that page from the template if
+  needed; the main process returns the path; see Stacked pages) and **Recent**. No
   Library item. No Views. Until the cleanup commit, Today opens an existing
   `Inbox/Logs/YYYY-MM-DD.md` when the daily page does not exist.
 - Under the nav, after some space and no rule: the vault's files. With one
@@ -114,9 +115,8 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
   with Open full log and the digest with Open digest. A full log of more than
   40 entries folds by hour. The log card shows every line of the day's log,
   so its count matches the file.
-- A chat row opens its thread card and a recording row opens the recording's
-  page (its summary note, with the links), in the current tab; Cmd+click
-  opens a new tab. A log entry opens in place, with the full sentence and
+- A chat row opens its chat page and a recording row its recording page
+  (see Stacked pages), in the current tab; Cmd+click opens a new tab. A log entry opens in place, with the full sentence and
   every link; Escape closes it. Links open in the current tab and Cmd+click
   opens a new tab; external links open the browser. A file icon marks a vault
   link and an arrow marks an external one.
@@ -279,6 +279,48 @@ A tucked-away view of a page's metadata, for the rare time it is wanted.
   never saved.
 - It is read again after each save and after a change in the page's folder,
   so Modified and Size stay current.
+
+## Stacked pages
+
+A stack shows several Markdown files one after another in one scroll, in one
+tab (Cody, 2026-10-29). Code: `components/stack/` in `disk-explorer`; the
+main process lists the files (`vault:stack`).
+
+- It reads as one document, not a set of boxed files (Cody: "I don't want it
+  to be super clear that they're different files by default"). Each file's
+  title is a heading in the page's column and serif. Files are told apart by
+  a little space and a faint hairline. The fold control (in the margin), the
+  file name and "Open on its own" show in muted text only while the pointer
+  or focus is on a section's start.
+- A part whose text starts with a heading lets that heading be its title
+  while it is open, so the page never shows the same title twice (a
+  transcript's `## Transcript`, a session's `# <thread> · Claude · <date>`).
+  Folded, it shows its label and detail as a title.
+- Every section is a plain Markdown file rendered by the same editor as on
+  its own, and saves, merges and reports conflicts on its own. Nothing about
+  the stack is written into any file, so blocks added later work the same
+  alone or in a stack.
+- Folds are saved per file and hold in every stack. Option-click on a fold
+  control folds or unfolds every section. A link to a file in the stack
+  scrolls to it and unfolds it. "Open on its own" opens the file as a page.
+- A stack of one file, such as a recording not split yet, reads as a page:
+  nothing to fold, no "Open on its own", and its footer line shows.
+- **Today:** today's page on top, then every earlier non-empty page in
+  `Library/daily`, newest first, loading more as the view nears the end. The
+  right sidebar follows the day at the top of the view.
+- **A recording:** opening a summary file (`Library/recordings/<date> HHMM
+  <title>.md`, from the tree, the right sidebar, a link or search) shows it
+  on top, with the links and action items, and its transcript file
+  (`Library/recordings/transcripts/<stem> transcript.md`) below it, open and
+  editable. A transcript opened on its own is a page. A recording not split
+  yet is one file and opens as one page.
+- **A chat:** opening a thread card (`Library/chats/<thread>.md` with
+  `type: thread`) shows the card (summary and the list of sessions) on top
+  and the sessions in `Library/chats/<thread>/` below it, newest first. The
+  newest is open and the older ones start folded; each is labelled as the
+  card lists it ("2026-10-21 · Claude", then the prompts and last activity).
+  A session's link in the card scrolls to it. A session opened on its own is
+  a page.
 
 ## Out of scope here
 

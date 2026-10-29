@@ -20,7 +20,7 @@ export function chatTitle(chat: DayChat, file: string): string {
   return `${openTitle(file)}\nLast active ${chat.last}. ${made}${prompts}.${tool ? `\n${tool}.` : ''}`;
 }
 
-/** A chat created or continued that day. A click opens its thread card. */
+/** A chat created or continued that day. A click opens its chat page: the thread card, with its sessions below. */
 export function ChatRow({ chat }: { chat: DayChat }) {
   const { openPath, root } = useDaySidebarContext();
   const archived = chat.status === 'archived';

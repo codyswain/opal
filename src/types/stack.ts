@@ -19,6 +19,13 @@ export interface StackSection {
   defaultOpen: boolean;
   /** The same rule the editor uses for this path. */
   readOnly: boolean;
+  /**
+   * The heading a part's text starts with, after at most two blank lines:
+   * its level and its line in the text. While the part is open that heading
+   * is its title, so the stack draws no second title above it. Null when the
+   * stack draws the title, as it always does for a head and a daily page.
+   */
+  textHeading: { level: number; line: number } | null;
   /** For height estimates before the section is measured. */
   size: number;
   mtimeMs: number;

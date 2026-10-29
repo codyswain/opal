@@ -287,7 +287,12 @@ export class DayService {
     return chatsForDay(date, cards, sessions);
   }
 
-  /** `Library/recordings/<date> HHMM <name>.md`, and until the cleanup commit the same names in `Inbox/Recordings`. */
+  /**
+   * `Library/recordings/<date> HHMM <name>.md`, and until the cleanup commit
+   * the same names in `Inbox/Recordings`. Only the folder's top level is
+   * read, so a split recording counts once, by its summary file; a
+   * transcript found there anyway is left out.
+   */
   private async recordings(root: string, date: string): Promise<DayRecording[]> {
     const seen = new Set<string>();
     const found: DayRecording[] = [];
@@ -298,7 +303,7 @@ export class DayService {
         if (!folder || !entry.isFile() || !name || name.date !== date || seen.has(entry.name)) continue;
         const file = path.join(folder, entry.name);
         const note = await this.parsed(file, parseRecording);
-        if (!note) continue;
+        if (!note || note.isTranscript) continue;
         seen.add(entry.name);
         const [links] = await this.resolve(file, [note.links]);
         found.push({

@@ -167,6 +167,52 @@
   color: hsl(var(--text-secondary));
 }
 
+/* A quiet header: an open part whose text starts with a heading, such as a
+   transcript's "## Transcript" or a session's title. That heading is the
+   section's title, so the header keeps only its rule in the flow. Its row
+   lies over the heading's first line, with the fold control in the margin
+   and the tools at the right, both centred on that line. The row takes no
+   pointer itself, so a click on the heading reaches the editor.
+   --stack-lead is the number of blank lines above the heading. */
+.opal-stack-header[data-quiet] > .opal-stack-column {
+  position: relative;
+  display: flow-root;
+}
+
+.opal-stack-header[data-quiet] .opal-stack-title-row {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + var(--stack-lead, 0) * var(--editor-line) * 1rem + var(--quiet-pad, 0em));
+  right: 2rem;
+  left: 2rem;
+  height: 1.3em;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* The same sizes and space above as the editor's headings (editor.css). */
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="1"] { --quiet-pad: 0.45em; font-size: 1.8em; }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="2"] { --quiet-pad: 0.4em; font-size: 1.5em; }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="3"] { --quiet-pad: 0.3em; font-size: 1.25em; }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="4"] { --quiet-pad: 0.25em; font-size: 1.1em; }
+.opal-stack-header[data-quiet] .opal-stack-title-row:is([data-level="5"], [data-level="6"]) { --quiet-pad: 0.2em; font-size: 1em; }
+
+.opal-stack-header[data-quiet] :is(.opal-stack-chevron, .opal-stack-open) {
+  pointer-events: auto;
+}
+
+.opal-stack-section[data-start] > .opal-stack-header[data-quiet] :is(.opal-stack-chevron, .opal-stack-name, .opal-stack-open) {
+  opacity: 1;
+  transition-duration: 0s;
+}
+
+/* A stack of one file reads as a page: its footer line shows as a page's does. */
+.opal-stack[data-lone] .opal-editor[data-layout="section"] .opal-editor-status {
+  opacity: 1;
+}
+
 .opal-stack-end {
   box-sizing: border-box;
   max-width: calc(var(--editor-measure) + 4rem);
