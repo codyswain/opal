@@ -24,6 +24,8 @@ export const DiskExplorer: React.FC = () => {
 
   // A file in a listing the tree already read shows at once; any other file
   // is looked up, and a late answer for a file left behind is dropped.
+  // Refreshing other folders' listings never looks the open file up again, so
+  // its page stays mounted while agents write elsewhere.
   const listedEntry = useMemo(
     () =>
       openedPath
@@ -39,12 +41,22 @@ export const DiskExplorer: React.FC = () => {
     loading: boolean;
   } | null>(null);
   useEffect(() => {
-    if (!openedPath || listedEntry) {
+    if (!openedPath) {
       setStatted(null);
       return;
     }
+    if (listedEntry) {
+      // Kept so the page stays mounted if a refresh drops it from the listing.
+      setStatted({ path: openedPath, entry: listedEntry, loading: false });
+      return;
+    }
     let cancelled = false;
-    setStatted({ path: openedPath, entry: null, loading: true });
+    // An open file stays on screen while it is looked up again; only an answer that it is gone closes it.
+    setStatted((previous) =>
+      previous?.path === openedPath && previous.entry
+        ? { ...previous, loading: true }
+        : { path: openedPath, entry: null, loading: true }
+    );
     void Promise.resolve(window.diskAPI.stat(openedPath))
       .then((result) => {
         if (!cancelled)

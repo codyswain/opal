@@ -39,3 +39,12 @@ export function isAllowedNavigation(url: string, options: NavigationGuardOptions
   }
   return false;
 }
+
+/** Links a page may open outside the app: web pages and mail, never files or app URLs. */
+export function isExternalLink(url: string): boolean {
+  try {
+    return ['http:', 'https:', 'mailto:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}

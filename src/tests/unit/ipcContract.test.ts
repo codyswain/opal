@@ -79,7 +79,7 @@ describe('IPC contract between preload and main', () => {
       introduced,
       `preload.ts invokes ${introduced.length} channel(s) that no main-process ` +
         `handler registers:\n  ${introduced.join('\n  ')}\n\n` +
-        `Register a handler (see src/main/fs/MetadataHandlers.ts for the ` +
+        `Register a handler (see src/main/fs/MarkdownHandlers.ts for the ` +
         `pattern), or remove the call from preload.ts.`
     ).toEqual([]);
   });

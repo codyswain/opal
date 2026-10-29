@@ -1,190 +1,348 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useDocumentStatusStore } from '../../store/documentStatusStore';
-import { parentFsPath } from '@/common/fsPaths';
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import type { MarkdownCopyLabel, UnsavedPage } from '@/types/markdown';
+import { mergeText, type MergeResult } from './mergeText';
+import { registerPageFlush, trackPendingWrite } from './pendingSaves';
 
 export type MarkdownSaveState = 'clean' | 'dirty' | 'saving' | 'saved' | 'conflict' | 'error';
 
 export interface MarkdownDocumentState {
   status: 'loading' | 'ready' | 'unavailable';
-  /** Seed text for the editor; changes only on load and reload, never while typing. */
+  /** The text the editor opens with. Later disk changes reach the editor as edits, not here. */
   body: string | null;
-  /** Increments whenever the editor must re-seed from `body`. */
-  seed: number;
   saveState: MarkdownSaveState;
   error: string | null;
-  hasFrontmatter: boolean;
+  /** How many keys the hidden frontmatter holds. */
+  properties: number;
+  /** Set while the page and the disk changed the same lines: the disk's side, for the editor to show beside the page's. */
+  conflict: { disk: string } | null;
+}
+
+/** The open editor, as the document drives it. */
+export interface MarkdownEditorHandle {
+  getText: () => string;
+  /** Moves the editor to `text` with the smallest edit, keeping cursor and scroll, outside undo history. */
+  setText: (text: string) => void;
 }
 
 export interface MarkdownDocumentActions {
-  onChange: (markdown: string) => void;
+  onChange: (text: string) => void;
   flush: () => Promise<void>;
-  reloadFromDisk: () => Promise<void>;
-  keepMine: () => Promise<void>;
+  attach: (editor: MarkdownEditorHandle) => () => void;
+  /** Saves the page, which now holds a pick for every conflicting change, over the disk version. */
+  resolveConflict: () => void;
 }
 
 export const AUTOSAVE_DELAY_MS = 800;
+export const AUTOSAVE_MAX_WAIT_MS = 5000;
 
 const INITIAL: MarkdownDocumentState = {
-  status: 'loading', body: null, seed: 0, saveState: 'clean', error: null, hasFrontmatter: false,
+  status: 'loading', body: null, saveState: 'clean', error: null, properties: 0, conflict: null,
 };
 
+type ReadResponse = Awaited<ReturnType<typeof window.markdownAPI.read>>;
+type WriteResponse = Awaited<ReturnType<typeof window.markdownAPI.write>>;
+
+const noteName = (path: string) => basenameFsPath(path).replace(/\.md$/i, '');
+
+/** A copy next to the note goes by its name; one in the recovery folder by its full path. */
+function copyLocation(note: string, copy: string): string {
+  return parentFsPath(copy) === parentFsPath(note) ? noteName(copy) : copy;
+}
+
 /**
- * Owns one Markdown file's edit lifecycle: load once, debounce writes against
- * the loaded revision, flush on demand, and surface an external change as a
- * conflict rather than overwriting it. Nothing is written for a clean file.
+ * One Markdown file's edit lifecycle. `saved` is the text at `revision` on
+ * disk and the base of every merge. Saves and disk checks run one at a time,
+ * so neither sees the other half done.
  */
-export function useMarkdownDocument(path: string): MarkdownDocumentState & MarkdownDocumentActions {
-  const [state, setState] = useState<MarkdownDocumentState>(INITIAL);
-  const revision = useRef<string | null>(null);
-  const latest = useRef<string>('');
-  const dirty = useRef(false);
-  const inFlight = useRef(false);
-  const inFlightWrite = useRef<Promise<void> | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const alive = useRef(true);
-  const generation = useRef(0);
+class MarkdownDocumentSession {
+  private live = false;
+  private revision: string | null = null;
+  private saved = '';
+  private latest = '';
+  private editor: MarkdownEditorHandle | null = null;
+  private conflict: { disk: string; revision: string } | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private dirtySince: number | null = null;
+  private queue: Promise<void> = Promise.resolve();
+  private unregister: (() => void) | null = null;
+  private saveState: MarkdownSaveState = 'clean';
 
-  const patch = useCallback((next: Partial<MarkdownDocumentState>) => {
-    if (alive.current) setState((previous) => ({ ...previous, ...next }));
-  }, []);
+  constructor(private readonly path: string, private readonly update: (patch: Partial<MarkdownDocumentState>) => void) {}
 
-  const load = useCallback(async (reseed: boolean) => {
-    const token = ++generation.current;
-    let response: Awaited<ReturnType<typeof window.markdownAPI.read>>;
+  open(): void {
+    this.live = true;
+    this.revision = null;
+    this.conflict = null;
+    this.publish(INITIAL);
+    // Closing the window or quitting waits for this, and asks before dropping text that did not reach the file.
+    this.unregister = registerPageFlush(() => this.settle());
+    void this.serial(() => this.load());
+  }
+
+  /** Leaving the page saves what was typed; the write is tracked so a quit right after still waits for it. */
+  close(): void {
+    this.live = false;
+    this.cancelTimer();
+    this.unregister?.();
+    trackPendingWrite(this.settle());
+  }
+
+  onChange = (text: string): void => {
+    this.latest = text;
+    // A conflict stays until every change has a pick; nothing saves meanwhile.
+    if (this.conflict) return;
+    if (text === this.saved) {
+      this.cancelTimer();
+      if (this.saveState === 'dirty') this.publish({ saveState: 'clean' });
+      return;
+    }
+    if (this.saveState !== 'dirty') this.publish({ saveState: 'dirty' });
+    this.schedule();
+  };
+
+  flush = async (): Promise<void> => {
+    this.cancelTimer();
+    await this.serial(() => this.write());
+    await this.drain();
+  };
+
+  attach = (editor: MarkdownEditorHandle): (() => void) => {
+    this.editor = editor;
+    // The disk may have moved on between load and mount.
+    if (editor.getText() !== this.latest) editor.setText(this.latest);
+    return () => { if (this.editor === editor) this.editor = null; };
+  };
+
+  resolveConflict = (): void => {
+    const conflict = this.conflict;
+    if (!conflict) return;
+    this.conflict = null;
+    this.saved = conflict.disk;
+    this.revision = conflict.revision;
+    this.publish({ conflict: null, saveState: this.latest === this.saved ? 'clean' : 'dirty' });
+    void this.serial(() => this.write());
+  };
+
+  /** Checks the disk after a change in the file's folder and folds what changed into the page. */
+  reconcile = (): Promise<void> => this.serial(() => this.reconcileNow());
+
+  private serial(task: () => Promise<void>): Promise<void> {
+    const run = this.queue.then(task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Waits until no save or disk check is queued, including ones queued while waiting. */
+  private async drain(): Promise<void> {
+    let tail: Promise<void>;
+    do {
+      tail = this.queue;
+      await tail;
+    } while (tail !== this.queue);
+  }
+
+  /**
+   * The last save before the page closes or the app quits. An open conflict
+   * keeps both sides. Text that still cannot reach the file goes to an
+   * unsaved copy, so it is never only in memory. Reports the page when its
+   * text is not in its file.
+   */
+  private async settle(): Promise<UnsavedPage | null> {
+    const name = noteName(this.path);
     try {
-      response = await window.markdownAPI.read(path);
+      this.cancelTimer();
+      await this.serial(() => this.write());
+      await this.drain();
+      if (this.conflict) {
+        await this.serial(() => this.keepBoth());
+        // keepBoth said what happened; its copy failed in both places.
+        if (this.conflict) return { name, copy: null };
+      }
+      if (this.latest === this.saved) return null;
+      const unsaved = { name, copy: await this.saveCopy(this.latest, 'unsaved copy') };
+      // An open page shows the failure itself, and a quit asks about it.
+      if (!this.live) {
+        if (unsaved.copy) toast.error(`Could not save ${unsaved.name}. Your changes are in ${copyLocation(this.path, unsaved.copy)}.`);
+        else toast.error(`Could not save ${unsaved.name} or a copy of it. Your last changes are lost.`);
+      }
+      return unsaved;
+    } catch {
+      return { name, copy: null };
+    }
+  }
+
+  /** Writes text to a new copy next to the note, or in the recovery folder; null when neither took it. */
+  private async saveCopy(text: string, label: MarkdownCopyLabel): Promise<string | null> {
+    try {
+      const saved = await window.markdownAPI.saveCopy(this.path, text, label);
+      return saved.success ? saved.data.path : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Autosave about 800ms after the last change, and at least every 5s while typing goes on. */
+  private schedule(): void {
+    const now = Date.now();
+    this.dirtySince ??= now;
+    const wait = Math.max(0, Math.min(AUTOSAVE_DELAY_MS, this.dirtySince + AUTOSAVE_MAX_WAIT_MS - now));
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this.timer = null; void this.serial(() => this.write()); }, wait);
+  }
+
+  private cancelTimer(): void {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+  }
+
+  private publish(patch: Partial<MarkdownDocumentState>): void {
+    if (!this.live) return;
+    if (patch.saveState) this.saveState = patch.saveState;
+    this.update(patch);
+  }
+
+  private show(text: string): void {
+    this.latest = text;
+    this.editor?.setText(text);
+  }
+
+  private async load(): Promise<void> {
+    let response: ReadResponse;
+    try {
+      response = await window.markdownAPI.read(this.path);
     } catch {
       response = { success: false, error: 'Could not open this note.' };
     }
-    if (token !== generation.current || !alive.current) return;
     if (!response.success) {
-      patch({ status: 'unavailable', error: response.error, body: null });
+      this.publish({ status: 'unavailable', error: response.error, body: null });
       return;
     }
-    revision.current = response.data.revision;
-    latest.current = response.data.body;
-    dirty.current = false;
-    setState((previous) => ({
-      status: 'ready',
-      body: response.data.body,
-      seed: reseed ? previous.seed + 1 : previous.seed,
-      saveState: 'clean',
-      error: null,
-      hasFrontmatter: response.data.hasFrontmatter,
-    }));
-  }, [path, patch]);
+    this.revision = response.data.revision;
+    this.saved = this.latest = response.data.body;
+    this.publish({ status: 'ready', body: response.data.body, saveState: 'clean', error: null, properties: response.data.properties });
+  }
 
-  const save = useCallback((): Promise<void> => {
-    if (inFlight.current && inFlightWrite.current) return inFlightWrite.current;
-    if (!dirty.current || revision.current === null) return Promise.resolve();
-    inFlight.current = true;
-    const text = latest.current;
-    const basedOn = revision.current;
-    patch({ saveState: 'saving', error: null });
-    const run = (async () => {
-      let response: Awaited<ReturnType<typeof window.markdownAPI.write>>;
-      try {
-        response = await window.markdownAPI.write(path, text, basedOn);
-      } catch {
-        response = { success: false, error: 'Could not save this note.' };
+  private async write(): Promise<void> {
+    if (this.conflict || this.revision === null) return;
+    const text = this.latest;
+    if (text === this.saved) return;
+    this.dirtySince = null;
+    this.publish({ saveState: 'saving', error: null });
+    let response: WriteResponse;
+    try {
+      response = await window.markdownAPI.write(this.path, text, this.revision);
+    } catch {
+      response = { success: false, error: 'Could not save this note.' };
+    }
+    if (!response.success) {
+      if (response.conflict) {
+        // Still unsaved until the disk check below folds the two versions together.
+        this.publish({ saveState: 'dirty' });
+        return this.reconcileNow();
       }
-      inFlight.current = false;
-      inFlightWrite.current = null;
-      if (!alive.current) return;
-      if (!response.success) {
-        patch({ saveState: response.conflict ? 'conflict' : 'error', error: response.error });
+      this.publish({ saveState: 'error', error: response.error });
+      return;
+    }
+    this.revision = response.data.revision;
+    this.saved = text;
+    if (this.latest === text) {
+      this.publish({ saveState: 'saved' });
+    } else {
+      // Typing went on while the write was in flight; the next save covers it.
+      this.publish({ saveState: 'dirty' });
+      if (this.live) this.schedule();
+    }
+  }
+
+  /**
+   * A clean page follows the disk. A dirty one merges: changes on different
+   * lines combine and save; changes to the same lines become a conflict the
+   * editor shows, or, once the page is closed, a copy that keeps both.
+   */
+  private async reconcileNow(): Promise<void> {
+    if (this.revision === null) return;
+    let response: ReadResponse;
+    try { response = await window.markdownAPI.read(this.path); } catch { return; }
+    // A file that went away or became unreadable stays as typed; the next save reports it.
+    if (!response.success) return;
+    const { body: disk, revision, properties } = response.data;
+    if (revision === (this.conflict?.revision ?? this.revision)) return;
+    const merged: MergeResult = this.latest === this.saved ? { clean: true, text: disk } : mergeText(this.saved, this.latest, disk);
+    if (merged.clean) {
+      this.conflict = null;
+      this.show(merged.text);
+      this.saved = disk;
+      this.revision = revision;
+      if (merged.text === disk) {
+        this.publish({ conflict: null, properties, saveState: 'clean' });
         return;
       }
-      revision.current = response.data.revision;
-      if (latest.current === text) {
-        dirty.current = false;
-        patch({ saveState: 'saved' });
-      } else {
-        // Typing continued while the write was in flight; the next save covers it.
-        patch({ saveState: 'dirty' });
-        timer.current = setTimeout(() => { timer.current = null; void save(); }, AUTOSAVE_DELAY_MS);
-      }
-    })();
-    inFlightWrite.current = run;
-    return run;
-  }, [path, patch]);
-
-  const onChange = useCallback((markdown: string) => {
-    if (markdown === latest.current && !dirty.current) return;
-    latest.current = markdown;
-    dirty.current = true;
-    setState((previous) =>
-      previous.saveState === 'conflict' || previous.saveState === 'dirty' ? previous : { ...previous, saveState: 'dirty' }
-    );
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { timer.current = null; void save(); }, AUTOSAVE_DELAY_MS);
-  }, [save]);
-
-  const flush = useCallback(async () => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    await save();
-  }, [save]);
-
-  const reloadFromDisk = useCallback(async () => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    await load(true);
-  }, [load]);
-
-  const keepMine = useCallback(async () => {
-    // A blur-triggered write may still be in flight (and about to conflict);
-    // let it settle, then adopt the on-disk revision and write over it.
-    if (inFlightWrite.current) await inFlightWrite.current;
-    let response: Awaited<ReturnType<typeof window.markdownAPI.read>>;
-    try {
-      response = await window.markdownAPI.read(path);
-    } catch {
-      response = { success: false, error: 'Could not read this note.' };
+      this.publish({ conflict: null, properties, saveState: 'dirty' });
+      void this.serial(() => this.write());
+      return;
     }
-    if (!alive.current) return;
-    if (!response.success) { patch({ saveState: 'error', error: response.error }); return; }
-    revision.current = response.data.revision;
-    dirty.current = true;
-    await save();
-  }, [path, patch, save]);
+    this.cancelTimer();
+    this.show(merged.mine);
+    this.conflict = { disk, revision };
+    this.publish({ saveState: 'conflict', conflict: { disk: merged.disk }, error: null, properties });
+  }
+
+  /**
+   * Settles an open conflict without a pick: the page's text goes to a copy
+   * next to the file, and the page takes the disk version.
+   */
+  private async keepBoth(): Promise<void> {
+    const conflict = this.conflict;
+    if (!conflict) return;
+    const name = noteName(this.path);
+    const copy = await this.saveCopy(this.latest, 'conflicted copy');
+    if (!copy) {
+      toast.error(this.live
+        ? `Could not save your version of ${name}. It is still open in the page.`
+        : `Could not save your version of ${name} or a copy of it. Your last changes are lost.`);
+      return;
+    }
+    toast(`Your version of ${name} was saved as ${copyLocation(this.path, copy)}.`);
+    this.conflict = null;
+    this.show(conflict.disk);
+    this.saved = conflict.disk;
+    this.revision = conflict.revision;
+    this.publish({ conflict: null, saveState: 'clean' });
+  }
+}
+
+/**
+ * Owns one Markdown file's edit lifecycle: load once, autosave against the
+ * loaded revision, follow disk changes, and merge them into unsaved edits.
+ * Nothing is written for a clean file.
+ */
+export function useMarkdownDocument(path: string): MarkdownDocumentState & MarkdownDocumentActions {
+  const [state, setState] = useState<MarkdownDocumentState>(INITIAL);
+  const session = useMemo(
+    () => new MarkdownDocumentSession(path, (patch) => setState((previous) => ({ ...previous, ...patch }))),
+    [path]
+  );
 
   useEffect(() => {
-    alive.current = true;
-    revision.current = null;
-    latest.current = '';
-    dirty.current = false;
-    inFlight.current = false;
-    setState(INITIAL);
-    void load(true);
-    return () => {
-      alive.current = false;
-      generation.current += 1;
-      if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-      // Leaving the file saves what was typed; a conflict stays on disk untouched.
-      if (dirty.current && revision.current !== null && !inFlight.current) {
-        void window.markdownAPI.write(path, latest.current, revision.current);
-      }
-    };
-  }, [path, load]);
+    session.open();
+    return () => session.close();
+  }, [session]);
 
-  // A clean document follows external edits silently; a dirty one waits for the save to report a conflict.
   useEffect(() => {
     const folder = parentFsPath(path);
     return window.diskAPI.onChanged(({ directories }) => {
-      if (!folder || !directories.includes(folder) || dirty.current || inFlight.current) return;
-      void (async () => {
-        let response: Awaited<ReturnType<typeof window.markdownAPI.read>>;
-        try { response = await window.markdownAPI.read(path); } catch { return; }
-        if (!alive.current || !response.success || dirty.current) return;
-        if (response.data.revision !== revision.current) await load(true);
-      })();
+      if (folder && directories.includes(folder)) void session.reconcile();
     });
-  }, [path, load]);
+  }, [path, session]);
 
+  // A reload of the renderer gets no close request from the main process.
   useEffect(() => {
-    const handler = () => { void flush(); };
+    const handler = () => { void session.flush(); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [flush]);
+  }, [session]);
 
   // Publish the save state so the tab strip can show an unsaved dot or a problem.
   useEffect(() => {
@@ -192,5 +350,5 @@ export function useMarkdownDocument(path: string): MarkdownDocumentState & Markd
   }, [path, state.saveState]);
   useEffect(() => () => useDocumentStatusStore.getState().clear(path), [path]);
 
-  return { ...state, onChange, flush, reloadFromDisk, keepMine };
+  return { ...state, onChange: session.onChange, flush: session.flush, attach: session.attach, resolveConflict: session.resolveConflict };
 }

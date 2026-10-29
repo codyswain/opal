@@ -3,6 +3,8 @@ import { useTabsStore } from '../store/tabsStore';
 
 /** Stops waiting for a page to grow tall enough to restore its scroll. */
 const RESTORE_TIMEOUT_MS = 1500;
+/** Frames a restored scroll must hold before the restore is done. */
+const SETTLE_FRAMES = 3;
 /** The page scroller sits a few levels inside the viewer. */
 const SCROLLER_DEPTH = 6;
 
@@ -46,17 +48,27 @@ export function useTabScroll(
     let last = target;
     let restoring = target > 0;
     let frame = 0;
+    let settled = 0;
     let scroller: HTMLElement | null = null;
     const started = performance.now();
     const pageScroller = () =>
       scroller?.isConnected ? scroller : (scroller = findPageScroller(element));
 
+    // A page that measures what it draws as it scrolls, as CodeMirror does,
+    // can move a restored scroll once the lines above it are measured, so the
+    // scroll is set again until it holds.
     const restore = () => {
       const page = pageScroller();
       const waited = performance.now() - started > RESTORE_TIMEOUT_MS;
       if (page && (page.scrollHeight - page.clientHeight >= target || waited)) {
-        page.scrollTop = target;
-      } else if (!waited) {
+        if (Math.abs(page.scrollTop - target) > 1) {
+          page.scrollTop = target;
+          settled = 0;
+        } else {
+          settled += 1;
+        }
+      }
+      if (!waited && settled < SETTLE_FRAMES) {
         frame = window.requestAnimationFrame(restore);
         return;
       }

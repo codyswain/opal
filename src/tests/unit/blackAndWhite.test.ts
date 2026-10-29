@@ -46,7 +46,7 @@ function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((name) => {
     const file = path.join(directory, name);
     if (statSync(file).isDirectory()) return sourceFiles(file);
-    return /\.(tsx?)$/.test(name) ? [file] : [];
+    return /\.(tsx?|css)$/.test(name) ? [file] : [];
   });
 }
 

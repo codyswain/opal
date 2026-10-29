@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowedNavigation, type NavigationGuardOptions } from '@/main/window/navigationGuard';
+import { isAllowedNavigation, isExternalLink, type NavigationGuardOptions } from '@/main/window/navigationGuard';
 import { installDropGuard } from '@/renderer/shared/dropGuard';
 
 describe('isAllowedNavigation', () => {
@@ -15,6 +15,18 @@ describe('isAllowedNavigation', () => {
     expect(isAllowedNavigation('file:///Applications/Opal.app/Contents/Resources/app/.vite/renderer/main_window/index.html#/files', packaged)).toBe(true);
     expect(isAllowedNavigation('file:///Users/someone/cost-of-cognition/', packaged)).toBe(false);
     expect(isAllowedNavigation('not a url', packaged)).toBe(false);
+  });
+});
+
+describe('isExternalLink', () => {
+  it('opens web and mail links outside the app, and nothing that reaches files or the app', () => {
+    expect(isExternalLink('https://example.com/a?b=c')).toBe(true);
+    expect(isExternalLink('http://example.com')).toBe(true);
+    expect(isExternalLink('mailto:robert@ishikilabs.ai')).toBe(true);
+    expect(isExternalLink('file:///etc/passwd')).toBe(false);
+    expect(isExternalLink('opal-file:///Users/cody/code/vault/a.png')).toBe(false);
+    expect(isExternalLink('javascript:alert(1)')).toBe(false);
+    expect(isExternalLink('example.com')).toBe(false);
   });
 });
 

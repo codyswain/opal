@@ -1,6 +1,5 @@
 @import "@fontsource-variable/inter/opsz.css";
 @import "@fontsource-variable/inter/opsz-italic.css";
-@import "katex/dist/katex.min.css";
 
 @tailwind base;
 @tailwind components;

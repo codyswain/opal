@@ -77,6 +77,19 @@ describe('useTabScroll', () => {
     expect(screen.getByTestId('scroller').scrollTop).toBe(900);
   });
 
+  it('sets a restored place again when the page moves it while it draws', async () => {
+    openTabs(['/V/long.md']);
+    act(() => useTabsStore.getState().saveScroll(tabId(0), 0, 900));
+    render(<Page />);
+    const scroller = screen.getByTestId('scroller');
+    await frame();
+    expect(scroller.scrollTop).toBe(900);
+    // CodeMirror measures the lines above and keeps its anchor, moving the scroll.
+    scroller.scrollTop = 1736;
+    for (let count = 0; count < 5; count += 1) await frame();
+    expect(scroller.scrollTop).toBe(900);
+  });
+
   it('saves onto the page it left when an earlier history entry is removed', async () => {
     openTabs(['/V/a.md']);
     for (const file of ['/V/b.md', '/V/c.md', '/V/d.md']) useTabsStore.getState().open(fileLocation(file));
