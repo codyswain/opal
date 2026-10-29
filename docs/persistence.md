@@ -7,7 +7,7 @@ back up the personal workspace or update the installed application.
 | --- | --- | --- |
 | Journal, task sources, attachments | Mounted vault folders | Include each folder, including hidden metadata |
 | Daily focus | Vault `.opal/days` | Include in private vault history |
-| Conversations, views, recent activity | Application Support/Opal/library | Back up with the vault |
+| Recent activity | Application Support/Opal/library | Back up with the vault |
 | Journal recovery drafts | Application Support/Opal/journal-drafts | Back up with the vault |
 | UI preferences, legacy database | Remaining Application Support/Opal | Include the full profile for recovery |
 | Search indexes and thumbnails | Application Support/Opal | Rebuildable; currently included in full copies |

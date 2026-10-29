@@ -1,7 +1,6 @@
 import React, { useEffect } from "react";
 import { toast } from "sonner";
 import { COMMAND_IDS } from "@/common/commandIds";
-import { folderScope } from "@/common/collectionQuery";
 import { parentFsPath } from "@/common/fsPaths";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
@@ -9,12 +8,10 @@ import {
   browseFiles,
   browseRecent,
   focusFile,
-  queryCollection,
   RECENT_COLLECTION,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore";
-import { useViewDraftsStore } from "@/renderer/features/disk-explorer/store/viewDraftsStore";
 import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
@@ -139,21 +136,6 @@ export const AppCommands: React.FC = () => {
               ),
             );
           });
-        },
-      },
-      {
-        id: "files.newView",
-        name: "New View",
-        type: "action",
-        keywords: ["filter", "collection", "saved", "query"],
-        perform: () => {
-          const folder = useDiskStore.getState().currentDirectory;
-          const id = useViewDraftsStore
-            .getState()
-            .create(
-              folder ? { scope: folderScope(folder), origin: folder } : {},
-            );
-          navigateFiles(browseCollection(queryCollection(id)));
         },
       },
       {

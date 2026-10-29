@@ -1,30 +1,15 @@
 import * as React from "react";
 import { toast } from "sonner";
-import {
-  AlertTriangle,
-  Bookmark,
-  Clock,
-  Files,
-  FolderPlus,
-  Plus,
-  Settings,
-  SlidersHorizontal,
-  Sun,
-} from "lucide-react";
+import { Clock, Files, FolderPlus, Settings, Sun } from "lucide-react";
 import { isFsPathAtOrBelow } from "@/common/fsPaths";
 import {
   FILES_ROUTE_PATH,
   RECENT_COLLECTION,
-  browseCollection,
   browseFiles,
   directoryCollection,
-  queryCollection,
   serializeFilesLocation,
-  viewCollection,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
-import { useViewDraftsStore } from "@/renderer/features/disk-explorer/store/viewDraftsStore";
-import { useSavedViewsStore } from "@/renderer/features/disk-explorer/store/savedViewsStore";
 import { ThemeToggle } from "@/renderer/features/theme";
 import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
@@ -61,27 +46,8 @@ export function WorkspaceSidebar({
   const openFolder = useDiskStore((state) => state.openFolder);
   const { navigateFiles, location } = useShell();
   const currentRoot = rootForDirectory(roots, currentDirectory);
-  const drafts = useViewDraftsStore((state) => state.drafts);
-  const draftOrder = useViewDraftsStore((state) => state.order);
-  const createDraft = useViewDraftsStore((state) => state.create);
-  const savedViews = useSavedViewsStore((state) => state.views);
-  const savedOrder = useSavedViewsStore((state) => state.order);
-  const unreadableViews = useSavedViewsStore((state) => state.unreadable);
-  React.useEffect(() => {
-    useSavedViewsStore.getState().subscribe();
-    void useSavedViewsStore.getState().load();
-  }, []);
   const onFiles = location.pathname === FILES_ROUTE_PATH;
   const isRecent = currentCollection?.kind === "recent";
-  const currentQueryId =
-    currentCollection?.kind === "query" || currentCollection?.kind === "view"
-      ? currentCollection.id
-      : null;
-  const newView = () => {
-    const id = createDraft();
-    navigateFiles(browseCollection(queryCollection(id)));
-    onNavigate?.();
-  };
   const recentDestination = {
     pathname: FILES_ROUTE_PATH,
     search: serializeFilesLocation({
@@ -146,7 +112,7 @@ export function WorkspaceSidebar({
             to={filesDestination}
             icon={Files}
             label="Library"
-            active={onFiles && !isRecent && !currentQueryId}
+            active={onFiles && !isRecent}
             onActivate={onNavigate}
           />
           {onFiles && (
@@ -163,79 +129,6 @@ export function WorkspaceSidebar({
 
       {onFiles ? (
         <>
-          <SidebarSection
-            title="Views"
-            className="border-t border-border-subtle pt-1"
-            action={
-              <IconButton label="New view" onClick={newView} size="compact">
-                <Plus aria-hidden className="h-3.5 w-3.5" />
-              </IconButton>
-            }
-          >
-            {draftOrder.length === 0 &&
-            savedOrder.length === 0 &&
-            unreadableViews.length === 0 ? (
-              <p className="px-2 py-1 text-metadata text-foreground-tertiary">
-                Filter any folder to start a view.
-              </p>
-            ) : (
-              <ul aria-label="Views" className="flex flex-col">
-                {savedOrder.map((id) => (
-                  <li key={id}>
-                    <SidebarItem
-                      to={{
-                        pathname: FILES_ROUTE_PATH,
-                        search: serializeFilesLocation({
-                          mode: "browse",
-                          collection: viewCollection(id),
-                        }),
-                      }}
-                      icon={Bookmark}
-                      label={savedViews[id]?.name ?? "View"}
-                      active={onFiles && currentQueryId === id}
-                      onActivate={onNavigate}
-                    />
-                  </li>
-                ))}
-                {unreadableViews.map((entry) => (
-                  <li key={entry.file}>
-                    <div
-                      role="note"
-                      title={entry.error}
-                      aria-label={`Unreadable view file ${entry.file.split("/").pop() ?? entry.file}`}
-                      className="flex h-row-compact items-center gap-2 rounded-row px-2 text-ui text-foreground-tertiary opacity-70"
-                    >
-                      <AlertTriangle
-                        aria-hidden
-                        className="h-4 w-4 shrink-0 text-icon"
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {entry.file.split("/").pop()}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-                {draftOrder.map((id) => (
-                  <li key={id}>
-                    <SidebarItem
-                      to={{
-                        pathname: FILES_ROUTE_PATH,
-                        search: serializeFilesLocation({
-                          mode: "browse",
-                          collection: queryCollection(id),
-                        }),
-                      }}
-                      icon={SlidersHorizontal}
-                      label={drafts[id]?.name ?? "Untitled view"}
-                      active={onFiles && currentQueryId === id}
-                      onActivate={onNavigate}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SidebarSection>
-
           <SidebarSection
             title="Open folders"
             className="flex min-h-0 flex-1 flex-col border-t border-border-subtle pt-1"

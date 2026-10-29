@@ -35,9 +35,8 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
   expect(results.open.success).toBe(false);
 
   // The newer namespaces cross the same boundary with the same guard: activity
-  // refuses paths outside opened roots, a collection scoped outside them
-  // reports the scope instead of searching elsewhere, and a saved view's
-  // revision check holds through IPC.
+  // refuses paths outside opened roots, and a collection scoped outside them
+  // reports the scope instead of searching elsewhere.
   const boundary = await page.evaluate(async () => {
     const query = {
       version: 1 as const,
@@ -45,15 +44,9 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
       filters: [] as never[],
       sort: { field: 'name' as const, direction: 'asc' as const },
     };
-    const created = await window.viewsAPI.create({ name: 'Boundary check', layout: 'list', query });
-    const stale = created.success
-      ? await window.viewsAPI.save(created.data.id, { name: 'Changed', layout: 'list', query }, 'not-the-revision')
-      : null;
     return {
       activity: await window.activityAPI.record('/etc/hosts', 'opened'),
       collection: await window.collectionsAPI.query(query),
-      created: created.success,
-      stale,
     };
   });
 
@@ -61,6 +54,4 @@ test('refuses to reveal or open a path outside every opened root', async ({ page
   expect(boundary.collection.success).toBe(true);
   expect(boundary.collection.data?.unavailableScopes).toEqual(['/etc']);
   expect(boundary.collection.data?.rows).toEqual([]);
-  expect(boundary.created).toBe(true);
-  expect(boundary.stale).toMatchObject({ success: false, conflict: true });
 });

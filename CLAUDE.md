@@ -11,8 +11,8 @@ that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
 - **State:** Zustand for global state, React hooks for local state
 - **Editor:** TipTap with `tiptap-markdown` (Markdown files on disk)
 - **Storage:** the user's folders are the store; authored metadata lives in
-  frontmatter or `.opal.yaml` sidecars; personal state (activity, saved views)
-  lives under `<userData>/library/` as JSON and YAML
+  frontmatter or `.opal.yaml` sidecars; personal state (activity)
+  lives under `<userData>/library/` as JSON
 - **Build:** Vite (3 configs: main, preload, renderer) + Electron Forge
 - **Testing:** Vitest + Testing Library + Happy DOM
 - **Linting:** ESLint with TypeScript plugin
@@ -22,7 +22,7 @@ that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
 
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `metadataAPI`,
-    `activityAPI`, `collectionsAPI`, `viewsAPI`, `markdownAPI`, `vaultAPI`
+    `activityAPI`, `collectionsAPI`, `markdownAPI`, `vaultAPI`
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame)
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
@@ -39,8 +39,7 @@ src/
   main/                # Main process
     fs/                # Roots, listings, watcher, metadata, file mutations
     activity/          # Personal activity behind Recent
-    collections/       # Disposable index and query evaluation for views
-    views/             # Saved view definitions on disk
+    collections/       # Disposable index and query evaluation (folder Filter, palette file search)
     library/           # The <userData>/library layout
     services/          # Credentials, system
     window/            # Window state, navigation guard
@@ -49,7 +48,7 @@ src/
     shared/            # Reusable components, hooks, utils, types
     store/             # Zustand stores
     styles/            # Global CSS
-  types/               # Shared contracts (disk, metadata, activity, queries, views)
+  types/               # Shared contracts (disk, metadata, activity, queries)
   common/              # Renderer-safe shared logic (validation, paths, formatting)
   tests/               # Vitest tests
 e2e/                   # Playwright Electron suite and acceptance scripts

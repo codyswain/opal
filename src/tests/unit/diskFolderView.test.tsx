@@ -98,6 +98,7 @@ describe('DiskFolderView', () => {
     render(<DiskFolderView dirPath={PHOTOS} />);
     await waitFor(() => expect(screen.getByText('Raw')).toBeInTheDocument());
     expect(screen.getByText('notes.md')).toBeInTheDocument();
+    expect(screen.queryByTestId('views-menu')).toBeNull();
   });
 
   it('switches to list mode and shows a size column', async () => {

@@ -15,9 +15,6 @@ import { TooltipProvider } from "@/renderer/shared/ui";
 import { entry, installDiskApi } from "@/tests/helpers/diskApi";
 import { installActivityApi } from "@/tests/helpers/activityApi";
 import { installCollectionsApi } from "@/tests/helpers/collectionsApi";
-import { installViewsApi, savedView } from "@/tests/helpers/viewsApi";
-import { useSavedViewsStore } from "@/renderer/features/disk-explorer/store/savedViewsStore";
-import { useViewDraftsStore } from "@/renderer/features/disk-explorer/store/viewDraftsStore";
 import { localDate } from "@/common/vaultModel";
 
 const ROOT = "/Vault";
@@ -74,9 +71,6 @@ beforeEach(() => {
   window.localStorage.clear();
   installActivityApi();
   installCollectionsApi();
-  installViewsApi();
-  useSavedViewsStore.getState().reset();
-  useViewDraftsStore.getState().clearAll();
   installDiskApi({
     listRoots: vi.fn(async () => ({
       success: true as const,
@@ -139,9 +133,6 @@ describe("WorkspaceSidebar", () => {
 
   it("keeps the sidebar quiet outside the library", async () => {
     renderSidebar(false, "/settings");
-    await waitFor(() =>
-      expect(useSavedViewsStore.getState().loaded).toBe(true),
-    );
     expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
     expect(screen.queryByText("Open folders")).toBeNull();
@@ -159,6 +150,8 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByText("Favorites")).toBeNull();
     expect(screen.queryByText("Search")).toBeNull();
+    expect(screen.queryByText("Views")).toBeNull();
+    expect(screen.queryByRole("button", { name: "New view" })).toBeNull();
 
     const root = await screen.findByTestId(`disk-tree-item-${ROOT}`);
     expect(root).toHaveAttribute("aria-level", "1");
@@ -235,73 +228,5 @@ describe("WorkspaceSidebar", () => {
       expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
     );
     expect(files).toHaveClass("bg-surface-selected");
-  });
-
-  it("creates a transient view from the Views section and lists it", async () => {
-    const user = userEvent.setup();
-    renderSidebar(true);
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
-    );
-    expect(
-      screen.getByText("Filter any folder to start a view."),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "New view" }));
-    // Route application, draft creation and the collection load chain through
-    // several stores; under full-suite load this exceeds the default wait.
-    await waitFor(
-      () =>
-        expect(useDiskStore.getState().currentCollection).toMatchObject({
-          kind: "query",
-        }),
-      { timeout: 4000 },
-    );
-    const id = useViewDraftsStore.getState().order[0];
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      `/files?mode=browse&collection=query&id=${id}`,
-    );
-    const view = screen.getByRole("link", { name: "Untitled view" });
-    expect(view).toHaveClass("bg-surface-selected");
-    expect(screen.getByRole("link", { name: "Library" })).not.toHaveClass(
-      "bg-surface-selected",
-    );
-    expect(window.activityAPI.record).not.toHaveBeenCalled();
-    expect(useViewDraftsStore.getState().get(id)?.query.scope).toEqual({
-      kind: "all-roots",
-    });
-  });
-
-  it("lists saved views and unreadable files, and opens a saved view", async () => {
-    const view = savedView({ name: "Project references" });
-    installViewsApi([view], {
-      list: vi.fn(async () => ({
-        success: true as const,
-        data: {
-          views: [view],
-          unreadable: [
-            { file: "/library/views/broken.yaml", error: "Malformed YAML" },
-          ],
-        },
-      })),
-    });
-    const user = userEvent.setup();
-    renderSidebar(true);
-    const link = await screen.findByRole("link", {
-      name: "Project references",
-    });
-    expect(
-      screen.getByRole("note", { name: "Unreadable view file broken.yaml" }),
-    ).toHaveAttribute("title", "Malformed YAML");
-    await user.click(link);
-    await waitFor(() =>
-      expect(useDiskStore.getState().currentCollection).toEqual({
-        kind: "view",
-        id: view.id,
-      }),
-    );
-    expect(link).toHaveClass("bg-surface-selected");
-    expect(screen.getByRole("link", { name: "Library" })).not.toHaveClass(
-      "bg-surface-selected",
-    );
   });
 });

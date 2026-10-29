@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { FolderOpen, RotateCw, SearchX, X } from 'lucide-react';
-import { toast } from 'sonner';
-import { LISTING_SORT_FIELDS, folderScope, suggestViewName } from '@/common/collectionQuery';
+import { LISTING_SORT_FIELDS, folderScope } from '@/common/collectionQuery';
 import { filterEntries } from '@/common/filterEntries';
 import { formatBytes } from '@/common/formatBytes';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
@@ -9,15 +8,11 @@ import { activityReason, formatRelativeTime } from '@/common/relativeTime';
 import { sortEntries, type SortField } from '@/common/sortEntries';
 import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
-import type { SavedView } from '@/types/savedView';
 import { Button } from '@/renderer/shared/ui';
 import { useDiskStore } from '../store/diskStore';
 import { DEFAULT_FOLDER_VIEW, useFolderViewStore } from '../store/folderViewStore';
-import { useSavedViewsStore } from '../store/savedViewsStore';
-import { useViewDraftsStore } from '../store/viewDraftsStore';
-import { directoryCollection, viewCollection } from '../navigation/filesLocation';
+import { directoryCollection } from '../navigation/filesLocation';
 import { filesLocationSnapshots } from '../navigation/filesLocationSnapshots';
-import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { Breadcrumb } from './Breadcrumb';
 import { CollectionView, type CollectionRowDecoration, type CollectionViewMode } from './CollectionView';
 import { EmptyState } from './EmptyState';
@@ -26,7 +21,6 @@ import { Toolbar } from './Toolbar';
 import { DisplayPopover } from './query/DisplayPopover';
 import { CHIP_TEXT_INPUT } from './query/FilterChips';
 import { ListToolbar } from './query/ListToolbar';
-import { ViewsPopover } from './query/ViewsPopover';
 import { filtersFromChips, newChip } from './query/editableFilters';
 import { useCollectionResult } from './query/useCollectionResult';
 import { useTagSuggestions } from './query/useTagSuggestions';
@@ -36,8 +30,6 @@ interface DiskFolderViewProps {
   /** Rendered at the end of the toolbar, such as the Preview toggle. */
   trailing?: React.ReactNode;
 }
-
-const UNDO_WINDOW_MS = 10_000;
 
 function detailFor(row: CollectionRow, query: CollectionQuery, now: number): string {
   switch (query.sort.field) {
@@ -56,10 +48,9 @@ function detailFor(row: CollectionRow, query: CollectionQuery, now: number): str
  * A folder, wearing the one list toolbar. With no filters it lists the
  * folder's own children; the first chip (or Include subfolders, or an
  * activity sort) turns the same surface into a collection query scoped to
- * the folder, without leaving it. Saving the toolbar state names a view.
+ * the folder, without leaving it.
  */
 export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailing }) => {
-  const navigation = useFilesNavigation();
   const entries = useDiskStore((state) => state.listings[dirPath]);
   const loadDirectory = useDiskStore((state) => state.loadDirectory);
   const sort = useDiskStore((state) => state.sort);
@@ -136,40 +127,6 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailin
     };
   }, [query, byPath, now, view.includeDescendants, dirPath]);
 
-  const suggestedName = query ? suggestViewName(query) : `Everything in ${basenameFsPath(dirPath)}`;
-  const definition = () => ({
-    query: query ?? { version: 1 as const, scope: folderScope(dirPath, view.includeDescendants), filters, sort: { field: sort.field, direction: sort.direction } },
-    layout,
-  });
-  const saveAsView = async (name: string) => {
-    const response = await window.viewsAPI.create({ ...definition(), name });
-    if (!response.success) { toast.error(response.error); return; }
-    await useSavedViewsStore.getState().load();
-    useViewDraftsStore.getState().openSaved(response.data);
-    toast(`Saved “${name}”`);
-    navigation.navigateCollection(viewCollection(response.data.id));
-  };
-  const openView = (saved: SavedView) => {
-    useViewDraftsStore.getState().openSaved(saved);
-    navigation.navigateCollection(viewCollection(saved.id));
-  };
-  const renameView = async (saved: SavedView, name: string) => {
-    const response = await window.viewsAPI.save(saved.id, { name, query: saved.query, layout: saved.layout }, saved.revision);
-    if (!response.success) { toast.error(response.error); return; }
-    await useSavedViewsStore.getState().load();
-  };
-  const removeView = async (saved: SavedView) => {
-    const response = await window.viewsAPI.remove(saved.id);
-    if (!response.success) { toast.error(response.error); return; }
-    useViewDraftsStore.getState().remove(saved.id);
-    await useSavedViewsStore.getState().load();
-    const { undoToken } = response.data;
-    toast(`Removed “${saved.name}”`, {
-      duration: UNDO_WINDOW_MS,
-      action: { label: 'Undo', onClick: () => { void window.viewsAPI.restore(undoToken).then((restored) => { if (restored.success) void useSavedViewsStore.getState().load(); else toast.error(restored.error); }); } },
-    });
-  };
-
   const toolbar = (
     <ListToolbar
       headerRef={header}
@@ -189,7 +146,6 @@ export const DiskFolderView: React.FC<DiskFolderViewProps> = ({ dirPath, trailin
             includeDescendants={view.includeDescendants}
             onIncludeDescendants={(value) => setIncludeDescendants(dirPath, value)}
           />
-          <ViewsPopover suggestedName={suggestedName} onSaveAs={saveAsView} onOpen={openView} onRename={renameView} onRemove={removeView} />
           {trailing}
         </>
       )}

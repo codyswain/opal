@@ -21,11 +21,6 @@ test("app without a vault launches into the Library", async ({
   // reads and writes the real profile's localStorage preferences.
   await page.evaluate(() => localStorage.setItem("opal.e2e-probe", "1"));
   expect(existsSync(path.join(userDataDir, "Local Storage"))).toBe(true);
-  expect(
-    await page.evaluate(() =>
-      Object.keys(localStorage).filter((key) => key.startsWith("opal.viewDrafts")),
-    ),
-  ).toEqual([]);
 });
 
 test.describe("with a vault", () => {

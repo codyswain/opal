@@ -22,9 +22,6 @@ import { pathMutationCoordinator } from '../navigation/pathMutationCoordinator';
 import { recordOpened } from '../activity/recordActivity';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
-import { useViewDraftsStore } from '../store/viewDraftsStore';
-import { useSavedViewsStore } from '../store/savedViewsStore';
-import { useCollectionQueryStore } from '../store/collectionQueryStore';
 import { useTabsStore } from '../store/tabsStore';
 import { useDocumentStatusStore } from '../store/documentStatusStore';
 import { DiskExplorer } from './DiskExplorer';
@@ -33,33 +30,13 @@ import { DiskExplorer } from './DiskExplorer';
 export function FilesRoute() {
   const roots = useDiskStore((state) => state.roots);
   const location = useLocation();
-  // Only the URL's own collection id is subscribed to, so unrelated draft or
-  // listing churn cannot re-key the apply effect while it is restoring.
-  const urlParams = new URLSearchParams(location.search);
-  const urlCollection = urlParams.get('collection');
-  const urlId = urlParams.get('id');
-  const knownQuery = useViewDraftsStore((state) =>
-    urlCollection === 'query' && urlId ? urlId in state.drafts : false
-  );
-  const knownView = useSavedViewsStore((state) =>
-    urlCollection === 'view' && urlId ? urlId in state.views : false
-  );
-  const viewsLoaded = useSavedViewsStore((state) => state.loaded);
   const navigate = useNavigate();
   const applied = React.useRef<FilesLocation | null>(null);
   const restoring = React.useRef(false);
   const [readyKey, setReadyKey] = React.useState<string | null>(null);
-  // A view URL cannot be judged until the library listing has loaded.
-  const awaitingViews = !viewsLoaded && urlCollection === 'view';
   const resolved = React.useMemo(
-    () =>
-      awaitingViews
-        ? null
-        : resolveFilesLocation(location.search, roots, {
-            isKnownQuery: () => knownQuery,
-            isKnownView: () => knownView,
-          }),
-    [awaitingViews, location.search, roots, knownQuery, knownView]
+    () => resolveFilesLocation(location.search, roots),
+    [location.search, roots]
   );
   const capture = React.useCallback(() => {
     const current = applied.current;
@@ -91,13 +68,10 @@ export function FilesRoute() {
   React.useEffect(() => {
     useTabsStore.getState().hydrate();
     void useDiskStore.getState().loadRoots();
-    useSavedViewsStore.getState().subscribe();
-    void useSavedViewsStore.getState().load();
   }, []);
   React.useEffect(() => useDiskStore.subscribe(() => capture()), [capture]);
   React.useEffect(() => {
     if (!resolved) {
-      if (awaitingViews) return;
       applied.current = null;
       useTabsStore.setState({ openedPath: null, activePath: null });
       return;
@@ -129,10 +103,8 @@ export function FilesRoute() {
       previewIntent.current = null;
     } else useTabsStore.setState({ openedPath: null, activePath: null });
     let cancelled = false;
-    // Null means the directory could not be listed; Recent and query
-    // collections always resolve to a (possibly empty) list and report their
-    // own errors in place.
-    const collection = next.collection;
+    // Null means the directory could not be listed; Recent always resolves
+    // to a (possibly empty) list and reports its own errors in place.
     const visiblePaths: Promise<string[] | null> = directory
       ? state
           .loadDirectory(directory)
@@ -142,34 +114,15 @@ export function FilesRoute() {
                 .getState()
                 .listings[directory]?.map((entry) => entry.path) ?? null
           )
-      : collection.kind === 'query' || collection.kind === 'view'
-        ? (() => {
-            const draftsStore = useViewDraftsStore.getState();
-            if (collection.kind === 'view') {
-              const view = useSavedViewsStore.getState().views[collection.id];
-              if (view) draftsStore.openSaved(view);
-            }
-            const draft = useViewDraftsStore.getState().drafts[collection.id];
-            if (!draft) return Promise.resolve<string[] | null>([]);
-            return useCollectionQueryStore
-              .getState()
-              .load(collection.id, draft.query, { immediate: true })
-              .then(
-                () =>
-                  useCollectionQueryStore
-                    .getState()
-                    .results[collection.id]?.rows.map((row) => row.entry.path) ?? []
-              );
-          })()
-        : useRecentStore
-            .getState()
-            .load()
-            .then(
-              () =>
-                useRecentStore
-                  .getState()
-                  .result?.items.map((item) => item.entry.path) ?? []
-            );
+      : useRecentStore
+          .getState()
+          .load()
+          .then(
+            () =>
+              useRecentStore
+                .getState()
+                .result?.items.map((item) => item.entry.path) ?? []
+          );
     void visiblePaths.then((paths) => {
       if (cancelled) return;
       if (!paths) {
@@ -206,7 +159,7 @@ export function FilesRoute() {
     return () => {
       cancelled = true;
     };
-  }, [resolved, awaitingViews, capture, navigate, go, roots]);
+  }, [resolved, capture, navigate, go, roots]);
 
   React.useEffect(
     () =>
@@ -358,7 +311,7 @@ export function FilesRoute() {
   const key = resolved ? serializeFilesLocation(resolved.location) : null;
   return (
     <FilesNavigationContext.Provider value={actions}>
-      {(key && key !== readyKey) || awaitingViews ? (
+      {key && key !== readyKey ? (
         <div role="status">Loading…</div>
       ) : (
         <DiskExplorer showNavigationPane={false} />
