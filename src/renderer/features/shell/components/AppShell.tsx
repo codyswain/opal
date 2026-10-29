@@ -300,7 +300,6 @@ export function AppShell({ children }: AppShellProps) {
         className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         <Titlebar
-          compact={isNarrow}
           sidebarOpen={sidebarOpen}
           rightSidebarOpen={rightOpen}
           sidebarToggleRef={sidebarToggleRef}

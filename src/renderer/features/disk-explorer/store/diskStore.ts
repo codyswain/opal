@@ -12,7 +12,7 @@ import {
   remapDiskState,
   removePathsFromDiskState,
 } from './diskPathState';
-import { isTreeExpanded } from './treeExpansion';
+import { collapsedTree, isTreeExpanded } from './treeExpansion';
 
 const EXPANDED_PREF_KEY = 'tree.expanded';
 
@@ -47,6 +47,8 @@ export interface DiskActions {
   /** Drop cached listings for directories that changed on disk, and reload the visible ones. */
   invalidate: (directories: string[]) => Promise<void>;
   toggleExpanded: (dirPath: string) => Promise<void>;
+  /** Closes every folder in the tree; the closed state persists like any other. */
+  collapseAll: () => void;
   /** Loads what the tree shows at launch: open roots and the expanded folders inside them. */
   loadTree: () => Promise<void>;
   /** Expands and loads every folder above a path, so the tree can scroll to it. */
@@ -178,6 +180,8 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     // re-expanding is instant.
     if (willExpand) await get().loadDirectory(dirPath);
   },
+
+  collapseAll: () => set((state) => ({ expanded: collapsedTree(state.roots) })),
 
   // Both walk down from the roots one level at a time and only into folders
   // the level above listed, so a folder moved or deleted while Opal was closed

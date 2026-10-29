@@ -50,6 +50,9 @@ const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator
 export function formatShortcut(accelerator: string): string {
   const parts = accelerator.split('+');
   if (!MAC) return parts.map((part) => (part === 'CmdOrCtrl' ? 'Ctrl' : part)).join('+');
-  const glyphs: Record<string, string> = { CmdOrCtrl: '⌘', Cmd: '⌘', Command: '⌘', Ctrl: '⌃', Control: '⌃', Alt: '⌥', Option: '⌥', Shift: '⇧' };
+  const glyphs: Record<string, string> = {
+    CmdOrCtrl: '⌘', Cmd: '⌘', Command: '⌘', Ctrl: '⌃', Control: '⌃', Alt: '⌥', Option: '⌥', Shift: '⇧',
+    Left: '←', Right: '→', Up: '↑', Down: '↓',
+  };
   return parts.map((part) => glyphs[part] ?? part.toUpperCase()).join('');
 }

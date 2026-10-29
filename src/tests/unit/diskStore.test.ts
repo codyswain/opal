@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { canCollapseTree, isTreeExpanded } from '@/renderer/features/disk-explorer/store/treeExpansion';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DiskEntry } from '@/types/disk';
@@ -242,6 +243,24 @@ describe('tree expansion', () => {
 
     await useDiskStore.getState().toggleExpanded(PHOTOS);
     expect(readPref('tree.expanded', null)).toEqual({ [OTHER_ROOT]: false });
+  });
+
+  it('collapses every folder at once and persists it, keeping a lone root open', async () => {
+    useDiskStore.setState({ roots: [ROOT] });
+    await useDiskStore.getState().toggleExpanded(PHOTOS);
+    expect(canCollapseTree([ROOT], useDiskStore.getState().expanded)).toBe(true);
+    useDiskStore.getState().collapseAll();
+    expect(useDiskStore.getState().expanded).toEqual({});
+    expect(readPref('tree.expanded', null)).toEqual({});
+    expect(canCollapseTree([ROOT], useDiskStore.getState().expanded)).toBe(false);
+    expect(isTreeExpanded([ROOT], useDiskStore.getState().expanded, ROOT)).toBe(true);
+
+    // With several roots, the roots are rows, and they close too.
+    useDiskStore.setState({ roots: [ROOT, OTHER_ROOT], expanded: {} });
+    expect(canCollapseTree([ROOT, OTHER_ROOT], {})).toBe(true);
+    useDiskStore.getState().collapseAll();
+    expect(readPref('tree.expanded', null)).toEqual({ [ROOT]: false, [OTHER_ROOT]: false });
+    expect(canCollapseTree([ROOT, OTHER_ROOT], useDiskStore.getState().expanded)).toBe(false);
   });
 
   it('restores expanded folders at launch and forgets those outside the opened roots', async () => {

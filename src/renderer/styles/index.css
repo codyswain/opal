@@ -252,6 +252,17 @@
   --fade-end: 2rem;
 }
 
+/* The sidebar's top row drops Collapse all folders before Search when it runs out of room. */
+.sidebar-top-row {
+  container-type: inline-size;
+}
+
+@container (max-width: 15rem) {
+  .sidebar-collapse-all {
+    display: none;
+  }
+}
+
 /* For making the navbar draggable */
 .drag-handle {
   -webkit-app-region: drag;

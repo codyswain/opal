@@ -226,6 +226,15 @@ export const AppCommands: React.FC = () => {
         perform: () => toggleDaySidebar(),
       },
       {
+        id: COMMAND_IDS.collapseAllFolders,
+        name: "Collapse All Folders",
+        type: "action",
+        // Left collapses a folder in the tree, so Option-Command-Left collapses them all.
+        shortcut: ["Alt+CmdOrCtrl+Left"],
+        keywords: ["tree", "sidebar", "files", "fold", "close folders"],
+        perform: () => useDiskStore.getState().collapseAll(),
+      },
+      {
         id: COMMAND_IDS.toggleProperties,
         name: propertiesOpen ? "Hide Properties" : "Show Properties",
         type: "action",

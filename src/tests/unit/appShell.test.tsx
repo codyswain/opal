@@ -106,7 +106,7 @@ describe('AppShell', () => {
     expect(screen.getByText('Other content')).toBeInTheDocument();
   });
 
-  it('holds the tabs, New tab and the search field in one row with no title or breadcrumb', async () => {
+  it('holds the tabs and New tab in one row, with Search in the top row of the sidebar', async () => {
     const user = userEvent.setup();
     openTabs(['/Vault/brief.md', '/Vault/plan.md']);
     renderShell();
@@ -115,11 +115,67 @@ describe('AppShell', () => {
     expect(titlebar).toHaveClass('drag-handle', 'h-header');
     expect(within(titlebar).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['brief', 'plan']);
     expect(within(titlebar).getByRole('button', { name: 'New tab' })).toBeInTheDocument();
+    expect(within(titlebar).queryByRole('button', { name: 'Search' })).toBeNull();
     expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
 
-    await user.click(within(titlebar).getByRole('button', { name: 'Search' }));
+    // Search is the last control of the sidebar's top row, after Back and Forward.
+    const sidebar = screen.getByTestId('workspace-sidebar');
+    const row = within(sidebar).getByRole('button', { name: 'Go forward' }).closest('.drag-handle') as HTMLElement;
+    expect(within(row).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Hide sidebar',
+      'Go back',
+      'Go forward',
+      'Search',
+    ]);
+    await user.click(within(row).getByRole('button', { name: 'Search' }));
     expect(usePaletteStore.getState()).toMatchObject({ open: true, newTab: false });
+  });
+
+  it('moves Search into the tab row with the other sidebar controls while the sidebar is hidden', async () => {
+    const user = userEvent.setup();
+    openTabs(['/Vault/brief.md']);
+    renderShell();
+    act(() => useShellStore.getState().toggleSidebar());
+    const titlebar = screen.getByTestId('titlebar');
+    const buttons = within(titlebar).getAllByRole('button').map((button) => button.getAttribute('aria-label'));
+    expect(buttons.slice(0, 4)).toEqual(['Show sidebar', 'Go back', 'Go forward', 'Search']);
+    await user.click(within(titlebar).getByRole('button', { name: 'Search' }));
+    expect(usePaletteStore.getState().open).toBe(true);
+  });
+
+  it('offers Collapse all folders beside Search only while a folder is open, and collapses them all', async () => {
+    const user = userEvent.setup();
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      readDirectory: vi.fn(async (path: string) => ({
+        success: true as const,
+        data: {
+          path,
+          entries:
+            path === '/Vault'
+              ? [entry({ path: '/Vault/Library', name: 'Library', isDirectory: true }), entry({ path: '/Vault/readme.md', name: 'readme.md' })]
+              : [entry({ path: `${path}/daily`, name: 'daily', isDirectory: true })],
+        },
+      })),
+    });
+    renderShell();
+    const sidebar = screen.getByTestId('workspace-sidebar');
+    await screen.findByTestId('disk-tree-item-/Vault/Library');
+    expect(within(sidebar).queryByRole('button', { name: 'Collapse all folders' })).toBeNull();
+
+    await user.click(screen.getByTestId('disk-tree-item-/Vault/Library'));
+    await screen.findByTestId('disk-tree-item-/Vault/Library/daily');
+    const collapse = within(sidebar).getByRole('button', { name: 'Collapse all folders' });
+    // Quiet at rest: it shows on hover of the sidebar or with focus in it.
+    expect(collapse).toHaveClass('opacity-0', 'group-hover/sidebar:opacity-100', 'group-focus-within/sidebar:opacity-100');
+    expect(sidebar).toHaveClass('group/sidebar');
+    expect(collapse.nextElementSibling).toHaveAttribute('aria-label', 'Search');
+
+    await user.click(collapse);
+    expect(screen.queryByTestId('disk-tree-item-/Vault/Library/daily')).toBeNull();
+    expect(useDiskStore.getState().expanded).toEqual({});
+    expect(within(sidebar).queryByRole('button', { name: 'Collapse all folders' })).toBeNull();
   });
 
   it('keeps Back and Forward in the sidebar, or in the titlebar when the sidebar is hidden', async () => {
@@ -258,7 +314,7 @@ describe('AppShell', () => {
     expect(useShellStore.getState().sidebarWidth).toBe(232);
   });
 
-  it('starts narrow with an off-canvas sidebar and a folded search field', async () => {
+  it('starts narrow with an off-canvas sidebar and Search in the tab row', async () => {
     const user = userEvent.setup();
     setViewportWidth(640);
     renderShell();
@@ -268,7 +324,7 @@ describe('AppShell', () => {
       'narrow'
     );
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('titlebar')).getByRole('button', { name: 'Search' })).toHaveTextContent('');
+    expect(within(screen.getByTestId('titlebar')).getByRole('button', { name: 'Search' })).toBeInTheDocument();
 
     act(() => useShellStore.getState().toggleSidebar());
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();

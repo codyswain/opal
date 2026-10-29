@@ -10,6 +10,7 @@ const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
   { id: COMMAND_IDS.toggleProperties, label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' },
+  { id: COMMAND_IDS.collapseAllFolders, label: 'Collapse All Folders', accelerator: 'Alt+CmdOrCtrl+Left' },
   { id: COMMAND_IDS.newTab, label: 'New Tab', accelerator: 'CmdOrCtrl+T' },
   { id: COMMAND_IDS.closeTab, label: 'Close Tab', accelerator: 'CmdOrCtrl+W' },
   { id: COMMAND_IDS.reopenClosedTab, label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T' },
@@ -96,7 +97,10 @@ describe('buildMenuTemplate', () => {
       'Toggle Right Sidebar CmdOrCtrl+Shift+\\',
       'Show Properties CmdOrCtrl+Shift+I',
     ]);
+    // Collapse All Folders follows, on Option-Command-Left, which no other item and no editor key uses.
+    expect(shown(menu(build(), 'View'))[4]).toBe('Collapse All Folders Alt+CmdOrCtrl+Left');
     const accelerators = build().flatMap((entry) => entry.submenu.map((item) => item.accelerator));
+    expect(accelerators.filter((accelerator) => accelerator === 'Alt+CmdOrCtrl+Left')).toHaveLength(1);
     expect(accelerators).not.toContain('CmdOrCtrl+B');
     // Cmd+I is italic in the editor and Cmd+Option+I opens the developer tools.
     expect(accelerators).not.toContain('CmdOrCtrl+I');

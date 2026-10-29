@@ -8,7 +8,8 @@ import {
 export const SHELL_PREFERENCE_KEY = 'shell.layout';
 
 export const SHELL_LIMITS = {
-  sidebar: { min: 180, max: 360 },
+  // The top row needs room for the traffic lights, the toggle, Back, Forward and Search.
+  sidebar: { min: 216, max: 360 },
 } as const;
 
 export interface ShellPreferences {

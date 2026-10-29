@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { ChevronLeft, ChevronRight, PanelLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelLeft, Search } from 'lucide-react';
+import { usePaletteStore } from '@/renderer/features/commands/store/paletteStore';
 import {
   selectCanGoBack,
   selectCanGoForward,
@@ -69,6 +70,23 @@ export function FrameControls({
         <ChevronRight aria-hidden className="h-4 w-4" />
       </IconButton>
     </div>
+  );
+}
+
+/**
+ * Opens the palette, as Cmd+K does. It sits at the right end of the
+ * sidebar's top row, or after Back and Forward while the sidebar is hidden.
+ */
+export function SearchButton() {
+  return (
+    <IconButton
+      label="Search"
+      shortcut="⌘K"
+      aria-keyshortcuts="Meta+K"
+      onClick={() => usePaletteStore.getState().show()}
+    >
+      <Search aria-hidden className="h-4 w-4" />
+    </IconButton>
   );
 }
 

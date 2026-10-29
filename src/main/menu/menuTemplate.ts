@@ -132,6 +132,8 @@ export function buildMenuTemplate(
         ...item(COMMAND_IDS.toggleRightPane),
         ...item(COMMAND_IDS.toggleProperties),
         SEPARATOR,
+        ...item(COMMAND_IDS.collapseAllFolders),
+        SEPARATOR,
         { role: "reload", label: "Reload" },
         { role: "toggleDevTools", label: "Toggle Developer Tools" },
         SEPARATOR,
