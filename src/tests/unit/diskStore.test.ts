@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DiskEntry } from '@/types/disk';
@@ -86,25 +85,6 @@ describe('useDiskStore', () => {
     expect(useDiskStore.getState().roots).toEqual([ROOT]);
   });
 
-  it('updates tab hydration authority when a root is added', async () => {
-    await useDiskStore.getState().loadRoots();
-    openFolder.mockResolvedValue({
-      success: true,
-      data: { root: OTHER_ROOT },
-    });
-    readDirectory.mockResolvedValue({
-      success: true,
-      data: { path: OTHER_ROOT, entries: [] },
-    });
-    await useDiskStore.getState().openFolder();
-
-    openTabs(['/Other/note.md']);
-    resetTabs();
-    useTabsStore.getState().hydrate();
-
-    expect(tabPaths()).toEqual(['/Other/note.md']);
-  });
-
   it('leaves state untouched when the dialog is cancelled', async () => {
     openFolder.mockResolvedValue({ success: true, data: { root: null } });
     await useDiskStore.getState().openFolder();
@@ -142,6 +122,13 @@ describe('useDiskStore', () => {
     await useDiskStore.getState().loadDirectory(ROOT);
     expect(useDiskStore.getState().loading.error).toBe('Nope');
     expect(useDiskStore.getState().listings[ROOT]).toBeUndefined();
+  });
+
+  it('keeps an error when a different folder then loads fine', async () => {
+    readDirectory.mockResolvedValueOnce({ success: false, error: 'Nope' });
+    await useDiskStore.getState().loadDirectory(PHOTOS);
+    await useDiskStore.getState().loadDirectory(ROOT);
+    expect(useDiskStore.getState().loading).toEqual({ isLoading: false, error: 'Nope' });
   });
 
   it('loads children the first time a folder is expanded', async () => {
@@ -194,17 +181,6 @@ describe('useDiskStore', () => {
     expect(state.listings[ROOT]).toBeUndefined();
     expect(state.pendingDelete).toBeNull();
   });
-
-  it('updates tab hydration authority when a root is closed', async () => {
-    await useDiskStore.getState().openFolder();
-    await useDiskStore.getState().closeRoot(ROOT);
-
-    openTabs(['/Vault/stale.md']);
-    resetTabs();
-    useTabsStore.getState().hydrate();
-
-    expect(tabPaths()).toEqual([]);
-  });
 });
 
 describe('tree expansion', () => {
@@ -235,6 +211,27 @@ describe('tree expansion', () => {
     readDirectory.mockClear();
     await useDiskStore.getState().revealPath('/Outside/file.md');
     expect(readDirectory).not.toHaveBeenCalled();
+  });
+
+  it('forgets folders moved away while Opal was closed, without reading them or raising an error', async () => {
+    const gone = '/Vault/Gone';
+    readDirectory.mockImplementation(async (p: string) =>
+      p === ROOT || p === PHOTOS
+        ? { success: true, data: { path: p, entries: p === ROOT ? rootEntries : photoEntries } }
+        : { success: false, error: `Path is not inside any folder you have opened: ${p}` }
+    );
+    useDiskStore.setState({
+      roots: [ROOT],
+      expanded: { [PHOTOS]: true, [gone]: true, [`${gone}/Deeper`]: true },
+    });
+
+    await useDiskStore.getState().loadTree();
+    await useDiskStore.getState().revealPath(`${gone}/Deeper/note.md`);
+
+    expect(readDirectory.mock.calls.map(([path]) => path).sort()).toEqual([ROOT, PHOTOS]);
+    expect(useDiskStore.getState().expanded).toEqual({ [PHOTOS]: true });
+    expect(readPref('tree.expanded', null)).toEqual({ [PHOTOS]: true });
+    expect(useDiskStore.getState().loading.error).toBeNull();
   });
 
   it('persists expanded folders and a collapsed root, but not collapsed folders', async () => {

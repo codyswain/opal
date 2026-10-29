@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import "@/renderer/styles/index.css";
 
-import { ThemeProvider } from "@/renderer/features/theme";
+import { ThemeProvider, useTheme } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { SettingsDialog } from "@/renderer/features/settings";
@@ -70,6 +70,9 @@ const APP_ROUTES: RouteObject[] = [
 
 const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 
+/** Toasts follow the resolved theme, as menus do. */
+const AppToaster: React.FC = () => <Toaster theme={useTheme().resolvedTheme} />;
+
 const App: React.FC = () => {
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
@@ -85,7 +88,7 @@ const App: React.FC = () => {
     <Router>
       <ThemeProvider>
         <TooltipProvider>
-          <Toaster />
+          <AppToaster />
           <ShellProvider>
             <AppCommands />
             <CommandPalette />

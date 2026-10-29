@@ -29,7 +29,7 @@ describe('FileViewer', () => {
   it('embeds a PDF in Chromium’s viewer', () => {
     render(<FileViewer entry={PDF} />);
     expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('type', 'application/pdf');
-    expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('src', expect.stringMatching(/^opal-file:\/\//));
+    expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('src', expect.stringMatching(/^opal-file:\/\/.*#navpanes=0$/));
   });
 
   it('shows text verbatim and says when only the start of a file is shown', async () => {

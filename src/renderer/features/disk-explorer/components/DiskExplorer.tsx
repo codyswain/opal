@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
@@ -112,14 +112,15 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
     <div
       role="alert"
       data-testid="disk-explorer-error"
-      className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+      className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-surface-sunken px-4 py-2 text-ui font-medium text-foreground"
     >
+      <AlertCircle aria-hidden className="h-4 w-4 shrink-0 text-icon" />
       <span className="flex-1">{message}</span>
       <button
         type="button"
         aria-label="Dismiss error"
         onClick={clearError}
-        className="rounded p-1 transition-hover hover:bg-destructive/20"
+        className="rounded-control p-1 text-icon transition-hover hover:bg-surface-hover hover:text-foreground"
       >
         <X className="h-3.5 w-3.5" />
       </button>

@@ -33,6 +33,7 @@ const ContextMenuContent = React.forwardRef<
 ContextMenuContent.displayName = 'ContextMenuContent';
 
 interface ContextMenuItemProps extends React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> {
+  /** Destructive items stand out by weight and the icon they carry, never by colour. */
   tone?: 'default' | 'destructive';
 }
 
@@ -40,7 +41,7 @@ const ContextMenuItem = React.forwardRef<React.ElementRef<typeof ContextMenuPrim
   ({ className, tone = 'default', ...props }, ref) => (
     <ContextMenuPrimitive.Item
       ref={ref}
-      className={cn(itemStyles, tone === 'destructive' && 'text-danger focus:bg-danger/10 focus:text-danger', className)}
+      className={cn(itemStyles, tone === 'destructive' && 'font-medium text-foreground', className)}
       {...props}
     />
   )

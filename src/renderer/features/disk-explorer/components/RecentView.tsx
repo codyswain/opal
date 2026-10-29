@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { parentFsPath } from '@/common/fsPaths';
 import type { RecentItem } from '@/types/activity';
 import { useShell } from '@/renderer/features/shell/context/ShellContext';
-import { fileTreeLabel } from '@/renderer/features/shell/utils/flattenFileTree';
+import { fileTreeLabel } from '@/common/fileKind';
 import { Button } from '@/renderer/shared/ui';
 import { recordOpened } from '../activity/recordActivity';
 import { groupRecent, recentTime } from '../activity/recentGroups';
 import { focusFile } from '../navigation/filesLocation';
 import { useDiskStore } from '../store/diskStore';
 import { useRecentStore } from '../store/recentStore';
-import { vaultRelativePath } from './tabLabels';
+import { vaultFolder, vaultRelativePath } from './tabLabels';
 
 /** Re-renders so the day groups move on at midnight. */
 function useNow(intervalMs = 60_000): number {
@@ -19,13 +18,6 @@ function useNow(intervalMs = 60_000): number {
     return () => clearInterval(timer);
   }, [intervalMs]);
   return now;
-}
-
-/** The folder a row names; files at the top of a lone vault have none. */
-function folderOf(path: string, roots: readonly string[]): string {
-  const parent = parentFsPath(path);
-  if (!parent || (roots.length === 1 && parent === roots[0])) return '';
-  return vaultRelativePath(parent, roots);
 }
 
 /** Up and Down move between rows, Home and End jump to the ends. */
@@ -139,7 +131,7 @@ const RecentRow: React.FC<RecentRowProps> = ({ item, roots, now, onOpen }) => {
       className="flex h-row w-full min-w-0 items-center gap-3 rounded-row px-2 text-left text-ui outline-none transition-hover hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
     >
       <span className="min-w-0 truncate text-foreground">{fileTreeLabel(name, kind)}</span>
-      <span className="min-w-0 flex-1 truncate text-foreground-tertiary">{folderOf(path, roots)}</span>
+      <span className="min-w-0 flex-1 truncate text-foreground-tertiary">{vaultFolder(path, roots)}</span>
       <span className="shrink-0 text-metadata tabular-nums text-foreground-tertiary">
         {recentTime(item.touchedAt, now)}
       </span>

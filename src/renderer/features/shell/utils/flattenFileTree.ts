@@ -1,3 +1,4 @@
+import { fileTreeLabel } from '@/common/fileKind';
 import { basenameFsPath } from '@/common/fsPaths';
 import { isTreeExpanded } from '@/renderer/features/disk-explorer/store/treeExpansion';
 import type { DiskEntry, FileKind } from '@/types/disk';
@@ -28,10 +29,6 @@ export interface FileTreeSource {
 type PendingNode = Omit<FileTreeNode, 'label' | 'isExpanded'>;
 
 type TreeItem = Pick<DiskEntry, 'path' | 'name' | 'kind' | 'isDirectory'>;
-
-export function fileTreeLabel(name: string, kind: FileKind): string {
-  return kind === 'markdown' ? name.replace(/\.md$/i, '') : name;
-}
 
 /**
  * Produces the visible tree in one pass, in the listing order main already

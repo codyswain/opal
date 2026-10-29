@@ -8,6 +8,67 @@ module.exports = {
     "./src/**/*.{ts,tsx}",
   ],
   theme: {
+    // The whole palette, not an extension: Tailwind's hued defaults (blue,
+    // amber, ...) do not exist here, so a component cannot reach for one.
+    colors: {
+      transparent: "transparent",
+      current: "currentColor",
+      inherit: "inherit",
+      white: "#ffffff",
+      black: "#000000",
+      chrome: "hsl(var(--chrome))",
+      canvas: "hsl(var(--canvas))",
+      surface: {
+        DEFAULT: "hsl(var(--surface))",
+        raised: "hsl(var(--surface-raised))",
+        sunken: "hsl(var(--surface-sunken))",
+        lift: "hsl(var(--surface-lift))",
+        hover: "hsl(var(--surface-hover))",
+        active: "hsl(var(--surface-active))",
+        selected: "hsl(var(--surface-selected))",
+      },
+      border: {
+        DEFAULT: "hsl(var(--border))",
+        subtle: "hsl(var(--border-subtle))",
+        strong: "hsl(var(--border-strong))",
+        overlay: "hsl(var(--border-overlay))",
+      },
+      "page-ring": "hsl(var(--page-ring))",
+      input: "hsl(var(--input))",
+      ring: "hsl(var(--ring))",
+      background: "hsl(var(--background))",
+      foreground: {
+        DEFAULT: "hsl(var(--foreground))",
+        secondary: "hsl(var(--text-secondary))",
+        tertiary: "hsl(var(--text-tertiary))",
+      },
+      icon: "hsl(var(--icon))",
+      focus: "hsl(var(--focus))",
+      primary: {
+        DEFAULT: "hsl(var(--primary))",
+        foreground: "hsl(var(--primary-foreground))",
+      },
+      secondary: {
+        DEFAULT: "hsl(var(--secondary))",
+        foreground: "hsl(var(--secondary-foreground))",
+      },
+      muted: {
+        DEFAULT: "hsl(var(--muted))",
+        foreground: "hsl(var(--muted-foreground))",
+      },
+      accent: {
+        DEFAULT: "hsl(var(--accent))",
+        foreground: "hsl(var(--accent-foreground))",
+      },
+      popover: {
+        DEFAULT: "hsl(var(--popover))",
+        foreground: "hsl(var(--popover-foreground))",
+      },
+      card: {
+        DEFAULT: "hsl(var(--card))",
+        foreground: "hsl(var(--card-foreground))",
+      },
+    },
     container: {
       center: true,
       padding: "2rem",
@@ -51,69 +112,6 @@ module.exports = {
         medium: "510",
         semibold: "590",
       },
-      colors: {
-        chrome: "hsl(var(--chrome))",
-        canvas: "hsl(var(--canvas))",
-        surface: {
-          DEFAULT: "hsl(var(--surface))",
-          raised: "hsl(var(--surface-raised))",
-          sunken: "hsl(var(--surface-sunken))",
-          lift: "hsl(var(--surface-lift))",
-          hover: "hsl(var(--surface-hover))",
-          active: "hsl(var(--surface-active))",
-          selected: "hsl(var(--surface-selected))",
-        },
-        border: {
-          DEFAULT: "hsl(var(--border))",
-          subtle: "hsl(var(--border-subtle))",
-          strong: "hsl(var(--border-strong))",
-          overlay: "hsl(var(--border-overlay))",
-        },
-        "page-ring": "hsl(var(--page-ring))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: {
-          DEFAULT: "hsl(var(--foreground))",
-          secondary: "hsl(var(--text-secondary))",
-          tertiary: "hsl(var(--text-tertiary))",
-        },
-        icon: "hsl(var(--icon))",
-        focus: "hsl(var(--focus))",
-        link: "hsl(var(--link))",
-        success: "hsl(var(--success))",
-        warning: "hsl(var(--warning))",
-        danger: "hsl(var(--danger))",
-        info: "hsl(var(--info))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -141,6 +139,10 @@ module.exports = {
       },
       maxWidth: {
         reading: "var(--reading-width)",
+      },
+      // Tailwind's default ring is blue; ours is the neutral focus token.
+      ringColor: {
+        DEFAULT: "hsl(var(--focus))",
       },
       boxShadow: {
         control: "var(--shadow-control)",

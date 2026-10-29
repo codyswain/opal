@@ -16,7 +16,6 @@ import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
-import { useTheme } from "@/renderer/features/theme";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
 
@@ -26,14 +25,12 @@ const tabs = () => useTabsStore.getState();
 
 /**
  * Registers every application command once and owns the palette shortcuts.
- * Lives inside the theme and shell providers so commands can navigate and
- * change the theme; the menu in main learns the same list through
+ * Lives inside the shell provider so commands can navigate; the menu in main learns the same list through
  * `reportCommands`, so the two can never disagree. Tab and history keys are
  * menu accelerators, which fire even while the editor has focus.
  */
 export const AppCommands: React.FC = () => {
   const { navigateFiles } = useShell();
-  const { resolvedTheme, setTheme } = useTheme();
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
 
   useEffect(() => {
@@ -43,8 +40,8 @@ export const AppCommands: React.FC = () => {
         name: "Go to Today",
         type: "navigation",
         keywords: ["home", "journal", "daily"],
-        perform: () => {
-          void openToday(navigateFiles)
+        perform: ({ newTab } = {}) => {
+          void openToday(navigateFiles, { newTab })
             .then((opened) => {
               if (!opened) toast.error("Open your vault folder first.");
             })
@@ -59,6 +56,7 @@ export const AppCommands: React.FC = () => {
         type: "action",
         shortcut: ["CmdOrCtrl+K"],
         keywords: ["palette", "search", "find", "quick open"],
+        hidden: true,
         perform: () => usePaletteStore.getState().show(),
       },
       {
@@ -66,7 +64,7 @@ export const AppCommands: React.FC = () => {
         name: "Go to Recent",
         type: "navigation",
         keywords: ["history", "activity"],
-        perform: () => navigateFiles(browseRecent()),
+        perform: ({ newTab } = {}) => navigateFiles(browseRecent(), { newTab }),
       },
       {
         id: COMMAND_IDS.back,
@@ -94,7 +92,7 @@ export const AppCommands: React.FC = () => {
       },
       {
         id: COMMAND_IDS.openFolder,
-        name: "Open Folder on Disk",
+        name: "Open Folder…",
         type: "navigation",
         shortcut: ["CmdOrCtrl+O"],
         keywords: ["files", "folder", "open", "disk", "add"],
@@ -212,16 +210,6 @@ export const AppCommands: React.FC = () => {
         keywords: ["pane", "toggle", "left"],
         perform: toggleSidebar,
       },
-      {
-        id: COMMAND_IDS.toggleTheme,
-        name:
-          resolvedTheme === "dark"
-            ? "Switch to Light Mode"
-            : "Switch to Dark Mode",
-        type: "action",
-        keywords: ["theme", "dark", "light", "appearance"],
-        perform: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
-      },
     ];
     commands.forEach((command) => commandRegistry.registerCommand(command));
     // Tell main what exists, so the menu and the palette can never disagree.
@@ -236,12 +224,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [
-    navigateFiles,
-    toggleSidebar,
-    resolvedTheme,
-    setTheme,
-  ]);
+  }, [navigateFiles, toggleSidebar]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   useEffect(() => {

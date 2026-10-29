@@ -1,10 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { basenameFsPath } from '@/common/fsPaths';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/renderer/shared/ui';
 import { useDiskStore } from '../../store/diskStore';
 
+/**
+ * Asks before Move to Trash. The confirm button takes focus, as in Finder's
+ * alerts, and closing hands focus back to where it was (the tree row).
+ */
 export const ConfirmDeleteDialog: React.FC = () => {
   const pendingDelete = useDiskStore((state) => state.pendingDelete);
   const cancelDelete = useDiskStore((state) => state.cancelDelete);
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -13,24 +28,10 @@ export const ConfirmDeleteDialog: React.FC = () => {
     if (!pendingDelete) return;
     setError(null);
     setIsSubmitting(false);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        cancelDelete();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [pendingDelete, cancelDelete]);
-
-  if (!pendingDelete) return null;
-
-  const name = pendingDelete.split('/').pop() ?? pendingDelete;
+  }, [pendingDelete]);
 
   const confirm = async () => {
-    if (isSubmitting) return;
+    if (!pendingDelete || isSubmitting) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -46,56 +47,42 @@ export const ConfirmDeleteDialog: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        onClick={cancelDelete}
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-      />
-
-      <div
-        role="dialog"
-        aria-modal="true"
+    <Dialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) cancelDelete(); }}>
+      <DialogContent
         data-testid="confirm-delete"
-        className="relative flex w-[min(90vw,420px)] flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-2xl"
+        className="max-w-sm"
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          confirmRef.current?.focus();
+        }}
       >
-        <div className="flex items-start gap-3">
-          <Trash2 className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-          <div className="min-w-0">
-            <h2 className="text-base font-medium">
-              {`Move "${name}" to Trash?`}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              You can restore it from the Trash.
-            </p>
-          </div>
-        </div>
-
-        {error && (
-          <p data-testid="confirm-delete-error" className="text-xs text-destructive">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trash2 aria-hidden className="h-4 w-4 shrink-0 text-icon" />
+            {`Move "${pendingDelete ? basenameFsPath(pendingDelete) : ''}" to Trash?`}
+          </DialogTitle>
+          <DialogDescription>You can restore it from the Trash.</DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <p role="alert" data-testid="confirm-delete-error" className="mt-3 text-ui font-medium text-foreground">
             {error}
           </p>
-        )}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={cancelDelete}
-            data-testid="confirm-delete-cancel"
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-hover hover:bg-muted"
-          >
+        ) : null}
+        <DialogFooter>
+          <Button variant="ghost" data-testid="confirm-delete-cancel" onClick={cancelDelete}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void confirm()}
-            disabled={isSubmitting}
+          </Button>
+          <Button
+            ref={confirmRef}
             data-testid="confirm-delete-confirm"
-            className="rounded-md bg-destructive px-3 py-2 text-sm text-destructive-foreground disabled:opacity-40"
+            disabled={isSubmitting}
+            onClick={() => void confirm()}
           >
             Move to Trash
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

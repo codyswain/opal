@@ -29,7 +29,8 @@ export const FileViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
       return (
         <embed
           key={entry.path}
-          src={toOpalFileUrl(entry.path)}
+          // Chromium's viewer opens without its thumbnail rail.
+          src={`${toOpalFileUrl(entry.path)}#navpanes=0`}
           type="application/pdf"
           data-testid="pdf-viewer"
           className="h-full w-full"

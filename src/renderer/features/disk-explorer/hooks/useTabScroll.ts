@@ -83,7 +83,12 @@ export function useTabScroll(
       element.removeEventListener('wheel', stop);
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('keydown', stop);
-      useTabsStore.getState().saveScroll(tabId, index, last);
+      if (!entry) return;
+      // Pruning an earlier entry moves this one left; a rename swaps it for a
+      // copy in the same place. Find it by identity, then by position.
+      const history = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history;
+      const at = history?.indexOf(entry) ?? -1;
+      useTabsStore.getState().saveScroll(tabId, at === -1 ? index : at, last);
     };
   }, [container, tabId, index, page]);
 }

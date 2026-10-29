@@ -62,6 +62,15 @@ describe('DiskReader.readDirectory', () => {
     ]);
   });
 
+  it('orders Markdown files by the name the tree shows, without .md', async () => {
+    await writeFile(path.join(root, 'investors notes.txt'), 'x');
+    await writeFile(path.join(root, 'investors.md'), 'x');
+
+    const listing = await reader.readDirectory(root);
+    const names = listing.entries.map((e) => e.name);
+    expect(names.indexOf('investors.md')).toBeLessThan(names.indexOf('investors notes.txt'));
+  });
+
   it('reports size and mtime for files', async () => {
     const listing = await reader.readDirectory(path.join(root, 'Photos'));
     const a = listing.entries.find((e) => e.name === 'a.jpg');

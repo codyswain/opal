@@ -5,10 +5,9 @@ import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 /** What the renderer reports; AppCommands holds the real list. */
 const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.openSettings, label: 'Settings…', accelerator: 'CmdOrCtrl+,' },
-  { id: COMMAND_IDS.openFolder, label: 'Open Folder on Disk', accelerator: 'CmdOrCtrl+O' },
+  { id: COMMAND_IDS.openFolder, label: 'Open Folder…', accelerator: 'CmdOrCtrl+O' },
   { id: COMMAND_IDS.newNote, label: 'New Note', accelerator: 'CmdOrCtrl+N' },
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
-  { id: COMMAND_IDS.toggleTheme, label: 'Switch to Dark Mode' },
   { id: COMMAND_IDS.newTab, label: 'New Tab', accelerator: 'CmdOrCtrl+T' },
   { id: COMMAND_IDS.closeTab, label: 'Close Tab', accelerator: 'CmdOrCtrl+W' },
   { id: COMMAND_IDS.reopenClosedTab, label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T' },
@@ -78,7 +77,7 @@ describe('buildMenuTemplate', () => {
     expect(shown(menu(build(), 'File'))).toEqual([
       'New Tab CmdOrCtrl+T',
       'New Note CmdOrCtrl+N',
-      'Open Folder on Disk CmdOrCtrl+O',
+      'Open Folder… CmdOrCtrl+O',
       '-',
       'Close Tab CmdOrCtrl+W',
       'Close Window CmdOrCtrl+Shift+W',

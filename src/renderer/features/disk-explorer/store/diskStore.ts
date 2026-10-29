@@ -138,7 +138,9 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   loadDirectory: async (dirPath, options = {}) => {
     if (!options.force && get().listings[dirPath]) return;
 
-    set({ loading: { isLoading: true, error: null } });
+    // A load leaves any earlier error alone: a listing that arrives fine says
+    // nothing about the folder that failed.
+    set((state) => ({ loading: { ...state.loading, isLoading: true } }));
     const response = await window.diskAPI.readDirectory(dirPath);
 
     if (!response.success) {
@@ -152,7 +154,8 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
 
     set((state) => ({
       listings: { ...state.listings, [dirPath]: response.data.entries },
-      loading: { isLoading: false, error: null },
+      expanded: withoutMissingChildren(state.expanded, dirPath, nextPaths),
+      loading: { ...state.loading, isLoading: false },
     }));
   },
 
@@ -176,19 +179,21 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     if (willExpand) await get().loadDirectory(dirPath);
   },
 
+  // Both walk down from the roots one level at a time and only into folders
+  // the level above listed, so a folder moved or deleted while Opal was closed
+  // is never read; loadDirectory drops its remembered expansion instead.
   loadTree: async () => {
-    const { roots, expanded } = get();
-    const isOpen = (path: string) => isTreeExpanded(roots, expanded, path);
-    const isShown = (path: string) => {
-      const root = roots.find((candidate) => isFsPathAtOrBelow(candidate, path));
-      if (!root) return false;
-      for (let folder: string | null = path; folder && folder !== root; folder = parentFsPath(folder)) {
-        if (!isOpen(folder)) return false;
-      }
-      return isOpen(root);
-    };
-    const folders = [...new Set([...roots, ...Object.keys(expanded)])].filter(isShown);
-    await Promise.all(folders.map((folder) => get().loadDirectory(folder)));
+    const isOpen = (path: string) => isTreeExpanded(get().roots, get().expanded, path);
+    let level = get().roots.filter(isOpen);
+    while (level.length > 0) {
+      await Promise.all(level.map((folder) => get().loadDirectory(folder)));
+      const { listings } = get();
+      level = level.flatMap((folder) =>
+        (listings[folder] ?? [])
+          .filter((entry) => entry.isDirectory && isOpen(entry.path))
+          .map((entry) => entry.path)
+      );
+    }
   },
 
   revealPath: async (targetPath) => {
@@ -196,13 +201,21 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       .sort((left, right) => right.length - left.length)
       .find((candidate) => isFsPathAtOrBelow(candidate, targetPath));
     if (!root) return;
-    const folders: string[] = [];
+    const below: string[] = [];
     for (
       let folder = parentFsPath(targetPath);
-      folder && isFsPathAtOrBelow(root, folder);
+      folder && folder !== root && isFsPathAtOrBelow(root, folder);
       folder = parentFsPath(folder)
     ) {
+      below.unshift(folder);
+    }
+    const folders = [root];
+    await get().loadDirectory(root);
+    for (const folder of below) {
+      const parent = folders[folders.length - 1];
+      if (!get().listings[parent]?.some((entry) => entry.isDirectory && entry.path === folder)) break;
       folders.push(folder);
+      await get().loadDirectory(folder);
     }
     const { expanded, roots } = get();
     if (folders.some((folder) => !isTreeExpanded(roots, expanded, folder))) {
@@ -213,7 +226,6 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
         },
       }));
     }
-    await Promise.all(folders.map((folder) => get().loadDirectory(folder)));
   },
 
   beginNewFolder: (parentDir) => set({ pendingAction: { kind: 'new-folder', target: parentDir } }),
@@ -244,6 +256,26 @@ function expandedWithinRoots(
   return kept.length === Object.keys(expanded).length
     ? expanded
     : Object.fromEntries(kept);
+}
+
+/**
+ * Forgets the expansion of folders a fresh listing of `dirPath` no longer
+ * holds, with everything below them: they were moved or deleted outside Opal.
+ */
+function withoutMissingChildren(
+  expanded: Record<string, boolean>,
+  dirPath: string,
+  present: ReadonlySet<string>
+): Record<string, boolean> {
+  const missing = Object.keys(expanded).filter(
+    (path) => parentFsPath(path) === dirPath && !present.has(path)
+  );
+  if (missing.length === 0) return expanded;
+  return Object.fromEntries(
+    Object.entries(expanded).filter(
+      ([path]) => !missing.some((gone) => isFsPathAtOrBelow(gone, path))
+    )
+  );
 }
 
 function samePaths(left: string[], right: string[]): boolean {

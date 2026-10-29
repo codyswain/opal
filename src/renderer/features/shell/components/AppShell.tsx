@@ -280,7 +280,9 @@ export function AppShell({ children }: AppShellProps) {
           style={{ width: effectiveSidebarWidth }}
         >
           <WorkspaceSidebar
-            onNavigate={() => closeNarrowSidebar('workspace')}
+            // Only the narrow overlay closes on a pick and hands focus to the
+            // page; beside the page, focus stays where the user put it.
+            onNavigate={isNarrow ? () => closeNarrowSidebar('workspace') : undefined}
             onToggleSidebar={
               isNarrow ? () => closeNarrowSidebar() : handleToggleSidebar
             }

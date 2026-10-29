@@ -80,7 +80,7 @@ const RecentSection: React.FC = () => {
       {state === "confirming" ? (
         <div role="group" aria-label="Confirm clearing recent history" className="flex items-center gap-2">
           <span className="min-w-0 flex-1 text-ui text-foreground">Clear all recent history? Files are not affected.</span>
-          <Button size="compact" variant="destructive" onClick={() => void clearHistory()}>
+          <Button size="compact" onClick={() => void clearHistory()}>
             Clear
           </Button>
           <Button size="compact" variant="ghost" onClick={() => setState("idle")}>

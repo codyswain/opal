@@ -45,6 +45,11 @@ export function extensionOf(name: string): string {
   return name.slice(lastDot + 1).toLowerCase();
 }
 
+/** The name the tree, tabs and lists show: Markdown without `.md`, anything else in full. */
+export function fileTreeLabel(name: string, kind: FileKind): string {
+  return kind === 'markdown' ? name.replace(/\.md$/i, '') : name;
+}
+
 export function classifyFile(name: string): FileKind {
   const ext = extensionOf(name);
   if (!ext) return 'other';

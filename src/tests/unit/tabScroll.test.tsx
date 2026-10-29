@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { findPageScroller, useTabScroll } from '@/renderer/features/disk-explorer/hooks/useTabScroll';
 import { selectActiveTab, selectOpenedPath, useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { openTabs, resetTabs, tabId } from '@/tests/helpers/tabs';
 
 /** A page whose scroller is two levels down, sized the way a browser would lay it out. */
@@ -74,6 +75,24 @@ describe('useTabScroll', () => {
     act(() => useTabsStore.getState().back());
     await frame();
     expect(screen.getByTestId('scroller').scrollTop).toBe(900);
+  });
+
+  it('saves onto the page it left when an earlier history entry is removed', async () => {
+    openTabs(['/V/a.md']);
+    for (const file of ['/V/b.md', '/V/c.md', '/V/d.md']) useTabsStore.getState().open(fileLocation(file));
+    useTabsStore.getState().back();
+    render(<Page />);
+    screen.getByTestId('scroller').scrollTop = 700;
+    fireEvent.scroll(screen.getByTestId('scroller'));
+
+    act(() => pathMutationCoordinator.applyExternalRemoval(['/V/a.md']));
+
+    const [tab] = useTabsStore.getState().tabs;
+    expect(tab.history.map((entry) => [entry.location.mode === 'focus' && entry.location.file, entry.scrollTop])).toEqual([
+      ['/V/b.md', undefined],
+      ['/V/c.md', 700],
+      ['/V/d.md', undefined],
+    ]);
   });
 
   it('lets the reader take over from a restore that is still waiting', async () => {

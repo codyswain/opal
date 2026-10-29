@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   FixedSizeList,
@@ -62,6 +62,12 @@ interface FileTreeRowData {
   /** Ends a rename; a path hands keyboard focus back to that row. */
   onRenameDone: (focusPath: string | null) => void;
   dragProps: (node: FileTreeNode) => React.HTMLAttributes<HTMLDivElement>;
+}
+
+function findRow(tree: HTMLElement | null, path: string): HTMLElement | undefined {
+  return [...(tree?.querySelectorAll<HTMLElement>('[data-tree-path]') ?? [])].find(
+    (row) => row.dataset.treePath === path
+  );
 }
 
 /** Moving onto the current parent, onto itself or into its own subtree does nothing. */
@@ -310,11 +316,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
 
   const focusPath = React.useCallback((path: string) => {
     setKeyboardPath(path);
-    window.requestAnimationFrame(() => {
-      [...(treeRef.current?.querySelectorAll<HTMLElement>('[data-tree-path]') ?? [])]
-        .find((row) => row.dataset.treePath === path)
-        ?.focus();
-    });
+    window.requestAnimationFrame(() => findRow(treeRef.current, path)?.focus());
   }, []);
 
   const focusIndex = React.useCallback(
@@ -407,20 +409,10 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     [activate, focusIndex, nodes, toggleExpanded]
   );
 
+  // Root rows (with several roots) take drops but do not move.
   const dragProps = React.useCallback(
     (node: FileTreeNode): React.HTMLAttributes<HTMLDivElement> => {
-      if (node.isRoot) return {};
-      return {
-        draggable: true,
-        onDragStart: (event) => {
-          setActiveDragSourcePath(node.path);
-          event.dataTransfer.setData('text/plain', node.path);
-          event.dataTransfer.effectAllowed = 'move';
-        },
-        onDragEnd: () => {
-          setDropTargetPath(null);
-          clearActiveDragSourcePath();
-        },
+      const drop: React.HTMLAttributes<HTMLDivElement> = {
         onDragOver: (event) => {
           if (!node.isDirectory) return;
           const source = getActiveDragSourcePath() ?? '';
@@ -445,6 +437,20 @@ export function FileTree({ onNavigate }: FileTreeProps) {
           const source = event.dataTransfer.getData('text/plain');
           clearActiveDragSourcePath();
           void moveInto(source, node.path);
+        },
+      };
+      if (node.isRoot) return drop;
+      return {
+        ...drop,
+        draggable: true,
+        onDragStart: (event) => {
+          setActiveDragSourcePath(node.path);
+          event.dataTransfer.setData('text/plain', node.path);
+          event.dataTransfer.effectAllowed = 'move';
+        },
+        onDragEnd: () => {
+          setDropTargetPath(null);
+          clearActiveDragSourcePath();
         },
       };
     },
@@ -638,11 +644,14 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   tone="destructive"
-                  onSelect={() =>
-                    useDiskStore.getState().beginDelete(menuNode.path)
-                  }
+                  onSelect={afterMenu(() => {
+                    // The confirmation hands focus back to this row when it closes.
+                    findRow(treeRef.current, menuNode.path)?.focus();
+                    useDiskStore.getState().beginDelete(menuNode.path);
+                  })}
                 >
                   Move to Trash
+                  <Trash2 aria-hidden className="ml-auto h-3.5 w-3.5 text-icon" />
                 </ContextMenuItem>
               </>
             ) : null}

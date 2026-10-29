@@ -4,9 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { Plus } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  Badge,
   Button,
-  Chip,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -14,7 +12,6 @@ import {
   DialogTitle,
   DialogTrigger,
   IconButton,
-  Kbd,
   Menu,
   MenuContent,
   MenuItem,
@@ -25,7 +22,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   SegmentedControl,
-  Switch,
   TooltipProvider,
 } from '@/renderer/shared/ui';
 
@@ -134,52 +130,6 @@ describe('compact controls', () => {
     await user.tab();
 
     expect(screen.getByRole('radio', { name: 'Gallery' })).toHaveFocus();
-  });
-
-  it('exposes checked and disabled switch behavior', async () => {
-    const user = userEvent.setup();
-
-    function Example() {
-      const [checked, setChecked] = React.useState(false);
-      return (
-        <>
-          <Switch
-            label="Show hidden files"
-            checked={checked}
-            onCheckedChange={setChecked}
-          />
-          <Switch label="Unavailable option" disabled />
-        </>
-      );
-    }
-
-    render(<Example />);
-    const toggle = screen.getByRole('switch', { name: 'Show hidden files' });
-    await user.click(toggle);
-    expect(toggle).toBeChecked();
-
-    const disabled = screen.getByRole('switch', { name: 'Unavailable option' });
-    await user.click(disabled);
-    expect(disabled).not.toBeChecked();
-  });
-
-  it('reports chip selection with aria-pressed', async () => {
-    const user = userEvent.setup();
-
-    function Example() {
-      const [selected, setSelected] = React.useState(false);
-      return (
-        <Chip selected={selected} onClick={() => setSelected((value) => !value)}>
-          Images
-        </Chip>
-      );
-    }
-
-    render(<Example />);
-    const chip = screen.getByRole('button', { name: 'Images' });
-    expect(chip).toHaveAttribute('aria-pressed', 'false');
-    await user.click(chip);
-    expect(chip).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -317,20 +267,6 @@ describe('overlays', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
-  });
-});
-
-describe('feedback primitives', () => {
-  it('keeps badges and shortcuts readable', () => {
-    render(
-      <>
-        <Badge tone="success">Synced</Badge>
-        <Kbd>⌘K</Kbd>
-      </>
-    );
-
-    expect(screen.getByText('Synced')).toBeInTheDocument();
-    expect(screen.getByText('⌘K')).toBeInTheDocument();
   });
 });
 

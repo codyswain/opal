@@ -18,7 +18,7 @@ chrome to page and by space.
 |---|---|---|---|
 | `--chrome` | `bg-chrome` | #f4f4f5 | #08090a |
 | `--canvas` | `bg-canvas` | #ffffff | #0f1011 |
-| `--page-ring` | `border-page-ring` | #e9e8ea | white at 5% |
+| `--page-ring` | `border-page-ring` | #e9e9e9 | white at 5% |
 | `--radius-card` | `rounded-card` | 8 px | 8 px |
 | `--page-inset` | `m*-page` | 8 px | 8 px |
 
@@ -26,6 +26,17 @@ The Electron window background (`WINDOW_BACKGROUND` in `src/main.ts`) is the
 chrome color, so the first frame matches.
 
 ## Color
+
+Black and white only (the spec, "Look"). Every token is a neutral grey from
+white to black, including focus, selection and the primary button; the only
+colour on screen comes from images inside notes. Emphasis comes from
+contrast, weight, size and spacing. Errors and destructive actions use
+wording, weight and an icon, never red.
+
+`tailwind.config.js` sets the whole `colors` palette rather than extending
+it, so Tailwind's hued defaults (`text-sky-500`, `bg-amber-500`) do not exist,
+and its default ring colour is `--focus`. `src/tests/unit/blackAndWhite.test.ts`
+fails if a token, a Tailwind colour or a renderer source file brings hue back.
 
 ### Surfaces
 
@@ -52,19 +63,25 @@ and does take modifiers.
 | `--border-default` | `border-border` | Pane and row boundaries |
 | `--border-strong` | `border-border-strong` | Inputs and outline buttons |
 | `--border-overlay` | `border-border-overlay` | Menus, popovers, tooltips, dialogs: black or white at 8% |
-| `--text-primary` | `text-foreground` | Primary content |
-| `--text-secondary` | `text-foreground-secondary` | Sidebar rows, supporting text |
-| `--text-tertiary` | `text-foreground-tertiary` | Labels and metadata |
-| `--icon` | `text-icon` | Icons and placeholders only |
-| `--focus` | `ring-focus`, `text-focus` | Focus ring, caret, the primary button (#5e6ad2) |
-| `--link` | `text-link` | Links in pages (#5e6ad2 light, #7170ff dark) |
+| `--text-primary` | `text-foreground` | Primary content (#2b2b2b / #f7f7f7) |
+| `--text-secondary` | `text-foreground-secondary` | Sidebar rows, supporting text (#424242 / #d6d6d6) |
+| `--text-tertiary` | `text-foreground-tertiary` | Labels and metadata (#6b6b6b / #919191) |
+| `--icon` | `text-icon` | Icons and placeholders only (#8a8a8a / #696969) |
+| `--focus` | `ring-focus` | Focus ring: dark on light (#666666), light on dark (#b3b3b3) |
+| `--primary` | `bg-primary` | The one filled button: near black with white text, inverted in dark mode |
 
-Accent color is for the caret, links, focus and the one primary action. Current
-items and selection use the neutral overlays above. Success, warning, danger
-and info are state colors only. Do not use color as the only state indicator.
+Contrast, light on white and on the chrome / dark on the page and on the
+chrome: primary 14.2 and 12.9 / 17.8 and 18.6; secondary 10.1 and 9.1 / 13.1
+and 13.7; tertiary 5.3 and 4.8 / 6.0 and 6.3; icon 3.5 and 3.1 / 3.5 and 3.6;
+focus 5.7 and 5.2 / 9.0 and 9.4. Text tokens meet 4.5:1 and the icon and
+focus tokens meet 3:1 on both grounds.
 
-Text selection uses `--selection`; in dark mode the selection is opaque and
-its text turns white.
+Current items and selection use the neutral overlays above. Links in pages
+are text-coloured with an underline. Do not use colour as the only state
+indicator; there is none to use.
+
+Text selection uses `--selection`: black at 12% in light mode, white at 20%
+in dark mode.
 
 The shadcn names (`background`, `card`, `muted`, `accent`, `border`, and
 others) remain compatibility aliases while existing components migrate.

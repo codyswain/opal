@@ -55,36 +55,36 @@
     --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
     --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
 
-    /* Semantic light palette */
+    /*
+     * Semantic light palette. Black and white only: every token is a neutral
+     * grey, including focus, selection and the primary button. Emphasis comes
+     * from contrast and weight; the only colour on screen is in notes' images.
+     */
     --chrome: 240 4.8% 95.9%;
     --canvas: 0 0% 100%;
     --surface: 0 0% 100%;
     --surface-raised: 0 0% 100%;
-    --surface-sunken: 300 7.7% 97.5%;
+    --surface-sunken: 0 0% 97.5%;
     /* A control raised off a track, such as the selected segment. */
     --surface-lift: 0 0% 100%;
     /* Overlays carry their own alpha, so they take no opacity modifier. */
     --surface-hover: 0 0% 0% / 0.04;
     --surface-active: 0 0% 0% / 0.07;
     --surface-selected: 0 0% 0% / 0.07;
-    --border-subtle: 270 4.5% 91.4%;
-    --border-default: 300 3.6% 89%;
-    --border-strong: 270 2.9% 86.3%;
+    --border-subtle: 0 0% 91.4%;
+    --border-default: 0 0% 89%;
+    --border-strong: 0 0% 86.3%;
     --border-overlay: 0 0% 0% / 0.08;
     --page-ring: var(--border-subtle);
-    --text-primary: 225 9.1% 17.3%;
-    --text-secondary: 217 9.8% 26.1%;
-    --text-tertiary: 247 3.9% 44.9%;
-    --icon: 253 3.8% 53.5%;
-    --focus: 234 56.3% 59.6%;
-    --link: 234 56.3% 59.6%;
-    --selection: color-mix(in lch, #7070ff, transparent 64%);
+    --text-primary: 0 0% 17%;
+    --text-secondary: 0 0% 26%;
+    --text-tertiary: 0 0% 42%;
+    --icon: 0 0% 54%;
+    /* A dark ring on light grounds, a light one on dark grounds. */
+    --focus: 0 0% 40%;
+    --selection: hsl(0 0% 0% / 0.12);
     --scrollbar-thumb: 0 0% 0% / 0.1;
     --scrollbar-thumb-hover: 0 0% 0% / 0.2;
-    --success: 145 62% 32%;
-    --warning: 37 92% 38%;
-    --danger: 0 72% 48%;
-    --info: 212 82% 46%;
 
     /* Compatibility aliases for existing shadcn-style components. */
     --background: var(--canvas);
@@ -93,7 +93,8 @@
     --card-foreground: var(--text-primary);
     --popover: var(--surface-raised);
     --popover-foreground: var(--text-primary);
-    --primary: var(--focus);
+    /* The one filled button is near black with white text, inverted in dark mode. */
+    --primary: 0 0% 10%;
     --primary-foreground: 0 0% 100%;
     --secondary: var(--surface-hover);
     --secondary-foreground: var(--text-primary);
@@ -101,8 +102,6 @@
     --muted-foreground: var(--text-secondary);
     --accent: var(--surface-active);
     --accent-foreground: var(--text-primary);
-    --destructive: var(--danger);
-    --destructive-foreground: 0 0% 100%;
     --border: var(--border-default);
     --input: var(--border-strong);
     --ring: var(--focus);
@@ -113,32 +112,27 @@
     --chrome: 210 11.1% 3.5%;
     --canvas: 210 6.2% 6.3%;
     --surface: 210 6.2% 6.3%;
-    --surface-raised: 210 3.8% 10.2%;
-    --surface-sunken: 210 4.8% 8.2%;
+    --surface-raised: 0 0% 10.2%;
+    --surface-sunken: 0 0% 8.2%;
     --surface-lift: 0 0% 100% / 0.08;
     --surface-hover: 0 0% 100% / 0.03;
     --surface-active: 0 0% 100% / 0.04;
     --surface-selected: 0 0% 100% / 0.04;
-    --border-subtle: 223 9.1% 15.1%;
-    --border-default: 230 6.5% 18%;
-    --border-strong: 240 5.5% 21.6%;
+    --border-subtle: 0 0% 15%;
+    --border-default: 0 0% 18%;
+    --border-strong: 0 0% 21.6%;
     --border-overlay: 0 0% 100% / 0.08;
     --page-ring: 0 0% 100% / 0.05;
-    --text-primary: 180 6.7% 97.1%;
-    --text-secondary: 220 8% 84%;
-    --text-tertiary: 219 6.4% 56.9%;
-    --icon: 218 5.3% 40.6%;
-    --focus: 234 56.3% 59.6%;
-    --link: 240 100% 72%;
-    --selection: color-mix(in lch, #5e6ad2, black 10%);
+    --text-primary: 0 0% 97%;
+    --text-secondary: 0 0% 84%;
+    --text-tertiary: 0 0% 57%;
+    --icon: 0 0% 41%;
+    --focus: 0 0% 70%;
+    --selection: hsl(0 0% 100% / 0.2);
     --scrollbar-thumb: 0 0% 100% / 0.1;
     --scrollbar-thumb-hover: 0 0% 100% / 0.2;
-    --success: 145 58% 54%;
-    --warning: 39 92% 58%;
-    --danger: 0 78% 64%;
-    --info: 212 88% 67%;
-    /* Filled destructive actions stay darker than the status color for white text. */
-    --destructive: 0 68% 43%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 4%;
     --shadow-control: 0 2px 4px hsl(0 0% 0% / 0.1);
     --shadow-overlay: 0 4px 24px hsl(0 0% 0% / 0.2);
     --shadow-dialog: 0 7px 32px hsl(0 0% 0% / 0.35);
@@ -177,11 +171,6 @@
   ::selection {
     background: var(--selection);
   }
-
-  /* The dark selection is opaque, so its text turns white. */
-  .dark ::selection {
-    color: #ffffff;
-  }
 }
 
 @layer utilities {
@@ -210,6 +199,51 @@
   .scrollbar-on-hover:hover {
     scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
   }
+}
+
+/*
+ * The tab row, as in Safari: a hairline parts inactive pills and hides beside
+ * the active or hovered one, and an edge fades while pills are scrolled out
+ * of view past it. :where keeps the hairline below the drop marker's
+ * before: utilities.
+ */
+:where(.tab-pill + .tab-pill)::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: -1.5px;
+  width: 1px;
+  background: hsl(var(--border-strong));
+}
+
+:where(
+    .tab-pill[aria-selected="true"],
+    .tab-pill:hover,
+    .tab-pill[aria-selected="true"] + .tab-pill,
+    .tab-pill:hover + .tab-pill
+  )::before {
+  background: transparent;
+}
+
+.tab-strip {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+}
+
+.tab-strip[data-fade-start] {
+  --fade-start: 1.5rem;
+}
+
+.tab-strip[data-fade-end] {
+  --fade-end: 1.5rem;
 }
 
 /* For making the navbar draggable */

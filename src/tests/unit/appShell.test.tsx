@@ -15,7 +15,7 @@ import {
 } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
-import { installDiskApi } from '@/tests/helpers/diskApi';
+import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, resetTabs } from '@/tests/helpers/tabs';
 
 const ROUTES: RouteObject[] = [
@@ -174,6 +174,13 @@ describe('AppShell', () => {
     let changed: ((payload: { directories: string[] }) => void) | undefined;
     installDiskApi({
       listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      readDirectory: vi.fn(async (path: string) => ({
+        success: true as const,
+        data: {
+          path,
+          entries: path === '/Vault' ? [entry({ path: '/Vault/Inbox', name: 'Inbox', kind: 'directory', isDirectory: true })] : [],
+        },
+      })),
       onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
         changed = callback;
         return () => undefined;
@@ -290,6 +297,30 @@ describe('AppShell', () => {
     await waitFor(() =>
       expect(screen.getByTestId('workspace-surface')).toHaveFocus()
     );
+  });
+
+  it('keeps focus in the sidebar when it opens a page beside it', async () => {
+    const user = userEvent.setup();
+    const note = '/Vault/note.md';
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      readDirectory: vi.fn(async (path: string) => ({
+        success: true as const,
+        data: { path, entries: path === '/Vault' ? [entry({ path: note, name: 'note.md', kind: 'markdown' })] : [] },
+      })),
+    });
+    renderShell();
+
+    const row = await screen.findByTestId(`disk-tree-item-${note}`);
+    act(() => row.focus());
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(openedPath()).toBe(note));
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(screen.getByTestId(`disk-tree-item-${note}`)).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Recent' }));
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(screen.getByTestId('workspace-surface')).not.toHaveFocus();
   });
 
   it('hands focus to the workspace when an external route closes the narrow sidebar', async () => {

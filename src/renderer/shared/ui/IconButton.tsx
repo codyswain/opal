@@ -23,8 +23,6 @@ const iconButtonVariants = cva(
           'bg-surface-hover text-foreground-secondary hover:bg-surface-active hover:text-foreground',
         outline:
           'border border-border bg-surface hover:bg-surface-hover hover:text-foreground',
-        destructive:
-          'text-danger hover:bg-danger/10 hover:text-danger active:bg-danger/15',
       },
       active: {
         true: 'bg-surface-active text-foreground',

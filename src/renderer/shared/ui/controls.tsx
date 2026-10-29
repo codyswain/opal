@@ -1,6 +1,4 @@
 import * as React from 'react';
-import * as SwitchPrimitive from '@radix-ui/react-switch';
-import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/renderer/shared/utils';
 
 interface SegmentedControlOption<Value extends string> {
@@ -119,87 +117,5 @@ function SegmentedControl<Value extends string>({
   );
 }
 
-interface SwitchProps
-  extends Omit<
-    React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>,
-    'aria-label'
-  > {
-  label: string;
-}
-
-const Switch = React.forwardRef<
-  React.ElementRef<typeof SwitchPrimitive.Root>,
-  SwitchProps
->(({ className, label, ...props }, ref) => (
-  <SwitchPrimitive.Root
-    ref={ref}
-    aria-label={label}
-    className={cn(
-      'inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full p-0.5',
-      'bg-surface-active outline-none transition-hover',
-      'data-[state=checked]:bg-primary',
-      'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1',
-      'focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-40',
-      className
-    )}
-    {...props}
-  >
-    <SwitchPrimitive.Thumb
-      className={cn(
-        'pointer-events-none block h-3 w-3 rounded-full bg-white shadow-sm',
-        'transition-transform duration-quick ease-standard',
-        'data-[state=checked]:translate-x-3 data-[state=unchecked]:translate-x-0'
-      )}
-    />
-  </SwitchPrimitive.Root>
-));
-Switch.displayName = SwitchPrimitive.Root.displayName;
-
-const chipVariants = cva(
-  [
-    'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-control',
-    'outline-none transition-hover',
-    'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1',
-    'focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-40',
-  ],
-  {
-    variants: {
-      selected: {
-        false:
-          'border-border bg-surface text-foreground-secondary hover:bg-surface-hover hover:text-foreground',
-        true:
-          'border-focus/40 bg-surface-selected text-foreground hover:border-focus/60',
-      },
-    },
-    defaultVariants: {
-      selected: false,
-    },
-  }
-);
-
-interface ChipProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof chipVariants> {
-  selected?: boolean;
-}
-
-const Chip = React.forwardRef<HTMLButtonElement, ChipProps>(
-  ({ className, selected = false, type = 'button', ...props }, ref) => (
-    <button
-      ref={ref}
-      type={type}
-      aria-pressed={selected}
-      className={cn(chipVariants({ selected }), className)}
-      {...props}
-    />
-  )
-);
-Chip.displayName = 'Chip';
-
-export { Chip, SegmentedControl, Switch, chipVariants };
-export type {
-  ChipProps,
-  SegmentedControlOption,
-  SegmentedControlProps,
-  SwitchProps,
-};
+export { SegmentedControl };
+export type { SegmentedControlOption, SegmentedControlProps };

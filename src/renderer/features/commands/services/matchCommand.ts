@@ -30,6 +30,20 @@ export function rankCommands(commands: readonly Command[], term: string, limit =
     .map(({ command }) => command);
 }
 
+/** The sidebar's names for its two pages stay capitalised in any label. */
+const PAGE_NAMES = new Set(['Today', 'Recent']);
+
+/**
+ * Commands are named in title case for the macOS menu; the palette, like the
+ * rest of Opal, reads them in sentence case: "Close All Tabs" is "Close all tabs".
+ */
+export function sentenceCase(name: string): string {
+  return name
+    .split(' ')
+    .map((word, index) => (index === 0 || PAGE_NAMES.has(word) ? word : word.toLowerCase()))
+    .join(' ');
+}
+
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** "CmdOrCtrl+Shift+T" becomes "⌘⇧T" on a Mac and "Ctrl+Shift+T" elsewhere. */

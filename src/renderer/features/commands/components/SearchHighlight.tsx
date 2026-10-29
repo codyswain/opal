@@ -6,6 +6,6 @@ export function SearchHighlight({ text, query }: { text: string; query: string }
   if (!term) return <>{text}</>;
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return <>{text.split(new RegExp(`(${escaped})`, 'gi')).map((part, index) =>
-    index % 2 ? <mark key={index} className="rounded-sm bg-focus/10 px-0 font-semibold text-foreground">{part}</mark> : part
+    index % 2 ? <mark key={index} className="rounded-sm bg-surface-active px-0 font-semibold text-foreground">{part}</mark> : part
   )}</>;
 }

@@ -133,8 +133,11 @@ describe('CommandPalette', () => {
     expect(screen.queryByTestId('command-palette')).toBeNull();
     await user.keyboard('{Meta>}k{/Meta}');
     const palette = await screen.findByTestId('command-palette');
-    expect(await within(palette).findByTestId('palette-file-/Vault/inbox.md')).toHaveTextContent('Opened 1 minute ago');
-    expect(within(palette).getByTestId('palette-command-nav.today')).toBeInTheDocument();
+    // One line per file: the name as the tree shows it, and no folder at the top of the vault.
+    expect(await within(palette).findByTestId('palette-file-/Vault/inbox.md')).toHaveTextContent(/^inbox$/);
+    expect(within(palette).getByTestId('palette-command-nav.today')).toHaveTextContent('Go to Today');
+    expect(within(palette).getByTestId(`palette-command-${COMMAND_IDS.closeTab}`)).toHaveTextContent('Close tab');
+    expect(within(palette).queryByTestId('palette-command-palette.open')).toBeNull();
     expect(within(palette).getByRole('group', { name: 'Recent' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
@@ -150,7 +153,8 @@ describe('CommandPalette', () => {
     const input = await screen.findByRole('combobox', { name: 'Search files and commands' });
     await user.type(input, 'pla');
     const file = await screen.findByTestId(`palette-file-${PLAN}`);
-    expect(file).toHaveTextContent('Vault › Projects › Atlas');
+    expect(file).toHaveTextContent(/^planProjects\/Atlas$/);
+    expect(file).toHaveAttribute('title', 'Projects/Atlas/plan.md');
     expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
       filters: [{ field: 'name', op: 'contains', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
       scope: { kind: 'all-roots' },
@@ -184,6 +188,26 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(tabPaths()).toEqual(['/Vault/inbox.md', PLAN, PLAN]));
   });
 
+  it('asks only for a file after New Tab, and opens Today there in a new tab when asked with >', async () => {
+    const user = userEvent.setup();
+    window.vaultAPI = {
+      discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT }] })),
+      createDay: vi.fn(async () => ({ success: true as const, data: undefined })),
+    } as unknown as typeof window.vaultAPI;
+    openTabs(['/Vault/inbox.md']);
+    renderPalette();
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.newTab));
+    const palette = await screen.findByTestId('command-palette');
+    await within(palette).findByTestId('palette-file-/Vault/inbox.md');
+    expect(within(palette).queryByRole('group', { name: 'Commands' })).toBeNull();
+
+    await user.type(within(palette).getByRole('combobox'), '>today');
+    await user.click(await within(palette).findByTestId('palette-command-nav.today'));
+    await waitFor(() => expect(tabPaths()).toHaveLength(2));
+    expect(tabPaths()[0]).toBe('/Vault/inbox.md');
+    expect(openedPath()).toMatch(/^\/Vault\/Inbox\/Logs\/\d{4}-\d{2}-\d{2}\.md$/);
+  });
+
   it('limits results to commands after > and runs the selected command', async () => {
     const user = userEvent.setup();
     renderPalette();
@@ -201,7 +225,9 @@ describe('CommandPalette', () => {
   it('reports every command to main and shows shortcuts', async () => {
     renderPalette();
     const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; accelerator?: string }[];
-    expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newNote', 'theme.toggle', 'pane.toggleLeft', 'app.openSettings']));
+    expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newNote', 'pane.toggleLeft', 'app.openSettings']));
+    // Theme lives in Settings only.
+    expect(reported.map((command) => command.id)).not.toContain('theme.toggle');
     expect(reported.map((command) => command.id)).not.toContain('privacy.toggle');
     // The folder view is gone, and the command that opened it with it.
     expect(reported.map((command) => command.id)).not.toContain('nav.files');

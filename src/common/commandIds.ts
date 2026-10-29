@@ -11,7 +11,6 @@ export const COMMAND_IDS = {
   openFolder: "files.openFolder",
   newNote: "files.newNote",
   toggleLeftPane: "pane.toggleLeft",
-  toggleTheme: "theme.toggle",
   newTab: "tabs.new",
   closeTab: "tabs.close",
   reopenClosedTab: "tabs.reopenClosed",

@@ -1,6 +1,6 @@
 import { readdir, stat, open } from 'fs/promises';
 import path from 'path';
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, fileTreeLabel } from '@/common/fileKind';
 import { normalizePath } from '@/main/fs/paths';
 import { isValidAdjacentCarrier } from './MetadataCodec';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
@@ -137,8 +137,12 @@ export class DiskReader {
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
-/** Directories first, then case-insensitive name order with numbers by value (2 before 10), as Finder sorts. */
+/**
+ * Directories first, then case-insensitive order with numbers by value (2
+ * before 10), as Finder sorts. Names compare as the tree shows them, so
+ * "investors" (investors.md) comes before "investors notes.txt".
+ */
 function compareEntries(a: DiskEntry, b: DiskEntry): number {
   if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-  return collator.compare(a.name, b.name);
+  return collator.compare(fileTreeLabel(a.name, a.kind), fileTreeLabel(b.name, b.kind));
 }

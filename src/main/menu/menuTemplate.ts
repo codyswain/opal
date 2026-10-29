@@ -130,8 +130,6 @@ export function buildMenuTemplate(
       submenu: [
         ...item(COMMAND_IDS.toggleLeftPane),
         SEPARATOR,
-        ...item(COMMAND_IDS.toggleTheme),
-        SEPARATOR,
         { role: "reload", label: "Reload" },
         { role: "toggleDevTools", label: "Toggle Developer Tools" },
         SEPARATOR,

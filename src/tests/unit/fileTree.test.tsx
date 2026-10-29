@@ -306,7 +306,9 @@ describe('FileTree', () => {
 
     menu = await openMenu(README);
     await user.click(within(menu).getByRole('menuitem', { name: 'Move to Trash' }));
-    expect(useDiskStore.getState().pendingDelete).toBe(README);
+    await waitFor(() => expect(useDiskStore.getState().pendingDelete).toBe(README));
+    // The confirmation gives focus back to the row it was asked from.
+    expect(row(README)).toHaveFocus();
     useDiskStore.getState().cancelDelete();
 
     menu = await openMenu(LIBRARY);
@@ -383,6 +385,23 @@ describe('FileTree', () => {
     fireEvent.drop(row(NOTES), { dataTransfer: dataTransfer(README) });
     fireEvent.drop(screen.getByRole('tree'), { dataTransfer: dataTransfer(README) });
     expect(window.diskAPI.move).not.toHaveBeenCalled();
+  });
+
+  it('takes drops on a root row when several roots are open, and never drags one', async () => {
+    const other = '/Other';
+    useDiskStore.setState({
+      roots: [ROOT, other],
+      listings: { [ROOT]: LISTINGS[ROOT], [other]: [] },
+    });
+    renderTree();
+
+    expect(row(other)).not.toHaveAttribute('draggable');
+    const over = createEvent.dragOver(row(other), { dataTransfer: dataTransfer(), cancelable: true });
+    fireEvent.dragStart(row(README), { dataTransfer: dataTransfer() });
+    fireEvent(row(other), over);
+    expect(over.defaultPrevented).toBe(true);
+    fireEvent.drop(row(other), { dataTransfer: dataTransfer(README) });
+    await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(README, other));
   });
 
   it('moves a nested row to the root when dropped on blank space, and reports a failure', async () => {

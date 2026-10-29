@@ -114,7 +114,7 @@ export const FolderPickerDialog: React.FC<FolderPickerDialogProps> = ({ open, ro
             ))
           )}
         </ul>
-        {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="text-ui font-medium text-foreground">{error}</p> : null}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button disabled={!current} onClick={() => { if (current) { onChoose(current); onOpenChange(false); } }}>

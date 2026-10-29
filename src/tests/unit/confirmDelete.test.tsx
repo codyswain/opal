@@ -28,6 +28,18 @@ describe('ConfirmDeleteDialog', () => {
     expect(screen.getByTestId('confirm-delete')).toHaveTextContent(/trash/i);
   });
 
+  it('starts on the confirm button and keeps focus inside', async () => {
+    const user = userEvent.setup();
+    useDiskStore.setState({ pendingDelete: '/V/note.md' });
+    render(<ConfirmDeleteDialog />);
+
+    await waitFor(() => expect(screen.getByTestId('confirm-delete-confirm')).toHaveFocus());
+    await user.tab();
+    expect(screen.getByTestId('confirm-delete-cancel')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('confirm-delete-confirm')).toHaveFocus();
+  });
+
   it('trashes on confirm', async () => {
     const user = userEvent.setup();
     useDiskStore.setState({ pendingDelete: '/V/note.md' });

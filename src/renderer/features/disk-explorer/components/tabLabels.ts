@@ -1,6 +1,5 @@
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, fileTreeLabel } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
-import { fileTreeLabel } from '@/renderer/features/shell/utils/flattenFileTree';
 import { locationPath, type FilesLocation } from '../navigation/filesLocation';
 
 export interface TabLabel {
@@ -24,6 +23,13 @@ export function vaultRelativePath(path: string, roots: readonly string[]): strin
   const inside = path === root ? '' : path.slice(root === '/' ? 1 : root.length + 1);
   if (roots.length === 1 && inside) return inside;
   return [basenameFsPath(root), inside].filter(Boolean).join('/');
+}
+
+/** The folder a row names beside a file; files at the top of a lone vault have none. */
+export function vaultFolder(path: string, roots: readonly string[]): string {
+  const parent = parentFsPath(path);
+  if (!parent || (roots.length === 1 && parent === roots[0])) return '';
+  return vaultRelativePath(parent, roots);
 }
 
 export function locationName(location: FilesLocation): string {

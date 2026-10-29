@@ -88,6 +88,16 @@ describe('TabStrip', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['READMEone', 'READMEtwo', 'alpha']);
   });
 
+  it('keeps the folder hint out of the name, so a squeezed name cannot hide it', () => {
+    openTabs(['/V/one/README.md', '/V/two/README.md']);
+    renderStrip();
+    const hint = screen.getByTestId('tab-hint-/V/one/README.md');
+    expect(hint).toHaveTextContent('one');
+    expect(hint.previousElementSibling).toHaveTextContent('README');
+    expect(hint.previousElementSibling).toHaveClass('truncate', 'max-w-[60%]');
+    expect(screen.getByTestId('tab-/V/one/README.md')).toHaveClass('min-w-40');
+  });
+
   it('shows an unsaved dot that gives way to the close glyph, and a mark for a problem', () => {
     openTabs([A, B], 1);
     useDocumentStatusStore.getState().set(A, 'dirty');
@@ -175,6 +185,23 @@ describe('TabStrip', () => {
     expect(within(menu).getAllByRole('menuitem')).toHaveLength(8);
     await user.click(within(menu).getByRole('menuitem', { name: /file-5/ }));
     expect(openedPath()).toBe(many[5]);
+  });
+
+  it('drops the list of tabs once the last tab of an overflowing row closes', () => {
+    const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get(this: HTMLElement) { return this.getAttribute('role') === 'tablist' ? 2000 : 0; },
+    });
+    try {
+      openTabs([A, B, C]);
+      renderStrip();
+      expect(screen.getByRole('button', { name: 'All tabs (3)' })).toBeInTheDocument();
+      act(() => useTabsStore.getState().closeAll());
+      expect(screen.queryByRole('button', { name: /All tabs/ })).toBeNull();
+    } finally {
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', scrollWidth);
+    }
   });
 });
 

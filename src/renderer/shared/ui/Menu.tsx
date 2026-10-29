@@ -45,20 +45,17 @@ MenuContent.displayName = MenuPrimitive.Content.displayName;
 interface MenuItemProps
   extends React.ComponentPropsWithoutRef<typeof MenuPrimitive.Item> {
   inset?: boolean;
-  tone?: 'default' | 'destructive';
 }
 
 const MenuItem = React.forwardRef<
   React.ElementRef<typeof MenuPrimitive.Item>,
   MenuItemProps
->(({ className, inset, tone = 'default', ...props }, ref) => (
+>(({ className, inset, ...props }, ref) => (
   <MenuPrimitive.Item
     ref={ref}
     className={cn(
       itemStyles,
       inset && 'pl-7',
-      tone === 'destructive' &&
-        'text-danger focus:bg-danger/10 focus:text-danger',
       className
     )}
     {...props}
