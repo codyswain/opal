@@ -5,6 +5,7 @@ import path from 'path';
 import type { IpcMain } from 'electron';
 vi.mock('@/main/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 import { MarkdownConflictError, MarkdownDocumentService, MarkdownError } from '@/main/fs/MarkdownDocumentService';
+import { LinkIndex } from '@/main/fs/LinkIndex';
 import { MarkdownHandlers } from '@/main/fs/MarkdownHandlers';
 import { MetadataService } from '@/main/fs/MetadataService';
 import { RootRegistry } from '@/main/fs/RootRegistry';
@@ -34,7 +35,7 @@ describe('MarkdownDocumentService', () => {
     const original = Buffer.concat([Buffer.from('﻿'), Buffer.from('---\r\ntags: [a]\r\ncustom: keep # comment\r\n---\r\n# Title\r\n\r\nBody line\r\n')]);
     await writeFile(item('note.md'), original);
     const document = await service.read(item('note.md'));
-    expect(document).toMatchObject({ body: '# Title\n\nBody line\n', hasFrontmatter: true, size: original.length });
+    expect(document).toMatchObject({ body: '# Title\n\nBody line\n', properties: 2, size: original.length });
     const written = await service.write(item('note.md'), '# Title\n\nEdited body\n\n- item', document.revision);
     const bytes = await readFile(item('note.md'));
     expect(bytes.subarray(0, 3)).toEqual(Buffer.from('﻿'));
@@ -52,12 +53,14 @@ describe('MarkdownDocumentService', () => {
   it('handles files without frontmatter, keeps no trailing newline when there was none, and treats an unclosed block as text', async () => {
     await writeFile(item('plain.md'), 'Just text');
     const plain = await service.read(item('plain.md'));
-    expect(plain).toMatchObject({ body: 'Just text', hasFrontmatter: false });
+    expect(plain).toMatchObject({ body: 'Just text', properties: 0 });
     await service.write(item('plain.md'), 'Changed', plain.revision);
     expect(await readFile(item('plain.md'), 'utf8')).toBe('Changed');
     await writeFile(item('open.md'), '---\ntitle: never closed\nbody');
     const open = await service.read(item('open.md'));
-    expect(open).toMatchObject({ body: '---\ntitle: never closed\nbody', hasFrontmatter: false });
+    expect(open).toMatchObject({ body: '---\ntitle: never closed\nbody', properties: 0 });
+    await writeFile(item('list.md'), '---\n- not\n- a map\n---\nBody');
+    expect(await service.read(item('list.md'))).toMatchObject({ body: 'Body', properties: 0 });
   });
 
   it('refuses a stale revision without touching the file', async () => {
@@ -111,13 +114,13 @@ describe('MarkdownHandlers', () => {
   it('validates arguments and maps conflicts', async () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
-    new MarkdownHandlers({ ipc, service }).registerAll();
+    new MarkdownHandlers({ ipc, service, links: new LinkIndex({ registry }) }).registerAll();
     const invoke = (channel: string, ...args: unknown[]) => {
       const handler = handlers.get(channel);
       if (!handler) throw new Error(`Missing ${channel}`);
       return handler({}, ...args);
     };
-    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:read', 'markdown:write']);
+    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:read', 'markdown:resolve-links', 'markdown:write']);
     await writeFile(item('note.md'), '# one\n');
     const read = await invoke('markdown:read', item('note.md')) as { success: true; data: { revision: string } };
     expect(read.success).toBe(true);
@@ -127,5 +130,9 @@ describe('MarkdownHandlers', () => {
     expect(await invoke('markdown:write', item('note.md'), '# mine\n', read.data.revision)).toEqual({ success: false, error: expect.stringMatching(/changed on disk/), conflict: true });
     expect(await invoke('markdown:create', root)).toMatchObject({ success: true, data: { path: item('Untitled.md') } });
     expect(await invoke('markdown:create', root, 7)).toMatchObject({ success: false });
+    expect(await invoke('markdown:resolve-links', item('note.md'), ['NOTE', 'missing'])).toEqual({ success: true, data: { NOTE: item('note.md'), missing: null } });
+    expect(await invoke('markdown:resolve-links', item('note.md'), 'note')).toMatchObject({ success: false, error: /Invalid/ });
+    expect(await invoke('markdown:resolve-links', item('note.md'), Array(501).fill('x'))).toMatchObject({ success: false, error: /Invalid/ });
+    expect(await invoke('markdown:resolve-links', path.join(tmp, 'outside.md'), ['note'])).toMatchObject({ success: false, error: /not inside/ });
   });
 });

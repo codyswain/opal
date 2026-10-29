@@ -4,7 +4,7 @@ import type { MarkdownAPI } from '@/renderer/shared/types/markdownApi';
 /**
  * An in-memory markdownAPI: documents are keyed by path with a revision that
  * changes on every write, and `conflictOn` makes the next write of a path
- * fail like an external edit would.
+ * fail like an external edit would. Wiki links resolve to documents by name.
  */
 export function installMarkdownApi(initial: Record<string, string> = {}, overrides: Partial<MarkdownAPI> = {}) {
   const documents = new Map(Object.entries(initial).map(([path, body]) => [path, { body, revision: `rev-${path}-1` }]));
@@ -17,7 +17,7 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
     read: vi.fn(async (target: string) => {
       const document = documents.get(target);
       if (!document) return { success: false as const, error: 'Only Markdown files can be edited here.' };
-      return { success: true as const, data: { path: target, body: document.body, revision: document.revision, size: document.body.length, hasFrontmatter: false } };
+      return { success: true as const, data: { path: target, body: document.body, revision: document.revision, size: document.body.length, properties: 0 } };
     }),
     write: vi.fn(async (target: string, body: string, expectedRevision: string) => {
       const document = documents.get(target);
@@ -38,6 +38,14 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
       documents.set(candidate, { body: '', revision: `rev-${candidate}-1` });
       return { success: true as const, data: { path: candidate } };
     }),
+    // Resolves a target to an open document with that name, ignoring case.
+    resolveLinks: vi.fn(async (_from: string, targets: string[]) => ({
+      success: true as const,
+      data: Object.fromEntries(targets.map((target) => [
+        target,
+        [...documents.keys()].find((path) => path.toLowerCase().endsWith(`/${target.toLowerCase()}.md`)) ?? null,
+      ])),
+    })),
     setFlushHandler: vi.fn(),
     ...overrides,
   };

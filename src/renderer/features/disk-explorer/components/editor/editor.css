@@ -1,16 +1,444 @@
-/* The page editor's type and measure. CodeMirror's theme in editorSetup.ts
-   reads these, and every color comes from the shell's tokens so light and
-   dark stay consistent with the rest of the surface. */
+/* The page: Cody's Obsidian look, PT Serif at 16px in a centered column
+   about 700px wide. Every color comes from the shell's tokens, so light and
+   dark follow the rest of the app, and nothing here has a hue. The live
+   preview's classes (cm-md-*) come from livePreview.ts and previewWidgets.ts.
+   Selectors start with `.opal-editor .cm-editor` so they outrank
+   CodeMirror's own theme. Lines and blocks space themselves with padding,
+   never margins: CodeMirror measures their boxes to place the caret. */
 .opal-editor {
-  --editor-measure: 68ch;
-  --editor-line: 1.65;
+  --font-reading: "PT Serif", "Iowan Old Style", Georgia, serif;
+  --editor-measure: 43.75rem;
+  --editor-line: 1.6;
+  --editor-sunken: hsl(var(--foreground) / 0.045);
+  --editor-rule: hsl(var(--border-subtle));
+  --editor-muted: hsl(var(--text-tertiary));
   color: hsl(var(--foreground));
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  font-family: var(--font-reading);
+  font-size: 1rem;
   -webkit-font-smoothing: antialiased;
 }
 
 .opal-editor .cm-editor {
   position: absolute;
   inset: 0;
+  height: 100%;
+  background-color: transparent;
+  color: inherit;
+}
+
+.opal-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.opal-editor .cm-editor .cm-scroller {
+  font-family: inherit;
+  line-height: var(--editor-line);
+}
+
+.opal-editor .cm-editor .cm-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  padding: 3rem 2rem 8rem;
+  caret-color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-line {
+  padding: 0;
+}
+
+.opal-editor .cm-editor .cm-content ::selection {
+  background-color: var(--selection, hsl(var(--foreground) / 0.14));
+}
+
+.opal-editor .cm-editor .cm-placeholder {
+  color: var(--editor-muted);
+}
+
+.opal-editor .cm-editor .cm-activity-log {
+  opacity: 0.65;
+}
+
+/* Marks left showing on the line being edited, and other syntax. */
+.opal-editor .cm-editor .cm-md-syntax {
+  color: var(--editor-muted);
+}
+
+.opal-editor .cm-editor .cm-md-strong {
+  font-weight: 700;
+}
+
+.opal-editor .cm-editor .cm-md-em {
+  font-style: italic;
+}
+
+.opal-editor .cm-editor .cm-md-strike {
+  text-decoration: line-through;
+}
+
+/* Headings and the inline title share the serif, bold, larger than the body. */
+.opal-editor .cm-editor .cm-md-inline-title,
+.opal-editor .cm-editor .cm-md-heading {
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.opal-editor .cm-editor .cm-md-inline-title {
+  padding-bottom: 0.6em;
+  font-size: 1.8em;
+  overflow-wrap: break-word;
+}
+
+.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.45em; font-size: 1.8em; }
+.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.4em; font-size: 1.5em; }
+.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.3em; font-size: 1.25em; }
+.opal-editor .cm-editor .cm-md-h4 { padding-top: 0.25em; font-size: 1.1em; }
+.opal-editor .cm-editor .cm-md-h5 { padding-top: 0.2em; font-size: 1em; }
+.opal-editor .cm-editor .cm-md-h6 { padding-top: 0.2em; font-size: 1em; color: hsl(var(--text-secondary)); }
+
+.opal-editor .cm-editor .cm-md-setext-mark {
+  color: var(--editor-muted);
+  font-size: 0.75em;
+}
+
+/* Links are text-colored with a quiet underline; a wiki link to nothing yet is fainter. */
+.opal-editor .cm-editor .cm-md-link,
+.opal-editor .cm-editor .cm-md-wikilink {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary) / 0.55);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.opal-editor .cm-editor .cm-md-wikilink {
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-md-unresolved {
+  opacity: 0.6;
+  text-decoration-style: dashed;
+}
+
+.opal-editor .cm-editor .cm-md-code {
+  padding: 0.1em 0.2em;
+  border-radius: 4px;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* Lists: the marker sits in a box as wide as the indent, so wrapped lines
+   hang under the item's text. --list-indent comes from the line. */
+/* .cm-line raises these over the quote rules below, whose indent they add to. */
+.opal-editor .cm-editor .cm-line.cm-md-list,
+.opal-editor .cm-editor .cm-line.cm-md-list-cont {
+  padding-left: calc(var(--quote-indent, 0px) + var(--list-indent));
+}
+
+.opal-editor .cm-editor .cm-md-list {
+  text-indent: calc(-1 * var(--list-indent));
+}
+
+.opal-editor .cm-editor .cm-md-list-marker {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: var(--list-indent);
+  justify-content: flex-end;
+  align-items: baseline;
+  padding-right: 0.55em;
+  text-indent: 0;
+  color: var(--editor-muted);
+}
+
+.opal-editor .cm-editor .cm-md-bullet {
+  display: inline-block;
+  width: 0.3em;
+  height: 0.3em;
+  border-radius: 50%;
+  background-color: currentColor;
+  transform: translateY(-0.2em);
+}
+
+.opal-editor .cm-editor .cm-md-number {
+  font-variant-numeric: tabular-nums;
+}
+
+.opal-editor .cm-editor .cm-md-task {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  border: 1.5px solid hsl(var(--text-tertiary));
+  border-radius: 4px;
+  cursor: pointer;
+  transform: translateY(0.12em);
+}
+
+.opal-editor .cm-editor .cm-md-task[aria-checked="true"] {
+  border-color: hsl(var(--foreground));
+  background-color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-md-task[aria-checked="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0.27em;
+  top: 0.08em;
+  width: 0.22em;
+  height: 0.48em;
+  border: solid hsl(var(--background));
+  border-width: 0 0.12em 0.12em 0;
+  transform: rotate(45deg);
+}
+
+.opal-editor .cm-editor .cm-md-task-done {
+  color: var(--editor-muted);
+  text-decoration: line-through;
+}
+
+/* Quotes get a grey rule; callouts, [!ai] included, a grey box with a bold title row. */
+.opal-editor .cm-editor .cm-md-quote,
+.opal-editor .cm-editor .cm-md-in-quote {
+  --quote-indent: 1em;
+  padding-left: var(--quote-indent);
+  border-left: 2px solid hsl(var(--border-default));
+  color: hsl(var(--text-secondary));
+}
+
+.opal-editor .cm-editor .cm-md-callout,
+.opal-editor .cm-editor .cm-md-in-callout {
+  --quote-indent: 1em;
+  padding-left: var(--quote-indent);
+  padding-right: 1em;
+  background-color: var(--editor-sunken);
+}
+
+.opal-editor .cm-editor .cm-md-callout-first {
+  padding-top: 0.45em;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.opal-editor .cm-editor .cm-md-callout-last,
+.opal-editor .cm-editor .cm-md-in-callout-last {
+  padding-bottom: 0.45em;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.opal-editor .cm-editor .cm-md-callout-title {
+  font-weight: 700;
+}
+
+.opal-editor .cm-editor .cm-md-callout-icon {
+  display: inline-flex;
+  margin-right: 0.4em;
+  color: hsl(var(--text-secondary));
+  vertical-align: -0.15em;
+}
+
+.opal-editor .cm-editor .cm-md-hr {
+  display: inline-block;
+  width: 100%;
+  border-top: 1px solid hsl(var(--border-default));
+  vertical-align: middle;
+}
+
+.opal-editor .cm-editor .cm-md-image {
+  display: block;
+  padding: 0.35em 0;
+}
+
+.opal-editor .cm-editor .cm-md-image img {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.opal-editor .cm-editor .cm-md-image-missing {
+  display: inline;
+  padding: 0;
+  color: var(--editor-muted);
+  font-style: italic;
+}
+
+/* Tables and fenced code: drawn as blocks while no selection is in them,
+   and as monospaced source while one is. */
+/* Blocks undo the editor's wrapping rules, which break words anywhere. */
+.opal-editor .cm-editor .cm-md-block {
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  padding-left: calc(var(--quote-indent, 0px) + var(--list-indent, 0px));
+  cursor: text;
+}
+
+.opal-editor .cm-editor .cm-md-table-scroll {
+  overflow-x: auto;
+  padding: 0.35em 0;
+}
+
+.opal-editor .cm-editor .cm-md-table table {
+  border-collapse: collapse;
+  font-size: 0.9375em;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.opal-editor .cm-editor .cm-md-table th,
+.opal-editor .cm-editor .cm-md-table td {
+  min-width: 3em;
+  padding: 0.3em 0.75em;
+  border: 1px solid var(--editor-rule);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.opal-editor .cm-editor .cm-md-table th {
+  font-weight: 700;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-widget {
+  padding-top: 0.25em;
+  padding-bottom: 0.25em;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-box {
+  padding: 0.7em 1em;
+  overflow-x: auto;
+  border-radius: 6px;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+}
+
+.opal-editor .cm-editor .cm-md-in-callout .cm-md-codeblock-box {
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-lines {
+  display: inline-block;
+  min-width: 100%;
+  white-space: pre;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock,
+.opal-editor .cm-editor .cm-md-table-source {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock {
+  padding: 0 1em;
+  background-color: var(--editor-sunken);
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-first {
+  padding-top: 0.35em;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-last {
+  padding-bottom: 0.35em;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+/* A conflict shows the disk's side above the page's, in greys. */
+.opal-editor .cm-editor .cm-deletedChunk {
+  position: relative;
+  background-color: var(--editor-sunken);
+}
+
+.opal-editor .cm-editor .cm-deletedChunk .cm-chunkButtons {
+  top: 0.15em;
+  display: flex;
+  gap: 4px;
+}
+
+.opal-editor .cm-editor .cm-deletedChunk .cm-chunkButtons button[name] {
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid hsl(var(--border-default));
+  border-radius: 4px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.4rem;
+}
+
+.opal-editor .cm-editor .cm-changedLine,
+.opal-editor .cm-editor .cm-insertedLine {
+  background-color: hsl(var(--foreground) / 0.03);
+}
+
+.opal-editor .cm-editor .cm-deletedChunk .cm-deletedText,
+.opal-editor .cm-editor .cm-changedText {
+  background: none;
+  text-decoration: underline;
+  text-decoration-color: var(--editor-muted);
+}
+
+/* Search: a quiet bar in the UI font, matches marked in grey. */
+.opal-editor .cm-editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--editor-rule);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search {
+  padding: 6px 28px 6px 8px;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label {
+  font-size: inherit;
+  accent-color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-panel .cm-textfield,
+.opal-editor .cm-editor .cm-panel .cm-button {
+  height: 1.6rem;
+  margin: 2px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-default));
+  border-radius: 6px;
+  background: hsl(var(--background));
+  color: inherit;
+  font: inherit;
+  vertical-align: middle;
+}
+
+.opal-editor .cm-editor .cm-panel .cm-textfield:focus {
+  outline: 2px solid hsl(var(--foreground) / 0.4);
+  outline-offset: -1px;
+}
+
+.opal-editor .cm-editor .cm-panel .cm-button:hover {
+  background: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search [name="close"] {
+  top: 8px;
+  right: 8px;
+  color: hsl(var(--text-tertiary));
+  font-size: 1rem;
+}
+
+.opal-editor .cm-editor .cm-content .cm-searchMatch {
+  background-color: hsl(var(--foreground) / 0.12);
+}
+
+.opal-editor .cm-editor .cm-content .cm-searchMatch-selected {
+  background-color: hsl(var(--foreground) / 0.26);
 }

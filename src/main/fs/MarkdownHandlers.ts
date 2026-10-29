@@ -1,14 +1,16 @@
 import type { IpcMain } from 'electron';
 import logger from '@/main/logger';
 import type { IPCResponse } from '@/types/ipc';
-import type { MarkdownDocument, MarkdownWriteResult } from '@/types/markdown';
+import { LINK_TARGET_LIMIT, type MarkdownDocument, type MarkdownLinks, type MarkdownWriteResult } from '@/types/markdown';
 import { PathNotAllowedError } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
 import { MarkdownConflictError, MarkdownError, type MarkdownDocumentService } from './MarkdownDocumentService';
+import type { LinkIndex } from './LinkIndex';
 
 export interface MarkdownHandlerDependencies {
   ipc: IpcMain;
   service: MarkdownDocumentService;
+  links: LinkIndex;
 }
 
 export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true };
@@ -17,11 +19,17 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+/** One page's link targets: at most a few hundred short names. */
+function isLinkTargets(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= LINK_TARGET_LIMIT &&
+    value.every((target) => typeof target === 'string' && target.length <= 1024);
+}
+
 export class MarkdownHandlers {
   constructor(private deps: MarkdownHandlerDependencies) {}
 
   registerAll(): void {
-    const { ipc, service } = this.deps;
+    const { ipc, service, links } = this.deps;
     ipc.handle('markdown:read', async (_, target: unknown): Promise<MarkdownResponse<MarkdownDocument>> => {
       if (!isNonEmptyString(target)) return invalid();
       return this.respond(() => service.read(target), 'Failed to open the note');
@@ -33,6 +41,10 @@ export class MarkdownHandlers {
     ipc.handle('markdown:create', async (_, parentDir: unknown, baseName: unknown): Promise<MarkdownResponse<{ path: string }>> => {
       if (!isNonEmptyString(parentDir) || (baseName !== undefined && typeof baseName !== 'string')) return invalid();
       return this.respond(() => service.create(parentDir, baseName as string | undefined), 'Failed to create the note');
+    });
+    ipc.handle('markdown:resolve-links', async (_, from: unknown, targets: unknown): Promise<MarkdownResponse<MarkdownLinks>> => {
+      if (!isNonEmptyString(from) || !isLinkTargets(targets)) return invalid();
+      return this.respond(() => links.resolve(from, targets), 'Failed to resolve links');
     });
   }
 

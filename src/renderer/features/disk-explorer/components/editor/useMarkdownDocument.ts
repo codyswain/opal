@@ -13,7 +13,8 @@ export interface MarkdownDocumentState {
   body: string | null;
   saveState: MarkdownSaveState;
   error: string | null;
-  hasFrontmatter: boolean;
+  /** How many keys the hidden frontmatter holds. */
+  properties: number;
   /** Set while the page and the disk changed the same lines: the disk's side, for the editor to show beside the page's. */
   conflict: { disk: string } | null;
 }
@@ -37,7 +38,7 @@ export const AUTOSAVE_DELAY_MS = 800;
 export const AUTOSAVE_MAX_WAIT_MS = 5000;
 
 const INITIAL: MarkdownDocumentState = {
-  status: 'loading', body: null, saveState: 'clean', error: null, hasFrontmatter: false, conflict: null,
+  status: 'loading', body: null, saveState: 'clean', error: null, properties: 0, conflict: null,
 };
 
 type ReadResponse = Awaited<ReturnType<typeof window.markdownAPI.read>>;
@@ -172,7 +173,7 @@ class MarkdownDocumentSession {
     }
     this.revision = response.data.revision;
     this.saved = this.latest = response.data.body;
-    this.publish({ status: 'ready', body: response.data.body, saveState: 'clean', error: null, hasFrontmatter: response.data.hasFrontmatter });
+    this.publish({ status: 'ready', body: response.data.body, saveState: 'clean', error: null, properties: response.data.properties });
   }
 
   private async write(): Promise<void> {
@@ -218,7 +219,7 @@ class MarkdownDocumentSession {
     try { response = await window.markdownAPI.read(this.path); } catch { return; }
     // A file that went away or became unreadable stays as typed; the next save reports it.
     if (!response.success) return;
-    const { body: disk, revision, hasFrontmatter } = response.data;
+    const { body: disk, revision, properties } = response.data;
     if (revision === (this.conflict?.revision ?? this.revision)) return;
     const merged: MergeResult = this.latest === this.saved ? { clean: true, text: disk } : mergeText(this.saved, this.latest, disk);
     if (merged.clean) {
@@ -227,10 +228,10 @@ class MarkdownDocumentSession {
       this.saved = disk;
       this.revision = revision;
       if (merged.text === disk) {
-        this.publish({ conflict: null, hasFrontmatter, saveState: 'clean' });
+        this.publish({ conflict: null, properties, saveState: 'clean' });
         return;
       }
-      this.publish({ conflict: null, hasFrontmatter, saveState: 'dirty' });
+      this.publish({ conflict: null, properties, saveState: 'dirty' });
       void this.serial(() => this.write());
       return;
     }
@@ -238,7 +239,7 @@ class MarkdownDocumentSession {
     this.show(merged.mine);
     this.conflict = { disk, revision };
     if (!this.live) return this.keepBoth();
-    this.publish({ saveState: 'conflict', conflict: { disk: merged.disk }, error: null, hasFrontmatter });
+    this.publish({ saveState: 'conflict', conflict: { disk: merged.disk }, error: null, properties });
   }
 
   /**

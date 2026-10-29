@@ -8,6 +8,8 @@ import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
 import { isDailyLog, readOnlyActivityLog } from './activityLog';
+import { livePreview } from './livePreview';
+import { pageContext, wikiLinkSyntax, wikiLinks } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
 export function textChanges(current: string, next: string): ChangeSpec[] {
@@ -53,48 +55,29 @@ function toggleMarker(marker: string): StateCommand {
   };
 }
 
-// Plain source styling until the live preview lands: markup is muted, text keeps its weight.
+// Inline styles as classes for editor.css. Marks still showing on an edited line are muted.
 const highlight = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: '700' },
-  { tag: tags.heading1, fontSize: '1.5em' },
-  { tag: tags.heading2, fontSize: '1.3em' },
-  { tag: tags.heading3, fontSize: '1.15em' },
-  { tag: tags.strong, fontWeight: '700' },
-  { tag: tags.emphasis, fontStyle: 'italic' },
-  { tag: tags.strikethrough, textDecoration: 'line-through' },
-  { tag: tags.link, color: 'hsl(var(--focus))' },
-  { tag: tags.monospace, fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
-  { tag: [tags.processingInstruction, tags.url, tags.contentSeparator, tags.quote], color: 'hsl(var(--text-tertiary))' },
+  { tag: tags.strong, class: 'cm-md-strong' },
+  { tag: tags.emphasis, class: 'cm-md-em' },
+  { tag: tags.strikethrough, class: 'cm-md-strike' },
+  { tag: tags.heading, class: 'cm-md-strong' },
+  { tag: [tags.processingInstruction, tags.labelName, tags.comment, tags.contentSeparator], class: 'cm-md-syntax' },
 ]);
-
-const theme = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'transparent', color: 'hsl(var(--foreground))' },
-  '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { fontFamily: 'inherit', lineHeight: 'var(--editor-line)' },
-  '.cm-content': {
-    boxSizing: 'border-box',
-    width: '100%',
-    maxWidth: 'calc(var(--editor-measure) + 4rem)',
-    margin: '0 auto',
-    padding: '2.5rem 2rem 6rem',
-    caretColor: 'hsl(var(--focus))',
-  },
-  '.cm-line': { padding: '0' },
-  '.cm-placeholder': { color: 'hsl(var(--text-tertiary))' },
-  '.cm-activity-log': { opacity: '0.65' },
-});
 
 /**
  * The page editor's setup. The document is the Markdown body exactly as read:
  * only "\n" splits lines, so a stray "\r" stays a character and `toString()`
- * gives back the same text.
+ * gives back the same text. `openNote` follows a wiki link.
  */
-export function markdownEditorExtensions(path: string): Extension[] {
+export function markdownEditorExtensions(path: string, openNote: (path: string) => void = () => undefined): Extension[] {
   return [
     EditorState.lineSeparator.of('\n'),
+    pageContext.of({ path, openNote }),
     history(),
-    markdown({ extensions: GFM, completeHTMLTags: false }),
+    markdown({ extensions: [GFM, wikiLinkSyntax], completeHTMLTags: false }),
     syntaxHighlighting(highlight),
+    wikiLinks,
+    livePreview,
     search({ top: true }),
     keymap.of([
       { key: 'Mod-b', run: toggleMarker('**') },
@@ -107,7 +90,6 @@ export function markdownEditorExtensions(path: string): Extension[] {
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ spellcheck: 'false', 'data-testid': 'markdown-editor' }),
     placeholder('Start writing…'),
-    theme,
     isDailyLog(path) ? readOnlyActivityLog() : [],
   ];
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChunks, unifiedMergeView } from '@codemirror/merge';
 import { Compartment, EditorState, Transaction, type Text } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import { useFilesNavigation } from '../../navigation/FilesNavigationContext';
 import { EditorStatus } from './EditorStatus';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
@@ -37,7 +38,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ path }) => {
 
   if (document.status === 'unavailable') {
     return (
-      <div role="alert" className="flex flex-1 items-center justify-center p-6 text-sm text-destructive">
+      <div role="alert" className="flex flex-1 items-center justify-center p-6 text-sm font-medium text-foreground">
         {document.error ?? 'This note could not be opened.'}
       </div>
     );
@@ -59,9 +60,12 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
   const view = useRef<EditorView | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState(0);
-  // The hook's state changes identity across renders; the editor reads the latest.
+  // The hook's state and the navigation change identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
+  const files = useFilesNavigation();
+  const navigation = useRef(files);
+  navigation.current = files;
 
   useEffect(() => {
     const created = new EditorView({
@@ -69,7 +73,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
       state: EditorState.create({
         doc: initialBody,
         extensions: [
-          markdownEditorExtensions(path),
+          markdownEditorExtensions(path, (target) => navigation.current.openFile(target)),
           keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
           conflict.of([]),
           EditorView.updateListener.of((update) => {
@@ -120,7 +124,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
       <EditorStatus
         saveState={document.saveState}
         error={document.error}
-        hasFrontmatter={document.hasFrontmatter}
+        properties={document.properties}
         words={words}
         onKeepMine={document.resolveConflict}
         onKeepDisk={keepDiskVersion}

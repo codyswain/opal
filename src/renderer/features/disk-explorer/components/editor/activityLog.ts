@@ -23,12 +23,16 @@ const sectionStart = StateField.define<number | null>({
   update: (start, tr) => (tr.docChanged ? activityLogStart(tr.newDoc) : start),
 });
 
-const muted = Decoration.mark({ class: 'cm-activity-log' });
+const muted = Decoration.line({ class: 'cm-activity-log' });
 
-// Recomputed on every doc change, so text appended at the end is muted too.
+// Whole lines, so list markers drawn in place of the Markdown are muted too.
+// Recomputed on every doc change, so lines appended at the end are muted as well.
 const sectionDecorations = EditorView.decorations.compute(['doc', sectionStart], (state) => {
   const start = state.field(sectionStart);
-  return start === null ? Decoration.none : Decoration.set(muted.range(start, state.doc.length));
+  if (start === null) return Decoration.none;
+  const lines = [];
+  for (let number = state.doc.lineAt(start).number; number <= state.doc.lines; number += 1) lines.push(muted.range(state.doc.line(number).from));
+  return Decoration.set(lines);
 });
 
 /**

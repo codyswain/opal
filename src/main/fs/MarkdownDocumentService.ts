@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto';
 import { constants } from 'fs';
 import { lstat, open, readFile, rename, stat, unlink, writeFile } from 'fs/promises';
 import path from 'path';
+import { isMap, parseDocument } from 'yaml';
 import { classifyFile } from '@/common/fileKind';
 import type { ActivityRecorder } from '@/main/activity/ActivityService';
 import type { RootRegistry } from './RootRegistry';
@@ -37,6 +38,8 @@ export interface ParsedMarkdown {
   /** The line ending new lines get on write. */
   newline: string;
   hasFrontmatter: boolean;
+  /** Top-level frontmatter keys, which Obsidian calls properties. */
+  properties: number;
 }
 
 interface LoadedFile extends ParsedMarkdown {
@@ -69,7 +72,7 @@ export class MarkdownDocumentService {
       body: loaded.body,
       revision: loaded.revision,
       size: loaded.bytes.length,
-      hasFrontmatter: loaded.hasFrontmatter,
+      properties: loaded.properties,
     };
   }
 
@@ -137,14 +140,14 @@ export class MarkdownDocumentService {
 
 /** Splits file bytes into the untouched prefix and the body the editor edits. */
 export function parseMarkdown(bytes: Buffer): ParsedMarkdown {
-  let split: { bodyOffset: number; bom: Buffer; newline: string };
+  let split: { raw: string; bodyOffset: number; bom: Buffer; newline: string };
   try {
     split = splitMarkdown(bytes);
   } catch (error) {
     if (!(error instanceof MetadataError)) throw error;
     // An unclosed or oversized frontmatter block is edited as ordinary text.
     const hasBom = bytes.subarray(0, 3).equals(Buffer.from('\ufeff'));
-    split = { bodyOffset: hasBom ? 3 : 0, bom: bytes.subarray(0, hasBom ? 3 : 0), newline: bytes.includes('\r\n') ? '\r\n' : '\n' };
+    split = { raw: '', bodyOffset: hasBom ? 3 : 0, bom: bytes.subarray(0, hasBom ? 3 : 0), newline: bytes.includes('\r\n') ? '\r\n' : '\n' };
   }
   let source: string;
   try {
@@ -159,7 +162,14 @@ export function parseMarkdown(bytes: Buffer): ParsedMarkdown {
     body: source.replace(/\r\n/g, '\n'),
     newline: split.newline,
     hasFrontmatter: split.bodyOffset > split.bom.length,
+    properties: countProperties(split.raw),
   };
+}
+
+function countProperties(raw: string): number {
+  if (!raw.trim()) return 0;
+  const contents = parseDocument(raw).contents;
+  return isMap(contents) ? contents.items.length : 0;
 }
 
 /**

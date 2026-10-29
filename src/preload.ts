@@ -135,6 +135,8 @@ contextBridge.exposeInMainWorld("markdownAPI", {
     ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
   create: (parentDir: string, baseName?: string) =>
     ipcRenderer.invoke("markdown:create", parentDir, baseName),
+  resolveLinks: (from: string, targets: string[]) =>
+    ipcRenderer.invoke("markdown:resolve-links", from, targets),
   setFlushHandler: (flush: () => Promise<void>) => {
     flushPendingSaves = flush;
   },

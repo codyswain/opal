@@ -23,7 +23,7 @@ import { CredentialHandlers } from "@/main/services/credentials/CredentialHandle
 import { CredentialManager } from "@/main/services/credentials/CredentialManager";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { WindowStateStore } from "@/main/window/WindowStateStore";
-import { isAllowedNavigation } from "@/main/window/navigationGuard";
+import { isAllowedNavigation, isExternalLink } from "@/main/window/navigationGuard";
 import { AppMenu } from "@/main/menu/AppMenu";
 import { PendingSavesGuard } from "@/main/window/PendingSavesGuard";
 import {
@@ -40,6 +40,7 @@ import { MetadataService } from "@/main/fs/MetadataService";
 import { MetadataHandlers } from "@/main/fs/MetadataHandlers";
 import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
 import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
+import { LinkIndex } from "@/main/fs/LinkIndex";
 import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
@@ -253,7 +254,11 @@ const createWindow = () => {
       event.preventDefault();
     }
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // A page link opened with Cmd+click goes to the default browser or mail app.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalLink(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
 
   // Open dev tools if in development mode
   if (isDevelopment || forceDevTools) {
@@ -395,9 +400,11 @@ const metadataService = new MetadataService({
   registry: rootRegistry,
   activity: activityService,
 });
+const linkIndex = new LinkIndex({ registry: rootRegistry });
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
     collectionIndex.invalidateDirectories(directories);
+    linkIndex.invalidateDirectories(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -447,6 +454,7 @@ const diskHandlers = new DiskHandlers({
   writer: fileWriter,
   onRootsChanged: () => {
     collectionIndex.invalidateAll();
+    linkIndex.invalidateAll();
     notifyCollectionsChanged();
   },
 });
@@ -465,6 +473,7 @@ const collectionHandlers = new CollectionHandlers({
 const markdownHandlers = new MarkdownHandlers({
   ipc: ipcMain,
   service: markdownDocuments,
+  links: linkIndex,
 });
 
 // --- Primary Initialization and Cleanup ---
