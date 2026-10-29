@@ -165,7 +165,7 @@ function RenameField({
           finish(node.path);
         }
       }}
-      className="h-6 min-w-0 flex-1 rounded-control border border-border-overlay bg-canvas px-1.5 text-ui text-foreground outline-none ring-2 ring-focus/40"
+      className="h-6 min-w-0 flex-1 rounded-control bg-canvas px-1.5 text-ui text-foreground outline-none ring-1 ring-inset ring-foreground-tertiary"
     />
   );
 }
@@ -206,7 +206,7 @@ function FileTreeRow({
           'transition-hover hover:bg-surface-hover hover:text-foreground',
           'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
           isActive && 'bg-surface-selected font-medium text-foreground',
-          data.outlinedPath === node.path && 'ring-1 ring-inset ring-focus'
+          data.outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
         )}
       >
         {node.isDirectory ? (
