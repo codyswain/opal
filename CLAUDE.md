@@ -26,7 +26,9 @@ not exist.
 ## Architecture
 
 - **Vault days:** `src/main/vault/` knows the vault layout. `VaultService`
-  creates the daily page; `DayService` answers `vault:day` with a day's page,
+  creates the daily page and ticks a digest's checkboxes
+  (`vault:check-digest-item`, one line through the editor's write queue);
+  `DayService` answers `vault:day` with a day's page,
   log, chats, recordings and digest, and sends `vault:day-changed`. The parsing
   is in `src/common/dayModel.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge

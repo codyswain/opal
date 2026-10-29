@@ -15,12 +15,12 @@ first: a file tree on the left and one clean page.
 
 ```
 ┌──────────────────────┬──────────────────────────────────────────┬──────────────────────┐
-│ ● ● ●  ▢  ‹  ›       │ [tab] [tab] +       [ Search ⌘K ]        │ Wed, Oct 28  ‹ › ⋯ ▢ │  one 40px row
+│ ● ● ●  ▢  ‹  ›    ⌕  │ [tab] [tab] +                            │ Wed, Oct 28  ‹ › ⋯ ▢ │  one 40px row
 │                      ├──────────────────────────────────────────┼──────────────────────┤
-│ Today                │                                          │ Activity log      22 │
-│ Recent               │     Page title                           │ Chats     4 new · 14 │
-│                      │                                          │ Recordings         4 │
-│ ▸ Archive            │     Body text in a centered column ...   │ Digest             8 │
+│ Today                │                                          │ Chats     4 new · 14 │
+│ Recent               │     Page title                           │ Recordings         4 │
+│                      │                                          │ Digest             8 │
+│ ▸ Archive            │     Body text in a centered column ...   │ Activity log      22 │
 │ ▾ Library            │                                          │                      │
 │   ▸ daily            │                                          │                      │
 │   ▸ logs             │                                          │                      │
@@ -34,7 +34,19 @@ first: a file tree on the left and one clean page.
 ### Sidebar
 
 - Top row (40px, the window drag region): traffic lights, then the sidebar
-  toggle, back and forward. Back and forward live here and nowhere else.
+  toggle, back and forward, and at the row's right end a magnifying glass,
+  Search (Cmd+K), which opens the palette. Back and forward live here and
+  nowhere else. Search moved here from the middle of the tab row (Cody,
+  2026-10-29), so the tabs have their whole row.
+- Collapse all folders (Obsidian has the same) is an icon just left of
+  Search. It shows only while the pointer is over the sidebar or focus is in
+  it, and only when a folder is open, so the row stays quiet at rest. View >
+  Collapse All Folders (Option-Cmd-Left, which nothing else uses; Left
+  collapses one folder in the tree) and the palette do the same. It closes
+  every folder, and with several roots the roots too, and the closed tree
+  persists like any other. There is no Expand all: Cody doubted it, and on a
+  vault this size it would list thousands of rows. Below about 240px the icon
+  drops out of the row before Search does.
 - No "Opal" workspace button, no "Open folders" heading, no open-folder
   buttons. Opening another folder stays in Settings only.
 - Nav: **Today** (opens `Library/daily/YYYY-MM-DD.md`, creating it from the
@@ -61,23 +73,26 @@ first: a file tree on the left and one clean page.
   folder to move it, and Cmd+N for a new note in the active file's folder
   (the vault root when nothing is open).
 - Footer: Settings only (no theme toggle; theme lives in Settings).
-- Default width about 260px, resizable.
+- Default width about 260px, resizable from 216px, which keeps the top row
+  whole.
 
 ### Top row of the main column
 
-- One 40px row: compact rounded tab pills, a `+` button, and a small search
-  field centered in the row ("Search ⌘K") that opens the palette. Nothing
-  else: no title, no privacy shield, no breadcrumb row, no "Return to folder".
-  Empty space in the row drags the window.
+- One 40px row: compact rounded tab pills and a `+` button. Nothing else: no
+  search field, no title, no privacy shield, no breadcrumb row, no "Return to
+  folder". Empty space in the row drags the window.
 - When the sidebar is hidden, the row leaves room for the traffic lights and
-  shows the sidebar toggle, back and forward at its left.
+  shows the sidebar's top-row controls at its left: the toggle, back,
+  forward and Search.
 - When the right sidebar is hidden, its toggle (panel-right) sits at the
   row's right end.
 
 ### Right sidebar
 
-One day of the vault beside the page: its activity log, chats, recordings and
-digest. Code: `src/renderer/features/day-sidebar/`. Data: `vault:day`.
+One day of the vault beside the page: its chats, recordings, digest and
+activity log, in that order. The activity log is the least read, so it is
+last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
+`vault:day`.
 
 - About 300px wide (260px below 1200px), resizable from 240px, as a column of
   hairline cards on the chrome ground. Its header shares the 40px top row:
@@ -94,15 +109,27 @@ digest. Code: `src/renderer/features/day-sidebar/`. Data: `vault:day`.
 - The options menu has a check per section and Go to today. Opal remembers
   whether the sidebar is open, its width, the sections shown and the folded
   cards.
-- At rest: the latest 3 log entries, 3 chats, 4 recordings and up to 3 items
-  of the digest's top group, each card with "Show N more". The log ends with
-  Open full log and the digest with Open digest. A full log of more than 40
-  entries folds by hour. The log card shows every line of the day's log, so
-  its count matches the file.
-- A chat row or digest item opens its note. A log entry or recording opens in
-  place, with the full sentence and every link; Escape closes it. Links open
-  in the current tab and Cmd+click opens a new tab; external links open the
-  browser. A file icon marks a vault link and an arrow marks an external one.
+- At rest: 8 chats, 4 recordings, up to 3 items of the digest's top group
+  and the latest 3 log entries, each card with "Show N more". The log ends
+  with Open full log and the digest with Open digest. A full log of more than
+  40 entries folds by hour. The log card shows every line of the day's log,
+  so its count matches the file.
+- A chat row opens its thread card and a recording row opens the recording's
+  page (its summary note, with the links), in the current tab; Cmd+click
+  opens a new tab. A log entry opens in place, with the full sentence and
+  every link; Escape closes it. Links open in the current tab and Cmd+click
+  opens a new tab; external links open the browser. A file icon marks a vault
+  link and an arrow marks an external one.
+- The digest's Top 3 and its other action items ("Also worth doing") are
+  checkboxes: the box, the item's one line, and its detail muted below,
+  clamped to two lines. The tooltip holds the whole detail and a click on the
+  text shows it in place. Ticking a box writes `- [x]` (or back to `- [ ]`)
+  into that line of the digest file and nothing else: `vault:check-digest-item`
+  names the line and its text as read, and the main process refuses when the
+  line changed since, using the editor's write queue and atomic replace. A
+  tick is Cody's mark on the note; it changes no Linear issue. The calendar
+  section is never shown. Items of digests written before checkboxes have no
+  box and open the digest.
 - A day with nothing shows one muted line instead of four empty cards. The
   cards read again when `vault:day-changed` says the day changed on disk.
 
@@ -183,7 +210,15 @@ Tokens follow the design brief from Bastion and Linear:
 - Neutral hover and selection overlays (light rgba(0,0,0,.04) and .07, dark
   rgba(255,255,255,.03) and .04); no accent colour anywhere (see above).
 - Rows 28px with a 6px radius and 2px gaps. Hover appears instantly and fades
-  out over 150ms. Sidebar scrollbars show on hover only.
+  out over 150ms.
+- Scrollbars (Cody, 2026-10-29: "I don't need to always see the scroll bar"):
+  every scroll area, the page, both sidebars, menus and the palette, shows no
+  scrollbar at rest. The thumb appears while the area scrolls and while the
+  pointer is on its scrollbar, and fades out about a second after the last
+  scroll. It is a grey pill 6px wide, 3px in from the area's outer edge.
+  Scrolling stays native, keyboard scrolling included
+  (`shared/scrollbars/scrollbarVisibility.ts` only listens). A table wider
+  than the page follows the same rule.
 - Warmer, less saturated neutrals than today's blue-greys.
 
 ## The page
