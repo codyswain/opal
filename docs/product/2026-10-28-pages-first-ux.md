@@ -145,7 +145,7 @@ Tokens follow the design brief from Bastion and Linear:
   8px radius and a 1px hairline ring, inset 8px on the right and bottom. No
   rules between sidebar parts or under the top row.
 - Neutral hover and selection overlays (light rgba(0,0,0,.04) and .07, dark
-  rgba(255,255,255,.03) and .04); accent only for the caret, links and focus.
+  rgba(255,255,255,.03) and .04); no accent colour anywhere (see above).
 - Rows 28px with a 6px radius and 2px gaps. Hover appears instantly and fades
   out over 150ms. Sidebar scrollbars show on hover only.
 - Warmer, less saturated neutrals than today's blue-greys.
@@ -157,6 +157,9 @@ Tokens follow the design brief from Bastion and Linear:
   list markers) hide away from the cursor; bullets, checkboxes, headings,
   links, wiki links, callouts (including `> [!ai] AI`), images, code blocks,
   tables and horizontal rules render. TipTap and its round trip are removed.
+- Callouts, including `> [!ai] AI`, render as neutral grey boxes (a light
+  grey fill or a grey left rule and a bold title), never tinted, whatever the
+  vault's Obsidian snippet uses.
 - Reading font PT Serif (ships with macOS) at 16px with about 1.6 line height
   in a centered column of about 700px. Headings in the same serif, bold. UI
   stays Inter.
