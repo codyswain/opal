@@ -245,6 +245,27 @@
   --fade-end: 1.5rem;
 }
 
+/* The right sidebar's column of cards fades at an edge while rows pass under it. */
+.day-column {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+}
+
+.day-column[data-fade-start] {
+  --fade-start: 1rem;
+}
+
+.day-column[data-fade-end] {
+  --fade-end: 2rem;
+}
+
 /* For making the navbar draggable */
 .drag-handle {
   -webkit-app-region: drag;

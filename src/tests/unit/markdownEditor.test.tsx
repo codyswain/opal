@@ -96,13 +96,17 @@ describe('MarkdownEditor', () => {
     expect(view.dom.querySelector('.cm-search')).not.toBeNull();
   });
 
-  it('leaves Cmd+[ and Cmd+] to the app menu, where they are Back and Forward', async () => {
+  it('leaves Cmd+[, Cmd+] and Cmd+Shift+\\ to the app menu: Back, Forward and the right sidebar', async () => {
     installMarkdownApi({ [NOTE]: '  - one' });
     const view = await openEditor(NOTE);
     for (const key of ['[', ']']) {
       expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key, ...MOD }), 'editor')).toBe(false);
     }
     expect(view.state.doc.toString()).toBe('  - one');
+    // CodeMirror would jump to the matching bracket here.
+    act(() => { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '(one)' }, selection: { anchor: 0 } }); });
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: '\\', shiftKey: true, ...MOD }), 'editor')).toBe(false);
+    expect(view.state.selection.main.head).toBe(0);
   });
 
   it('keeps a whole log page read-only, and still follows the lines the scripts append', async () => {

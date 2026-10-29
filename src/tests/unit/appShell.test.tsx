@@ -13,6 +13,10 @@ import {
   ShellProvider,
   useShellStore,
 } from '@/renderer/features/shell';
+import {
+  DEFAULT_DAY_SIDEBAR_PREFERENCES,
+  useDaySidebarStore,
+} from '@/renderer/features/day-sidebar';
 import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
@@ -77,6 +81,7 @@ beforeEach(() => {
     narrowLayout: false,
     narrowSidebarOpen: false,
   });
+  useDaySidebarStore.setState({ ...DEFAULT_DAY_SIDEBAR_PREFERENCES, pickedDay: null, lastDay: null });
   useDiskStore.setState({
     roots: [],
     listings: {},
@@ -205,11 +210,17 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell();
     const page = screen.getByTestId('workspace-surface');
-    expect(page).toHaveClass('rounded-card', 'border-page-ring', 'mr-page', 'mb-page');
+    // The right sidebar's column keeps the gap on that side.
+    expect(screen.getByTestId('day-sidebar')).toBeInTheDocument();
+    expect(page).toHaveClass('rounded-card', 'border-page-ring', 'mb-page');
     expect(page).not.toHaveClass('ml-page');
+    expect(page).not.toHaveClass('mr-page');
 
     await user.click(screen.getByRole('button', { name: 'Hide sidebar' }));
     expect(page).toHaveClass('ml-page');
+    await user.click(screen.getByRole('button', { name: 'Hide right sidebar' }));
+    expect(screen.queryByTestId('day-sidebar')).not.toBeInTheDocument();
+    expect(page).toHaveClass('mr-page');
   });
 
   it('uses the persisted desktop collapse state and traffic-light clearance', async () => {

@@ -33,7 +33,8 @@ not exist.
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
-  (`disk-explorer` is the Files feature; `shell` is the workspace frame)
+  (`disk-explorer` is the Files feature; `shell` is the workspace frame;
+  `day-sidebar` is the right sidebar, one vault day beside the page)
 - **Main area:** each tab shows one file or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
   plain text, otherwise "Open in default app"). There is no folder view:
@@ -57,7 +58,7 @@ src/
     services/          # Credentials, system
     window/            # Window state, navigation guard
   renderer/            # React renderer
-    features/          # disk-explorer, shell, settings, theme, kbar, commands
+    features/          # disk-explorer, shell, day-sidebar, settings, theme, commands
     shared/            # Reusable components, hooks, utils, types
     store/             # Zustand stores
     styles/            # Global CSS

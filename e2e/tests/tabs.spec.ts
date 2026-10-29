@@ -86,6 +86,7 @@ test('tabs answer the native menu and come back on relaunch', async ({ userDataD
       'Back CmdOrCtrl+[',
       'Forward CmdOrCtrl+]',
       'Toggle Sidebar CmdOrCtrl+\\',
+      'Toggle Right Sidebar CmdOrCtrl+Shift+\\',
     ])
   );
 

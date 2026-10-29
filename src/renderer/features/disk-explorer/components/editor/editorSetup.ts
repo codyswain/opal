@@ -64,9 +64,11 @@ const highlight = HighlightStyle.define([
   { tag: [tags.processingInstruction, tags.labelName, tags.comment, tags.contentSeparator], class: 'cm-md-syntax' },
 ]);
 
-// Cmd+[ and Cmd+] are Back and Forward in the app menu, as in Safari; a key
-// the editor takes never reaches the menu. Tab and Shift+Tab still indent.
-const editingKeymap = defaultKeymap.filter((binding) => binding.key !== 'Mod-[' && binding.key !== 'Mod-]');
+// Cmd+[ and Cmd+] are Back and Forward in the app menu, as in Safari, and
+// Cmd+Shift+\ toggles the right sidebar; a key the editor takes never reaches
+// the menu. Tab and Shift+Tab still indent.
+const MENU_KEYS = new Set(['Mod-[', 'Mod-]', 'Shift-Mod-\\']);
+const editingKeymap = defaultKeymap.filter((binding) => !MENU_KEYS.has(binding.key ?? ''));
 
 /**
  * The page editor's setup. The document is the Markdown body exactly as read:

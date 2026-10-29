@@ -72,6 +72,38 @@ first: a file tree on the left and one clean page.
   Empty space in the row drags the window.
 - When the sidebar is hidden, the row leaves room for the traffic lights and
   shows the sidebar toggle, back and forward at its left.
+- When the right sidebar is hidden, its toggle (panel-right) sits at the
+  row's right end.
+
+### Right sidebar
+
+One day of the vault beside the page: its activity log, chats, recordings and
+digest. Code: `src/renderer/features/day-sidebar/`. Data: `vault:day`.
+
+- About 300px wide (260px below 1200px), resizable from 240px, as a column of
+  hairline cards on the chrome ground. Its header shares the 40px top row:
+  the day ("Wed, Oct 28", then "Yesterday" or "Today"; below 280px the
+  weekday goes), previous and next day, the options menu and the toggle.
+- Toggle: the panel-right button or View > Toggle Right Sidebar
+  (Cmd+Shift+\). Below 1000px only one sidebar stays open, so opening one
+  closes the other.
+- Which day: a dated page (a daily page, a log, a recording or a digest) sets
+  the day. Any other page keeps the last day shown. With nothing set, it
+  shows today. The arrows pick a day until another page opens.
+- The options menu has a check per section and Go to today. Opal remembers
+  whether the sidebar is open, its width, the sections shown and the folded
+  cards.
+- At rest: the latest 3 log entries, 3 chats, 4 recordings and up to 3 items
+  of the digest's top group, each card with "Show N more". The log ends with
+  Open full log and the digest with Open digest. A full log of more than 40
+  entries folds by hour. Log lines that only repeat a recording or the digest
+  shown below are left out.
+- A chat row or digest item opens its note. A log entry or recording opens in
+  place, with the full sentence and every link; Escape closes it. Links open
+  in the current tab and Cmd+click opens a new tab; external links open the
+  browser. A file icon marks a vault link and an arrow marks an external one.
+- A day with nothing shows one muted line instead of four empty cards. The
+  cards read again when `vault:day-changed` says the day changed on disk.
 
 ### Tabs (Obsidian and Safari semantics)
 
@@ -85,7 +117,8 @@ first: a file tree on the left and one clean page.
   has focus: New Tab Cmd+T, Close Tab Cmd+W (closes the window when no tab is
   left), Reopen Closed Tab Cmd+Shift+T, Show Previous/Next Tab Cmd+Shift+[ / ]
   and Ctrl+Shift+Tab / Ctrl+Tab, Cmd+1..8 by position and Cmd+9 for the last,
-  Back Cmd+[ and Forward Cmd+], Toggle Sidebar Cmd+\. Cmd+B stays bold.
+  Back Cmd+[ and Forward Cmd+], Toggle Sidebar Cmd+\, Toggle Right Sidebar
+  Cmd+Shift+\. Cmd+B stays bold.
 - Tabs keep their scroll position. The window title is the active file name.
 - Open tabs restore on relaunch. Launch opens Today only when no tabs were
   restored or the date changed since the last session.

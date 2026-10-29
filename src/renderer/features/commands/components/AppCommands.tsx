@@ -7,6 +7,7 @@ import {
   browseRecent,
   focusFile,
 } from "@/renderer/features/disk-explorer/navigation";
+import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import {
   selectOpenedPath,
@@ -209,6 +210,14 @@ export const AppCommands: React.FC = () => {
         shortcut: ["CmdOrCtrl+\\"],
         keywords: ["pane", "toggle", "left"],
         perform: toggleSidebar,
+      },
+      {
+        id: COMMAND_IDS.toggleRightPane,
+        name: "Toggle Right Sidebar",
+        type: "paneToggle",
+        shortcut: ["CmdOrCtrl+Shift+\\"],
+        keywords: ["pane", "toggle", "right", "day", "log", "chats", "recordings", "digest"],
+        perform: () => toggleDaySidebar(),
       },
     ];
     commands.forEach((command) => commandRegistry.registerCommand(command));

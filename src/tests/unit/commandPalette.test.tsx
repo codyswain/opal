@@ -231,10 +231,13 @@ describe('CommandPalette', () => {
     expect(reported.map((command) => command.id)).not.toContain('privacy.toggle');
     // The folder view is gone, and the command that opened it with it.
     expect(reported.map((command) => command.id)).not.toContain('nav.files');
-    expect(reported.map((command) => command.id).filter((id) => id.startsWith('pane.'))).toEqual(['pane.toggleLeft']);
+    expect(reported.map((command) => command.id).filter((id) => id.startsWith('pane.'))).toEqual(['pane.toggleLeft', 'pane.toggleRight']);
     act(() => usePaletteStore.getState().show('>side'));
     const option = await screen.findByTestId('palette-command-pane.toggleLeft');
     expect(option).toHaveTextContent(/⌘\\|Ctrl\+\\/);
+    expect(reported.find((command) => command.id === COMMAND_IDS.toggleRightPane)).toMatchObject({
+      label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\',
+    });
     expect(reported.find((command) => command.id === COMMAND_IDS.nextTab)).toEqual({
       id: COMMAND_IDS.nextTab, label: 'Show Next Tab', accelerator: 'CmdOrCtrl+Shift+]', aliases: ['Ctrl+Tab'],
     });

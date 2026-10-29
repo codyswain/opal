@@ -11,7 +11,16 @@ import {
   SHELL_LIMITS,
   useShellStore,
 } from '../store/shellStore';
+import {
+  DaySidebar,
+  daySidebarMaxWidth,
+  daySidebarShown,
+  daySidebarWidth,
+  DAY_SIDEBAR_LIMITS,
+  useDaySidebarStore,
+} from '@/renderer/features/day-sidebar';
 import { cn } from '@/renderer/shared/utils';
+import { SidebarResizeHandle } from './SidebarResizeHandle';
 import { Titlebar } from './Titlebar';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 
@@ -44,71 +53,8 @@ function useShellViewport(): { layout: ShellLayout; width: number } {
   return { layout: shellLayoutForWidth(width), width };
 }
 
-interface SidebarResizeHandleProps {
-  value: number;
-  max: number;
-  onChange: (width: number) => void;
-}
-
 /** The medium layout keeps at least about 560px for the page. */
 const MEDIUM_SIDEBAR_MAX = 240;
-
-function SidebarResizeHandle({
-  max,
-  onChange,
-  value,
-}: SidebarResizeHandleProps) {
-  const beginResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = value;
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      onChange(
-        Math.min(
-          max,
-          Math.max(
-            SHELL_LIMITS.sidebar.min,
-            startWidth + moveEvent.clientX - startX
-          )
-        )
-      );
-    };
-    const stop = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', stop);
-    };
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', stop);
-  };
-
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault();
-    const direction = event.key === 'ArrowLeft' ? -1 : 1;
-    onChange(
-      Math.min(
-        max,
-        Math.max(SHELL_LIMITS.sidebar.min, value + direction * 8)
-      )
-    );
-  };
-
-  return (
-    <div
-      role="separator"
-      tabIndex={0}
-      aria-label="Resize workspace sidebar"
-      aria-orientation="vertical"
-      aria-valuemin={SHELL_LIMITS.sidebar.min}
-      aria-valuemax={max}
-      aria-valuenow={value}
-      onDoubleClick={() => onChange(DEFAULT_SHELL_PREFERENCES.sidebarWidth)}
-      onKeyDown={onKeyDown}
-      onPointerDown={beginResize}
-      className="no-drag absolute inset-y-0 right-[-2px] z-10 w-1 cursor-col-resize bg-transparent outline-none transition-hover hover:bg-focus/40 focus-visible:bg-focus"
-    />
-  );
-}
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -136,6 +82,7 @@ export function AppShell({ children }: AppShellProps) {
   const sidebarToggleRef = React.useRef<HTMLButtonElement>(null);
   const workspaceRef = React.useRef<HTMLElement>(null);
   const workspaceMainRef = React.useRef<HTMLElement>(null);
+  const daySidebarRef = React.useRef<HTMLDivElement>(null);
   const locationKey = `${location.pathname}${location.search}`;
   const previousLocationKey = React.useRef(locationKey);
   const isNarrow = layout === 'narrow';
@@ -149,6 +96,11 @@ export function AppShell({ children }: AppShellProps) {
       : sidebarWidth;
   const sidebarMax =
     layout === 'medium' ? MEDIUM_SIDEBAR_MAX : SHELL_LIMITS.sidebar.max;
+  const daySidebarOpen = useDaySidebarStore((state) => state.open);
+  const daySidebarPreferredWidth = useDaySidebarStore((state) => state.width);
+  const setDaySidebarWidth = useDaySidebarStore((state) => state.setWidth);
+  const rightOpen = daySidebarShown(daySidebarOpen, sidebarOpen, isNarrow, viewport);
+  const rightWidth = daySidebarWidth(daySidebarPreferredWidth, viewport);
 
   useDiskSync();
 
@@ -196,12 +148,20 @@ export function AppShell({ children }: AppShellProps) {
   }, [closeNarrowSidebar, isNarrow, locationKey]);
 
   React.useLayoutEffect(() => {
-    const workspace = workspaceRef.current;
-    if (!workspace) return;
+    // The right sidebar sits outside the page column, so the overlay shuts it too.
+    const behind = [workspaceRef.current, daySidebarRef.current].filter(
+      (element): element is HTMLElement => element !== null
+    );
+    const release = () => {
+      for (const element of behind) {
+        element.removeAttribute('inert');
+        element.removeAttribute('aria-hidden');
+      }
+    };
+    if (behind.length === 0) return;
 
     if (!isNarrow || !narrowSidebarOpen) {
-      workspace.removeAttribute('inert');
-      workspace.removeAttribute('aria-hidden');
+      release();
       return;
     }
 
@@ -210,14 +170,13 @@ export function AppShell({ children }: AppShellProps) {
         'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
       )
       ?.focus();
-    workspace.setAttribute('inert', '');
-    workspace.setAttribute('aria-hidden', 'true');
+    for (const element of behind) {
+      element.setAttribute('inert', '');
+      element.setAttribute('aria-hidden', 'true');
+    }
 
-    return () => {
-      workspace.removeAttribute('inert');
-      workspace.removeAttribute('aria-hidden');
-    };
-  }, [isNarrow, narrowSidebarOpen]);
+    return release;
+  }, [isNarrow, narrowSidebarOpen, rightOpen]);
 
   const handleToggleSidebar = () => {
     toggleSidebar();
@@ -289,8 +248,11 @@ export function AppShell({ children }: AppShellProps) {
           />
           {!isNarrow ? (
             <SidebarResizeHandle
+              label="Resize workspace sidebar"
               value={effectiveSidebarWidth}
+              min={SHELL_LIMITS.sidebar.min}
               max={sidebarMax}
+              defaultValue={DEFAULT_SHELL_PREFERENCES.sidebarWidth}
               onChange={setSidebarWidth}
             />
           ) : null}
@@ -305,6 +267,7 @@ export function AppShell({ children }: AppShellProps) {
         <Titlebar
           compact={isNarrow}
           sidebarOpen={sidebarOpen}
+          rightSidebarOpen={rightOpen}
           sidebarToggleRef={sidebarToggleRef}
           onToggleSidebar={handleToggleSidebar}
         />
@@ -314,13 +277,31 @@ export function AppShell({ children }: AppShellProps) {
           data-testid="workspace-surface"
           aria-label="Page"
           className={cn(
-            'mb-page mr-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
-            (isNarrow || !sidebarOpen) && 'ml-page'
+            'mb-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
+            (isNarrow || !sidebarOpen) && 'ml-page',
+            // The right sidebar's column keeps its own gap to the page.
+            !rightOpen && 'mr-page'
           )}
         >
           {children}
         </main>
       </section>
+
+      {rightOpen ? (
+        <div ref={daySidebarRef} className="relative z-10 h-full shrink-0" style={{ width: rightWidth }}>
+          <SidebarResizeHandle
+            edge="start"
+            label="Resize right sidebar"
+            value={rightWidth}
+            min={DAY_SIDEBAR_LIMITS.min}
+            max={daySidebarMaxWidth(viewport)}
+            defaultValue={daySidebarWidth(null, viewport)}
+            onChange={setDaySidebarWidth}
+            onReset={() => setDaySidebarWidth(null)}
+          />
+          <DaySidebar width={rightWidth} />
+        </div>
+      ) : null}
     </div>
   );
 }

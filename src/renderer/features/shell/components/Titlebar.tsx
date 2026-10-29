@@ -1,6 +1,7 @@
 import * as React from "react";
-import { Search } from "lucide-react";
+import { PanelRight, Search } from "lucide-react";
 import { usePaletteStore } from "@/renderer/features/commands/store/paletteStore";
+import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { TabStrip } from "@/renderer/features/disk-explorer/components/TabStrip";
 import { IconButton } from "@/renderer/shared/ui";
 import { cn } from "@/renderer/shared/utils";
@@ -8,6 +9,8 @@ import { FrameControls, TrafficLightInset } from "./FrameControls";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
+  /** With the right sidebar open, its own top row holds its toggle. */
+  rightSidebarOpen?: boolean;
   /** Narrow windows fold the search field to its icon. */
   compact: boolean;
   onToggleSidebar: () => void;
@@ -41,14 +44,16 @@ function SearchField({ compact }: { compact: boolean }) {
 
 /**
  * The page column's one 40px row: the tabs and New Tab, then a search field
- * centred in the row that opens the palette. The row is a grid whose first
- * column grows past half only when the tabs need it, so the field stays put
- * until the tabs push it right, and the tabs shrink and scroll once it meets
- * the edge. Empty space drags the window; every control is no-drag.
+ * centred in the row that opens the palette, then the right sidebar's toggle
+ * while that sidebar is closed. The row is a grid whose first column grows
+ * past half only when the tabs need it, so the field stays put until the tabs
+ * push it right, and the tabs shrink and scroll once it meets the edge. Empty
+ * space drags the window; every control is no-drag.
  */
 export function Titlebar({
   compact,
   onToggleSidebar,
+  rightSidebarOpen = false,
   sidebarOpen,
   sidebarToggleRef,
 }: TitlebarProps) {
@@ -79,7 +84,19 @@ export function Titlebar({
         <TabStrip />
       </div>
       <SearchField compact={compact} />
-      <span aria-hidden />
+      <div className="flex min-w-0 justify-end">
+        {!rightSidebarOpen ? (
+          <IconButton
+            label="Show right sidebar"
+            shortcut="⌘⇧\"
+            aria-controls="day-sidebar"
+            aria-expanded={false}
+            onClick={() => toggleDaySidebar()}
+          >
+            <PanelRight aria-hidden className="h-4 w-4" />
+          </IconButton>
+        ) : null}
+      </div>
     </header>
   );
 }
