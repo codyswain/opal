@@ -79,7 +79,7 @@ describe('useTabScroll', () => {
 
   it('sets a restored place again when the page moves it while it draws', async () => {
     openTabs(['/V/long.md']);
-    act(() => useTabsStore.getState().saveScroll(tabId(0), 0, 900));
+    act(() => useTabsStore.getState().saveView(tabId(0), 0, { scrollTop: 900 }));
     render(<Page />);
     const scroller = screen.getByTestId('scroller');
     await frame();
@@ -110,7 +110,7 @@ describe('useTabScroll', () => {
 
   it('lets the reader take over from a restore that is still waiting', async () => {
     openTabs(['/V/long.md']);
-    act(() => useTabsStore.getState().saveScroll(tabId(0), 0, 9000));
+    act(() => useTabsStore.getState().saveView(tabId(0), 0, { scrollTop: 9000 }));
     render(<Page />);
     fireEvent.wheel(screen.getByTestId('scroller'));
     await frame();

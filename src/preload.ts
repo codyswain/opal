@@ -60,6 +60,16 @@ contextBridge.exposeInMainWorld("credentialAPI", {
     ipcRenderer.invoke("credentials:delete", account),
 });
 
+/**
+ * Every open editor, a stack's twelve among them, follows disk changes. One
+ * IPC listener hands each change to all of them, so the count of listeners
+ * on the channel stays at one.
+ */
+const diskChangeListeners = new Set<(payload: { directories: string[] }) => void>();
+const fanOutDiskChange = (_event: IpcRendererEvent, payload: { directories: string[] }) => {
+  for (const listener of [...diskChangeListeners]) listener(payload);
+};
+
 contextBridge.exposeInMainWorld("diskAPI", {
   openFolder: () => ipcRenderer.invoke("disk:open-folder"),
   listRoots: () => ipcRenderer.invoke("disk:list-roots"),
@@ -82,12 +92,12 @@ contextBridge.exposeInMainWorld("diskAPI", {
   stat: (target: string) => ipcRenderer.invoke("disk:stat", target),
   searchContent: (query: string) => ipcRenderer.invoke("disk:search-content", query),
   onChanged: (callback: (payload: { directories: string[] }) => void) => {
-    const listener = (
-      _event: IpcRendererEvent,
-      payload: { directories: string[] },
-    ) => callback(payload);
-    ipcRenderer.on("disk:changed", listener);
-    return () => ipcRenderer.removeListener("disk:changed", listener);
+    diskChangeListeners.add(callback);
+    if (diskChangeListeners.size === 1) ipcRenderer.on("disk:changed", fanOutDiskChange);
+    return () => {
+      diskChangeListeners.delete(callback);
+      if (diskChangeListeners.size === 0) ipcRenderer.removeListener("disk:changed", fanOutDiskChange);
+    };
   },
 });
 
@@ -141,6 +151,7 @@ const vaultAPI: VaultAPI = {
   discover: () => ipcRenderer.invoke("vault:discover"),
   createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
   day: (root, date) => ipcRenderer.invoke("vault:day", root, date),
+  stack: (root, kind, head) => ipcRenderer.invoke("vault:stack", root, kind, head),
   checkDigestItem: (root, path, line, raw, checked) =>
     ipcRenderer.invoke("vault:check-digest-item", root, path, line, raw, checked),
   onDayChanged: (callback) => {

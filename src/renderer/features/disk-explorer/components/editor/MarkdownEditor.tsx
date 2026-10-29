@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChunks, unifiedMergeView } from '@codemirror/merge';
-import { Compartment, EditorState, Transaction, type Text } from '@codemirror/state';
+import { Compartment, EditorState, Transaction, type Extension, type Text } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { recordOpened } from '../../activity/recordActivity';
 import { fileLocation } from '../../navigation/filesLocation';
@@ -9,17 +9,42 @@ import { useTabsStore } from '../../store/tabsStore';
 import { isLogPage } from './activityLog';
 import { EditorStatus } from './EditorStatus';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
+import { showInlineTitle } from './livePreview';
 import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
 import './editor.css';
 
+export type EditorLayout = 'page' | 'section';
+
 interface MarkdownEditorProps {
   path: string;
+  /**
+   * 'page' fills the pane and scrolls itself. 'section' is one file in a
+   * stack: it grows with its text inside the stack's scroll, and the stack
+   * draws its title.
+   */
+  layout?: EditorLayout;
+  /** Section layout: an empty file takes the caret when it mounts. Pages always do. */
+  autoFocusEmpty?: boolean;
+  /** How a followed link opens. By default it replaces the page in its tab. */
+  openNote?: (path: string) => void;
+  /** Section layout: whether this section shows the properties block. Pages follow the global flag. */
+  propertiesShown?: boolean;
+  /** Section layout: the footer line's click. Pages toggle the global flag. */
+  onToggleProperties?: () => void;
+  /** The editor's view once it exists, and null once it is gone. */
+  onView?: (view: EditorView | null) => void;
+  /** Called once the file has been read, or could not be. */
+  onLoaded?: () => void;
+  /** More extensions for this editor, such as a stack's keys. Read once, when the view is created. */
+  extensions?: Extension;
+  /** Section layout: the height to hold while the file is read. */
+  loadingHeight?: number;
 }
 
 /** A followed link replaces the page in its tab, as a plain open from the tree does. */
-function openNote(path: string): void {
+function openNoteInTab(path: string): void {
   recordOpened(path);
   useTabsStore.getState().open(fileLocation(path));
 }
@@ -45,29 +70,42 @@ function conflictView(disk: string) {
  * the surface below mounts once the text is loaded and creates one
  * CodeMirror view for the life of the page.
  */
-export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ path }) => {
+export const MarkdownEditor: React.FC<MarkdownEditorProps> = (props) => {
+  const { path, layout = 'page', onLoaded, loadingHeight } = props;
   const document = useMarkdownDocument(path);
+  const loaded = document.status !== 'loading';
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!loaded || reported.current) return;
+    reported.current = true;
+    onLoaded?.();
+  }, [loaded, onLoaded]);
 
   if (document.status === 'unavailable') {
     return (
-      <div role="alert" className="flex flex-1 items-center justify-center p-6 text-sm font-medium text-foreground">
+      <div role="alert" className={layout === 'page' ? 'flex flex-1 items-center justify-center p-6 text-sm font-medium text-foreground' : 'opal-section-message text-sm font-medium text-foreground'}>
         {document.error ?? 'This note could not be opened.'}
       </div>
     );
   }
   if (document.status !== 'ready' || document.body === null) {
-    return <div role="status" className="p-8 text-sm text-muted-foreground">Opening note…</div>;
+    return layout === 'page'
+      ? <div role="status" className="p-8 text-sm text-muted-foreground">Opening note…</div>
+      : <div role="status" aria-busy aria-label="Opening note" style={{ height: loadingHeight }} />;
   }
-  return <MarkdownEditorSurface path={path} document={document} initialBody={document.body} />;
+  return <MarkdownEditorSurface {...props} layout={layout} document={document} initialBody={document.body} />;
 };
 
-interface MarkdownEditorSurfaceProps {
-  path: string;
+interface MarkdownEditorSurfaceProps extends MarkdownEditorProps {
+  layout: EditorLayout;
   document: MarkdownDocumentState & MarkdownDocumentActions;
   initialBody: string;
 }
 
-const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, document, initialBody }) => {
+const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
+  path, layout, document, initialBody, autoFocusEmpty = false, openNote = openNoteInTab, propertiesShown, onToggleProperties, onView, extensions,
+}) => {
+  const section = layout === 'section';
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
@@ -75,8 +113,11 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
   // The hook's state changes identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
-  const propertiesOpen = usePagePropertiesStore((state) => state.open);
+  const globalPropertiesOpen = usePagePropertiesStore((state) => state.open);
+  const propertiesOpen = section ? !!propertiesShown : globalPropertiesOpen;
   const facts = usePageProperties(path, propertiesOpen, document.saveState);
+  const onViewRef = useRef(onView);
+  onViewRef.current = onView;
   const wasOpen = useRef(propertiesOpen);
 
   useEffect(() => {
@@ -86,6 +127,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
         doc: initialBody,
         extensions: [
           markdownEditorExtensions(path, openNote),
+          section ? showInlineTitle.of(false) : [],
+          extensions ?? [],
           keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
           conflict.of([]),
           EditorView.updateListener.of((update) => {
@@ -105,12 +148,15 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
     view.current = created;
     setWords(countWords(created.state.doc));
     // A page opens at the top without taking focus; an empty one gets the caret.
-    if (created.state.doc.length === 0) created.focus();
+    // In a stack only the section that asks for it does, so scrolling never moves the caret.
+    if (created.state.doc.length === 0 && (!section || autoFocusEmpty)) created.focus();
     const detach = actions.current.attach({
       getText: () => created.state.doc.toString(),
       setText: (text) => replaceText(created, text),
     });
+    onViewRef.current?.(created);
     return () => {
+      onViewRef.current?.(null);
       detach();
       created.destroy();
       view.current = null;
@@ -127,10 +173,11 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
   }, [facts]);
 
   // The block opens under the title, so the page scrolls up to show it. Closing keeps the scroll.
+  // In a stack the stack brings the section's top into view.
   useEffect(() => {
-    if (propertiesOpen && !wasOpen.current && view.current) view.current.scrollDOM.scrollTop = 0;
+    if (!section && propertiesOpen && !wasOpen.current && view.current) view.current.scrollDOM.scrollTop = 0;
     wasOpen.current = propertiesOpen;
-  }, [propertiesOpen]);
+  }, [propertiesOpen, section]);
 
   // Escape closes the block only while focus is in it or on its toggle. In
   // the text, Escape belongs to the editor, so there the menu item closes it.
@@ -139,7 +186,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
     const onToggle = event.target.closest('[data-properties-toggle]') !== null;
     if (!onToggle && !event.target.closest('[data-page-properties]')) return;
     event.preventDefault();
-    usePagePropertiesStore.getState().setOpen(false);
+    if (section && onToggleProperties) onToggleProperties();
+    else usePagePropertiesStore.getState().setOpen(false);
     // Focus in the block would go with it.
     if (!onToggle) view.current?.focus();
   };
@@ -152,9 +200,16 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
     document.resolveConflict();
   };
 
+  const problem = document.saveState === 'conflict' || document.saveState === 'error';
   return (
-    <div className="opal-editor flex h-full min-h-0 flex-col" onKeyDown={closePropertiesOnEscape}>
-      <div ref={host} className="relative min-h-0 flex-1" />
+    <div
+      className={section ? 'opal-editor' : 'opal-editor flex h-full min-h-0 flex-col'}
+      data-layout={layout}
+      data-problem={problem ? '' : undefined}
+      data-properties-shown={propertiesOpen ? '' : undefined}
+      onKeyDown={closePropertiesOnEscape}
+    >
+      <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
       <EditorStatus
         saveState={document.saveState}
         error={document.error}
@@ -162,7 +217,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
         words={words}
         readOnly={isLogPage(path)}
         propertiesOpen={propertiesOpen}
-        onToggleProperties={togglePageProperties}
+        onToggleProperties={section && onToggleProperties ? onToggleProperties : togglePageProperties}
         onKeepMine={document.resolveConflict}
         onKeepDisk={keepDiskVersion}
         onRetry={() => void document.flush()}

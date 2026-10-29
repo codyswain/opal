@@ -1,0 +1,179 @@
+/* A stack reads as one document: each file's title is a heading in the same
+   column and serif as a page's title, and the files are told apart only by a
+   little space and a faint hairline. The fold control, the file name and the
+   open button show in muted text while the pointer or focus is on a
+   section's start. Every colour is a shell token. */
+.opal-stack {
+  position: relative;
+  /* The stack corrects for sections changing height above the view itself. */
+  overflow-anchor: none;
+  /* The column holds still when the stream starts or stops scrolling. */
+  scrollbar-gutter: stable;
+}
+
+.opal-stack-content {
+  position: relative;
+  padding-bottom: 8rem;
+}
+
+.opal-stack-column {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.opal-stack-section:first-child > .opal-stack-header {
+  padding-top: 3rem;
+}
+
+/* The boundary between two files: space, then a faint hairline, then space. */
+.opal-stack-rule {
+  margin: 1.25rem 0 2rem;
+  border-top: 1px solid hsl(var(--border-subtle));
+}
+
+.opal-stack-title-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-bottom: 0.5em;
+  font-size: 1.5em;
+}
+
+.opal-stack-title-row.opal-stack-title-large {
+  padding-bottom: 0.6em;
+  font-size: 1.8em;
+}
+
+.opal-stack-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.opal-stack-label {
+  min-width: 0;
+  overflow-wrap: break-word;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: default;
+  border-radius: 4px;
+  outline: none;
+}
+
+.opal-stack-label:focus-visible,
+.opal-stack-chevron:focus-visible,
+.opal-stack-open:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-stack-detail {
+  flex-shrink: 0;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-ui-size);
+  font-weight: 400;
+  letter-spacing: var(--text-ui-tracking);
+}
+
+/* The fold control sits in the column's margin, centred on the title's first line. */
+.opal-stack-chevron {
+  position: absolute;
+  top: calc(0.65em - 0.625rem);
+  left: -1.5rem;
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: hsl(var(--icon));
+  outline: none;
+}
+
+.opal-stack-chevron svg {
+  transition: transform var(--duration-disclosure) var(--ease-standard);
+}
+
+.opal-stack-chevron[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.opal-stack-chevron:hover,
+.opal-stack-open:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-stack-tools {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: center;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-control-size);
+  font-weight: 400;
+  line-height: var(--text-control-line);
+}
+
+.opal-stack-open {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  color: hsl(var(--icon));
+  outline: none;
+}
+
+.opal-stack-problem {
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+
+/* At rest only the title shows; the rest appears with the pointer or focus. */
+.opal-stack-chevron,
+.opal-stack-name,
+.opal-stack-open {
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-stack-header:hover :is(.opal-stack-chevron, .opal-stack-name, .opal-stack-open),
+.opal-stack-header:focus-within :is(.opal-stack-chevron, .opal-stack-name, .opal-stack-open),
+.opal-stack-section:not([data-open]) .opal-stack-chevron {
+  opacity: 1;
+  transition-duration: 0s;
+}
+
+.opal-stack-section:not([data-open]) .opal-stack-title {
+  color: hsl(var(--text-secondary));
+}
+
+.opal-stack-end {
+  box-sizing: border-box;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 2rem auto 0;
+  padding: 0 2rem;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-ui-size);
+}

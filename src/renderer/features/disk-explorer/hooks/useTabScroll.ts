@@ -100,7 +100,7 @@ export function useTabScroll(
       // copy in the same place. Find it by identity, then by position.
       const history = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history;
       const at = history?.indexOf(entry) ?? -1;
-      useTabsStore.getState().saveScroll(tabId, at === -1 ? index : at, last);
+      useTabsStore.getState().saveView(tabId, at === -1 ? index : at, { scrollTop: last });
     };
   }, [container, tabId, index, page]);
 }

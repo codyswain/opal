@@ -64,7 +64,8 @@ test("View > Show Properties opens the block under the title, and it stays open 
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
-  await expect(page.locator(".cm-md-inline-title")).toHaveText(today, { timeout: 15000 });
+  // Today is a stream of daily pages; its head's title is drawn by the stack.
+  await expect(page.locator('[data-role="head"] .opal-stack-label')).toHaveText(today, { timeout: 15000 });
   await openNote(page, daily);
   const toggle = page.locator("[data-properties-toggle]");
   await expect(toggle).toHaveText("2 properties · 0 words");

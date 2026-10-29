@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { digestCheckboxLine } from '@/common/dayModel';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
 import { focusFile } from '@/renderer/features/disk-explorer/navigation';
+import { selectViewedPath, useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
 import {
   selectOpenedPath,
   useTabsStore,
@@ -415,13 +416,17 @@ export function DaySidebar({ width }: DaySidebarProps) {
   const { navigateFiles } = useShell();
   const today = useToday();
   const openedPath = useTabsStore(selectOpenedPath);
+  const activeTab = useTabsStore((state) => state.activeId);
+  const viewedPath = useStackStore((state) => selectViewedPath(state, { activeId: activeTab }));
+  // In a stream of daily pages the day follows the page at the top of the view.
+  const pagePath = viewedPath ?? openedPath;
   const pickedDay = useDaySidebarStore((state) => state.pickedDay);
   const lastDay = useDaySidebarStore((state) => state.lastDay);
   const sections = useDaySidebarStore((state) => state.sections);
   const toggleSection = useDaySidebarStore((state) => state.toggleSection);
   const pickDay = useDaySidebarStore((state) => state.pickDay);
   const followPage = useDaySidebarStore((state) => state.followPage);
-  const date = shownDay({ pickedDay, lastDay }, openedPath, today);
+  const date = shownDay({ pickedDay, lastDay }, pagePath, today);
   const state = useDay(date);
   const column = React.useRef<HTMLDivElement>(null);
   useScrollFade(column);
@@ -440,7 +445,7 @@ export function DaySidebar({ width }: DaySidebarProps) {
 
   const relative = relativeDayName(date, today);
   const roomy = width >= WEEKDAY_FROM;
-  const pageDay = pageDate(openedPath);
+  const pageDay = pageDate(pagePath);
   const isToday = date === today;
 
   return (

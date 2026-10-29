@@ -11,6 +11,8 @@ const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
   { id: COMMAND_IDS.toggleProperties, label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' },
   { id: COMMAND_IDS.collapseAllFolders, label: 'Collapse All Folders', accelerator: 'Alt+CmdOrCtrl+Left' },
+  { id: COMMAND_IDS.nextSection, label: 'Next Section', accelerator: 'Alt+CmdOrCtrl+Down' },
+  { id: COMMAND_IDS.previousSection, label: 'Previous Section', accelerator: 'Alt+CmdOrCtrl+Up' },
   { id: COMMAND_IDS.newTab, label: 'New Tab', accelerator: 'CmdOrCtrl+T' },
   { id: COMMAND_IDS.closeTab, label: 'Close Tab', accelerator: 'CmdOrCtrl+W' },
   { id: COMMAND_IDS.reopenClosedTab, label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T' },
@@ -99,6 +101,8 @@ describe('buildMenuTemplate', () => {
     ]);
     // Collapse All Folders follows, on Option-Command-Left, which no other item and no editor key uses.
     expect(shown(menu(build(), 'View'))[4]).toBe('Collapse All Folders Alt+CmdOrCtrl+Left');
+    // A stack's section commands come next, on the keys the editor gives up for them.
+    expect(shown(menu(build(), 'View')).slice(6, 8)).toEqual(['Next Section Alt+CmdOrCtrl+Down', 'Previous Section Alt+CmdOrCtrl+Up']);
     const accelerators = build().flatMap((entry) => entry.submenu.map((item) => item.accelerator));
     expect(accelerators.filter((accelerator) => accelerator === 'Alt+CmdOrCtrl+Left')).toHaveLength(1);
     expect(accelerators).not.toContain('CmdOrCtrl+B');

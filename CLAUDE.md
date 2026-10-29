@@ -1,9 +1,10 @@
 # Project: Opal
 
 A desktop app for reading and editing the Markdown pages in a folder on disk.
-Pages come first. There is no chat and no Today screen: "Today" is a shortcut
-that opens the day's page (`Library/daily/YYYY-MM-DD.md`) in the editor,
-creating it from the vault's template when it does not exist. Activity logs
+Pages come first. There is no chat and no Today screen: "Today" opens a
+stream of daily pages, the day's page (`Library/daily/YYYY-MM-DD.md`) on top
+and the earlier ones below it, creating the day's page from the vault's
+template when it does not exist. Activity logs
 are separate, read-only files in `Library/logs/`. Until the cleanup commit,
 Today opens an existing `Inbox/Logs/YYYY-MM-DD.md` when the daily page does
 not exist.
@@ -37,7 +38,13 @@ not exist.
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame;
   `day-sidebar` is the right sidebar, one vault day beside the page)
-- **Main area:** each tab shows one file or Recent. Markdown opens in the
+- **Stacks:** a tab can show several Markdown files in one scroll, each its
+  own editor that saves and merges on its own (`components/stack/`). The
+  main process lists the files (`StackService`, `vault:stack`); `canonical()`
+  in the tabs store decides by path which opens become stacks. Today's
+  stream is the first use; sections near the view have a live editor and the
+  rest are placeholders
+- **Main area:** each tab shows one file, a stack or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
   plain text, otherwise "Open in default app"). There is no folder view:
   folders are browsed in the sidebar tree, which also holds the file actions.

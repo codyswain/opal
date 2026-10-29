@@ -40,7 +40,7 @@ const count = (value: number, one: string, many: string) => `${value.toLocaleStr
 export const EditorStatus: React.FC<EditorStatusProps> = ({
   saveState, error, properties, words, readOnly = false, propertiesOpen, onToggleProperties, onKeepMine, onKeepDisk, onRetry,
 }) => (
-  <div className="flex shrink-0 flex-col gap-1 px-4 pb-2 pt-1 font-sans text-control tabular-nums text-foreground-tertiary">
+  <div className="opal-editor-status flex shrink-0 flex-col gap-1 px-4 pb-2 pt-1 font-sans text-control tabular-nums text-foreground-tertiary">
     <div className="flex items-center justify-end gap-1.5">
       <span role="status" data-testid="editor-save-state" data-state={saveState} className="mr-auto font-medium text-foreground empty:hidden">
         {LABELS[saveState]}

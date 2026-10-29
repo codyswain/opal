@@ -1,16 +1,18 @@
 import { localDate } from "@/common/vaultModel";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
-  focusFile,
+  stackLocation,
   type FilesNavigationIntent,
 } from "@/renderer/features/disk-explorer/navigation";
+import { useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import type { OpenOptions } from "@/renderer/features/disk-explorer/store/tabsStore";
 
 /**
- * Today is a shortcut, not a screen: it opens the day's page in the editor,
- * which the main process creates from the vault's template first when it does
- * not exist, and counts as an open for Recent. Resolves false when no opened
- * folder is a vault.
+ * Today is a shortcut, not a screen: it opens the stream of daily pages with
+ * today's on top, which the main process creates from the vault's template
+ * first when it does not exist, and counts as an open for Recent. When the
+ * tab already shows that stream, it scrolls back to its top. Resolves false
+ * when no opened folder is a vault.
  */
 export async function openToday(
   navigateFiles: (intent: FilesNavigationIntent, options?: Pick<OpenOptions, "newTab">) => void,
@@ -24,6 +26,7 @@ export async function openToday(
   if ("error" in created) throw new Error(created.error);
   const page = created.data.path;
   recordOpened(page);
-  navigateFiles(focusFile(page), options);
+  navigateFiles({ location: stackLocation("daily", page) }, options);
+  if (!options.newTab) useStackStore.getState().revealHead(page);
   return true;
 }

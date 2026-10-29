@@ -3,15 +3,19 @@ import {
   isAbsoluteFsPath,
   isFsPathAtOrBelow,
   normalizeFsPath,
+  remapFsPath,
 } from '@/common/fsPaths';
+import { isStackKind, stackKindForPath } from '@/common/stackModel';
 import { localDate } from '@/common/vaultModel';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import {
   RECENT_COLLECTION,
+  aloneLocation,
   fileLocation,
   filesLocationKey,
   locationPath,
   remapFilesLocation,
+  stackLocation,
   type FilesLocation,
 } from '../navigation/filesLocation';
 import {
@@ -25,11 +29,32 @@ const LEGACY_PREF_KEY = 'tabs.open';
 const HISTORY_LIMIT = 50;
 const RECENTLY_CLOSED_LIMIT = 20;
 
+/** Where a stack was scrolled: the section at the top of the view, and how far into it the view starts. */
+export interface StackViewState {
+  /** The path of the section at the top of the view. */
+  anchor: string;
+  /** How far, in px, the view's top is below that section's top. */
+  offset: number;
+  /**
+   * When the view starts inside the section's text: the line there, as the
+   * position of its start, and how far, in px, the view's top is into it.
+   */
+  line?: { pos: number; into: number };
+}
+
 export interface TabEntry {
   location: FilesLocation;
   /** How far the page was scrolled when the tab last left this entry. */
   scrollTop?: number;
+  /** A stack's place when the tab last left this entry; a stack does not use `scrollTop`. */
+  stack?: StackViewState;
 }
+
+/** What a tab remembers about where an entry was scrolled. */
+export type EntryView = { scrollTop: number } | { stack: StackViewState };
+
+/** The largest stack offset kept; anything larger was not a real place. */
+const STACK_OFFSET_LIMIT = 1_000_000;
 
 /**
  * One tab, as in Safari and Obsidian: it shows one place at a time and keeps
@@ -86,8 +111,8 @@ export interface TabsActions {
   /** Reopens the most recently closed tab where it was; false when there is none. */
   reopenClosed: () => boolean;
   move: (from: number, to: number) => void;
-  /** Remembers the scroll of one entry, so Back and switching tabs return to it. */
-  saveScroll: (id: string, index: number, scrollTop: number) => void;
+  /** Remembers where one entry was scrolled, so Back and switching tabs return to it. */
+  saveView: (id: string, index: number, view: EntryView) => void;
 }
 
 export type TabsStore = TabsState & TabsActions;
@@ -103,10 +128,9 @@ export function tabLocation(tab: Tab): FilesLocation {
   return tab.history[tab.index].location;
 }
 
-/** The file a tab shows, or null while it shows Recent. */
+/** The file a tab shows, a stack's head, or null while it shows Recent. */
 export function tabFile(tab: Tab): string | null {
-  const location = tabLocation(tab);
-  return location.mode === 'focus' ? location.file : null;
+  return locationPath(tabLocation(tab));
 }
 
 export function selectActiveTab(state: TabsState): Tab | null {
@@ -146,9 +170,18 @@ export function selectLaunchLocation(
   return state.lastSessionDate === today ? selectCurrentLocation(state) : null;
 }
 
-/** Tabs compare places by key, so a file's path is kept normalized. */
-function canonical(location: FilesLocation): FilesLocation {
-  return location.mode === 'focus' ? fileLocation(location.file) : location;
+/**
+ * Tabs compare places by key, so each place has one form: a normalized path,
+ * and a plain open of a stack's head becomes that stack. Every open passes
+ * here, so the tree, the palette, Recent, links and the sidebars all agree.
+ * `alone` stays only on a path that would otherwise open as a stack.
+ */
+export function canonical(location: FilesLocation): FilesLocation {
+  if (location.mode === 'browse') return location;
+  if (location.mode === 'stack') return stackLocation(location.kind, location.file);
+  const kind = stackKindForPath(location.file);
+  if (!kind) return fileLocation(location.file);
+  return location.alone ? aloneLocation(location.file) : stackLocation(kind, location.file);
 }
 
 interface StoredSession {
@@ -176,13 +209,36 @@ function restoredLocation(value: unknown): FilesLocation | null {
     mode?: unknown;
     collection?: { kind?: unknown };
     file?: unknown;
+    kind?: unknown;
+    alone?: unknown;
   };
   if (candidate.mode === 'focus') {
-    return isStoredPath(candidate.file) ? fileLocation(candidate.file) : null;
+    if (!isStoredPath(candidate.file)) return null;
+    return canonical(candidate.alone === true ? aloneLocation(candidate.file) : fileLocation(candidate.file));
+  }
+  if (candidate.mode === 'stack') {
+    return isStoredPath(candidate.file) && isStackKind(candidate.kind)
+      ? stackLocation(candidate.kind, candidate.file)
+      : null;
   }
   return candidate.mode === 'browse' && candidate.collection?.kind === 'recent'
     ? { mode: 'browse', collection: RECENT_COLLECTION }
     : null;
+}
+
+const inRange = (value: unknown, limit: number): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= limit;
+
+export function restoredStackView(value: unknown): StackViewState | null {
+  if (!value || typeof value !== 'object') return null;
+  const { anchor, offset, line } = value as { anchor?: unknown; offset?: unknown; line?: { pos?: unknown; into?: unknown } };
+  if (!isStoredPath(anchor) || !inRange(offset, STACK_OFFSET_LIMIT)) return null;
+  const view: StackViewState = { anchor: normalizeFsPath(anchor), offset };
+  // A bad line drops only the line; the section and offset still restore.
+  if (line && Number.isInteger(line.pos) && inRange(line.pos, 100_000_000) && inRange(line.into, STACK_OFFSET_LIMIT)) {
+    view.line = { pos: line.pos as number, into: line.into as number };
+  }
+  return view;
 }
 
 function restoredTab(value: unknown): Tab | null {
@@ -194,6 +250,10 @@ function restoredTab(value: unknown): Tab | null {
       const entry = value as Partial<TabEntry> | null;
       const location = restoredLocation(entry?.location);
       if (!location) return [];
+      if (location.mode === 'stack') {
+        const stack = restoredStackView(entry?.stack);
+        return stack ? [{ location, stack }] : [{ location }];
+      }
       const scrollTop = entry?.scrollTop;
       return typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0
         ? [{ location, scrollTop }]
@@ -387,21 +447,32 @@ export const useTabsStore = create<TabsStore>((set, get) => {
         return { tabs };
       }),
 
-    saveScroll: (id, index, scrollTop) =>
+    saveView: (id, index, view) =>
       update((state) => {
         const tab = state.tabs.find((candidate) => candidate.id === id);
         const entry = tab?.history[index];
-        if (!tab || !entry || entry.scrollTop === scrollTop) return {};
-        const history = tab.history.map((candidate, at) =>
-          at === index ? { ...candidate, scrollTop } : candidate
-        );
+        if (!tab || !entry) return {};
+        let next: TabEntry;
+        if ('stack' in view) {
+          const stack = restoredStackView(view.stack);
+          if (!stack || JSON.stringify(entry.stack) === JSON.stringify(stack)) return {};
+          next = { location: entry.location, stack };
+        } else {
+          // A stack keeps its place by section, never as a plain scroll.
+          if (entry.location.mode === 'stack' || entry.scrollTop === view.scrollTop) return {};
+          next = { location: entry.location, scrollTop: view.scrollTop };
+        }
+        const history = tab.history.map((candidate, at) => (at === index ? next : candidate));
         return { tabs: replaceTab(state.tabs, { ...tab, history }) };
       }),
   };
 });
 
 function remapEntry(entry: TabEntry, mutation: AppPathMutation): TabEntry {
-  return { ...entry, location: remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath) };
+  const location = remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath);
+  if (!entry.stack) return { ...entry, location };
+  const anchor = remapFsPath(entry.stack.anchor, mutation.oldPath, mutation.newPath);
+  return { ...entry, location, stack: { ...entry.stack, anchor } };
 }
 
 function remapTab(tab: Tab, mutation: AppPathMutation): Tab {

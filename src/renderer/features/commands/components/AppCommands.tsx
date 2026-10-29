@@ -9,6 +9,7 @@ import {
 } from "@/renderer/features/disk-explorer/navigation";
 import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import {
   togglePageProperties,
   usePagePropertiesStore,
@@ -233,6 +234,27 @@ export const AppCommands: React.FC = () => {
         shortcut: ["Alt+CmdOrCtrl+Left"],
         keywords: ["tree", "sidebar", "files", "fold", "close folders"],
         perform: () => useDiskStore.getState().collapseAll(),
+      },
+      {
+        id: COMMAND_IDS.nextSection,
+        name: "Next Section",
+        type: "navigation",
+        // A menu accelerator, so it works while a section's editor has focus.
+        shortcut: ["Alt+CmdOrCtrl+Down"],
+        keywords: ["stack", "daily", "page", "scroll", "down"],
+        perform: () => {
+          useStackStore.getState().move?.("next");
+        },
+      },
+      {
+        id: COMMAND_IDS.previousSection,
+        name: "Previous Section",
+        type: "navigation",
+        shortcut: ["Alt+CmdOrCtrl+Up"],
+        keywords: ["stack", "daily", "page", "scroll", "up"],
+        perform: () => {
+          useStackStore.getState().move?.("previous");
+        },
       },
       {
         id: COMMAND_IDS.toggleProperties,

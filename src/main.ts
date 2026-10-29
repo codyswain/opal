@@ -2,6 +2,7 @@ import "@/main/applyTestProfile";
 import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
+import { StackService } from "@/main/vault/StackService";
 import {
   app,
   BrowserWindow,
@@ -428,10 +429,12 @@ const dayService = new DayService({
     mainWindow.webContents.send("vault:day-changed", change);
   },
 });
+const stackService = new StackService({ registry: rootRegistry });
 const vaultHandlers = new VaultHandlers({
   ipc: ipcMain,
   service: vaultService,
   days: dayService,
+  stacks: stackService,
 });
 const fileWriter = new FileWriter({
   registry: rootRegistry,

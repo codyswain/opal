@@ -6,19 +6,24 @@ import { useDiskStore } from '../store/diskStore';
 import { RecentView } from './RecentView';
 import { FileViewer } from './FileViewer';
 import { MarkdownEditor } from './editor/MarkdownEditor';
+import { StackView } from './stack/StackView';
 import { useTabScroll } from '../hooks/useTabScroll';
+import { filesLocationKey } from '../navigation/filesLocation';
 import {
   selectActiveTab,
+  selectCurrentLocation,
   selectOpenedPath,
   useTabsStore,
 } from '../store/tabsStore';
 
-/** The main pane: the active tab's file or Recent. Tabs and the tree live in the shell. */
+/** The main pane: the active tab's file, stack or Recent. Tabs and the tree live in the shell. */
 export const DiskExplorer: React.FC = () => {
   const listings = useDiskStore((state) => state.listings);
   const error = useDiskStore((state) => state.loading.error);
   const openedPath = useTabsStore(selectOpenedPath);
   const activeTab = useTabsStore(selectActiveTab);
+  const location = useTabsStore(selectCurrentLocation);
+  const stack = location?.mode === 'stack' ? location : null;
   const page = useRef<HTMLDivElement>(null);
   useTabScroll(page, activeTab?.id ?? null, activeTab?.index ?? 0, openedPath);
 
@@ -92,7 +97,17 @@ export const DiskExplorer: React.FC = () => {
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
       {error && <ErrorBanner message={error} />}
-      {openedPath ? (
+      {stack && activeTab ? (
+        // A stack keeps its own place per tab entry, so each entry gets its own view.
+        <div className="min-h-0 flex-1">
+          <StackView
+            key={`${activeTab.id}:${activeTab.index}:${filesLocationKey(stack)}`}
+            tabId={activeTab.id}
+            index={activeTab.index}
+            location={stack}
+          />
+        </div>
+      ) : openedPath ? (
         <div ref={page} data-testid="files-focus" className="min-h-0 flex-1">
           {focusedEntry?.path === openedPath && focusedEntry.entry ? (
             focusedEntry.entry.kind === 'markdown' ? (

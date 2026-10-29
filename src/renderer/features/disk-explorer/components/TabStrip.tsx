@@ -7,6 +7,7 @@ import {
 } from '@/renderer/shared/ui';
 import { cn } from '@/renderer/shared/utils';
 import { hasProblem, hasUnsavedChanges, useDocumentStatusStore } from '../store/documentStatusStore';
+import { useStackStore } from '../store/stackStore';
 import { useDiskStore } from '../store/diskStore';
 import { tabFile, tabLocation, useTabsStore, type Tab } from '../store/tabsStore';
 import { locationPath } from '../navigation/filesLocation';
@@ -39,6 +40,13 @@ export const TabStrip: React.FC = () => {
   const activeId = useTabsStore((state) => state.activeId);
   const roots = useDiskStore((state) => state.roots);
   const statuses = useDocumentStatusStore((state) => state.statuses);
+  const stackLive = useStackStore((state) => state.live);
+  // A stack tab counts every section with a live editor; a page tab its one file.
+  const tabStatuses = (tab: Tab) => {
+    const file = tabFile(tab);
+    const paths = tabLocation(tab).mode === 'stack' ? (stackLive[tab.id] ?? (file ? [file] : [])) : file ? [file] : [];
+    return paths.map((path) => statuses[path]);
+  };
   const strip = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -167,9 +175,9 @@ export const TabStrip: React.FC = () => {
             const isActive = tab.id === activeId;
             const label = labels[index];
             const file = tabFile(tab);
-            const status = file ? statuses[file] : undefined;
-            const unsaved = hasUnsavedChanges(status);
-            const problem = hasProblem(status);
+            const shownStatuses = tabStatuses(tab);
+            const unsaved = shownStatuses.some(hasUnsavedChanges);
+            const problem = shownStatuses.some(hasProblem);
             const key = tabKey(tab);
             return (
               <ContextMenu key={tab.id}>
@@ -269,12 +277,11 @@ export const TabStrip: React.FC = () => {
           </MenuTrigger>
           <MenuContent align="start" className="max-h-80 overflow-auto">
             {tabs.map((tab, index) => {
-              const file = tabFile(tab);
               return (
                 <MenuItem key={tab.id} onSelect={() => activate(tab.id)} className={tab.id === activeId ? 'font-medium text-foreground' : ''}>
                   <span className="truncate">{labels[index].name}</span>
                   {labels[index].hint ? <span className="ml-1.5 truncate text-foreground-tertiary">{labels[index].hint}</span> : null}
-                  {file && hasUnsavedChanges(statuses[file]) ? <span aria-label="Unsaved changes" className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" /> : null}
+                  {tabStatuses(tab).some(hasUnsavedChanges) ? <span aria-label="Unsaved changes" className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" /> : null}
                 </MenuItem>
               );
             })}

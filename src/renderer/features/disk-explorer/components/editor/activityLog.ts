@@ -1,11 +1,16 @@
 import { EditorState, Facet, StateField, type Text } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
+import { readOnlyRule } from '@/common/stackModel';
 
 const HEADING = /^## Activity Log[ \t]*$/;
 
-/** A day's activity log. Only the vault's scripts write it, so the whole page is read-only. */
+/**
+ * A page Opal shows read-only, such as a day's activity log, which only the
+ * vault's scripts write. The rule is shared with the main process, so a page
+ * reads the same alone and in a stack.
+ */
 export function isLogPage(path: string): boolean {
-  return /(^|\/)Library\/logs\/[^/]+\.md$/.test(path);
+  return readOnlyRule(path);
 }
 
 /**

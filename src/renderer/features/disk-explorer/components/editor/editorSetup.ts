@@ -65,10 +65,11 @@ const highlight = HighlightStyle.define([
   { tag: [tags.processingInstruction, tags.labelName, tags.comment, tags.contentSeparator], class: 'cm-md-syntax' },
 ]);
 
-// Cmd+[ and Cmd+] are Back and Forward in the app menu, as in Safari, and
-// Cmd+Shift+\ toggles the right sidebar; a key the editor takes never reaches
-// the menu. Tab and Shift+Tab still indent.
-const MENU_KEYS = new Set(['Mod-[', 'Mod-]', 'Shift-Mod-\\']);
+// Cmd+[ and Cmd+] are Back and Forward in the app menu, as in Safari,
+// Cmd+Shift+\ toggles the right sidebar, and Cmd+Option+Up and Down move
+// between a stack's sections; a key the editor takes never reaches the menu.
+// Tab and Shift+Tab still indent.
+const MENU_KEYS = new Set(['Mod-[', 'Mod-]', 'Shift-Mod-\\', 'Mod-Alt-ArrowUp', 'Mod-Alt-ArrowDown']);
 const editingKeymap = defaultKeymap.filter((binding) => !MENU_KEYS.has(binding.key ?? ''));
 
 /**

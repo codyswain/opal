@@ -14,6 +14,8 @@ export const COMMAND_IDS = {
   toggleLeftPane: "pane.toggleLeft",
   toggleRightPane: "pane.toggleRight",
   toggleProperties: "page.toggleProperties",
+  nextSection: "stack.nextSection",
+  previousSection: "stack.previousSection",
   newTab: "tabs.new",
   closeTab: "tabs.close",
   reopenClosedTab: "tabs.reopenClosed",

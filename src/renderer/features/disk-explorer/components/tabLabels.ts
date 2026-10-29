@@ -1,5 +1,7 @@
 import { classifyFile, fileTreeLabel } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
+import { dailyHeadDate } from '@/common/stackModel';
+import { localDate } from '@/common/vaultModel';
 import { locationPath, type FilesLocation } from '../navigation/filesLocation';
 
 export interface TabLabel {
@@ -32,9 +34,15 @@ export function vaultFolder(path: string, roots: readonly string[]): string {
   return vaultRelativePath(parent, roots);
 }
 
-export function locationName(location: FilesLocation): string {
+/**
+ * A tab's name. Today's stream of daily pages is "Today" while its head is
+ * today's page; any other stack goes by its head's name, as the head opened
+ * alone does.
+ */
+export function locationName(location: FilesLocation, today = localDate()): string {
   const path = locationPath(location);
   if (!path) return 'Recent';
+  if (location.mode === 'stack' && location.kind === 'daily' && dailyHeadDate(path) === today) return 'Today';
   const name = basenameFsPath(path);
   return fileTreeLabel(name, classifyFile(name));
 }
@@ -69,7 +77,7 @@ export function tabLabels(
   locations: readonly FilesLocation[],
   roots: readonly string[]
 ): TabLabel[] {
-  const names = locations.map(locationName);
+  const names = locations.map((location) => locationName(location));
   const paths = locations.map(locationPath);
   return locations.map((_, index) => {
     const name = names[index];

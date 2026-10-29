@@ -4,8 +4,10 @@
    preview's classes (cm-md-*) come from livePreview.ts and previewWidgets.ts.
    Selectors start with `.opal-editor .cm-editor` so they outrank
    CodeMirror's own theme. Lines and blocks space themselves with padding,
-   never margins: CodeMirror measures their boxes to place the caret. */
-.opal-editor {
+   never margins: CodeMirror measures their boxes to place the caret.
+   A stack (stack.css) shares the column and the type. */
+.opal-editor,
+.opal-stack {
   --font-reading: "PT Serif", "Iowan Old Style", Georgia, serif;
   --editor-measure: 43.75rem;
   --editor-line: 1.6;
@@ -28,6 +30,48 @@
 
 .opal-editor .cm-editor.cm-focused {
   outline: none;
+}
+
+/* A section of a stack grows with its text inside the stack's scroll, so
+   CodeMirror draws only the lines in view. The stack draws the title. */
+.opal-editor[data-layout="section"] .cm-editor {
+  position: static;
+  height: auto;
+}
+
+.opal-editor[data-layout="section"] .cm-editor .cm-scroller {
+  height: auto;
+  scrollbar-gutter: auto;
+}
+
+.opal-editor[data-layout="section"] .cm-editor .cm-content {
+  padding: 0 2rem 0.5rem;
+}
+
+/* The footer line keeps its place but shows only with the pointer or focus
+   on the section, a save problem, or the properties block open. */
+.opal-editor[data-layout="section"] .opal-editor-status {
+  box-sizing: border-box;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  padding-right: 2rem;
+  padding-left: 2rem;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-stack-section:hover .opal-editor[data-layout="section"] .opal-editor-status,
+.opal-editor[data-layout="section"]:focus-within .opal-editor-status,
+.opal-editor[data-layout="section"][data-problem] .opal-editor-status,
+.opal-editor[data-layout="section"][data-properties-shown] .opal-editor-status {
+  opacity: 1;
+  transition-duration: 0s;
+}
+
+.opal-editor[data-layout="section"] .opal-section-message {
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  padding: 0 2rem 1rem;
 }
 
 .opal-editor .cm-editor .cm-scroller {

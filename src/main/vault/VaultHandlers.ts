@@ -2,7 +2,9 @@ import type { IpcMain } from "electron";
 import path from "path";
 import type { VaultResult } from "@/types/vault";
 import { validDate } from "@/common/vaultModel";
+import { isStackKind } from "@/common/stackModel";
 import type { DayService } from "./DayService";
+import type { StackService } from "./StackService";
 import type { VaultService } from "./VaultService";
 
 const nonempty = (value: unknown, limit = 32768): value is string =>
@@ -30,10 +32,11 @@ export class VaultHandlers {
       ipc: Pick<IpcMain, "handle">;
       service: VaultService;
       days: DayService;
+      stacks: StackService;
     },
   ) {}
   registerAll(): void {
-    const { ipc, service, days } = this.deps;
+    const { ipc, service, days, stacks } = this.deps;
     ipc.handle("vault:discover", () => this.respond(() => service.discover()));
     ipc.handle("vault:create-day", (_, root: unknown, day: unknown) =>
       target(root) && date(day)
@@ -43,6 +46,11 @@ export class VaultHandlers {
     ipc.handle("vault:day", (_, root: unknown, day: unknown) =>
       target(root) && date(day)
         ? this.respond(() => days.day(root, day))
+        : invalid(),
+    );
+    ipc.handle("vault:stack", (_, root: unknown, kind: unknown, head: unknown) =>
+      target(root) && isStackKind(kind) && target(head)
+        ? this.respond(() => stacks.stack(root, kind, head))
         : invalid(),
     );
     ipc.handle(

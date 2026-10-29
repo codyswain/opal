@@ -1,4 +1,5 @@
 import type { VaultDay, VaultDayChange } from "./day";
+import type { StackKind, VaultStack } from "./stack";
 
 export interface VaultInfo {
   path: string;
@@ -18,6 +19,8 @@ export interface VaultAPI {
   createDay: (root: string, date: string) => Promise<VaultResult<{ path: string }>>;
   /** Everything the vault holds for the date. */
   day: (root: string, date: string) => Promise<VaultResult<VaultDay>>;
+  /** The files a stack headed by `head` shows, in order. Fails when `head` does not start a stack of `kind`. */
+  stack: (root: string, kind: StackKind, head: string) => Promise<VaultResult<VaultStack>>;
   /**
    * Ticks or clears a digest checkbox. `line` and `raw` are the item's `at`,
    * as `day` read it; the main process refuses when that line changed since.

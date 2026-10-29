@@ -4,6 +4,7 @@ import {
   selectOpenedPath,
   useTabsStore,
 } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { selectViewedPath, useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
 import { useShellStore } from '@/renderer/features/shell/store/shellStore';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import {
@@ -147,7 +148,14 @@ function readPreferences(): DaySidebarPreferences {
   );
 }
 
-const openedPath = () => selectOpenedPath(useTabsStore.getState());
+/**
+ * The page the day rule follows: in a stream of daily pages, the one at the
+ * top of the view; otherwise the open page.
+ */
+export function shownPath(): string | null {
+  const tabs = useTabsStore.getState();
+  return selectViewedPath(useStackStore.getState(), tabs) ?? selectOpenedPath(tabs);
+}
 
 export const useDaySidebarStore = create<DaySidebarStore>((set) => {
   const update = (change: (state: DaySidebarStore) => Partial<DaySidebarPreferences>) =>
@@ -161,7 +169,7 @@ export const useDaySidebarStore = create<DaySidebarStore>((set) => {
     ...readPreferences(),
     pickedDay: null,
     lastDay: null,
-    seenPath: openedPath(),
+    seenPath: shownPath(),
     narrowOpen: false,
 
     setOpen: (open) => update(() => ({ open })),
@@ -181,13 +189,16 @@ export const useDaySidebarStore = create<DaySidebarStore>((set) => {
   };
 });
 
-// The day rule follows every page the active tab shows, open or closed.
-useTabsStore.subscribe((tabs) => {
-  const path = selectOpenedPath(tabs);
+// The day rule follows every page the active tab shows, open or closed, and
+// the page at the top of a stream as it scrolls.
+function followShownPage(): void {
+  const path = shownPath();
   const state = useDaySidebarStore.getState();
   if (path === state.seenPath) return;
   useDaySidebarStore.setState({ ...afterPageOpened(state, state.seenPath, path, localDate()), seenPath: path });
-});
+}
+useTabsStore.subscribe(followShownPage);
+useStackStore.subscribe(followShownPage);
 
 // Only one overlay at a time, and a change of layout starts the overlay closed.
 useShellStore.subscribe((shell, before) => {

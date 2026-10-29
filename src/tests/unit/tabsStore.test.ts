@@ -117,7 +117,7 @@ describe('history per tab', () => {
   it('remembers the scroll of one entry', () => {
     open(A);
     open(B);
-    state().saveScroll(tabId(0), 0, 420);
+    state().saveView(tabId(0), 0, { scrollTop: 420 });
     state().back();
     expect(state().tabs[0].history[0].scrollTop).toBe(420);
   });

@@ -6,7 +6,8 @@ import { TAB_DRAG_TYPE, TabStrip } from '@/renderer/features/disk-explorer/compo
 import { tabLabels, vaultRelativePath } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { usePaletteStore } from '@/renderer/features/commands/store/paletteStore';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { RECENT_COLLECTION, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { RECENT_COLLECTION, fileLocation, stackLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -110,6 +111,24 @@ describe('TabStrip', () => {
     expect(screen.getByTestId(`tab-dot-${A}`)).toHaveAttribute('aria-label', 'This file needs attention');
     act(() => useDocumentStatusStore.getState().clear(A));
     expect(screen.queryByTestId(`tab-dot-${A}`)).toBeNull();
+  });
+
+  it('marks a stack tab unsaved when any of its live sections is', () => {
+    const head = '/V/Library/daily/2026-10-29.md';
+    const lower = '/V/Library/daily/2026-10-28.md';
+    openTabs([stackLocation('daily', head)]);
+    const tab = useTabsStore.getState().tabs[0];
+    useStackStore.getState().setLive(tab.id, [head, lower]);
+    useDocumentStatusStore.getState().set(lower, 'dirty');
+    renderStrip();
+    expect(screen.getByTestId(`tab-dot-${head}`)).toHaveAttribute('title', 'Unsaved changes');
+    act(() => useDocumentStatusStore.getState().set(lower, 'error'));
+    expect(screen.getByTestId(`tab-dot-${head}`)).toHaveAttribute('aria-label', 'This file needs attention');
+    act(() => {
+      useDocumentStatusStore.getState().clear(lower);
+      useStackStore.getState().setLive(tab.id, []);
+    });
+    expect(screen.queryByTestId(`tab-dot-${head}`)).toBeNull();
   });
 
   it('closes on middle click and on Delete from the keyboard', async () => {

@@ -1,5 +1,5 @@
 import { syntaxTree } from '@codemirror/language';
-import { Prec, StateEffect, StateField, type EditorSelection, type EditorState, type Extension, type Range, type Text } from '@codemirror/state';
+import { Facet, Prec, StateEffect, StateField, type EditorSelection, type EditorState, type Extension, type Range, type Text } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate, type WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Tag, styleTags } from '@lezer/highlight';
@@ -189,6 +189,12 @@ function imageWidth(size: string | undefined): number | null {
  * are links and mutes their marks itself, so the brackets around plain text
  * keep the text's color.
  */
+/**
+ * Whether the page draws its file name as a title above the text. A stack
+ * section turns it off and draws the same title in its header.
+ */
+export const showInlineTitle = Facet.define<boolean, boolean>({ combine: (values) => values.every(Boolean) });
+
 export const linkMarkStyle: MarkdownConfig = { props: [styleTags({ LinkMark: Tag.define() })] };
 
 /** A reference label the way CommonMark matches it: case and runs of spaces do not count. */
@@ -431,8 +437,11 @@ function showBlocks(state: EditorState, blocks: readonly PreviewBlock[]): BlockP
     if (cell !== null && widget instanceof TableWidget && from <= cell && cell <= to) return [{ from, to, widget: widget.withCellCaret(cell - from) }];
     return reveal.lines(from, to) ? [] : [{ from, to, widget }];
   });
+  const title = state.facet(showInlineTitle)
+    ? [Decoration.widget({ widget: new InlineTitleWidget(pageTitle(state)), block: true, side: -1 }).range(0)]
+    : [];
   const decorations = Decoration.set([
-    Decoration.widget({ widget: new InlineTitleWidget(pageTitle(state)), block: true, side: -1 }).range(0),
+    ...title,
     ...shown.map((block) => Decoration.replace({ widget: block.widget, block: true }).range(block.from, block.to)),
   ], true);
   return { blocks, shown, decorations };
