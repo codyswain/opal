@@ -2,13 +2,10 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Clock, Settings, Sun } from "lucide-react";
 import { localDate } from "@/common/vaultModel";
-import {
-  FILES_ROUTE_PATH,
-  RECENT_COLLECTION,
-  serializeFilesLocation,
-} from "@/renderer/features/disk-explorer/navigation";
+import { browseRecent } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import {
+  selectCurrentLocation,
   selectOpenedPath,
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
@@ -26,31 +23,37 @@ interface WorkspaceSidebarProps {
   onToggleSidebar?: () => void;
 }
 
-const RECENT_DESTINATION = {
-  pathname: FILES_ROUTE_PATH,
-  search: serializeFilesLocation({ mode: "browse", collection: RECENT_COLLECTION }),
-};
+/** Cmd+click and middle-click open in a new tab, as everywhere else. */
+function wantsNewTab(event: React.MouseEvent): boolean {
+  return event.metaKey || event.ctrlKey || event.button === 1;
+}
 
 export function WorkspaceSidebar({
   onNavigate,
   onToggleSidebar,
 }: WorkspaceSidebarProps) {
   const roots = useDiskStore((state) => state.roots);
-  const isRecent = useDiskStore(
-    (state) => state.currentCollection?.kind === "recent",
-  );
+  const isRecent = useTabsStore((state) => {
+    const shown = selectCurrentLocation(state);
+    return shown?.mode === "browse" && shown.collection.kind === "recent";
+  });
   const openedPath = useTabsStore(selectOpenedPath);
   const { navigateFiles } = useShell();
   const todayLog = `/Inbox/Logs/${localDate()}.md`;
   const isToday = roots.some((root) => openedPath === `${root}${todayLog}`);
 
-  const goToToday = async () => {
+  const goToToday = async (newTab: boolean) => {
     try {
-      if (await openToday(navigateFiles)) onNavigate?.();
+      if (await openToday((intent) => navigateFiles(intent, { newTab }))) onNavigate?.();
       else toast.error("Open your vault folder first.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not open today's page.");
     }
+  };
+
+  const goToRecent = (newTab: boolean) => {
+    navigateFiles(browseRecent(), { newTab });
+    onNavigate?.();
   };
 
   const openSettings = () => {
@@ -75,14 +78,13 @@ export function WorkspaceSidebar({
             icon={Sun}
             label="Today"
             active={isToday}
-            onActivate={() => void goToToday()}
+            onActivate={(event) => void goToToday(wantsNewTab(event))}
           />
           <SidebarItem
-            to={RECENT_DESTINATION}
             icon={Clock}
             label="Recent"
-            active={isRecent && !openedPath}
-            onActivate={onNavigate}
+            active={isRecent}
+            onActivate={(event) => goToRecent(wantsNewTab(event))}
           />
         </SidebarSection>
       </nav>

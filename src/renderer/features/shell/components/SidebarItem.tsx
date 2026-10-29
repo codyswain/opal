@@ -1,19 +1,14 @@
 import * as React from 'react';
-import { NavLink, type To } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/renderer/shared/utils';
 
 interface SidebarItemProps {
   label: string;
   icon: LucideIcon;
-  to?: To;
-  /**
-   * When given, overrides NavLink's pathname matching. Items that share a
-   * pathname but differ by search (Files and Recent) rely on this.
-   */
   active?: boolean;
   trailing?: React.ReactNode;
-  onActivate?: () => void;
+  /** Gets the click, so Cmd+click and middle-click can open a new tab. */
+  onActivate?: (event: React.MouseEvent) => void;
   className?: string;
 }
 
@@ -48,32 +43,15 @@ export function SidebarItem({
   icon,
   label,
   onActivate,
-  to,
   trailing,
 }: SidebarItemProps) {
-  if (to) {
-    return (
-      <NavLink
-        to={to}
-        onClick={onActivate}
-        className={({ isActive }) =>
-          cn(
-            rowStyles,
-            (active === undefined ? isActive : active) &&
-              'bg-surface-selected text-foreground',
-            className
-          )
-        }
-      >
-        <ItemContents icon={icon} label={label} trailing={trailing} />
-      </NavLink>
-    );
-  }
-
   return (
     <button
       type="button"
       onClick={onActivate}
+      onAuxClick={(event) => {
+        if (event.button === 1) onActivate?.(event);
+      }}
       aria-pressed={active || undefined}
       className={cn(
         rowStyles,

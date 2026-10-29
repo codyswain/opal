@@ -1,5 +1,10 @@
 import React, { useEffect } from "react";
-import { HashRouter as Router, Navigate, useRoutes } from "react-router-dom";
+import {
+  HashRouter as Router,
+  Navigate,
+  useRoutes,
+  type RouteObject,
+} from "react-router-dom";
 import "@/renderer/styles/index.css";
 
 import { ThemeProvider } from "@/renderer/features/theme";
@@ -13,57 +18,54 @@ import {
   FilesRoute,
   NameDialog,
 } from "@/renderer/features/disk-explorer";
-import { FILES_ROUTE_PATH } from "@/renderer/features/disk-explorer/navigation";
-import { openToday } from "@/renderer/features/shell/utils/openToday";
 import {
-  AppShell,
-  ShellProvider,
-  useShell,
-  type ShellRouteDescriptor,
-  type ShellRouteObject,
-} from "@/renderer/features/shell";
+  FILES_ROUTE_PATH,
+  serializeFilesLocation,
+} from "@/renderer/features/disk-explorer/navigation";
+import {
+  selectCurrentLocation,
+  selectLaunchLocation,
+  useTabsStore,
+} from "@/renderer/features/disk-explorer/store/tabsStore";
+import { openToday } from "@/renderer/features/shell/utils/openToday";
+import { AppShell, ShellProvider, useShell } from "@/renderer/features/shell";
 
-const FILES_ROUTE: ShellRouteDescriptor = {
-  id: "files",
-  header: { title: "Files" },
-};
-
-const FALLBACK_ROUTE: ShellRouteDescriptor = {
-  id: "opal",
-  header: { title: "Opal" },
-};
-
-/** Launch lands on today's page; without a vault it falls back to the Library. */
+/**
+ * Launch brings back the tabs of the last session. Today's page opens when
+ * nothing came back or the day has changed since; without a vault the page
+ * area is left to the files route.
+ */
 const StartPage: React.FC = () => {
   const { navigateFiles, navigateTo } = useShell();
   useEffect(() => {
-    const library = () => navigateTo(FILES_ROUTE_PATH, { replace: true });
-    void openToday(navigateFiles, "replace")
+    const files = () => {
+      const shown = selectCurrentLocation(useTabsStore.getState());
+      navigateTo(
+        {
+          pathname: FILES_ROUTE_PATH,
+          search: shown ? serializeFilesLocation(shown) : "",
+        },
+        { replace: true },
+      );
+    };
+    if (selectLaunchLocation(useTabsStore.getState())) {
+      files();
+      return;
+    }
+    void openToday(navigateFiles)
       .then((opened) => {
-        if (!opened) library();
+        if (!opened) files();
       })
-      .catch(library);
+      .catch(files);
     // Runs once per landing on "/"; navigation replaces this route.
   }, []);
   return null;
 };
 
-const APP_ROUTES: ShellRouteObject[] = [
-  {
-    path: "/",
-    element: <StartPage />,
-    handle: { shell: FALLBACK_ROUTE },
-  },
-  {
-    path: "/files",
-    element: <FilesRoute />,
-    handle: { shell: FILES_ROUTE },
-  },
-  {
-    path: "*",
-    element: <Navigate to="/" replace />,
-    handle: { shell: FALLBACK_ROUTE },
-  },
+const APP_ROUTES: RouteObject[] = [
+  { path: "/", element: <StartPage /> },
+  { path: "/files", element: <FilesRoute /> },
+  { path: "*", element: <Navigate to="/" replace /> },
 ];
 
 const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
@@ -84,7 +86,7 @@ const App: React.FC = () => {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
+          <ShellProvider>
             <AppCommands />
             <CommandPalette />
             <SettingsDialog />

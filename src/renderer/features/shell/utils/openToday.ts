@@ -1,7 +1,6 @@
 import { localDate } from "@/common/vaultModel";
 import {
   focusFile,
-  type FilesHistoryMutation,
   type FilesNavigationIntent,
 } from "@/renderer/features/disk-explorer/navigation";
 
@@ -12,7 +11,6 @@ import {
  */
 export async function openToday(
   navigateFiles: (intent: FilesNavigationIntent) => void,
-  history: FilesHistoryMutation = "push",
 ): Promise<boolean> {
   const vaults = await window.vaultAPI.discover();
   if ("error" in vaults) throw new Error(vaults.error);
@@ -22,6 +20,6 @@ export async function openToday(
   const created = await window.vaultAPI.createDay(root, date);
   if ("error" in created) throw new Error(created.error);
   const folder = `${root}/Inbox/Logs`;
-  navigateFiles(focusFile(folder, `${folder}/${date}.md`, history));
+  navigateFiles(focusFile(folder, `${folder}/${date}.md`));
   return true;
 }

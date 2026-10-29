@@ -1,10 +1,7 @@
-import { classifyFile } from '@/common/fileKind';
-import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
-import { Button } from '@/renderer/shared/ui';
 import React, { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useFilesNavigation } from '../navigation/FilesNavigationContext';
 import { shouldIgnoreShortcutTarget } from '../navigation/shortcutTarget';
-import { X, ArrowLeft, ChevronRight } from 'lucide-react';
+import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterEntries } from '@/common/filterEntries';
 import { sortEntries, type SortField } from '@/common/sortEntries';
@@ -19,11 +16,13 @@ import { QuickLook } from './QuickLook';
 import { DetailPane } from './detail/DetailPane';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { DiskFolderView } from './DiskFolderView';
-import { TabStrip } from './TabStrip';
 import { WelcomePanel } from './WelcomePanel';
-import { Breadcrumb } from './Breadcrumb';
-import { FileKindIcon } from './fileKindIcon';
-import { useTabsStore } from '../store/tabsStore';
+import { useTabScroll } from '../hooks/useTabScroll';
+import {
+  selectActiveTab,
+  selectOpenedPath,
+  useTabsStore,
+} from '../store/tabsStore';
 import {
   PaneGroup,
   Pane,
@@ -34,7 +33,7 @@ import {
 
 const NO_RECENT_ITEMS: RecentItem[] = [];
 
-/** The main pane: tabs, then a page, a folder or Recent. The sidebar tree lives in the shell. */
+/** The main pane: the active tab's page, folder or Recent. Tabs and the tree live in the shell. */
 export const DiskExplorer: React.FC = () => {
   const navigation = useFilesNavigation();
   const previewPaneId = useId();
@@ -54,7 +53,10 @@ export const DiskExplorer: React.FC = () => {
   const layoutKey = 'files-shell';
   const { sizes, onLayout } = usePaneLayout(layoutKey, [72, 28]);
 
-  const openedPath = useTabsStore((state) => state.openedPath);
+  const openedPath = useTabsStore(selectOpenedPath);
+  const activeTab = useTabsStore(selectActiveTab);
+  const page = useRef<HTMLDivElement>(null);
+  useTabScroll(page, activeTab?.id ?? null, activeTab?.index ?? 0, openedPath);
   const activeDirectory = currentDirectory;
   const folderRows = useCollectionQueryStore((state) => (activeDirectory ? state.results[`folder:${activeDirectory}`]?.query ? state.results[`folder:${activeDirectory}`].rows : null : null));
   const isRecent = currentCollection?.kind === 'recent';
@@ -101,29 +103,33 @@ export const DiskExplorer: React.FC = () => {
     return found ?? retainedEntry.current;
   }, [selectedPath, listings, recentItems]);
 
-  const [focusedEntry, setFocusedEntry] = useState<{
+  // A file in a listing the tree or a folder already read shows at once; any
+  // other file is looked up, and a late answer for a file left behind is dropped.
+  const listedEntry = useMemo(
+    () =>
+      openedPath
+        ? Object.values(listings)
+            .flat()
+            .find((entry) => entry.path === openedPath && !entry.isDirectory) ?? null
+        : null,
+    [openedPath, listings]
+  );
+  const [statted, setStatted] = useState<{
     path: string;
     entry: DiskEntry | null;
     loading: boolean;
   } | null>(null);
   useEffect(() => {
-    if (!openedPath) {
-      setFocusedEntry(null);
-      return;
-    }
-    const cached = Object.values(listings)
-      .flat()
-      .find((entry) => entry.path === openedPath && !entry.isDirectory);
-    if (cached) {
-      setFocusedEntry({ path: openedPath, entry: cached, loading: false });
+    if (!openedPath || listedEntry) {
+      setStatted(null);
       return;
     }
     let cancelled = false;
-    setFocusedEntry({ path: openedPath, entry: null, loading: true });
+    setStatted({ path: openedPath, entry: null, loading: true });
     void Promise.resolve(window.diskAPI.stat(openedPath))
       .then((result) => {
         if (!cancelled)
-          setFocusedEntry({
+          setStatted({
             path: openedPath,
             entry:
               result?.success &&
@@ -136,85 +142,17 @@ export const DiskExplorer: React.FC = () => {
       })
       .catch(() => {
         if (!cancelled)
-          setFocusedEntry({ path: openedPath, entry: null, loading: false });
+          setStatted({ path: openedPath, entry: null, loading: false });
       });
     return () => {
       cancelled = true;
     };
-  }, [openedPath, listings]);
+  }, [openedPath, listedEntry]);
+  const focusedEntry =
+    openedPath && listedEntry
+      ? { path: openedPath, entry: listedEntry, loading: false }
+      : statted;
   const showDetailPane = !openedPath && isPreviewPaneOpen;
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        shouldIgnoreShortcutTarget(event.target as HTMLElement) ||
-        useDiskStore.getState().pendingAction ||
-        useDiskStore.getState().pendingDelete
-      )
-        return;
-      if (!event.metaKey && !event.ctrlKey) return;
-
-      const tabs = useTabsStore.getState();
-
-      // Ctrl+Tab cycles like a browser; Cmd+Shift+T brings back the last closed tab.
-      if (event.key === 'Tab' && event.ctrlKey) {
-        if (tabs.openPaths.length === 0) return;
-        event.preventDefault();
-        const index = tabs.activePath ? tabs.openPaths.indexOf(tabs.activePath) : -1;
-        const step = event.shiftKey ? -1 : 1;
-        const path = tabs.openPaths[(index + step + tabs.openPaths.length) % tabs.openPaths.length];
-        if (path) navigation.openFile(path);
-        return;
-      }
-
-      if (event.shiftKey && event.key.toLowerCase() === 't') {
-        const path = tabs.reopenClosed();
-        if (path) { event.preventDefault(); navigation.openFile(path); }
-        return;
-      }
-
-      if (event.key === 'w') {
-        if (!tabs.activePath) return;
-        event.preventDefault();
-        navigation.closeFile(tabs.activePath);
-        return;
-      }
-
-      if (event.shiftKey && event.key === '[') {
-        event.preventDefault();
-        const index = tabs.activePath
-          ? tabs.openPaths.indexOf(tabs.activePath)
-          : 0;
-        const path =
-          tabs.openPaths[
-            (index - 1 + tabs.openPaths.length) % tabs.openPaths.length
-          ];
-        if (path) navigation.openFile(path);
-        return;
-      }
-
-      if (event.shiftKey && event.key === ']') {
-        event.preventDefault();
-        const index = tabs.activePath
-          ? tabs.openPaths.indexOf(tabs.activePath)
-          : -1;
-        const path = tabs.openPaths[(index + 1) % tabs.openPaths.length];
-        if (path) navigation.openFile(path);
-        return;
-      }
-
-      // Cmd+1..9 jump to a tab by position, as in every browser.
-      if (event.key >= '1' && event.key <= '9') {
-        event.preventDefault();
-        const path = tabs.openPaths[Number(event.key) - 1];
-        if (path) navigation.openFile(path);
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [navigation]);
 
   useEffect(() => {
     if (!error) return;
@@ -344,7 +282,6 @@ export const DiskExplorer: React.FC = () => {
           className="flex min-w-0 flex-col overflow-hidden"
         >
           {error && <ErrorBanner message={error} />}
-          <TabStrip />
           {(() => {
             const previewToggle = (
               <button
@@ -371,44 +308,20 @@ export const DiskExplorer: React.FC = () => {
             return null;
           })()}
           {openedPath ? (
-            <div
-              data-testid="files-focus"
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1" data-testid="focus-header">
-                <Button
-                  size="compact"
-                  variant="ghost"
-                  onClick={navigation.returnToFolder}
-                  aria-label={`Return to folder ${basenameFsPath(parentFsPath(openedPath) ?? openedPath)}`}
-                  title="Return to folder"
-                  className="shrink-0"
-                >
-                  <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-                </Button>
-                {/* The folder trail is live; the file itself is where you are. */}
-                <Breadcrumb dirPath={parentFsPath(openedPath) ?? openedPath} />
-                <ChevronRight aria-hidden className="h-3 w-3 shrink-0 opacity-40" />
-                <span className="flex min-w-0 items-center gap-1.5 px-1 text-2xs font-medium text-foreground" aria-current="page">
-                  <FileKindIcon kind={focusedEntry?.entry?.kind ?? classifyFile(basenameFsPath(openedPath))} className="h-3.5 w-3.5" />
-                  <span className="truncate">{basenameFsPath(openedPath)}</span>
-                </span>
-              </div>
-              <div className="min-h-0 flex-1">
-                {focusedEntry?.path === openedPath && focusedEntry.entry ? (
-                  focusedEntry.entry.kind === 'markdown' ? (
-                    <MarkdownEditor key={focusedEntry.entry.path} path={focusedEntry.entry.path} />
-                  ) : (
-                    <DetailPane entry={focusedEntry.entry} />
-                  )
+            <div ref={page} data-testid="files-focus" className="min-h-0 flex-1">
+              {focusedEntry?.path === openedPath && focusedEntry.entry ? (
+                focusedEntry.entry.kind === 'markdown' ? (
+                  <MarkdownEditor key={focusedEntry.entry.path} path={focusedEntry.entry.path} />
                 ) : (
-                  <div role="status" className="p-4">
-                    {focusedEntry?.path !== openedPath || focusedEntry.loading
-                      ? 'Loading file…'
-                      : 'File unavailable'}
-                  </div>
-                )}
-              </div>
+                  <DetailPane entry={focusedEntry.entry} />
+                )
+              ) : (
+                <div role="status" className="p-4">
+                  {focusedEntry?.path !== openedPath || focusedEntry.loading
+                    ? 'Loading file…'
+                    : 'File unavailable'}
+                </div>
+              )}
             </div>
           ) : isRecent ? null : activeDirectory ? (
             <div className="min-h-0 flex-1 overflow-hidden">

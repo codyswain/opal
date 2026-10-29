@@ -22,6 +22,7 @@ export class SystemHandlers {
     this.registerOpenFolderDialog();
     this.registerReportTheme();
     this.registerFullScreenState();
+    this.registerCloseWindow();
   }
 
   private registerCreateDirectoryOnDisk(): void {
@@ -59,6 +60,13 @@ export class SystemHandlers {
     this.deps.ipc.handle('system:is-full-screen', (event) =>
       this.deps.browserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
     );
+  }
+
+  /** Close Tab with no tab left closes the window, as in Safari. */
+  private registerCloseWindow(): void {
+    this.deps.ipc.on('system:close-window', (event) => {
+      this.deps.browserWindow.fromWebContents(event.sender)?.close();
+    });
   }
 
   private registerReportTheme(): void {

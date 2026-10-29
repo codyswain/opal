@@ -1,7 +1,11 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, PanelLeft } from 'lucide-react';
+import {
+  selectCanGoBack,
+  selectCanGoForward,
+  useTabsStore,
+} from '@/renderer/features/disk-explorer/store/tabsStore';
 import { IconButton } from '@/renderer/shared/ui';
-import { useShell } from '../context/ShellContext';
 import { useShellStore } from '../store/shellStore';
 
 /**
@@ -26,27 +30,42 @@ interface FrameControlsProps {
   toggleRef?: React.Ref<HTMLButtonElement>;
 }
 
-/** Sidebar toggle, Back and Forward: the top row's only buttons, as in Safari. */
+/**
+ * Sidebar toggle, Back and Forward, as in Safari. Back and Forward walk the
+ * active tab's own history.
+ */
 export function FrameControls({
   onToggleSidebar,
   sidebarOpen,
   toggleRef,
 }: FrameControlsProps) {
-  const { goBack, goForward } = useShell();
+  const canGoBack = useTabsStore(selectCanGoBack);
+  const canGoForward = useTabsStore(selectCanGoForward);
 
   return (
     <div className="no-drag flex shrink-0 items-center gap-0.5">
       <IconButton
         ref={toggleRef}
         label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+        shortcut="⌘\"
         onClick={onToggleSidebar}
       >
         <PanelLeft aria-hidden className="h-4 w-4" />
       </IconButton>
-      <IconButton label="Go back" onClick={goBack}>
+      <IconButton
+        label="Go back"
+        shortcut="⌘["
+        disabled={!canGoBack}
+        onClick={() => useTabsStore.getState().back()}
+      >
         <ChevronLeft aria-hidden className="h-4 w-4" />
       </IconButton>
-      <IconButton label="Go forward" onClick={goForward}>
+      <IconButton
+        label="Go forward"
+        shortcut="⌘]"
+        disabled={!canGoForward}
+        onClick={() => useTabsStore.getState().forward()}
+      >
         <ChevronRight aria-hidden className="h-4 w-4" />
       </IconButton>
     </div>

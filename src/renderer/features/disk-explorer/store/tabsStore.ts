@@ -3,384 +3,489 @@ import {
   isAbsoluteFsPath,
   isFsPathAtOrBelow,
   normalizeFsPath,
-  remapFsPath,
 } from '@/common/fsPaths';
+import { localDate } from '@/common/vaultModel';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
+import {
+  RECENT_COLLECTION,
+  directoryCollection,
+  fileLocation,
+  filesLocationKey,
+  locationPath,
+  remapFilesLocation,
+  type FilesLocation,
+} from '../navigation/filesLocation';
 import {
   pathMutationCoordinator,
   type AppPathMutation,
 } from '../navigation/pathMutationCoordinator';
 
-const PREF_KEY = 'tabs.open';
+const PREF_KEY = 'tabs.session';
+/** Before tabs had history, the open files were saved as a list of paths. */
+const LEGACY_PREF_KEY = 'tabs.open';
+const HISTORY_LIMIT = 50;
+const RECENTLY_CLOSED_LIMIT = 20;
+
+export interface TabEntry {
+  location: FilesLocation;
+  /** How far the page was scrolled when the tab last left this entry. */
+  scrollTop?: number;
+}
+
+/**
+ * One tab, as in Safari and Obsidian: it shows one place at a time and keeps
+ * its own back and forward history.
+ */
+export interface Tab {
+  id: string;
+  /** Everything the tab has shown, oldest first. */
+  history: TabEntry[];
+  /** The entry the tab shows now. */
+  index: number;
+}
 
 export interface TabsState {
   /** Open tabs, left to right. */
-  openPaths: string[];
-  /** File explicitly occupying the Focus surface; never a preview adapter. */
-  openedPath: string | null;
-  /** @deprecated Task 7: active tab may still point at a preview adapter. */
-  activePath: string | null;
-  /**
-   * The single italic "preview" tab, replaced by the next single click. It is
-   * shown like any other tab; double-clicking, opening explicitly or editing
-   * pins it. Cursor and VS Code both work this way: browsing must not litter
-   * the strip.
-   */
-  previewPath: string | null;
-  /** Most recently closed first; Cmd+Shift+T reopens the head. Session only. */
-  recentlyClosed: string[];
+  tabs: Tab[];
+  activeId: string | null;
+  /** Most recently closed first, history and all; Cmd+Shift+T reopens the head. */
+  recentlyClosed: ClosedTab[];
+  /** The day the previous session last saved its tabs. Launch opens Today when it is not today. */
+  lastSessionDate: string | null;
+}
+
+/** A closed tab and the position it had, where reopening puts it back. */
+export interface ClosedTab {
+  tab: Tab;
+  index: number;
+}
+
+export interface OpenOptions {
+  /** Open beside the active tab instead of in it. */
+  newTab?: boolean;
+  /** Swap the entry the tab shows instead of adding a history step. */
+  replace?: boolean;
 }
 
 export interface TabsActions {
-  /** Canonical explicit open action. Real opened files are the only target model. */
-  openFile: (path: string) => void;
   /**
-   * Shows a file in the active tab, replacing the file it held. A file that is
-   * already open is activated instead, and with no tab open it opens a new one.
+   * Shows a place in the active tab as a new history step, or in a new tab.
+   * With no tab open it opens one either way.
    */
-  openInPlace: (path: string) => void;
-  /** Opens a file in the preview slot, replacing whatever previewed before. */
-  openPreview: (path: string) => void;
-  /** @deprecated Task 7: use openFile. */
-  openPinned: (path: string) => void;
-  pin: (path: string) => void;
-  close: (path: string) => void;
-  /** Closes every other tab; the kept tab becomes active. */
-  closeOthers: (path: string) => void;
-  /** Closes every tab after this one; the active tab moves here if it was among them. */
-  closeToRight: (path: string) => void;
-  closeAll: () => void;
-  /** Reopens the most recently closed tab that is not already open; returns it. */
-  reopenClosed: () => string | null;
-  activate: (path: string) => void;
+  open: (location: FilesLocation, options?: OpenOptions) => void;
+  back: () => void;
+  forward: () => void;
+  activate: (id: string) => void;
+  /** By position from the left; -1 is the last tab. */
   activateIndex: (index: number) => void;
   activateNext: () => void;
   activatePrevious: () => void;
+  close: (id: string) => void;
+  /** Closes every other tab; the kept tab becomes active. */
+  closeOthers: (id: string) => void;
+  /** Closes every tab after this one; the active tab moves here if it was among them. */
+  closeToRight: (id: string) => void;
+  closeAll: () => void;
+  /** Reopens the most recently closed tab where it was; false when there is none. */
+  reopenClosed: () => boolean;
   move: (from: number, to: number) => void;
+  /** Remembers the scroll of one entry, so Back and switching tabs return to it. */
+  saveScroll: (id: string, index: number, scrollTop: number) => void;
   hydrate: () => TabsState;
 }
 
 export type TabsStore = TabsState & TabsActions;
 
-/** Only pinned tabs persist — see the "does not persist the preview tab" test. */
-function persist(state: TabsState): void {
-  writePref(
-    PREF_KEY,
-    state.openPaths.filter((path) => path !== state.previewPath)
-  );
+let createdTabs = 0;
+
+function createTab(history: TabEntry[], index = history.length - 1): Tab {
+  createdTabs += 1;
+  return { id: `tab-${createdTabs}`, history, index };
 }
 
-function restoredPaths(): string[] {
-  const stored = readPref<unknown>(PREF_KEY, null);
-  if (!Array.isArray(stored)) return [];
-  return [
-    ...new Set(
-      stored
-        .filter(
-          (path): path is string =>
-            typeof path === 'string' && isAbsoluteFsPath(path)
-        )
-        .map(normalizeFsPath)
-    ),
-  ];
+export function tabLocation(tab: Tab): FilesLocation {
+  return tab.history[tab.index].location;
 }
 
-function openFileState(
+/** The file a tab shows, or null while it shows Recent or a folder. */
+export function tabFile(tab: Tab): string | null {
+  const location = tabLocation(tab);
+  return location.mode === 'focus' ? location.file : null;
+}
+
+export function selectActiveTab(state: TabsState): Tab | null {
+  return state.tabs.find((tab) => tab.id === state.activeId) ?? null;
+}
+
+export function selectCurrentLocation(state: TabsState): FilesLocation | null {
+  const tab = selectActiveTab(state);
+  return tab ? tabLocation(tab) : null;
+}
+
+/** The file the page shows. */
+export function selectOpenedPath(state: TabsState): string | null {
+  const tab = selectActiveTab(state);
+  return tab ? tabFile(tab) : null;
+}
+
+export function selectCanGoBack(state: TabsState): boolean {
+  const tab = selectActiveTab(state);
+  return !!tab && tab.index > 0;
+}
+
+export function selectCanGoForward(state: TabsState): boolean {
+  const tab = selectActiveTab(state);
+  return !!tab && tab.index < tab.history.length - 1;
+}
+
+/**
+ * The place launch goes back to: the active restored tab, unless nothing was
+ * restored or the day has changed since the last session, when launch opens
+ * Today instead.
+ */
+export function selectLaunchLocation(
   state: TabsState,
-  path: string
-): Pick<
-  TabsState,
-  'openPaths' | 'openedPath' | 'activePath' | 'previewPath'
-> {
-  const normalizedPath = normalizeFsPath(path);
-  const alreadyOpen = state.openPaths.includes(normalizedPath);
-  const openPaths = alreadyOpen
-    ? state.openPaths
-    : [...state.openPaths, normalizedPath];
+  today = localDate()
+): FilesLocation | null {
+  return state.lastSessionDate === today ? selectCurrentLocation(state) : null;
+}
+
+/** A file's location always names the folder that holds it. */
+function canonical(location: FilesLocation): FilesLocation {
+  return location.mode === 'focus' ? fileLocation(location.file) : location;
+}
+
+interface StoredSession {
+  date: string;
+  active: number;
+  tabs: Array<Pick<Tab, 'history' | 'index'>>;
+}
+
+function persist(state: Pick<TabsState, 'tabs' | 'activeId'>): void {
+  writePref<StoredSession>(PREF_KEY, {
+    date: localDate(),
+    active: state.tabs.findIndex((tab) => tab.id === state.activeId),
+    tabs: state.tabs.map(({ history, index }) => ({ history, index })),
+  });
+}
+
+function isStoredPath(value: unknown): value is string {
+  return typeof value === 'string' && isAbsoluteFsPath(value);
+}
+
+function restoredLocation(value: unknown): FilesLocation | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as {
+    mode?: unknown;
+    collection?: { kind?: unknown; directory?: unknown };
+    file?: unknown;
+  };
+  if (candidate.mode === 'focus') {
+    return isStoredPath(candidate.file) ? fileLocation(candidate.file) : null;
+  }
+  if (candidate.mode !== 'browse') return null;
+  if (candidate.collection?.kind === 'recent') {
+    return { mode: 'browse', collection: RECENT_COLLECTION };
+  }
+  return candidate.collection?.kind === 'directory' &&
+    isStoredPath(candidate.collection.directory)
+    ? { mode: 'browse', collection: directoryCollection(candidate.collection.directory) }
+    : null;
+}
+
+function restoredTab(value: unknown): Tab | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { history?: unknown; index?: unknown };
+  if (!Array.isArray(candidate.history)) return null;
+  const history = candidate.history
+    .flatMap((value: unknown): TabEntry[] => {
+      const entry = value as Partial<TabEntry> | null;
+      const location = restoredLocation(entry?.location);
+      if (!location) return [];
+      const scrollTop = entry?.scrollTop;
+      return typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0
+        ? [{ location, scrollTop }]
+        : [{ location }];
+    })
+    .slice(-HISTORY_LIMIT);
+  if (history.length === 0) return null;
+  const index =
+    typeof candidate.index === 'number' && Number.isInteger(candidate.index)
+      ? Math.min(history.length - 1, Math.max(0, candidate.index))
+      : history.length - 1;
+  return createTab(history, index);
+}
+
+function restoredSession(): Pick<TabsState, 'tabs' | 'activeId' | 'lastSessionDate'> {
+  const stored = readPref<unknown>(PREF_KEY, null);
+  if (stored && typeof stored === 'object') {
+    const session = stored as Partial<StoredSession>;
+    const candidates = Array.isArray(session.tabs) ? session.tabs.map(restoredTab) : [];
+    const tabs = candidates.filter((tab): tab is Tab => tab !== null);
+    const active =
+      typeof session.active === 'number' ? candidates[session.active] : null;
+    return {
+      tabs,
+      activeId: active?.id ?? tabs[0]?.id ?? null,
+      lastSessionDate: typeof session.date === 'string' ? session.date : null,
+    };
+  }
+  const legacy = readPref<unknown>(LEGACY_PREF_KEY, null);
+  const paths = Array.isArray(legacy)
+    ? [...new Set(legacy.filter(isStoredPath).map(normalizeFsPath))]
+    : [];
+  const tabs = paths.map((path) => createTab([{ location: fileLocation(path) }]));
+  return { tabs, activeId: tabs[0]?.id ?? null, lastSessionDate: null };
+}
+
+function replaceTab(tabs: readonly Tab[], tab: Tab): Tab[] {
+  return tabs.map((candidate) => (candidate.id === tab.id ? tab : candidate));
+}
+
+/** Inserts beside the active tab, where Obsidian and Safari put a new one. */
+function insertBesideActive(state: TabsState, tab: Tab): Tab[] {
+  const active = state.tabs.findIndex((candidate) => candidate.id === state.activeId);
+  const at = active === -1 ? state.tabs.length : active + 1;
+  return [...state.tabs.slice(0, at), tab, ...state.tabs.slice(at)];
+}
+
+function remember(state: TabsState, closed: readonly Tab[]): ClosedTab[] {
+  // A bulk close reopens from the left, so each tab lands back where it was.
+  const entries = closed.map((tab) => ({ tab, index: state.tabs.indexOf(tab) }));
+  return [...entries, ...state.recentlyClosed].slice(0, RECENTLY_CLOSED_LIMIT);
+}
+
+function openState(
+  state: TabsState,
+  target: FilesLocation,
+  options: OpenOptions
+): Partial<TabsState> {
+  const location = canonical(target);
+  const active = selectActiveTab(state);
+  if (!active || options.newTab) {
+    const tab = createTab([{ location }]);
+    return { tabs: insertBesideActive(state, tab), activeId: tab.id };
+  }
+  if (filesLocationKey(tabLocation(active)) === filesLocationKey(location)) return {};
+  if (options.replace) {
+    const history = active.history.map((entry, index) =>
+      index === active.index ? { location } : entry
+    );
+    return { tabs: replaceTab(state.tabs, { ...active, history }) };
+  }
+  const history = [...active.history.slice(0, active.index + 1), { location }].slice(
+    -HISTORY_LIMIT
+  );
   return {
-    openPaths,
-    openedPath: normalizedPath,
-    activePath: normalizedPath,
-    previewPath:
-      state.previewPath === normalizedPath ? null : state.previewPath,
+    tabs: replaceTab(state.tabs, { ...active, history, index: history.length - 1 }),
   };
 }
 
-/** The file the focus surface shows, preview or pinned. */
-export function selectOpenedPath(state: TabsState): string | null {
-  return state.openedPath && state.openPaths.includes(state.openedPath) ? state.openedPath : null;
+function stepState(state: TabsState, delta: number): Partial<TabsState> {
+  const tab = selectActiveTab(state);
+  const index = tab ? tab.index + delta : -1;
+  if (!tab || index < 0 || index >= tab.history.length) return {};
+  return { tabs: replaceTab(state.tabs, { ...tab, index }) };
 }
 
-function activationState(
-  _state: TabsState,
-  path: string
-): Pick<TabsState, 'activePath' | 'openedPath'> {
-  return { activePath: path, openedPath: path };
+function activateAt(state: TabsState, index: number): Partial<TabsState> {
+  const tab = state.tabs.at(index);
+  return tab && tab.id !== state.activeId ? { activeId: tab.id } : {};
 }
 
-function nearestRealPath(
-  openPaths: readonly string[],
-  previewPath: string | null,
-  index: number
-): string | null {
-  return (
-    openPaths.slice(index).find((path) => path !== previewPath) ??
-    openPaths
-      .slice(0, index)
-      .reverse()
-      .find((path) => path !== previewPath) ??
-    null
-  );
+function cycle(state: TabsState, delta: number): Partial<TabsState> {
+  if (state.tabs.length === 0) return {};
+  const current = state.tabs.findIndex((tab) => tab.id === state.activeId);
+  const from = current === -1 ? (delta > 0 ? -1 : 0) : current;
+  return activateAt(state, (from + delta + state.tabs.length) % state.tabs.length);
 }
 
-const RECENTLY_CLOSED_LIMIT = 20;
-
-function remember(recentlyClosed: readonly string[], closed: readonly string[]): string[] {
-  return [...closed, ...recentlyClosed.filter((path) => !closed.includes(path))].slice(0, RECENTLY_CLOSED_LIMIT);
+/** Keeps only `kept` tabs in their order, moving the active tab onto a kept one. */
+function keepOnly(state: TabsState, kept: readonly Tab[]): Partial<TabsState> {
+  const tabs = state.tabs.filter((tab) => kept.includes(tab));
+  const closed = state.tabs.filter((tab) => !kept.includes(tab));
+  const activeId = tabs.some((tab) => tab.id === state.activeId)
+    ? state.activeId
+    : (tabs.at(-1)?.id ?? null);
+  return { tabs, activeId, recentlyClosed: remember(state, closed) };
 }
 
-/** Keeps only `kept` tabs (in their current order), moving the active and opened tabs onto a kept one. */
-function keepOnly(state: TabsState, kept: readonly string[]): TabsState {
-  const openPaths = state.openPaths.filter((path) => kept.includes(path));
-  const closed = state.openPaths.filter((path) => !kept.includes(path));
-  const previewPath = state.previewPath && openPaths.includes(state.previewPath) ? state.previewPath : null;
-  const fallback = openPaths[openPaths.length - 1] ?? null;
-  const activePath = state.activePath && openPaths.includes(state.activePath) ? state.activePath : fallback;
-  const openedPath = state.openedPath && openPaths.includes(state.openedPath)
-    ? state.openedPath
-    : nearestRealPath(openPaths, previewPath, Math.max(0, openPaths.length - 1));
-  return { openPaths, openedPath, activePath, previewPath, recentlyClosed: remember(state.recentlyClosed, closed) };
-}
-
-export const useTabsStore = create<TabsStore>((set, get) => ({
-  openPaths: [],
-  openedPath: null,
-  activePath: null,
-  previewPath: null,
-  recentlyClosed: [],
-
-  openFile: (path) =>
+export const useTabsStore = create<TabsStore>((set, get) => {
+  const update = (change: (state: TabsState) => Partial<TabsState>) =>
     set((state) => {
-      const next = openFileState(state, path);
-      persist({ ...state, ...next });
+      const next = change(state);
+      if (Object.keys(next).length > 0) persist({ ...state, ...next });
       return next;
-    }),
+    });
 
-  openInPlace: (path) =>
-    set((state) => {
-      const normalizedPath = normalizeFsPath(path);
-      const current = selectOpenedPath(state);
-      if (state.openPaths.includes(normalizedPath) || !current) {
-        const next = openFileState(state, normalizedPath);
-        persist({ ...state, ...next });
-        return next;
-      }
-      const next = {
-        openPaths: state.openPaths.map((open) =>
-          open === current ? normalizedPath : open
-        ),
-        openedPath: normalizedPath,
-        activePath: normalizedPath,
-        previewPath: state.previewPath === current ? null : state.previewPath,
+  return {
+    ...restoredSession(),
+    recentlyClosed: [],
+
+    open: (location, options = {}) =>
+      update((state) => openState(state, location, options)),
+
+    back: () => update((state) => stepState(state, -1)),
+
+    forward: () => update((state) => stepState(state, 1)),
+
+    activate: (id) =>
+      update((state) =>
+        state.activeId !== id && state.tabs.some((tab) => tab.id === id)
+          ? { activeId: id }
+          : {}
+      ),
+
+    activateIndex: (index) => update((state) => activateAt(state, index)),
+
+    activateNext: () => update((state) => cycle(state, 1)),
+
+    activatePrevious: () => update((state) => cycle(state, -1)),
+
+    close: (id) =>
+      update((state) => {
+        const index = state.tabs.findIndex((tab) => tab.id === id);
+        if (index === -1) return {};
+        const tabs = state.tabs.filter((tab) => tab.id !== id);
+        // Prefer the tab to the right, as browsers do.
+        const activeId =
+          state.activeId === id
+            ? (tabs[index] ?? tabs[index - 1])?.id ?? null
+            : state.activeId;
+        return {
+          tabs,
+          activeId,
+          recentlyClosed: remember(state, [state.tabs[index]]),
+        };
+      }),
+
+    closeOthers: (id) =>
+      update((state) => {
+        const tab = state.tabs.find((candidate) => candidate.id === id);
+        return tab ? { ...keepOnly(state, [tab]), activeId: id } : {};
+      }),
+
+    closeToRight: (id) =>
+      update((state) => {
+        const index = state.tabs.findIndex((tab) => tab.id === id);
+        if (index === -1 || index === state.tabs.length - 1) return {};
+        const kept = state.tabs.slice(0, index + 1);
+        const next = keepOnly(state, kept);
+        return kept.some((tab) => tab.id === state.activeId) ? next : { ...next, activeId: id };
+      }),
+
+    closeAll: () => update((state) => keepOnly(state, [])),
+
+    reopenClosed: () => {
+      const [closed, ...rest] = get().recentlyClosed;
+      if (!closed) return false;
+      update((state) => ({
+        tabs: [
+          ...state.tabs.slice(0, closed.index),
+          closed.tab,
+          ...state.tabs.slice(closed.index),
+        ],
+        activeId: closed.tab.id,
+        recentlyClosed: rest,
+      }));
+      return true;
+    },
+
+    move: (from, to) =>
+      update((state) => {
+        const count = state.tabs.length;
+        if (from < 0 || to < 0 || from >= count || to >= count || from === to) return {};
+        const tabs = [...state.tabs];
+        const [moved] = tabs.splice(from, 1);
+        tabs.splice(to, 0, moved);
+        return { tabs };
+      }),
+
+    saveScroll: (id, index, scrollTop) =>
+      update((state) => {
+        const tab = state.tabs.find((candidate) => candidate.id === id);
+        const entry = tab?.history[index];
+        if (!tab || !entry || entry.scrollTop === scrollTop) return {};
+        const history = tab.history.map((candidate, at) =>
+          at === index ? { ...candidate, scrollTop } : candidate
+        );
+        return { tabs: replaceTab(state.tabs, { ...tab, history }) };
+      }),
+
+    hydrate: () => {
+      const restored: TabsState = {
+        ...restoredSession(),
+        recentlyClosed: get().recentlyClosed,
       };
-      persist({ ...state, ...next });
+      const allowedRoots = pathMutationCoordinator.getAllowedRoots();
+      const next = allowedRoots
+        ? retainTabsWithinRoots(restored, allowedRoots)
+        : restored;
+      set(next);
       return next;
-    }),
+    },
+  };
+});
 
-  openPreview: (path) =>
-    set((state) => {
-      const normalizedPath = normalizeFsPath(path);
-      if (state.openPaths.includes(normalizedPath)) {
-        return { activePath: normalizedPath, openedPath: normalizedPath };
-      }
+function remapEntry(entry: TabEntry, mutation: AppPathMutation): TabEntry {
+  const { location } = remapFilesLocation(entry.location, mutation.oldPath, mutation.newPath);
+  return { ...entry, location: canonical(location) };
+}
 
-      // Swap the outgoing preview in place so the tab does not jump position.
-      const openPaths = state.previewPath
-        ? state.openPaths.map((open) =>
-            open === state.previewPath ? normalizedPath : open
-          )
-        : [...state.openPaths, normalizedPath];
-
-      const next = {
-        openPaths,
-        activePath: normalizedPath,
-        openedPath: normalizedPath,
-        previewPath: normalizedPath,
-      };
-      persist({ ...state, ...next });
-      return next;
-    }),
-
-  openPinned: (path) => get().openFile(path),
-
-  pin: (path) =>
-    set((state) => {
-      if (state.previewPath !== path) return {};
-      const next: Pick<TabsState, 'previewPath'> = { previewPath: null };
-      persist({ ...state, ...next });
-      return next;
-    }),
-
-  close: (path) =>
-    set((state) => {
-      const index = state.openPaths.indexOf(path);
-      if (index === -1) return {};
-
-      const openPaths = state.openPaths.filter((open) => open !== path);
-      const previewPath = state.previewPath === path ? null : state.previewPath;
-
-      let activePath = state.activePath;
-      if (state.activePath === path) {
-        // Prefer the tab to the right, matching every editor's behaviour.
-        activePath = openPaths[index] ?? openPaths[index - 1] ?? null;
-      }
-      let openedPath = state.openedPath;
-      if (openedPath === path) {
-        openedPath = nearestRealPath(openPaths, previewPath, index);
-      } else if (
-        !openedPath &&
-        activePath &&
-        activePath !== previewPath
-      ) {
-        openedPath = activePath;
-      }
-
-      const next = { openPaths, openedPath, activePath, previewPath, recentlyClosed: remember(state.recentlyClosed, [path]) };
-      persist({ ...state, ...next });
-      return next;
-    }),
-
-  closeOthers: (path) =>
-    set((state) => {
-      if (!state.openPaths.includes(path)) return {};
-      const next = keepOnly(state, [path]);
-      persist(next);
-      return next;
-    }),
-
-  closeToRight: (path) =>
-    set((state) => {
-      const index = state.openPaths.indexOf(path);
-      if (index === -1 || index === state.openPaths.length - 1) return {};
-      const next = keepOnly(state, state.openPaths.slice(0, index + 1));
-      persist(next);
-      return next;
-    }),
-
-  closeAll: () =>
-    set((state) => {
-      const next: TabsState = {
-        openPaths: [],
-        openedPath: null,
-        activePath: null,
-        previewPath: null,
-        recentlyClosed: remember(state.recentlyClosed, state.openPaths),
-      };
-      persist(next);
-      return next;
-    }),
-
-  reopenClosed: () => {
-    const state = get();
-    const path = state.recentlyClosed.find((candidate) => !state.openPaths.includes(candidate)) ?? null;
-    if (!path) return null;
-    set({ recentlyClosed: state.recentlyClosed.filter((candidate) => candidate !== path) });
-    get().openFile(path);
-    return path;
-  },
-
-  activate: (path) =>
-    set((state) =>
-      state.openPaths.includes(path) ? activationState(state, path) : {}
-    ),
-
-  activateIndex: (index) =>
-    set((state) => {
-      const path = state.openPaths[index];
-      return path ? activationState(state, path) : {};
-    }),
-
-  activateNext: () =>
-    set((state) => {
-      if (state.openPaths.length === 0) return {};
-      const current = state.activePath ? state.openPaths.indexOf(state.activePath) : -1;
-      const nextIndex = (current + 1) % state.openPaths.length;
-      const path = state.openPaths[nextIndex];
-      return path ? activationState(state, path) : {};
-    }),
-
-  activatePrevious: () =>
-    set((state) => {
-      if (state.openPaths.length === 0) return {};
-      const current = state.activePath ? state.openPaths.indexOf(state.activePath) : 0;
-      const previousIndex =
-        (current - 1 + state.openPaths.length) % state.openPaths.length;
-      const path = state.openPaths[previousIndex];
-      return path ? activationState(state, path) : {};
-    }),
-
-  move: (from, to) =>
-    set((state) => {
-      const count = state.openPaths.length;
-      if (from < 0 || to < 0 || from >= count || to >= count) return {};
-
-      const openPaths = [...state.openPaths];
-      const [moved] = openPaths.splice(from, 1);
-      openPaths.splice(to, 0, moved);
-
-      const next = { openPaths };
-      persist({ ...state, ...next });
-      return next;
-    }),
-
-  hydrate: () => {
-    const openPaths = restoredPaths();
-    const restored: TabsState = {
-      openPaths,
-      openedPath: openPaths[0] ?? null,
-      activePath: openPaths[0] ?? null,
-      previewPath: null,
-      recentlyClosed: get().recentlyClosed,
-    };
-    const allowedRoots = pathMutationCoordinator.getAllowedRoots();
-    const next = allowedRoots
-      ? retainTabsWithinRoots(restored, allowedRoots)
-      : restored;
-    persist(next);
-    set(next);
-    return next;
-  },
-}));
+function remapTab(tab: Tab, mutation: AppPathMutation): Tab {
+  return { ...tab, history: tab.history.map((entry) => remapEntry(entry, mutation)) };
+}
 
 export function remapTabsState(
   state: TabsState,
   mutation: AppPathMutation
 ): TabsState {
-  const openPaths = [
-    ...new Set(
-      state.openPaths.map((path) =>
-        remapFsPath(path, mutation.oldPath, mutation.newPath)
-      )
-    ),
-  ];
-  const activePath = state.activePath
-    ? remapFsPath(state.activePath, mutation.oldPath, mutation.newPath)
-    : null;
-  const openedPath = state.openedPath
-    ? remapFsPath(state.openedPath, mutation.oldPath, mutation.newPath)
-    : null;
-  const previewPath = state.previewPath
-    ? remapFsPath(state.previewPath, mutation.oldPath, mutation.newPath)
-    : null;
   return {
-    openPaths,
-    openedPath:
-      openedPath && openPaths.includes(openedPath) ? openedPath : null,
-    activePath:
-      activePath && openPaths.includes(activePath) ? activePath : null,
-    previewPath:
-      previewPath && openPaths.includes(previewPath) ? previewPath : null,
-    recentlyClosed: state.recentlyClosed.map((path) => remapFsPath(path, mutation.oldPath, mutation.newPath)),
+    ...state,
+    tabs: state.tabs.map((tab) => remapTab(tab, mutation)),
+    recentlyClosed: state.recentlyClosed.map((closed) => ({
+      ...closed,
+      tab: remapTab(closed.tab, mutation),
+    })),
+  };
+}
+
+/**
+ * Drops every history entry `keep` rejects. A tab whose current entry goes
+ * shows the nearest earlier entry that stays, as if Back were pressed; a tab
+ * with nothing left closes, and the active tab then moves right, as on close.
+ */
+function keepEntries(
+  state: TabsState,
+  keep: (path: string) => boolean
+): TabsState {
+  const kept = (entry: TabEntry) => {
+    const path = locationPath(entry.location);
+    return path === null || keep(path);
+  };
+  const prune = (tab: Tab): Tab | null => {
+    const history = tab.history.filter(kept);
+    if (history.length === 0) return null;
+    if (history.length === tab.history.length) return tab;
+    const earlier = tab.history.slice(0, tab.index + 1).filter(kept).length;
+    return { ...tab, history, index: Math.max(0, earlier - 1) };
+  };
+  const pruned = state.tabs.map(prune);
+  const tabs = pruned.filter((tab): tab is Tab => tab !== null);
+  const activeIndex = state.tabs.findIndex((tab) => tab.id === state.activeId);
+  const activeId =
+    activeIndex === -1
+      ? null
+      : (pruned.slice(activeIndex).find(Boolean) ??
+          pruned.slice(0, activeIndex).reverse().find(Boolean))?.id ?? null;
+  return {
+    ...state,
+    tabs,
+    activeId,
+    recentlyClosed: state.recentlyClosed.flatMap((closed) => {
+      const tab = prune(closed.tab);
+      return tab ? [{ ...closed, tab }] : [];
+    }),
   };
 }
 
@@ -388,116 +493,42 @@ export function removePathsFromTabsState(
   state: TabsState,
   removedPaths: readonly string[]
 ): TabsState {
-  const isRemoved = (path: string) =>
-    removedPaths.some((root) => isFsPathAtOrBelow(root, path));
-  const openPaths = state.openPaths.filter((path) => !isRemoved(path));
-  const activeIndex = state.activePath
-    ? state.openPaths.indexOf(state.activePath)
-    : -1;
-  let activePath = state.activePath;
-  if (activePath && isRemoved(activePath)) {
-    activePath =
-      state.openPaths
-        .slice(activeIndex + 1)
-        .find((path) => !isRemoved(path)) ??
-      state.openPaths
-        .slice(0, Math.max(0, activeIndex))
-        .reverse()
-        .find((path) => !isRemoved(path)) ??
-      null;
-  }
-  const previewPath =
-    state.previewPath && !isRemoved(state.previewPath)
-      ? state.previewPath
-      : null;
-  const openedIndex = state.openedPath
-    ? state.openPaths.indexOf(state.openedPath)
-    : -1;
-  const openedPath =
-    state.openedPath === null ? null : !isRemoved(state.openedPath)
-      ? state.openedPath
-      : nearestRealPath(
-          openPaths,
-          previewPath,
-          Math.max(0, openedIndex)
-        );
-
-  return {
-    openPaths,
-    openedPath:
-      openedPath && openPaths.includes(openedPath) ? openedPath : null,
-    activePath:
-      activePath && openPaths.includes(activePath) ? activePath : null,
-    previewPath:
-      previewPath && openPaths.includes(previewPath) ? previewPath : null,
-    recentlyClosed: state.recentlyClosed.filter((path) => !isRemoved(path)),
-  };
+  return keepEntries(
+    state,
+    (path) => !removedPaths.some((root) => isFsPathAtOrBelow(root, path))
+  );
 }
 
 export function retainTabsWithinRoots(
   state: TabsState,
   roots: readonly string[]
 ): TabsState {
-  const isAllowed = (path: string) =>
-    roots.some((root) => isFsPathAtOrBelow(root, path));
-  const openPaths = state.openPaths.filter(isAllowed);
-  const previewPath =
-    state.previewPath && openPaths.includes(state.previewPath)
-      ? state.previewPath
-      : null;
-  const openedPath =
-    state.openedPath && openPaths.includes(state.openedPath)
-      ? state.openedPath
-      : nearestRealPath(openPaths, previewPath, 0);
-  const activePath =
-    state.activePath && openPaths.includes(state.activePath)
-      ? state.activePath
-      : openedPath ?? openPaths[0] ?? null;
-  return { openPaths, openedPath, activePath, previewPath, recentlyClosed: state.recentlyClosed.filter(isAllowed) };
+  return keepEntries(state, (path) =>
+    roots.some((root) => isFsPathAtOrBelow(root, path))
+  );
+}
+
+function prepare(next: (previous: TabsState) => TabsState) {
+  const previous = useTabsStore.getState();
+  const updated = next(previous);
+  return {
+    commit: () => {
+      persist(updated);
+      useTabsStore.setState(updated);
+    },
+    rollback: () => {
+      persist(previous);
+      useTabsStore.setState(previous);
+    },
+  };
 }
 
 pathMutationCoordinator.register({
   id: 'tabs-store',
-  prepareAppMutation: (mutation) => {
-    const previous = useTabsStore.getState();
-    const next = remapTabsState(previous, mutation);
-    return {
-      commit: () => {
-        persist(next);
-        useTabsStore.setState(next);
-      },
-      rollback: () => {
-        persist(previous);
-        useTabsStore.setState(previous);
-      },
-    };
-  },
-  preparePathRemoval: (paths) => {
-    const previous = useTabsStore.getState();
-    const next = removePathsFromTabsState(previous, paths);
-    return {
-      commit: () => {
-        persist(next);
-        useTabsStore.setState(next);
-      },
-      rollback: () => {
-        persist(previous);
-        useTabsStore.setState(previous);
-      },
-    };
-  },
-  prepareAllowedRoots: (roots) => {
-    const previous = useTabsStore.getState();
-    const next = retainTabsWithinRoots(previous, roots);
-    return {
-      commit: () => {
-        persist(next);
-        useTabsStore.setState(next);
-      },
-      rollback: () => {
-        persist(previous);
-        useTabsStore.setState(previous);
-      },
-    };
-  },
+  prepareAppMutation: (mutation) =>
+    prepare((previous) => remapTabsState(previous, mutation)),
+  preparePathRemoval: (paths) =>
+    prepare((previous) => removePathsFromTabsState(previous, paths)),
+  prepareAllowedRoots: (roots) =>
+    prepare((previous) => retainTabsWithinRoots(previous, roots)),
 });

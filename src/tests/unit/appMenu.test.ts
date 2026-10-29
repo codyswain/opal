@@ -84,6 +84,16 @@ describe('AppMenu', () => {
     }
   });
 
+  it('keeps the accelerator of a hidden alias item working', () => {
+    makeMenu().install([
+      { id: COMMAND_IDS.nextTab, label: 'Show Next Tab', accelerator: 'CmdOrCtrl+Shift+]', aliases: ['Ctrl+Tab'] },
+    ]);
+    const alias = allItems(built!).find((item) => item.accelerator === 'Ctrl+Tab') as FakeMenuItem & { visible?: boolean; acceleratorWorksWhenHidden?: boolean };
+    expect(alias).toMatchObject({ visible: false, acceleratorWorksWhenHidden: true });
+    alias.click?.();
+    expect(sent).toEqual([COMMAND_IDS.nextTab]);
+  });
+
   it('replaces the previous menu when installed again', () => {
     const menu = makeMenu();
     menu.install(COMMANDS);

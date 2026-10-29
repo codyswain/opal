@@ -1,5 +1,10 @@
 import * as React from 'react';
+import { locationName } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { useDiskSync } from '@/renderer/features/disk-explorer/hooks/useDiskSync';
+import {
+  selectCurrentLocation,
+  useTabsStore,
+} from '@/renderer/features/disk-explorer/store/tabsStore';
 import { useShell } from '../context/ShellContext';
 import {
   DEFAULT_SHELL_PREFERENCES,
@@ -121,7 +126,11 @@ export function AppShell({ children }: AppShellProps) {
     (state) => state.closeNarrowSidebar
   );
   const setSidebarWidth = useShellStore((state) => state.setSidebarWidth);
-  const { location, route } = useShell();
+  const { location } = useShell();
+  const pageName = useTabsStore((state) => {
+    const shown = selectCurrentLocation(state);
+    return shown ? locationName(shown) : null;
+  });
   const { layout, width: viewport } = useShellViewport();
   const narrowSidebarRef = React.useRef<HTMLDivElement>(null);
   const sidebarToggleRef = React.useRef<HTMLButtonElement>(null);
@@ -142,6 +151,11 @@ export function AppShell({ children }: AppShellProps) {
     layout === 'medium' ? MEDIUM_SIDEBAR_MAX : SHELL_LIMITS.sidebar.max;
 
   useDiskSync();
+
+  // The window menu, Mission Control and Cmd+` name the window by its page.
+  React.useEffect(() => {
+    document.title = pageName ?? 'Opal';
+  }, [pageName]);
 
   React.useEffect(() => {
     const { setFullScreen } = useShellStore.getState();
@@ -287,7 +301,7 @@ export function AppShell({ children }: AppShellProps) {
         className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         <Titlebar
-          compactActions={isNarrow}
+          compact={isNarrow}
           sidebarOpen={sidebarOpen}
           sidebarToggleRef={sidebarToggleRef}
           onToggleSidebar={handleToggleSidebar}
@@ -296,7 +310,7 @@ export function AppShell({ children }: AppShellProps) {
           ref={workspaceMainRef}
           tabIndex={-1}
           data-testid="workspace-surface"
-          aria-label={`${route.header.title} workspace`}
+          aria-label="Page"
           className={cn(
             'mb-page mr-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
             (isNarrow || !sidebarOpen) && 'ml-page'

@@ -52,6 +52,7 @@ function locate(path: string, roots: readonly string[]): string {
 export const CommandPalette: React.FC = () => {
   const open = usePaletteStore((state) => state.open);
   const initialQuery = usePaletteStore((state) => state.initialQuery);
+  const newTabMode = usePaletteStore((state) => state.newTab);
   const hide = usePaletteStore((state) => state.hide);
   const roots = useDiskStore((state) => state.roots);
   const { navigateFiles } = useShell();
@@ -127,7 +128,7 @@ export const CommandPalette: React.FC = () => {
   }, [open, commandMode, term, roots, searchRevision]);
 
   const sections = useMemo((): { title: string; items: PaletteItem[] }[] => {
-    const matched = rankCommands(commands, term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
+    const matched = rankCommands(commands.filter((command) => !command.hidden), term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
       .map((command): PaletteItem => ({ kind: 'command', command }));
     if (commandMode) return [{ title: 'Commands', items: matched }];
     if (!term) return [{ title: 'Recent', items: recent }, { title: 'Commands', items: matched }].filter((section) => section.items.length > 0);
@@ -141,21 +142,22 @@ export const CommandPalette: React.FC = () => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [active]);
 
-  const run = (item: PaletteItem) => {
+  /** Files open in the current tab; Cmd+Enter, or a palette opened by New Tab, opens a new one. */
+  const run = (item: PaletteItem, newTab = newTabMode) => {
     hide();
     if (item.kind === 'command') { commandRegistry.executeCommand(item.command.id); return; }
     const { path, isDirectory } = item.entry;
-    if (isDirectory) { navigateFiles(browseFiles(path)); return; }
+    if (isDirectory) { navigateFiles(browseFiles(path), { newTab }); return; }
     const folder = parentFsPath(path);
     if (!folder) return;
     recordOpened(path);
-    navigateFiles(focusFile(folder, path));
+    navigateFiles(focusFile(folder, path), { newTab });
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'ArrowDown') { event.preventDefault(); setActiveKey(flat.length ? itemKey(flat[(active + 1) % flat.length]) : null); }
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveKey(flat.length ? itemKey(flat[(active - 1 + flat.length) % flat.length]) : null); }
-    else if (event.key === 'Enter') { event.preventDefault(); const item = flat[active]; if (item) run(item); }
+    else if (event.key === 'Enter') { event.preventDefault(); const item = flat[active]; if (item) run(item, newTabMode || event.metaKey || event.ctrlKey); }
   };
 
   let position = -1;
@@ -210,7 +212,7 @@ export const CommandPalette: React.FC = () => {
                       data-index={index}
                       data-testid={item.kind === 'file' ? `palette-file-${item.entry.path}` : `palette-command-${item.command.id}`}
                       onMouseMove={() => setActiveKey(itemKey(item))}
-                      onClick={() => run(item)}
+                      onClick={(event) => run(item, newTabMode || event.metaKey || event.ctrlKey)}
                       className={`flex min-h-9 py-2 cursor-default items-center gap-3 rounded-row px-2.5 text-sm ${selected ? 'bg-surface-active text-foreground' : 'text-foreground-secondary'}`}
                     >
                       {item.kind === 'file' ? (
@@ -247,7 +249,14 @@ export const CommandPalette: React.FC = () => {
           </div>}
           <div className="flex items-center gap-4 border-t border-border-subtle px-4 py-2 text-2xs text-muted-foreground">
             <span><kbd className="font-sans">↑↓</kbd> navigate</span>
-            <span><kbd className="font-sans">↵</kbd> open</span>
+            {newTabMode ? (
+              <span><kbd className="font-sans">↵</kbd> open in new tab</span>
+            ) : (
+              <>
+                <span><kbd className="font-sans">↵</kbd> open</span>
+                <span><kbd className="font-sans">⌘↵</kbd> new tab</span>
+              </>
+            )}
             <span><kbd className="font-sans">&gt;</kbd> commands</span>
             <span className="ml-auto"><kbd className="font-sans">esc</kbd> close</span>
           </div>

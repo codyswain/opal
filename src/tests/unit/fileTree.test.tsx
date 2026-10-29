@@ -14,17 +14,14 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
-import {
-  FileTree,
-  ShellProvider,
-  type ShellRouteObject,
-} from '@/renderer/features/shell';
+import { FileTree, ShellProvider } from '@/renderer/features/shell';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import type { DiskEntry } from '@/types/disk';
+import { openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: toastError }) }));
@@ -48,14 +45,6 @@ const LISTINGS: Record<string, DiskEntry[]> = {
   [BOOKS]: [entry({ path: BOOK, name: 'Dune.md', kind: 'markdown' })],
 };
 
-const ROUTES: ShellRouteObject[] = [
-  {
-    path: '/files',
-    element: null,
-    handle: { shell: { id: 'files', header: { title: 'Files' } } },
-  },
-];
-
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.search}</output>;
@@ -68,10 +57,7 @@ function renderTree(initialPath = '/files') {
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <TooltipProvider>
-        <ShellProvider
-          routes={ROUTES}
-          fallbackRoute={{ id: 'files', header: { title: 'Files' } }}
-        >
+        <ShellProvider>
           <div className="h-[600px] w-[260px]">
             <FileTree />
           </div>
@@ -123,13 +109,7 @@ beforeEach(() => {
       data: { path: `${destination}/${source.split('/').pop()}` },
     })),
   });
-  useTabsStore.setState({
-    openPaths: [],
-    openedPath: null,
-    activePath: null,
-    previewPath: null,
-    recentlyClosed: [],
-  });
+  resetTabs();
   useDiskStore.setState({
     roots: [ROOT],
     listings: { [ROOT]: LISTINGS[ROOT] },
@@ -183,24 +163,23 @@ describe('FileTree', () => {
         `file=${encodeURIComponent(README)}`
       )
     );
-    expect(useTabsStore.getState().openPaths).toEqual([README]);
+    expect(tabPaths()).toEqual([README]);
     expect(row(README)).toHaveAttribute('aria-selected', 'true');
     expect(window.activityAPI.record).toHaveBeenCalledWith(README, 'opened');
 
     await user.click(row(NOTES));
-    await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTES));
-    expect(useTabsStore.getState().openPaths).toEqual([NOTES]);
+    await waitFor(() => expect(openedPath()).toBe(NOTES));
+    expect(tabPaths()).toEqual([NOTES]);
+    expect(useTabsStore.getState().tabs[0].history).toHaveLength(2);
 
     await user.keyboard('{Meta>}');
     await user.click(row(README));
     await user.keyboard('{/Meta}');
-    await waitFor(() =>
-      expect(useTabsStore.getState().openPaths).toEqual([NOTES, README])
-    );
+    await waitFor(() => expect(tabPaths()).toEqual([NOTES, README]));
 
     fireEvent(row(NOTES), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
-    await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTES));
-    expect(useTabsStore.getState().openPaths).toEqual([NOTES, README]);
+    await waitFor(() => expect(tabPaths()).toEqual([NOTES, README, NOTES]));
+    expect(openedPath()).toBe(NOTES);
   });
 
   it('reveals and highlights a file opened from outside the tree', async () => {
@@ -252,7 +231,7 @@ describe('FileTree', () => {
     await waitFor(() => expect(row(NOTES)).toHaveFocus());
 
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTES));
+    await waitFor(() => expect(openedPath()).toBe(NOTES));
   });
 
   it('renames inline, keeping the hidden .md', async () => {
@@ -365,7 +344,7 @@ describe('FileTree', () => {
 
     await waitFor(() => expect(window.markdownAPI.create).toHaveBeenCalledWith(LIBRARY));
     await waitFor(() =>
-      expect(useTabsStore.getState().openedPath).toBe(`${LIBRARY}/Untitled.md`)
+      expect(openedPath()).toBe(`${LIBRARY}/Untitled.md`)
     );
     expect(useDiskStore.getState().expanded[LIBRARY]).toBe(true);
   });

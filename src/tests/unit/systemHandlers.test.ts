@@ -99,3 +99,27 @@ describe('SystemHandlers full screen', () => {
     expect(isFullScreen?.({ sender: {} })).toBe(false);
   });
 });
+
+describe('SystemHandlers close window', () => {
+  it('closes the window that asked, as Close Tab does with no tab left', () => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const ipc = {
+      handle: vi.fn(),
+      on: (channel: string, listener: (event: unknown) => void) => listeners.set(channel, listener),
+    } as unknown as IpcMain;
+    const sender = {};
+    const close = vi.fn();
+    const fromWebContents = vi.fn((contents: unknown) => (contents === sender ? { close } : null));
+    new SystemHandlers({
+      ipc,
+      dialog: {} as Dialog,
+      browserWindow: { fromWebContents } as unknown as typeof BrowserWindow,
+      onThemeChanged: vi.fn(),
+    }).registerAll();
+
+    listeners.get('system:close-window')?.({ sender: {} });
+    expect(close).not.toHaveBeenCalled();
+    listeners.get('system:close-window')?.({ sender });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});

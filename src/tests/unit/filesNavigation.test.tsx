@@ -8,15 +8,17 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
 import { NameDialog } from '@/renderer/features/disk-explorer/components/dialogs/NameDialog';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
+import { fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi } from '@/tests/helpers/activityApi';
+import { openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 const ROOT = '/Vault',
   FOLDER = '/Vault/References',
   NOTE = '/Vault/brief.md';
@@ -35,13 +37,13 @@ const items = [
   }),
   entry({ path: NOTE, name: 'brief.md', kind: 'markdown' }),
 ];
+/** Back and Forward walk the active tab's history, as the top row's buttons do. */
 function Harness() {
   const location = useLocation();
-  const navigate = useNavigate();
   return (
     <>
-      <button onClick={() => navigate(-1)}>Back</button>
-      <button onClick={() => navigate(1)}>Forward</button>
+      <button onClick={() => useTabsStore.getState().back()}>Back</button>
+      <button onClick={() => useTabsStore.getState().forward()}>Forward</button>
       <output data-testid="location">{location.search}</output>
       <FilesRoute />
       <NameDialog />
@@ -88,12 +90,7 @@ beforeEach(() => {
     isPreviewPaneOpen: false,
     loading: { isLoading: false, error: null },
   });
-  useTabsStore.setState({
-    openPaths: [],
-    openedPath: null,
-    activePath: null,
-    previewPath: null,
-  });
+  resetTabs();
 });
 it('selects folders without navigating and supports multiple folder selection', async () => {
   await setup();
@@ -106,14 +103,14 @@ it('selects folders without navigating and supports multiple folder selection', 
     FOLDER,
     '/Vault/Other',
   ]);
-  expect(useTabsStore.getState().openPaths).toEqual([]);
+  expect(openedPath()).toBeNull();
 });
 it('shows the selected file in an explicitly opened preview without a tab or route change', async () => {
   await setup();
   fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
   expect(screen.getByTestId('detail-title')).toHaveTextContent('brief.md');
-  expect(useTabsStore.getState().openPaths).toEqual([]);
+  expect(openedPath()).toBeNull();
   expect(screen.getByTestId('location')).toHaveTextContent('mode=browse');
 });
 it('opens a folder explicitly and Back restores its selection', async () => {
@@ -133,14 +130,14 @@ it('opens a folder explicitly and Back restores its selection', async () => {
     expect(useDiskStore.getState().currentDirectory).toBe(FOLDER)
   );
 });
-it('explicit file open occupies the main surface and return restores browse selection', async () => {
+it('an explicit file open replaces the folder in its tab and Back restores the selection', async () => {
   await setup();
   fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
   expect(screen.queryByTestId('disk-folder-list')).toBeNull();
-  expect(useTabsStore.getState().openPaths).toEqual([NOTE]);
-  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
+  expect(tabPaths()).toEqual([NOTE]);
+  fireEvent.click(screen.getByText('Back'));
   await waitFor(() =>
     expect(item(NOTE)).toHaveAttribute('aria-pressed', 'true')
   );
@@ -150,7 +147,7 @@ it('Cmd+Down opens while Space previews and Return renames', async () => {
   fireEvent.click(item(NOTE), { metaKey: true });
   fireEvent.keyDown(item(NOTE), { key: ' ', code: 'Space' });
   expect(useDiskStore.getState().isQuickLookOpen).toBe(true);
-  expect(useTabsStore.getState().openPaths).toEqual([]);
+  expect(openedPath()).toBeNull();
   act(() => useDiskStore.getState().closeQuickLook());
   fireEvent.keyDown(item(NOTE), { key: 'Enter' });
   expect(useDiskStore.getState().pendingAction?.kind).toBe('rename');
@@ -235,33 +232,37 @@ it('replaces the live focused URL on rename and clears removed focus', async () 
   );
   expect(screen.queryByTestId('files-focus')).toBeNull();
 });
-it('activates and closes real tabs through route history', async () => {
+it('switching and closing tabs moves the URL without a history step', async () => {
   await setup();
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
-  act(() => useTabsStore.getState().openFile('/Vault/second.txt'));
-  fireEvent.click(screen.getByTestId('tab-/Vault/second.txt'));
+  const [noteTab] = useTabsStore.getState().tabs;
+  act(() =>
+    useTabsStore.getState().open(fileLocation('/Vault/second.txt'), { newTab: true })
+  );
   await waitFor(() =>
     expect(screen.getByTestId('location')).toHaveTextContent(
       'file=%2FVault%2Fsecond.txt'
     )
   );
-  fireEvent.click(screen.getByTestId('tab-' + NOTE));
+  act(() => useTabsStore.getState().activate(noteTab.id));
   await waitFor(() =>
     expect(screen.getByTestId('location')).toHaveTextContent(
       'file=%2FVault%2Fbrief.md'
     )
   );
-  fireEvent.click(screen.getByTestId('tab-close-' + NOTE));
+  act(() => useTabsStore.getState().close(noteTab.id));
   await waitFor(() =>
     expect(screen.getByTestId('location')).toHaveTextContent(
       'file=%2FVault%2Fsecond.txt'
     )
   );
-  fireEvent.click(screen.getByTestId('tab-close-/Vault/second.txt'));
-  await waitFor(() =>
-    expect(screen.getByTestId('location')).toHaveTextContent('mode=browse')
-  );
+  // The closed tab is not in any history: Back has nowhere to go.
+  fireEvent.click(screen.getByText('Back'));
+  expect(tabPaths()).toEqual(['/Vault/second.txt']);
+  act(() => useTabsStore.getState().closeAll());
+  await screen.findByTestId('no-page-open');
+  expect(screen.getByTestId('location').textContent).toBe('');
 });
 it('ignores late focused-file stat responses and never falls back to a selected file', async () => {
   let finishA: (
@@ -278,11 +279,9 @@ it('ignores late focused-file stat responses and never falls back to a selected 
   );
   await setup();
   fireEvent.click(item(NOTE), { metaKey: true });
-  act(() => useTabsStore.getState().openFile('/Vault/a.txt'));
-  fireEvent.click(screen.getByTestId('tab-/Vault/a.txt'));
+  act(() => useTabsStore.getState().open(fileLocation('/Vault/a.txt'), { newTab: true }));
   await screen.findByTestId('files-focus');
-  act(() => useTabsStore.getState().openFile('/Vault/b.txt'));
-  fireEvent.click(screen.getByTestId('tab-/Vault/b.txt'));
+  act(() => useTabsStore.getState().open(fileLocation('/Vault/b.txt'), { newTab: true }));
   await screen.findByText('File unavailable');
   act(() =>
     finishA({
@@ -336,7 +335,7 @@ it('shortcuts respect independent controls, contenteditable and handled events',
     fireEvent.keyDown(target, { key: ' ', code: 'Space' });
     fireEvent.keyDown(target, { key: 'Delete' });
   }
-  expect(useTabsStore.getState().openPaths).toEqual([]);
+  expect(openedPath()).toBeNull();
   expect(useDiskStore.getState().pendingDelete).toBeNull();
   expect(useDiskStore.getState().isQuickLookOpen).toBe(false);
 });
@@ -374,11 +373,11 @@ it('external listing removal clears the focused file route', async () => {
     expect(screen.getByTestId('location')).toHaveTextContent('mode=browse')
   );
 });
-it('successful drag move remaps the opened tab', async () => {
+it('successful drag move remaps the file in the tab history', async () => {
   await setup();
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
-  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
+  fireEvent.click(screen.getByText('Back'));
   await waitFor(() => expect(item(FOLDER)).toBeVisible());
   window.diskAPI.move = vi.fn(async () => ({
     success: true as const,
@@ -386,8 +385,12 @@ it('successful drag move remaps the opened tab', async () => {
   }));
   fireEvent.drop(item(FOLDER), { dataTransfer: { getData: () => NOTE } });
   await waitFor(() =>
-    expect(useTabsStore.getState().openPaths).toEqual([FOLDER + '/brief.md'])
+    expect(useTabsStore.getState().tabs[0].history[1].location).toEqual(
+      fileLocation(FOLDER + '/brief.md')
+    )
   );
+  fireEvent.click(screen.getByText('Forward'));
+  await waitFor(() => expect(openedPath()).toBe(FOLDER + '/brief.md'));
 });
 it('finishes initial loading when URL canonicalization happens during a delayed listing', async () => {
   let finish: (
@@ -402,13 +405,11 @@ it('finishes initial loading when URL canonicalization happens during a delayed 
       )
   );
   render(
-    <MemoryRouter initialEntries={['/files']}>
+    <MemoryRouter initialEntries={['/files?mode=browse&dir=%2FVault']}>
       <Harness />
     </MemoryRouter>
   );
-  await waitFor(() =>
-    expect(screen.getByTestId('location')).toHaveTextContent('mode=browse')
-  );
+  await screen.findByText('Loading…');
   await act(async () => {
     finish({ success: true, data: { path: ROOT, entries: items } });
   });
@@ -431,8 +432,7 @@ it('activates tabs in another allowed root using that file’s folder', async ()
     data: [ROOT, '/Second'],
   }));
   await setup();
-  act(() => useTabsStore.getState().openFile('/Second/a.txt'));
-  fireEvent.click(screen.getByTestId('tab-/Second/a.txt'));
+  act(() => useTabsStore.getState().open(fileLocation('/Second/a.txt'), { newTab: true }));
   await waitFor(() =>
     expect(screen.getByTestId('location')).toHaveTextContent(
       'mode=focus&dir=%2FSecond&file=%2FSecond%2Fa.txt'
@@ -470,11 +470,11 @@ it.each([
     else await screen.findByTestId('files-focus');
   }
 );
-it('keeps Browse active when an unrelated cached sibling disappears after returning from a file', async () => {
+it('keeps Browse active when an unrelated cached sibling disappears after going back from a file', async () => {
   await setup();
   fireEvent.doubleClick(item(NOTE));
   await screen.findByTestId('files-focus');
-  fireEvent.click(screen.getByRole('button', { name: /^Return to folder/ }));
+  fireEvent.click(screen.getByText('Back'));
   await screen.findByTestId('disk-folder-list');
   window.diskAPI.readDirectory = vi.fn(async (path) => ({
     success: true as const,
@@ -483,8 +483,8 @@ it('keeps Browse active when an unrelated cached sibling disappears after return
   await act(async () => {
     await useDiskStore.getState().invalidate([ROOT]);
   });
-  expect(useTabsStore.getState().openedPath).toBeNull();
-  expect(useTabsStore.getState().openPaths).toEqual([NOTE]);
+  expect(openedPath()).toBeNull();
+  expect(useTabsStore.getState().tabs[0].history[1].location).toEqual(fileLocation(NOTE));
   expect(screen.getByTestId('disk-folder-list')).toBeVisible();
   expect(screen.queryByTestId('files-focus')).toBeNull();
   expect(screen.getByTestId('location')).toHaveTextContent('mode=browse');
@@ -530,7 +530,7 @@ it.each(['list', 'gallery'])(
   }
 );
 
-it('records explicit opens and navigations but not restoration, Back or return', async () => {
+it('records explicit opens and navigations but not restoration or Back', async () => {
   const api = window.activityAPI;
   await setup();
   expect(api.record).not.toHaveBeenCalled();
@@ -542,9 +542,9 @@ it('records explicit opens and navigations but not restoration, Back or return',
   await waitFor(() => expect(useDiskStore.getState().currentDirectory).toBe(ROOT));
   await waitFor(() => expect(screen.queryByTestId('disk-folder-entry-' + NOTE)).toBeInTheDocument());
   await user.dblClick(item(NOTE));
-  await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(NOTE));
+  await waitFor(() => expect(openedPath()).toBe(NOTE));
   expect(api.record).toHaveBeenCalledWith(NOTE, 'opened');
-  await user.click(screen.getByRole('button', { name: /^Return to folder/ }));
-  await waitFor(() => expect(useTabsStore.getState().openedPath).toBeNull());
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await waitFor(() => expect(openedPath()).toBeNull());
   expect(api.record).toHaveBeenCalledTimes(2);
 });

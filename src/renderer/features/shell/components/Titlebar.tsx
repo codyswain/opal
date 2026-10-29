@@ -1,86 +1,70 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
-import { ChevronRight, MoreHorizontal } from "lucide-react";
-import {
-  IconButton,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/renderer/shared/ui";
-import { useShell } from "../context/ShellContext";
+import { Search } from "lucide-react";
+import { usePaletteStore } from "@/renderer/features/commands/store/paletteStore";
+import { TabStrip } from "@/renderer/features/disk-explorer/components/TabStrip";
+import { IconButton } from "@/renderer/shared/ui";
+import { cn } from "@/renderer/shared/utils";
 import { FrameControls, TrafficLightInset } from "./FrameControls";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
-  compactActions: boolean;
+  /** Narrow windows fold the search field to its icon. */
+  compact: boolean;
   onToggleSidebar: () => void;
   sidebarToggleRef?: React.Ref<HTMLButtonElement>;
 }
 
-function Breadcrumbs() {
-  const {
-    route: {
-      header: { breadcrumbs, title },
-    },
-  } = useShell();
+const openPalette = () => usePaletteStore.getState().show();
 
-  if (!breadcrumbs || breadcrumbs.length === 0) {
+function SearchField({ compact }: { compact: boolean }) {
+  if (compact) {
     return (
-      <h1 className="truncate text-ui font-medium text-foreground">{title}</h1>
+      <IconButton label="Search" shortcut="⌘K" onClick={openPalette}>
+        <Search aria-hidden className="h-4 w-4" />
+      </IconButton>
     );
   }
-
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
-      {breadcrumbs.map((breadcrumb, index) => (
-        <React.Fragment key={breadcrumb.id}>
-          {index > 0 ? (
-            <ChevronRight
-              aria-hidden
-              className="h-3.5 w-3.5 shrink-0 text-foreground-tertiary"
-            />
-          ) : null}
-          {breadcrumb.to ? (
-            <Link
-              to={breadcrumb.to}
-              className="no-drag min-w-0 truncate rounded-row px-1 text-ui text-foreground-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              {breadcrumb.label}
-            </Link>
-          ) : breadcrumb.onActivate ? (
-            <button
-              type="button"
-              onClick={breadcrumb.onActivate}
-              className="no-drag min-w-0 truncate rounded-row px-1 text-ui text-foreground-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              {breadcrumb.label}
-            </button>
-          ) : (
-            <span className="min-w-0 truncate px-1 text-ui text-foreground-secondary">
-              {breadcrumb.label}
-            </span>
-          )}
-        </React.Fragment>
-      ))}
-    </nav>
+    <button
+      type="button"
+      aria-label="Search"
+      aria-keyshortcuts="Meta+K"
+      onClick={openPalette}
+      className="flex h-control-compact w-[12.5rem] items-center gap-2 rounded-control bg-surface-hover px-2 text-ui text-foreground-tertiary outline-none transition-hover hover:bg-surface-active hover:text-foreground-secondary focus-visible:ring-2 focus-visible:ring-foreground/25"
+    >
+      <Search aria-hidden className="h-3.5 w-3.5 shrink-0 text-icon" />
+      <span className="flex-1 text-left">Search</span>
+      <kbd className="font-sans text-metadata text-foreground-tertiary">⌘K</kbd>
+    </button>
   );
 }
 
+/**
+ * The page column's one 40px row: the tabs and New Tab, then a search field
+ * centred in the row that opens the palette. The row is a grid whose first
+ * column grows past half only when the tabs need it, so the field stays put
+ * until the tabs push it right, and the tabs shrink and scroll once it meets
+ * the edge. Empty space drags the window; every control is no-drag.
+ */
 export function Titlebar({
-  compactActions,
+  compact,
   onToggleSidebar,
   sidebarOpen,
   sidebarToggleRef,
 }: TitlebarProps) {
-  const { route } = useShell();
-  const { actions, leadingActions, tabs } = route.header;
-
   return (
     <header
       data-testid="titlebar"
-      className="drag-handle shrink-0 bg-chrome"
+      className="drag-handle grid h-header shrink-0 grid-cols-[minmax(max-content,1fr)_auto_minmax(0,1fr)] items-center gap-2 bg-chrome px-2 [container-type:inline-size]"
     >
-      <div className="flex h-header min-w-0 items-center gap-1 px-2">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1",
+          compact
+            ? "max-w-[calc(100cqw-2.75rem)]"
+            : "max-w-[calc(100cqw-13.5rem)]",
+        )}
+      >
         {/* With the sidebar open, its own top row holds these. */}
         {!sidebarOpen ? (
           <>
@@ -92,41 +76,10 @@ export function Titlebar({
             />
           </>
         ) : null}
-
-        {leadingActions ? (
-          <div className="no-drag flex shrink-0 items-center">
-            {leadingActions}
-          </div>
-        ) : null}
-
-        <div className="min-w-0 flex-1 px-1">
-          <Breadcrumbs />
-        </div>
-
-        {actions ? (
-          compactActions ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <IconButton label="Page actions">
-                  <MoreHorizontal aria-hidden className="h-4 w-4" />
-                </IconButton>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-auto min-w-44">
-                <div className="flex flex-col gap-1">{actions}</div>
-              </PopoverContent>
-            </Popover>
-          ) : (
-            <div className="no-drag flex shrink-0 items-center gap-1">
-              {actions}
-            </div>
-          )
-        ) : null}
+        <TabStrip />
       </div>
-      {tabs ? (
-        <div className="no-drag min-h-row-compact border-t border-border-subtle">
-          {tabs}
-        </div>
-      ) : null}
+      <SearchField compact={compact} />
+      <span aria-hidden />
     </header>
   );
 }

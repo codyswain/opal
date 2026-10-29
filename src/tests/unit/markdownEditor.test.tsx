@@ -5,16 +5,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
 import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { openedPath, resetTabs } from '@/tests/helpers/tabs';
 
 const NOTE = '/Vault/Notes/brief.md';
 
 beforeEach(() => {
   installDiskApi();
   useDiskStore.setState({ listings: {}, sort: { field: 'name', direction: 'asc' }, filter: '', pendingAction: null });
-  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null });
+  resetTabs();
 });
 
 describe('MarkdownEditor', () => {
@@ -41,7 +41,7 @@ describe('Toolbar new note', () => {
     await user.click(screen.getByTestId('toolbar-new'));
     await user.click(await screen.findByTestId('toolbar-new-note'));
     await waitFor(() => expect(api.create).toHaveBeenCalledWith('/Vault/Notes'));
-    await waitFor(() => expect(useTabsStore.getState().openedPath).toBe('/Vault/Notes/Untitled.md'));
+    await waitFor(() => expect(openedPath()).toBe('/Vault/Notes/Untitled.md'));
     expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault/Notes');
   });
 });

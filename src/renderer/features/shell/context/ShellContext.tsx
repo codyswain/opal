@@ -1,149 +1,69 @@
 import * as React from 'react';
 import {
-  matchRoutes,
   useLocation,
   useNavigate,
-  type IndexRouteObject,
-  type Location,
   type NavigateOptions,
-  type NonIndexRouteObject,
-  type RouteObject,
   type To,
 } from 'react-router-dom';
 import {
-  toFilesRouterUpdate,
+  FILES_ROUTE_PATH,
+  serializeFilesLocation,
   type FilesNavigationIntent,
 } from '@/renderer/features/disk-explorer/navigation/filesLocation';
-
-export interface ShellBreadcrumbDescriptor {
-  id: string;
-  label: string;
-  to?: To;
-  onActivate?: () => void;
-}
-
-export interface ShellHeaderDescriptor {
-  title: string;
-  breadcrumbs?: readonly ShellBreadcrumbDescriptor[];
-  leadingActions?: React.ReactNode;
-  actions?: React.ReactNode;
-  tabs?: React.ReactNode;
-}
-
-export interface ShellRouteDescriptor {
-  id: string;
-  header: ShellHeaderDescriptor;
-}
-
-export type ShellRouteDescriptorResolver = (
-  location: Location
-) => ShellRouteDescriptor;
-
-export interface ShellRouteHandle {
-  shell: ShellRouteDescriptor | ShellRouteDescriptorResolver;
-}
-
-type ShellIndexRouteObject = Omit<IndexRouteObject, 'handle'> & {
-  handle?: ShellRouteHandle;
-};
-
-type ShellNonIndexRouteObject = Omit<
-  NonIndexRouteObject,
-  'children' | 'handle'
-> & {
-  children?: ShellRouteObject[];
-  handle?: ShellRouteHandle;
-};
-
-export type ShellRouteObject =
-  | ShellIndexRouteObject
-  | ShellNonIndexRouteObject;
-
-export function resolveShellRoute(
-  routes: readonly ShellRouteObject[],
-  location: Location,
-  fallback: ShellRouteDescriptor
-): ShellRouteDescriptor {
-  const matches = matchRoutes(routes as RouteObject[], location);
-  for (const match of [...(matches ?? [])].reverse()) {
-    const shell = (match.route as ShellRouteObject).handle?.shell;
-    if (shell) {
-      return typeof shell === 'function' ? shell(location) : shell;
-    }
-  }
-  return fallback;
-}
+import {
+  useTabsStore,
+  type OpenOptions,
+} from '@/renderer/features/disk-explorer/store/tabsStore';
 
 interface ShellContextValue {
-  route: ShellRouteDescriptor;
   /** Live React Router location; it is never copied into the shell store. */
   location: ReturnType<typeof useLocation>;
   navigateTo: (to: To, options?: NavigateOptions) => void;
-  navigateFiles: (intent: FilesNavigationIntent) => void;
-  goBack: () => void;
-  goForward: () => void;
+  /**
+   * Shows a place in the active tab, or in a new one with `newTab`. The files
+   * route mirrors the tab into the URL; from anywhere else this goes there.
+   */
+  navigateFiles: (
+    intent: FilesNavigationIntent,
+    options?: Pick<OpenOptions, 'newTab'>
+  ) => void;
 }
 
 const ShellContext = React.createContext<ShellContextValue | null>(null);
 
 interface ShellProviderProps {
-  routes: readonly ShellRouteObject[];
-  fallbackRoute: ShellRouteDescriptor;
   children: React.ReactNode;
 }
 
-/**
- * The same route objects can feed `useRoutes` and this provider. Their handles
- * let the stable parent shell read child-route chrome without upward context or
- * effect-based registration.
- */
-export function ShellProvider({
-  children,
-  fallbackRoute,
-  routes,
-}: ShellProviderProps) {
+export function ShellProvider({ children }: ShellProviderProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const route = React.useMemo(
-    () => resolveShellRoute(routes, location, fallbackRoute),
-    [fallbackRoute, location, routes]
-  );
+  const pathname = React.useRef(location.pathname);
+  pathname.current = location.pathname;
 
   const navigateTo = React.useCallback(
     (to: To, options?: NavigateOptions) => navigate(to, options),
     [navigate]
   );
   const navigateFiles = React.useCallback(
-    (intent: FilesNavigationIntent) => {
-      const update = toFilesRouterUpdate(intent);
-      if (!update) return;
-      navigate(
-        { pathname: update.pathname, search: update.search },
-        { replace: update.replace }
-      );
+    (intent: FilesNavigationIntent, options: Pick<OpenOptions, 'newTab'> = {}) => {
+      if (intent.history === 'none') return;
+      useTabsStore.getState().open(intent.location, {
+        newTab: options.newTab,
+        replace: intent.history === 'replace',
+      });
+      if (pathname.current !== FILES_ROUTE_PATH)
+        navigate(
+          { pathname: FILES_ROUTE_PATH, search: serializeFilesLocation(intent.location) },
+          { replace: true }
+        );
     },
     [navigate]
   );
-  const goBack = React.useCallback(() => navigate(-1), [navigate]);
-  const goForward = React.useCallback(() => navigate(1), [navigate]);
 
   const value = React.useMemo<ShellContextValue>(
-    () => ({
-      route,
-      location,
-      navigateTo,
-      navigateFiles,
-      goBack,
-      goForward,
-    }),
-    [
-      goBack,
-      goForward,
-      location,
-      navigateFiles,
-      navigateTo,
-      route,
-    ]
+    () => ({ location, navigateTo, navigateFiles }),
+    [location, navigateFiles, navigateTo]
   );
 
   return (

@@ -7,6 +7,23 @@ import fs from 'fs';
 const PROJECT_ROOT = path.join(__dirname, '../..');
 const MAIN_JS_PATH = path.join(PROJECT_ROOT, '.vite/build/main.js');
 
+/** Launches the built app with its stores in `userDataDir`; a test can relaunch with the same one. */
+export async function launchOpal(userDataDir: string): Promise<ElectronApplication> {
+  if (!fs.existsSync(MAIN_JS_PATH)) {
+    throw new Error(
+      `Built main.js not found at ${MAIN_JS_PATH}. Run the Vite builds first:\n` +
+      `  npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts`
+    );
+  }
+  return electron.launch({
+    args: [PROJECT_ROOT],
+    env: {
+      ...process.env,
+      OPAL_TEST_USER_DATA_DIR: userDataDir,
+    },
+  });
+}
+
 type ElectronFixtures = {
   /** Absolute path to this test's isolated user-data directory. */
   userDataDir: string;
@@ -25,20 +42,7 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   electronApp: async ({ userDataDir }, use) => {
-    if (!fs.existsSync(MAIN_JS_PATH)) {
-      throw new Error(
-        `Built main.js not found at ${MAIN_JS_PATH}. Run the Vite builds first:\n` +
-        `  npx vite build --config vite.main.config.ts && npx vite build --config vite.preload.config.ts && npx vite build --config vite.renderer.config.ts`
-      );
-    }
-
-    const app = await electron.launch({
-      args: [PROJECT_ROOT],
-      env: {
-        ...process.env,
-        OPAL_TEST_USER_DATA_DIR: userDataDir,
-      },
-    });
+    const app = await launchOpal(userDataDir);
 
     await use(app);
 

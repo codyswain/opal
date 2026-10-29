@@ -237,7 +237,7 @@ describe('DetailPane', () => {
       ] }) })),
     });
     render(
-      <FilesNavigationContext.Provider value={{ navigateDirectory, navigateCollection: vi.fn(), openFile, previewFile: vi.fn(), returnToFolder: vi.fn(), closeFile: vi.fn() }}>
+      <FilesNavigationContext.Provider value={{ navigateDirectory, navigateCollection: vi.fn(), openFile }}>
         <DetailPane entry={entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' })} />
       </FilesNavigationContext.Provider>
     );
@@ -460,8 +460,7 @@ describe('Details integration integrity', () => {
   };
   const source = entry({ path: '/V/note.md', name: 'note.md', kind: 'markdown' });
   const renderDetails = () => {
-    const navigation = { navigateDirectory: vi.fn(),
-    navigateCollection: vi.fn(), openFile: vi.fn(), previewFile: vi.fn(), returnToFolder: vi.fn(), closeFile: vi.fn() };
+    const navigation = { navigateDirectory: vi.fn(), navigateCollection: vi.fn(), openFile: vi.fn() };
     const view = render(<FilesNavigationContext.Provider value={navigation}><DetailPane entry={source} /></FilesNavigationContext.Provider>);
     return { ...view, navigation };
   };

@@ -5,6 +5,7 @@ import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { pathMutationCoordinator } from '@/renderer/features/disk-explorer/navigation/pathMutationCoordinator';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DiskEntry } from '@/types/disk';
+import { openedPath, openTabs, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const ROOT = '/Vault';
 const PHOTOS = '/Vault/Photos';
@@ -43,12 +44,7 @@ beforeEach(() => {
     density: 'comfortable',
     loading: { isLoading: false, error: null },
   });
-  useTabsStore.setState({
-    openPaths: [],
-    openedPath: null,
-    activePath: null,
-    previewPath: null,
-  });
+  resetTabs();
 
   readDirectory = vi.fn(async (p: string) => ({
     success: true,
@@ -71,20 +67,12 @@ describe('useDiskStore', () => {
   });
 
   it('drops hydrated tabs outside the roots returned at launch', async () => {
-    useTabsStore.setState({
-      openPaths: ['/Removed/stale.md', '/Vault/note.md'],
-      openedPath: '/Removed/stale.md',
-      activePath: '/Removed/stale.md',
-      previewPath: null,
-    });
+    openTabs(['/Removed/stale.md', '/Vault/note.md'], 0);
 
     await useDiskStore.getState().loadRoots();
 
-    expect(useTabsStore.getState()).toMatchObject({
-      openPaths: ['/Vault/note.md'],
-      openedPath: '/Vault/note.md',
-      activePath: '/Vault/note.md',
-    });
+    expect(tabPaths()).toEqual(['/Vault/note.md']);
+    expect(openedPath()).toBe('/Vault/note.md');
   });
 
   it('opens a folder, adds it as a root, and loads its listing', async () => {
@@ -113,16 +101,11 @@ describe('useDiskStore', () => {
     });
     await useDiskStore.getState().openFolder();
 
-    useTabsStore.getState().openFile('/Other/note.md');
-    useTabsStore.setState({
-      openPaths: [],
-      openedPath: null,
-      activePath: null,
-      previewPath: null,
-    });
+    openTabs(['/Other/note.md']);
+    resetTabs();
     useTabsStore.getState().hydrate();
 
-    expect(useTabsStore.getState().openPaths).toEqual(['/Other/note.md']);
+    expect(tabPaths()).toEqual(['/Other/note.md']);
   });
 
   it('leaves state untouched when the dialog is cancelled', async () => {
@@ -275,16 +258,11 @@ describe('useDiskStore', () => {
     await useDiskStore.getState().openFolder();
     await useDiskStore.getState().closeRoot(ROOT);
 
-    useTabsStore.getState().openFile('/Vault/stale.md');
-    useTabsStore.setState({
-      openPaths: [],
-      openedPath: null,
-      activePath: null,
-      previewPath: null,
-    });
+    openTabs(['/Vault/stale.md']);
+    resetTabs();
     useTabsStore.getState().hydrate();
 
-    expect(useTabsStore.getState().openPaths).toEqual([]);
+    expect(tabPaths()).toEqual([]);
   });
 });
 

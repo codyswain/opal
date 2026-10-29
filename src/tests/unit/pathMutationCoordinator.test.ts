@@ -9,6 +9,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { writePref } from '@/renderer/shared/prefs/prefs';
 import { entry } from '@/tests/helpers/diskApi';
+import { openTabs, openedPath, tabPaths } from '@/tests/helpers/tabs';
 
 const ROOT = '/Vault';
 const NOTES = '/Vault/Notes';
@@ -48,12 +49,7 @@ beforeEach(() => {
     pendingAction: { kind: 'rename', target: NOTE },
     pendingDelete: NOTE,
   });
-  useTabsStore.setState({
-    openPaths: [NOTE, '/Vault/keep.md'],
-    openedPath: NOTE,
-    activePath: NOTE,
-    previewPath: null,
-  });
+  openTabs([NOTE, '/Vault/keep.md']);
 });
 
 describe('path mutation coordination', () => {
@@ -204,11 +200,8 @@ describe('path mutation coordination', () => {
     expect(disk.pendingAction?.target).toBe(REMAPPED_NOTE);
     expect(disk.pendingDelete).toBe(REMAPPED_NOTE);
 
-    expect(useTabsStore.getState()).toMatchObject({
-      openPaths: [REMAPPED_NOTE, '/Vault/keep.md'],
-      openedPath: REMAPPED_NOTE,
-      activePath: REMAPPED_NOTE,
-    });
+    expect(tabPaths()).toEqual([REMAPPED_NOTE, '/Vault/keep.md']);
+    expect(openedPath()).toBe(REMAPPED_NOTE);
     expect(
       filesLocationSnapshots.read({
         mode: 'browse',
@@ -233,11 +226,8 @@ describe('path mutation coordination', () => {
     expect(disk.listings[ROOT]?.map((item) => item.path)).toEqual([
       '/Vault/Photos-backup',
     ]);
-    expect(useTabsStore.getState()).toMatchObject({
-      openPaths: ['/Vault/keep.md'],
-      openedPath: '/Vault/keep.md',
-      activePath: '/Vault/keep.md',
-    });
+    expect(tabPaths()).toEqual(['/Vault/keep.md']);
+    expect(openedPath()).toBe('/Vault/keep.md');
   });
 
   it('purges a removed root across registered state', () => {
@@ -251,34 +241,22 @@ describe('path mutation coordination', () => {
       focusedPath: null,
       selectedPaths: [],
     });
-    expect(useTabsStore.getState()).toMatchObject({
-      openPaths: [],
-      openedPath: null,
-      activePath: null,
-      previewPath: null,
-    });
+    expect(tabPaths()).toEqual([]);
+    expect(useTabsStore.getState().activeId).toBeNull();
   });
 
   it('retains restored tabs only while they belong to an allowed root', () => {
-    useTabsStore.setState({
-      openPaths: [NOTE, '/Removed/stale.md'],
-      openedPath: '/Removed/stale.md',
-      activePath: '/Removed/stale.md',
-      previewPath: null,
-    });
+    openTabs([NOTE, '/Removed/stale.md'], 1);
 
     expect(pathMutationCoordinator.reconcileAllowedRoots([ROOT])).toBe(true);
 
-    expect(useTabsStore.getState()).toMatchObject({
-      openPaths: [NOTE],
-      openedPath: NOTE,
-      activePath: NOTE,
-      previewPath: null,
-    });
+    expect(tabPaths()).toEqual([NOTE]);
+    expect(openedPath()).toBe(NOTE);
 
+    window.localStorage.clear();
     writePref('tabs.open', [NOTE, '/Removed/restored.md']);
     useTabsStore.getState().hydrate();
-    expect(useTabsStore.getState().openPaths).toEqual([NOTE]);
+    expect(tabPaths()).toEqual([NOTE]);
   });
 
   it('does not treat a similarly prefixed sibling as part of the subtree', () => {
@@ -298,11 +276,11 @@ describe('path mutation coordination', () => {
     pathMutationCoordinator.applyAppMutation(mutation);
     const afterFirst = {
       disk: useDiskStore.getState().selectedPaths,
-      tabs: useTabsStore.getState().openPaths,
+      tabs: tabPaths(),
     };
     pathMutationCoordinator.applyAppMutation(mutation);
 
     expect(useDiskStore.getState().selectedPaths).toEqual(afterFirst.disk);
-    expect(useTabsStore.getState().openPaths).toEqual(afterFirst.tabs);
+    expect(tabPaths()).toEqual(afterFirst.tabs);
   });
 });

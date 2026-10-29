@@ -340,7 +340,9 @@ const appMenu = new AppMenu({
   menu: Menu,
   appName: app.getName(),
   send: (commandId) => {
-    BrowserWindow.getFocusedWindow()?.webContents.send(
+    // Falls back to the one window when none has focus, as when DevTools
+    // has it or a test clicks the item.
+    (BrowserWindow.getFocusedWindow() ?? mainWindow)?.webContents.send(
       "menu:invoke",
       commandId,
     );

@@ -7,6 +7,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { useDocumentStatusStore } from '@/renderer/features/disk-explorer/store/documentStatusStore';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
+import { resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
@@ -25,7 +26,7 @@ function listing() {
 
 beforeEach(() => {
   window.localStorage.clear();
-  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null, recentlyClosed: [] });
+  resetTabs();
   useDocumentStatusStore.setState({ statuses: {} });
   installDiskApi({
     listRoots: vi.fn(async () => ({ success: true as const, data: [DIR] })),
@@ -40,19 +41,19 @@ beforeEach(() => {
 });
 
 describe('row interactions', () => {
-  it('opens a file as a preview tab on a single click and pins it on double click', async () => {
+  it('opens a file in the current tab on a single click, with no preview state', async () => {
     const user = userEvent.setup();
     render(<DiskFolderView dirPath={DIR} />);
     const row = await screen.findByTestId(`disk-folder-entry-${NOTE}`);
     await user.click(row);
-    expect(useTabsStore.getState()).toMatchObject({ openedPath: NOTE, previewPath: NOTE, openPaths: [NOTE] });
+    expect(tabPaths()).toEqual([NOTE]);
     expect(useDiskStore.getState().selectedPath).toBe(NOTE);
     await user.click(screen.getByTestId(`disk-folder-entry-${OTHER}`));
-    // The preview slot is reused: one tab, now the other file.
-    expect(useTabsStore.getState()).toMatchObject({ openedPath: OTHER, previewPath: OTHER, openPaths: [OTHER] });
+    // One tab, now the other file, with the first one a Back step away.
+    expect(tabPaths()).toEqual([OTHER]);
     await user.dblClick(screen.getByTestId(`disk-folder-entry-${OTHER}`));
-    expect(useTabsStore.getState().previewPath).toBeNull();
-    expect(useTabsStore.getState().openPaths).toEqual([OTHER]);
+    expect(tabPaths()).toEqual([OTHER]);
+    expect(useTabsStore.getState().tabs[0].history).toHaveLength(2);
   });
 
   it('modified clicks only change the selection', async () => {
@@ -64,7 +65,7 @@ describe('row interactions', () => {
     await user.click(screen.getByTestId(`disk-folder-entry-${OTHER}`));
     await user.keyboard('{/Meta}');
     expect(useDiskStore.getState().selectedPaths).toEqual([NOTE, OTHER]);
-    expect(useTabsStore.getState().openPaths).toEqual([]);
+    expect(tabPaths()).toEqual([]);
   });
 
   it('a single click on a folder opens it', async () => {

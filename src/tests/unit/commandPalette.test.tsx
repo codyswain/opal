@@ -13,6 +13,8 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { installActivityApi, recentResult } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
+import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
+import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 
 const ROOT = '/Vault';
 const PLAN = '/Vault/Projects/Atlas/plan.md';
@@ -27,7 +29,7 @@ function renderPalette() {
     <MemoryRouter initialEntries={['/files']}>
       <ThemeProvider>
         <TooltipProvider>
-          <ShellProvider routes={[{ path: '/files', element: null, handle: { shell: { id: 'files', header: { title: 'Files' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
+          <ShellProvider>
             <AppCommands />
             <CommandPalette />
             <LocationProbe />
@@ -39,10 +41,11 @@ function renderPalette() {
 }
 
 beforeEach(() => {
-  usePaletteStore.setState({ open: false, initialQuery: '' });
+  usePaletteStore.setState({ open: false, initialQuery: '', newTab: false });
+  resetTabs();
   useSettingsStore.setState({ open: false });
   for (const command of commandRegistry.getAllCommands()) commandRegistry.unregisterCommand(command);
-  (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined) };
+  (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined), closeWindow: vi.fn() };
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })) });
   installActivityApi({ recent: vi.fn(async () => ({ success: true as const, data: recentResult([{ entry: entry({ path: '/Vault/inbox.md', name: 'inbox.md', kind: 'markdown' }), touchedAt: Date.now() - 60_000, touchedKind: 'opened', openedAt: Date.now() - 60_000, organizedAt: null, editedAt: null }]) })) });
   useDiskStore.setState({ roots: [ROOT], currentDirectory: ROOT });
@@ -60,7 +63,7 @@ describe('CommandPalette', () => {
     expect(await screen.findByRole('option', { name: /Plant foxglove in the garden/ })).toHaveTextContent('Plant foxglove in the garden.');
     expect(searchContent).toHaveBeenLastCalledWith('foxglove');
     await user.click(screen.getByTestId(`palette-file-${PLAN}`));
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`file=${encodeURIComponent(PLAN)}`));
+    await waitFor(() => expect(openedPath()).toBe(PLAN));
   });
   it('retries a failed local content search without changing its query or scope', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
@@ -150,9 +153,32 @@ describe('CommandPalette', () => {
     expect(file).toHaveTextContent('Vault › Projects › Atlas');
     expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({ filters: [{ field: 'name', op: 'contains', value: 'pla' }], scope: { kind: 'all-roots' } });
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`file=${encodeURIComponent(PLAN)}`));
+    await waitFor(() => expect(openedPath()).toBe(PLAN));
+    expect(tabPaths()).toEqual([PLAN]);
     expect(window.activityAPI.record).toHaveBeenCalledWith(PLAN, 'opened');
     expect(screen.queryByTestId('command-palette')).toBeNull();
+  });
+
+  it('opens the pick in the current tab, in a new tab with Cmd+Enter, and always in a new tab after New Tab', async () => {
+    installCollectionsApi({
+      query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })),
+    });
+    const user = userEvent.setup();
+    openTabs(['/Vault/inbox.md']);
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'pla');
+    await screen.findByTestId(`palette-file-${PLAN}`);
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await waitFor(() => expect(tabPaths()).toEqual(['/Vault/inbox.md', PLAN]));
+
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.newTab));
+    const palette = await screen.findByTestId('command-palette');
+    expect(palette).toHaveTextContent('open in new tab');
+    await user.type(within(palette).getByRole('combobox'), 'pla');
+    await screen.findByTestId(`palette-file-${PLAN}`);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(tabPaths()).toEqual(['/Vault/inbox.md', PLAN, PLAN]));
   });
 
   it('limits results to commands after > and runs the selected command', async () => {
@@ -177,6 +203,39 @@ describe('CommandPalette', () => {
     expect(reported.map((command) => command.id).filter((id) => id.startsWith('pane.'))).toEqual(['pane.toggleLeft']);
     act(() => usePaletteStore.getState().show('>side'));
     const option = await screen.findByTestId('palette-command-pane.toggleLeft');
-    expect(option).toHaveTextContent(/⌘B|Ctrl\+B/);
+    expect(option).toHaveTextContent(/⌘\\|Ctrl\+\\/);
+    expect(reported.find((command) => command.id === COMMAND_IDS.nextTab)).toEqual({
+      id: COMMAND_IDS.nextTab, label: 'Show Next Tab', accelerator: 'CmdOrCtrl+Shift+]', aliases: ['Ctrl+Tab'],
+    });
+  });
+
+  it('keeps the tab-position keys out of the palette', async () => {
+    renderPalette();
+    act(() => usePaletteStore.getState().show('>show'));
+    await screen.findByTestId(`palette-command-${COMMAND_IDS.nextTab}`);
+    expect(screen.queryByTestId(`palette-command-${TAB_POSITION_COMMAND_IDS[0]}`)).toBeNull();
+    expect(screen.queryByTestId(`palette-command-${COMMAND_IDS.lastTab}`)).toBeNull();
+  });
+
+  it('runs the tab and history commands the menu sends', () => {
+    renderPalette();
+    openTabs(['/Vault/a.md', '/Vault/b.md', '/Vault/c.md']);
+    const run = (id: string) => act(() => commandRegistry.executeCommand(id));
+    run(TAB_POSITION_COMMAND_IDS[1]);
+    expect(openedPath()).toBe('/Vault/b.md');
+    run(COMMAND_IDS.lastTab);
+    expect(openedPath()).toBe('/Vault/c.md');
+    run(COMMAND_IDS.nextTab);
+    expect(openedPath()).toBe('/Vault/a.md');
+    run(COMMAND_IDS.previousTab);
+    expect(openedPath()).toBe('/Vault/c.md');
+    run(COMMAND_IDS.closeTab);
+    expect(tabPaths()).toEqual(['/Vault/a.md', '/Vault/b.md']);
+    run(COMMAND_IDS.reopenClosedTab);
+    expect(tabPaths()).toEqual(['/Vault/a.md', '/Vault/b.md', '/Vault/c.md']);
+    expect(window.systemAPI.closeWindow).not.toHaveBeenCalled();
+    resetTabs();
+    run(COMMAND_IDS.closeTab);
+    expect(window.systemAPI.closeWindow).toHaveBeenCalledTimes(1);
   });
 });

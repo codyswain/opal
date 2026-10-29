@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { FilesRoute } from '@/renderer/features/disk-explorer/components/FilesRoute';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { useRecentStore } from '@/renderer/features/disk-explorer/store/recentStore';
@@ -10,6 +10,7 @@ import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore'
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { installActivityApi, recentItem, recentResult } from '@/tests/helpers/activityApi';
+import { openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const ROOT = '/Vault';
 const NOTES = '/Vault/Notes';
@@ -20,10 +21,9 @@ const HOUR = 60 * MIN;
 
 function Harness() {
   const location = useLocation();
-  const navigate = useNavigate();
   return (
     <>
-      <button type="button" onClick={() => navigate(-1)}>Back</button>
+      <button type="button" onClick={() => useTabsStore.getState().back()}>Back</button>
       <output data-testid="location">{location.search}</output>
       <FilesRoute />
     </>
@@ -76,7 +76,7 @@ beforeEach(() => {
     quickPreviewPath: null, isQuickLookOpen: false, isPreviewPaneOpen: false,
     pendingAction: null, pendingDelete: null, loading: { isLoading: false, error: null },
   });
-  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null });
+  resetTabs();
 });
 
 describe('RecentView', () => {
@@ -102,39 +102,31 @@ describe('RecentView', () => {
     expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
   });
 
-  it('opens a result in the recent collection, records the open once, and returns to Recent with selection', async () => {
+  it('opens a result in the current tab with one click and records the open once', async () => {
     const user = userEvent.setup();
     renderAt('?mode=browse&collection=recent');
     const row = await screen.findByTestId(`disk-folder-entry-${NOTE}`);
-    // One click is enough to open; the result takes the preview slot.
     await user.click(row);
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        `?mode=focus&collection=recent&file=${encodeURIComponent(NOTE)}`
+        `?mode=focus&dir=${encodeURIComponent(NOTES)}&file=${encodeURIComponent(NOTE)}`
       )
     );
-    expect(useTabsStore.getState().previewPath).toBe(NOTE);
+    expect(tabPaths()).toEqual([NOTE]);
     expect(window.activityAPI.record).toHaveBeenCalledTimes(1);
     expect(window.activityAPI.record).toHaveBeenCalledWith(NOTE, 'opened');
-    await user.click(await screen.findByRole('button', { name: /^Return to folder/ }));
-    await waitFor(() =>
-      expect(screen.getByTestId('location')).toHaveTextContent('?mode=browse&collection=recent')
-    );
-    await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([NOTE]));
-    expect(screen.getByTestId(`disk-folder-entry-${NOTE}`)).toHaveAttribute('aria-pressed', 'true');
-    expect(window.activityAPI.record).toHaveBeenCalledTimes(1);
   });
 
-  it('Back from an opened result also restores Recent without recording', async () => {
+  it('Back from an opened result restores Recent and its selection without recording', async () => {
     const user = userEvent.setup();
     renderAt('?mode=browse&collection=recent');
     const row = await screen.findByTestId(`disk-folder-entry-${PDF}`);
     await user.click(row);
-    await waitFor(() => expect(useTabsStore.getState().openedPath).toBe(PDF));
-    // The list is replaced by the file, so a list double-click cannot pin;
-    // the tab, editing, or an explicit Open do that.
-    expect(useTabsStore.getState().previewPath).toBe(PDF);
+    await waitFor(() => expect(openedPath()).toBe(PDF));
     await user.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent('?mode=browse&collection=recent')
+    );
     await waitFor(() => expect(useDiskStore.getState().currentCollection).toEqual({ kind: 'recent' }));
     await waitFor(() => expect(useDiskStore.getState().selectedPaths).toEqual([PDF]));
     expect(window.activityAPI.record).toHaveBeenCalledTimes(1);

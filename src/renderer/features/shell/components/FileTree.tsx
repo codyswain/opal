@@ -292,9 +292,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   const openFile = React.useCallback(
     (path: string, inNewTab: boolean) => {
       openedFromTree.current = path;
-      if (!inNewTab) useTabsStore.getState().openInPlace(path);
       recordOpened(path);
-      navigateFiles(focusFile(parentFsPath(path) ?? path, path));
+      navigateFiles(focusFile(parentFsPath(path) ?? path, path), { newTab: inNewTab });
       onNavigate?.();
     },
     [navigateFiles, onNavigate]

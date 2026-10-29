@@ -1,14 +1,12 @@
 import React, { useEffect } from "react";
 import { toast } from "sonner";
-import { COMMAND_IDS } from "@/common/commandIds";
+import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from "@/common/commandIds";
 import { parentFsPath } from "@/common/fsPaths";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
-  browseCollection,
   browseFiles,
   browseRecent,
   focusFile,
-  RECENT_COLLECTION,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import {
@@ -25,11 +23,14 @@ import { usePaletteStore } from "../store/paletteStore";
 
 export const PALETTE_COMMAND_ID = "palette.open";
 
+const tabs = () => useTabsStore.getState();
+
 /**
  * Registers every application command once and owns the palette shortcuts.
  * Lives inside the theme and shell providers so commands can navigate and
  * change the theme; the menu in main learns the same list through
- * `reportCommands`, so the two can never disagree.
+ * `reportCommands`, so the two can never disagree. Tab and history keys are
+ * menu accelerators, which fire even while the editor has focus.
  */
 export const AppCommands: React.FC = () => {
   const { navigateFiles, navigateTo } = useShell();
@@ -84,6 +85,22 @@ export const AppCommands: React.FC = () => {
         perform: () => navigateFiles(browseRecent()),
       },
       {
+        id: COMMAND_IDS.back,
+        name: "Back",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+["],
+        keywords: ["history", "previous page"],
+        perform: () => tabs().back(),
+      },
+      {
+        id: COMMAND_IDS.forward,
+        name: "Forward",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+]"],
+        keywords: ["history", "next page"],
+        perform: () => tabs().forward(),
+      },
+      {
         id: COMMAND_IDS.openSettings,
         name: "Settings…",
         type: "navigation",
@@ -102,14 +119,14 @@ export const AppCommands: React.FC = () => {
         },
       },
       {
-        id: "files.newNote",
+        id: COMMAND_IDS.newNote,
         name: "New Note",
         type: "action",
         shortcut: ["CmdOrCtrl+N"],
         keywords: ["create", "markdown", "write"],
         perform: () => {
           // Next to the open page, or at the top of the vault.
-          const opened = selectOpenedPath(useTabsStore.getState());
+          const opened = selectOpenedPath(tabs());
           const folder =
             (opened && parentFsPath(opened)) ??
             useDiskStore.getState().roots[0] ??
@@ -135,16 +152,34 @@ export const AppCommands: React.FC = () => {
         },
       },
       {
-        id: "tabs.reopenClosed",
+        id: COMMAND_IDS.newTab,
+        name: "New Tab",
+        type: "action",
+        shortcut: ["CmdOrCtrl+T"],
+        keywords: ["tab", "open"],
+        perform: () => usePaletteStore.getState().show("", { newTab: true }),
+      },
+      {
+        id: COMMAND_IDS.closeTab,
+        name: "Close Tab",
+        type: "action",
+        shortcut: ["CmdOrCtrl+W"],
+        keywords: ["tab", "close"],
+        perform: () => {
+          // With no tab left, Cmd+W closes the window, as in Safari.
+          const { activeId } = tabs();
+          if (activeId) tabs().close(activeId);
+          else window.systemAPI.closeWindow();
+        },
+      },
+      {
+        id: COMMAND_IDS.reopenClosedTab,
         name: "Reopen Closed Tab",
         type: "action",
         shortcut: ["CmdOrCtrl+Shift+T"],
         keywords: ["tab", "restore", "undo close"],
         perform: () => {
-          const path = useTabsStore.getState().reopenClosed();
-          if (!path) return;
-          const folder = parentFsPath(path);
-          if (folder) navigateFiles(focusFile(folder, path));
+          tabs().reopenClosed();
         },
       },
       {
@@ -152,20 +187,49 @@ export const AppCommands: React.FC = () => {
         name: "Close All Tabs",
         type: "action",
         keywords: ["tab", "close"],
-        perform: () => {
-          useTabsStore.getState().closeAll();
-          navigateFiles(
-            browseCollection(
-              useDiskStore.getState().currentCollection ?? RECENT_COLLECTION,
-            ),
-          );
-        },
+        perform: () => tabs().closeAll(),
+      },
+      {
+        id: COMMAND_IDS.previousTab,
+        name: "Show Previous Tab",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+Shift+[", "Ctrl+Shift+Tab"],
+        keywords: ["tab", "switch", "left"],
+        perform: () => tabs().activatePrevious(),
+      },
+      {
+        id: COMMAND_IDS.nextTab,
+        name: "Show Next Tab",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+Shift+]", "Ctrl+Tab"],
+        keywords: ["tab", "switch", "right"],
+        perform: () => tabs().activateNext(),
+      },
+      ...TAB_POSITION_COMMAND_IDS.map(
+        (id, index): Command => ({
+          id,
+          name: `Show Tab ${index + 1}`,
+          type: "navigation",
+          shortcut: [`CmdOrCtrl+${index + 1}`],
+          keywords: [],
+          hidden: true,
+          perform: () => tabs().activateIndex(index),
+        }),
+      ),
+      {
+        id: COMMAND_IDS.lastTab,
+        name: "Show Last Tab",
+        type: "navigation",
+        shortcut: ["CmdOrCtrl+9"],
+        keywords: [],
+        hidden: true,
+        perform: () => tabs().activateIndex(-1),
       },
       {
         id: COMMAND_IDS.toggleLeftPane,
         name: "Toggle Sidebar",
         type: "paneToggle",
-        shortcut: ["CmdOrCtrl+B"],
+        shortcut: ["CmdOrCtrl+\\"],
         keywords: ["pane", "toggle", "left"],
         perform: toggleSidebar,
       },
@@ -187,6 +251,7 @@ export const AppCommands: React.FC = () => {
         id: command.id,
         label: command.name,
         accelerator: command.shortcut?.[0],
+        aliases: command.shortcut?.slice(1),
       })),
     );
     return () => {

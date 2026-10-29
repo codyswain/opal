@@ -99,15 +99,15 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
   const [moving, setMoving] = useState<string[] | null>(null);
   const directory = collectionDirectory(location.collection);
 
-  // A plain click selects and opens (files take the preview slot, folders open
-  // in place); a modified click only changes the selection, as in Finder.
+  // A plain click selects and opens in the current tab; a modified click only
+  // changes the selection, as in Finder.
   const handleClick = useCallback((event: React.MouseEvent, target: DiskEntry) => {
     const store = useDiskStore.getState();
     if (event.shiftKey) { store.selectRange(entries, target.path); return; }
     if (event.metaKey || event.ctrlKey) { store.toggleSelected(target.path); return; }
     store.select(target.path);
     if (target.isDirectory) navigation.navigateDirectory(target.path);
-    else navigation.previewFile(target.path);
+    else navigation.openFile(target.path);
   }, [entries, navigation]);
 
   /** Right-clicking a row outside the selection moves the selection onto it. */
@@ -159,7 +159,6 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
     else listRef.current?.scrollToItem(index);
   }, [selectedPath, entries, activeMode, columns]);
   const saveScroll = (offset: number) => filesLocationSnapshots.patch(location, {scroll: {view: activeMode === 'list' ? 'details' : 'gallery', offset}});
-  // Double-click pins: a previewed file stays open, a folder simply opens.
   const activate = useCallback(
     (entry: DiskEntry) => entry.isDirectory ? navigation.navigateDirectory(entry.path) : navigation.openFile(entry.path),
     [navigation]

@@ -34,6 +34,11 @@ export function locationDirectory(location: FilesLocation): string | null {
   return collectionDirectory(location.collection);
 }
 
+/** The file or folder a place shows; Recent has none. */
+export function locationPath(location: FilesLocation): string | null {
+  return location.mode === 'focus' ? location.file : collectionDirectory(location.collection);
+}
+
 export function collectionKey(collection: FilesCollection): string {
   if (collection.kind === 'directory') return `directory:${normalizeFsPath(collection.directory)}`;
   return collection.kind;
@@ -62,12 +67,6 @@ export type FilesLocation = FilesBrowseLocation | FilesFocusLocation;
 export interface FilesNavigationIntent {
   location: FilesLocation;
   history: FilesHistoryMutation;
-}
-
-export interface FilesRouterUpdate {
-  pathname: typeof FILES_ROUTE_PATH;
-  search: string;
-  replace: boolean;
 }
 
 function isWithinOneRoot(
@@ -204,43 +203,13 @@ export function focusFile(
   return focusInCollection(directoryCollection(directory), file, history);
 }
 
-export function toFilesRouterUpdate(
-  intent: FilesNavigationIntent
-): FilesRouterUpdate | null {
-  if (intent.history === 'none') return null;
+/** A file shown in a tab. Its collection is the folder that holds it. */
+export function fileLocation(file: string): FilesFocusLocation {
+  const path = normalizeFsPath(file);
   return {
-    pathname: FILES_ROUTE_PATH,
-    search: serializeFilesLocation(intent.location),
-    replace: intent.history === 'replace',
-  };
-}
-
-export interface ResolvedFilesLocation {
-  location: FilesLocation;
-  history: Extract<FilesHistoryMutation, 'replace' | 'none'>;
-}
-
-/** Resolves a URL to a valid canonical location or the first-root fallback. */
-export function resolveFilesLocation(
-  search: string,
-  roots: readonly string[]
-): ResolvedFilesLocation | null {
-  const location = parseFilesLocation(search, roots);
-  if (!location) {
-    const fallback = roots[0] ? normalizeFsPath(roots[0]) : null;
-    return fallback
-      ? {
-          location: { mode: 'browse', collection: directoryCollection(fallback) },
-          history: 'replace',
-        }
-      : null;
-  }
-
-  const canonicalSearch = serializeFilesLocation(location);
-  const suppliedSearch = search.startsWith('?') ? search : `?${search}`;
-  return {
-    location,
-    history: canonicalSearch === suppliedSearch ? 'none' : 'replace',
+    mode: 'focus',
+    collection: directoryCollection(parentFsPath(path) ?? path),
+    file: path,
   };
 }
 

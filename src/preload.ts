@@ -27,7 +27,12 @@ contextBridge.exposeInMainWorld("systemAPI", {
   createDirectoryOnDisk: (dirPath: string) =>
     ipcRenderer.invoke(`system:create-directory-on-disk`, dirPath),
   reportCommands: (
-    commands: Array<{ id: string; label: string; accelerator?: string }>,
+    commands: Array<{
+      id: string;
+      label: string;
+      accelerator?: string;
+      aliases?: string[];
+    }>,
   ) => ipcRenderer.send("menu:commands", commands),
   onMenuCommand: (handler: (commandId: string) => void) => {
     const listener = (_event: IpcRendererEvent, commandId: string) =>
@@ -35,6 +40,7 @@ contextBridge.exposeInMainWorld("systemAPI", {
     ipcRenderer.on("menu:invoke", listener);
     return () => ipcRenderer.removeListener("menu:invoke", listener);
   },
+  closeWindow: () => ipcRenderer.send("system:close-window"),
   isFullScreen: () => ipcRenderer.invoke("system:is-full-screen"),
   onFullScreenChange: (handler: (fullScreen: boolean) => void) => {
     const listener = (_event: IpcRendererEvent, fullScreen: boolean) =>

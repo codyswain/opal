@@ -5,17 +5,15 @@ import {
   browseFiles,
   collectionKey,
   directoryCollection,
+  fileLocation,
   filesLocationKey,
   locationDirectory,
-  focusFile,
   parseFilesLocation,
   remapFilesLocation,
   resolveFilesInteraction,
-  resolveFilesLocation,
   sameCollection,
   serializeFilesLocation,
   stateFromFilesLocation,
-  toFilesRouterUpdate,
 } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import {
   createFilesLocationSnapshotStore,
@@ -72,45 +70,12 @@ describe('files router locations', () => {
     expect(parseFilesLocation(search, [ROOT])).toBeNull();
   });
 
-  it('replaces an invalid location with the first open root', () => {
-    expect(resolveFilesLocation('?mode=browse&dir=%2FOutside', [ROOT])).toEqual(
-      {
-        location: { mode: 'browse', collection: directoryCollection(ROOT)},
-        history: 'replace',
-      }
-    );
-    expect(resolveFilesLocation('', [])).toBeNull();
-  });
-
-  it('marks non-canonical but valid search state for replacement', () => {
-    expect(
-      resolveFilesLocation(`dir=${encodeURIComponent(NOTES)}&mode=browse`, [
-        ROOT,
-      ])
-    ).toEqual({
-      location: { mode: 'browse', collection: directoryCollection(NOTES)},
-      history: 'replace',
+  it('names the folder that holds a file as its location', () => {
+    expect(fileLocation('/Vault/Notes/../Notes/a.md')).toEqual({
+      mode: 'focus',
+      collection: directoryCollection(NOTES),
+      file: '/Vault/Notes/a.md',
     });
-    expect(
-      resolveFilesLocation(
-        serializeFilesLocation({ mode: 'browse', collection: directoryCollection(NOTES)}),
-        [ROOT]
-      )?.history
-    ).toBe('none');
-  });
-
-  it('turns push and replace intents into router updates, but ignores none', () => {
-    expect(toFilesRouterUpdate(browseFiles(NOTES))).toMatchObject({
-      pathname: '/files',
-      replace: false,
-    });
-    expect(toFilesRouterUpdate(focusFile(NOTES, FILE, 'replace'))).toMatchObject(
-      {
-        pathname: '/files',
-        replace: true,
-      }
-    );
-    expect(toFilesRouterUpdate(browseFiles(NOTES, 'none'))).toBeNull();
   });
 
   it('remaps the active location with replace semantics', () => {
@@ -365,10 +330,9 @@ describe('collections', () => {
     expect(remapFilesLocation(focus, '/Vault/Old', '/Vault/New')).toEqual({ location: { ...focus, file: '/Vault/New/a.md' }, history: 'replace' });
     expect(remapFilesLocation({ mode: 'browse', collection: RECENT_COLLECTION }, '/Vault/Old', '/Vault/New').history).toBe('none');
   });
-  it('treats retired query and view collection URLs as invalid and falls back to the first root', () => {
+  it('treats retired query and view collection URLs as invalid', () => {
     expect(parseFilesLocation('?mode=browse&collection=query&id=q1', roots)).toBeNull();
     expect(parseFilesLocation('?mode=browse&collection=view&id=v1', roots)).toBeNull();
-    expect(resolveFilesLocation('?mode=browse&collection=view&id=v1', roots)?.location).toEqual(browseFiles(ROOT).location);
   });
 
   it('exposes directory helpers', () => {

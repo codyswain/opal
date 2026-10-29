@@ -2,11 +2,13 @@ import * as React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryRouter, useRoutes } from 'react-router-dom';
+import { MemoryRouter, useNavigationType, useRoutes, type RouteObject } from 'react-router-dom';
 import {
   browseFiles,
+  fileLocation,
   focusFile,
 } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import {
   DEFAULT_SHELL_PREFERENCES,
   SHELL_LIMITS,
@@ -15,45 +17,18 @@ import {
   sanitizeShellPreferences,
   useShell,
   useShellStore,
-  type ShellRouteObject,
-  type ShellRouteDescriptor,
 } from '@/renderer/features/shell';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
+import { resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
-const FILES_ROUTE: ShellRouteDescriptor = {
-  id: 'files',
-  header: {
-    title: 'Files',
-    breadcrumbs: [{ id: 'vault', label: 'Vault' }],
-    actions: <button type="button">New folder</button>,
-  },
-};
-
-const SETTINGS_ROUTE: ShellRouteDescriptor = {
-  id: 'settings',
-  header: { title: 'Settings' },
-};
-
-const FALLBACK_ROUTE: ShellRouteDescriptor = {
-  id: 'unknown',
-  header: { title: 'Opal' },
-};
-
-const SHELL_ROUTES: ShellRouteObject[] = [
-  {
-    path: '/files',
-    element: <div data-testid="route-content">Files route</div>,
-    handle: { shell: FILES_ROUTE },
-  },
-  {
-    path: '/settings',
-    element: <div data-testid="route-content">Settings route</div>,
-    handle: { shell: SETTINGS_ROUTE },
-  },
+const SHELL_ROUTES: RouteObject[] = [
+  { path: '/files', element: <div data-testid="route-content">Files route</div> },
+  { path: '/other', element: <div data-testid="route-content">Other route</div> },
 ];
 
 beforeEach(() => {
   window.localStorage.clear();
+  resetTabs();
   useShellStore.setState({
     ...DEFAULT_SHELL_PREFERENCES,
     narrowLayout: false,
@@ -176,46 +151,34 @@ describe('shell preferences', () => {
 
 function ShellConsumer() {
   const shell = useShell();
+  const navigationType = useNavigationType();
   return (
     <>
-      <output data-testid="route-id">{shell.route.id}</output>
-      <output data-testid="route-title">{shell.route.header.title}</output>
       <output data-testid="router-location">
         {shell.location.pathname}
         {shell.location.search}
       </output>
-      <button type="button" onClick={() => shell.navigateTo('/settings')}>
-        Settings
+      <output data-testid="navigation-type">{navigationType}</output>
+      <button type="button" onClick={() => shell.navigateTo('/other')}>
+        Other
       </button>
-      <button type="button" onClick={shell.goBack}>
-        Back
-      </button>
-      <button type="button" onClick={shell.goForward}>
-        Forward
-      </button>
-      <button
-        type="button"
-        onClick={() => shell.navigateFiles(browseFiles('/Vault'))}
-      >
+      <button type="button" onClick={() => shell.navigateFiles(browseFiles('/Vault'))}>
         Browse vault
       </button>
       <button
         type="button"
-        onClick={() =>
-          shell.navigateFiles(browseFiles('/Ignored', 'none'))
-        }
+        onClick={() => shell.navigateFiles(focusFile('/Vault', '/Vault/note.md'), { newTab: true })}
       >
+        Note in a new tab
+      </button>
+      <button type="button" onClick={() => shell.navigateFiles(browseFiles('/Ignored', 'none'))}>
         No route change
       </button>
       <button
         type="button"
-        onClick={() =>
-          shell.navigateFiles(
-            focusFile('/Vault', '/Vault/note.md', 'replace')
-          )
-        }
+        onClick={() => shell.navigateFiles(focusFile('/Vault', '/Vault/note.md', 'replace'))}
       >
-        Replace with focused file
+        Replace with note
       </button>
     </>
   );
@@ -234,100 +197,59 @@ function RouteContent() {
   return useRoutes(SHELL_ROUTES);
 }
 
-function DescriptorHarness() {
-  return (
-    <ShellProvider routes={SHELL_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
-      <StableShellProbe />
-      <RouteContent />
-    </ShellProvider>
+function renderShell(initialEntry: string) {
+  return render(
+    <MemoryRouter
+      initialEntries={[initialEntry]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <ShellProvider>
+        <StableShellProbe />
+        <RouteContent />
+      </ShellProvider>
+    </MemoryRouter>
   );
 }
 
-describe('shell route contract', () => {
-  it('updates declarative route chrome with the live router location', async () => {
+describe('shell navigation contract', () => {
+  it('keeps one shell mounted while the route changes', async () => {
     const user = userEvent.setup();
     shellMounts = 0;
-    render(
-      <MemoryRouter
-        initialEntries={['/files']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <DescriptorHarness />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByTestId('route-id')).toHaveTextContent('files');
-    await user.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByTestId('route-id')).toHaveTextContent('settings');
-    expect(screen.getByTestId('route-title')).toHaveTextContent('Settings');
-    expect(screen.getByTestId('router-location')).toHaveTextContent('/settings');
-    expect(screen.getByTestId('route-content')).toHaveTextContent(
-      'Settings route'
-    );
+    renderShell('/files');
+    await user.click(screen.getByRole('button', { name: 'Other' }));
+    expect(screen.getByTestId('router-location')).toHaveTextContent('/other');
+    expect(screen.getByTestId('route-content')).toHaveTextContent('Other route');
     expect(shellMounts).toBe(1);
   });
 
-  it('uses React Router for top-level Back and Forward', async () => {
+  it('opens files intents in the active tab, or a new one, and ignores none', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter
-        initialEntries={['/files']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <DescriptorHarness />
-      </MemoryRouter>
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByTestId('router-location')).toHaveTextContent('/files');
-    await user.click(screen.getByRole('button', { name: 'Forward' }));
-    expect(screen.getByTestId('router-location')).toHaveTextContent('/settings');
+    renderShell('/files');
+    await user.click(screen.getByRole('button', { name: 'Browse vault' }));
+    await user.click(screen.getByRole('button', { name: 'Note in a new tab' }));
+    await user.click(screen.getByRole('button', { name: 'No route change' }));
+    expect(tabPaths()).toEqual([null, '/Vault/note.md']);
+    // On the files route the route itself mirrors the tab into the URL.
+    expect(screen.getByTestId('router-location')).toHaveTextContent(/^\/files$/);
   });
 
-  it('adapts Task 3 files intents into the same router history', async () => {
+  it('swaps the shown entry for a replace intent instead of adding a step', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter
-        initialEntries={['/settings']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <DescriptorHarness />
-      </MemoryRouter>
-    );
+    renderShell('/files');
+    await user.click(screen.getByRole('button', { name: 'Browse vault' }));
+    await user.click(screen.getByRole('button', { name: 'Replace with note' }));
+    expect(useTabsStore.getState().tabs[0].history).toEqual([
+      { location: fileLocation('/Vault/note.md') },
+    ]);
+  });
 
+  it('goes to the files route when an intent comes from another route, without a history step', async () => {
+    const user = userEvent.setup();
+    renderShell('/other');
     await user.click(screen.getByRole('button', { name: 'Browse vault' }));
     expect(screen.getByTestId('router-location')).toHaveTextContent(
       '/files?mode=browse&dir=%2FVault'
     );
-    await user.click(screen.getByRole('button', { name: 'No route change' }));
-    expect(screen.getByTestId('router-location')).toHaveTextContent(
-      '/files?mode=browse&dir=%2FVault'
-    );
-  });
-
-  it('replaces with a Focus location instead of adding history', async () => {
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter
-        initialEntries={[
-          '/settings',
-          '/files?mode=browse&dir=%2FVault',
-        ]}
-        initialIndex={1}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <DescriptorHarness />
-      </MemoryRouter>
-    );
-
-    await user.click(
-      screen.getByRole('button', { name: 'Replace with focused file' })
-    );
-    expect(screen.getByTestId('router-location')).toHaveTextContent(
-      '/files?mode=focus&dir=%2FVault&file=%2FVault%2Fnote.md'
-    );
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByTestId('router-location')).toHaveTextContent('/settings');
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
   });
 });

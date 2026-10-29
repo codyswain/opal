@@ -12,7 +12,7 @@ test("app without a vault launches with the sidebar", async ({
   await expect(page.getByTestId("app-shell")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
   await expect(page.getByRole("button", { name: "Today" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Recent" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Recent" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Library" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Threads" })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.location.hash)).toMatch(/^#\/files/);

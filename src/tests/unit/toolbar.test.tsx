@@ -3,15 +3,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { Toolbar } from '@/renderer/features/disk-explorer/components/Toolbar';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { openedPath, resetTabs } from '@/tests/helpers/tabs';
 
 beforeEach(() => {
   installDiskApi();
   useDiskStore.setState({ pendingAction: null, listings: {} });
-  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null, recentlyClosed: [] });
+  resetTabs();
 });
 
 describe('Toolbar (New menu)', () => {
@@ -30,6 +30,6 @@ describe('Toolbar (New menu)', () => {
     await user.click(screen.getByTestId('toolbar-new'));
     await user.click(await screen.findByTestId('toolbar-new-note'));
     expect(markdown.create).toHaveBeenCalledWith('/V');
-    await vi.waitFor(() => expect(useTabsStore.getState().openedPath).toBe('/V/Untitled.md'));
+    await vi.waitFor(() => expect(openedPath()).toBe('/V/Untitled.md'));
   });
 });

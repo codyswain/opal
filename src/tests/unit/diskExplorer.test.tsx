@@ -1,4 +1,3 @@
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { filesLocationSnapshots } from '@/renderer/features/disk-explorer/navigation/filesLocationSnapshots';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,6 +6,7 @@ import React from 'react';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { DiskExplorer } from '@/renderer/features/disk-explorer/components/DiskExplorer';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
+import { openedPath, resetTabs } from '@/tests/helpers/tabs';
 
 const { toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
@@ -24,7 +24,7 @@ let readDirectory: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   filesLocationSnapshots.clear();
-  useTabsStore.setState({openPaths: [], openedPath: null, activePath: null, previewPath: null});
+  resetTabs();
   toastError.mockClear();
   readDirectory = vi.fn(async (p: string) => ({
     success: true as const,
@@ -127,7 +127,7 @@ describe('DiskExplorer', () => {
     fireEvent.click(await screen.findByTestId('disk-folder-entry-/Vault/Photos/a.jpg'), { metaKey: true });
     fireEvent.keyDown(window, { key: 'ArrowDown', metaKey: true });
 
-    expect(useTabsStore.getState().openedPath).toBe(`${PHOTOS}/a.jpg`);
+    expect(openedPath()).toBe(`${PHOTOS}/a.jpg`);
     expect(screen.getByTestId('files-focus')).toBeInTheDocument();
   });
 

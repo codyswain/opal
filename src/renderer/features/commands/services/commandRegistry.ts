@@ -8,8 +8,11 @@ export interface Command {
   id: string;
   name: string;
   type: CommandType;
+  /** Menu accelerators; the first is shown, the rest are hidden aliases. */
   shortcut?: string[];
   keywords: string[];
+  /** Kept out of the palette, as the Cmd+1 to Cmd+9 tab keys are. */
+  hidden?: boolean;
   perform: () => void;
 }
 

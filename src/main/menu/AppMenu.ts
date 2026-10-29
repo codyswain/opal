@@ -44,10 +44,13 @@ export class AppMenu {
   private toElectronItem(item: MenuTemplateItem): Record<string, unknown> {
     // commandId is internal bookkeeping; Electron would reject the unknown key.
     const { commandId, ...rest } = item;
-    if (!commandId) return { ...rest };
+    // A hidden item exists for its accelerator, which macOS must still honor.
+    const hidden = item.visible === false ? { acceleratorWorksWhenHidden: true } : {};
+    if (!commandId) return { ...rest, ...hidden };
 
     return {
       ...rest,
+      ...hidden,
       click: () => this.deps.send(commandId),
     };
   }

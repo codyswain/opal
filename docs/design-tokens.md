@@ -125,6 +125,14 @@ both classes.
 Sidebar and tree rows are 28 px tall with a 6 px radius and 2 px between rows.
 The tree indents 16 px per level; a folder's chevron sits where a nav icon
 does, so top-level labels line up with Today and Recent.
+
+The page column's top row is one `h-header` row: tab pills, New tab, and a
+200 px search field. Pills are `h-control-compact` with `rounded-control`,
+96 to 200 px wide, `text-ui`; the active pill is `bg-surface-lift` with
+`shadow-control` at weight 510, the others take `bg-surface-hover` on hover.
+Same-name tabs add their folder in `text-foreground-tertiary`. The search
+field is `bg-surface-hover` and stays centred in the row until the tabs need
+the room.
 Rows and controls may use the compact or default value, but features must not
 invent their own density scale.
 

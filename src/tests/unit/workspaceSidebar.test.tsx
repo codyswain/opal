@@ -7,11 +7,11 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings";
+import { fileLocation } from "@/renderer/features/disk-explorer/navigation/filesLocation";
 import {
   ShellProvider,
   WorkspaceSidebar,
   useShellStore,
-  type ShellRouteObject,
 } from "@/renderer/features/shell";
 import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/ui";
@@ -19,25 +19,13 @@ import { entry, installDiskApi } from "@/tests/helpers/diskApi";
 import { installActivityApi } from "@/tests/helpers/activityApi";
 import { installCollectionsApi } from "@/tests/helpers/collectionsApi";
 import { localDate } from "@/common/vaultModel";
+import { openTabs, resetTabs, tabPaths } from "@/tests/helpers/tabs";
 
 const ROOT = "/Vault";
 const DESIGN = "/Vault/Design";
 const ROOT_ENTRIES = [
   entry({ path: DESIGN, name: "Design", kind: "directory", isDirectory: true }),
   entry({ path: "/Vault/readme.md", name: "readme.md", kind: "markdown" }),
-];
-
-const ROUTES: ShellRouteObject[] = [
-  {
-    path: "/files",
-    element: null,
-    handle: { shell: { id: "files", header: { title: "Files" } } },
-  },
-  {
-    path: "/",
-    element: null,
-    handle: { shell: { id: "opal", header: { title: "Opal" } } },
-  },
 ];
 
 function LocationProbe() {
@@ -58,10 +46,7 @@ function renderSidebar(withFiles = false, initialPath = "/files") {
     >
       <ThemeProvider>
         <TooltipProvider>
-          <ShellProvider
-            routes={ROUTES}
-            fallbackRoute={{ id: "opal", header: { title: "Opal" } }}
-          >
+          <ShellProvider>
             <div className="h-[600px] w-[220px]">
               <WorkspaceSidebar />
             </div>
@@ -88,7 +73,7 @@ beforeEach(() => {
       data: { path, entries: path === ROOT ? ROOT_ENTRIES : [] },
     })),
   });
-  useTabsStore.setState({ openPaths: [], openedPath: null, activePath: null, previewPath: null });
+  resetTabs();
   useDiskStore.setState({
     roots: [],
     listings: {},
@@ -113,12 +98,19 @@ describe("WorkspaceSidebar", () => {
     renderSidebar(false, "/");
     await user.click(screen.getByRole("button", { name: "Today" }));
     const today = localDate();
+    const log = `${ROOT}/Inbox/Logs/${today}.md`;
     expect(createDay).toHaveBeenCalledWith(ROOT, today);
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
-        `file=${encodeURIComponent(`${ROOT}/Inbox/Logs/${today}.md`)}`,
+        `file=${encodeURIComponent(log)}`,
       ),
     );
+
+    // Cmd+click opens Today in a new tab instead.
+    await user.keyboard("{Meta>}");
+    await user.click(screen.getByRole("button", { name: "Today" }));
+    await user.keyboard("{/Meta}");
+    await waitFor(() => expect(tabPaths()).toEqual([log, log]));
   });
 
   it("opens the Settings dialog from the gear", async () => {
@@ -133,11 +125,11 @@ describe("WorkspaceSidebar", () => {
   it("marks Today active while today's log is open", () => {
     const log = `${ROOT}/Inbox/Logs/${localDate()}.md`;
     useDiskStore.setState({ roots: [ROOT] });
-    useTabsStore.setState({ openPaths: [log], openedPath: log, activePath: log });
+    openTabs([log]);
     renderSidebar();
     expect(screen.getByRole("button", { name: "Today" })).toHaveClass("bg-surface-selected");
 
-    act(() => useTabsStore.setState({ openedPath: `${ROOT}/readme.md`, openPaths: [`${ROOT}/readme.md`] }));
+    act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
     expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
   });
 
@@ -149,7 +141,7 @@ describe("WorkspaceSidebar", () => {
     renderSidebar(false, "/");
 
     expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Recent" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recent" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Library" })).toBeNull();
     expect(screen.queryByText("Open folders")).toBeNull();
     expect(screen.queryByRole("button", { name: /workspace folder/i })).toBeNull();
@@ -165,7 +157,7 @@ describe("WorkspaceSidebar", () => {
     render(
       <MemoryRouter initialEntries={["/files"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <TooltipProvider>
-          <ShellProvider routes={ROUTES} fallbackRoute={{ id: "opal", header: { title: "Opal" } }}>
+          <ShellProvider>
             <WorkspaceSidebar onToggleSidebar={onToggleSidebar} />
           </ShellProvider>
         </TooltipProvider>
@@ -189,7 +181,7 @@ describe("WorkspaceSidebar", () => {
     await waitFor(() =>
       expect(useDiskStore.getState().currentDirectory).toBe(ROOT),
     );
-    const recent = screen.getByRole("link", { name: "Recent" });
+    const recent = screen.getByRole("button", { name: "Recent" });
     expect(recent).not.toHaveClass("bg-surface-selected");
 
     await user.click(recent);
@@ -203,5 +195,9 @@ describe("WorkspaceSidebar", () => {
     );
     expect(recent).toHaveClass("bg-surface-selected");
     expect(window.activityAPI.record).not.toHaveBeenCalled();
+
+    // Opening a page from Recent leaves Recent one Back step away.
+    act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
+    expect(recent).not.toHaveClass("bg-surface-selected");
   });
 });

@@ -2,44 +2,25 @@ import * as React from 'react';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, useNavigate, useRoutes } from 'react-router-dom';
+import { MemoryRouter, useNavigate, useRoutes, type RouteObject } from 'react-router-dom';
+import { usePaletteStore } from '@/renderer/features/commands/store/paletteStore';
+import { fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import {
   AppShell,
   DEFAULT_SHELL_PREFERENCES,
   ShellProvider,
   useShellStore,
-  type ShellRouteDescriptor,
-  type ShellRouteObject,
 } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { installDiskApi } from '@/tests/helpers/diskApi';
+import { openTabs, openedPath, resetTabs } from '@/tests/helpers/tabs';
 
-const FILES: ShellRouteDescriptor = {
-  id: 'files',
-  header: {
-    title: 'Files',
-    actions: <button type="button">New item</button>,
-  },
-};
-
-const OTHER: ShellRouteDescriptor = {
-  id: 'other',
-  header: { title: 'Other' },
-};
-
-const ROUTES: ShellRouteObject[] = [
-  {
-    path: '/files',
-    element: <div>Files content</div>,
-    handle: { shell: FILES },
-  },
-  {
-    path: '/other',
-    element: <div>Other content</div>,
-    handle: { shell: OTHER },
-  },
+const ROUTES: RouteObject[] = [
+  { path: '/files', element: <div>Files content</div> },
+  { path: '/other', element: <div>Other content</div> },
 ];
 
 function RouteContent() {
@@ -66,7 +47,7 @@ function renderShell(initialEntries = ['/files']) {
     >
       <ThemeProvider>
         <TooltipProvider>
-          <ShellProvider routes={ROUTES} fallbackRoute={FILES}>
+          <ShellProvider>
             <NativeRouteControl />
             <AppShell>
               <RouteContent />
@@ -89,6 +70,8 @@ beforeEach(() => {
   window.localStorage.clear();
   setViewportWidth(1440);
   installDiskApi();
+  resetTabs();
+  usePaletteStore.setState({ open: false });
   useShellStore.setState({
     ...DEFAULT_SHELL_PREFERENCES,
     narrowLayout: false,
@@ -107,40 +90,69 @@ beforeEach(() => {
 });
 
 describe('AppShell', () => {
-  it('keeps one frame mounted while route content and context change', async () => {
+  it('keeps one frame mounted while route content changes', async () => {
     renderShell(['/files']);
     const shell = screen.getByTestId('app-shell');
 
     expect(shell).toHaveAttribute('data-layout', 'wide');
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByText('Files content')).toBeInTheDocument();
 
     act(() => screen.getByTestId('native-route-command').click());
 
     expect(screen.getByTestId('app-shell')).toBe(shell);
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Other' })).toBeInTheDocument();
     expect(screen.getByText('Other content')).toBeInTheDocument();
+  });
+
+  it('holds the tabs, New tab and the search field in one row with no title or breadcrumb', async () => {
+    const user = userEvent.setup();
+    openTabs(['/Vault/brief.md', '/Vault/plan.md']);
+    renderShell();
+    const titlebar = screen.getByTestId('titlebar');
+
+    expect(titlebar).toHaveClass('drag-handle', 'h-header');
+    expect(within(titlebar).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['brief', 'plan']);
+    expect(within(titlebar).getByRole('button', { name: 'New tab' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+
+    await user.click(within(titlebar).getByRole('button', { name: 'Search' }));
+    expect(usePaletteStore.getState()).toMatchObject({ open: true, newTab: false });
   });
 
   it('keeps Back and Forward in the sidebar, or in the titlebar when the sidebar is hidden', async () => {
     const user = userEvent.setup();
+    installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })) });
+    openTabs(['/Vault/brief.md']);
+    act(() => useTabsStore.getState().open(fileLocation('/Vault/plan.md')));
     renderShell(['/files']);
-    act(() => screen.getByTestId('native-route-command').click());
+    await waitFor(() => expect(useDiskStore.getState().roots).toEqual(['/Vault']));
 
     const sidebar = screen.getByTestId('workspace-sidebar');
     expect(within(screen.getByTestId('titlebar')).queryByRole('button', { name: 'Go back' })).toBeNull();
+    expect(within(sidebar).getByRole('button', { name: 'Go forward' })).toBeDisabled();
     await user.click(within(sidebar).getByRole('button', { name: 'Go back' }));
-    expect(screen.getByText('Files content')).toBeInTheDocument();
+    expect(openedPath()).toBe('/Vault/brief.md');
+    expect(within(sidebar).getByRole('button', { name: 'Go back' })).toBeDisabled();
     await user.click(within(sidebar).getByRole('button', { name: 'Go forward' }));
-    expect(screen.getByText('Other content')).toBeInTheDocument();
+    expect(openedPath()).toBe('/Vault/plan.md');
 
     await user.click(within(sidebar).getByRole('button', { name: 'Hide sidebar' }));
     const titlebar = screen.getByTestId('titlebar');
     await user.click(within(titlebar).getByRole('button', { name: 'Go back' }));
-    expect(screen.getByText('Files content')).toBeInTheDocument();
+    expect(openedPath()).toBe('/Vault/brief.md');
     expect(within(titlebar).getByRole('button', { name: 'Show sidebar' })).toBeInTheDocument();
+  });
+
+  it('names the window after the active page', () => {
+    openTabs(['/Vault/Inbox/Logs/2026-10-28.md', '/Vault/photo.png']);
+    renderShell();
+    expect(document.title).toBe('2026-10-28');
+    act(() => useTabsStore.getState().activateNext());
+    expect(document.title).toBe('photo.png');
+    act(() => useTabsStore.getState().closeAll());
+    expect(document.title).toBe('Opal');
   });
 
   it('drops the traffic-light inset in full screen', async () => {
@@ -232,7 +244,7 @@ describe('AppShell', () => {
     expect(useShellStore.getState().sidebarWidth).toBe(232);
   });
 
-  it('starts narrow with an off-canvas sidebar and overflows page actions', async () => {
+  it('starts narrow with an off-canvas sidebar and a folded search field', async () => {
     const user = userEvent.setup();
     setViewportWidth(640);
     renderShell();
@@ -242,16 +254,12 @@ describe('AppShell', () => {
       'narrow'
     );
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'New item' })).toBeNull();
+    expect(within(screen.getByTestId('titlebar')).getByRole('button', { name: 'Search' })).toHaveTextContent('');
 
     act(() => useShellStore.getState().toggleSidebar());
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
     act(() => useShellStore.getState().toggleSidebar());
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Page actions' }));
-    expect(screen.getByRole('button', { name: 'New item' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
 
     await user.click(
       screen.getByRole('button', { name: 'Show sidebar' })
@@ -280,7 +288,7 @@ describe('AppShell', () => {
     await user.click(
       screen.getByRole('button', { name: 'Show sidebar' })
     );
-    await user.click(screen.getByRole('link', { name: 'Recent' }));
+    await user.click(screen.getByRole('button', { name: 'Recent' }));
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
     expect(screen.getByText('Files content')).toBeInTheDocument();
     await waitFor(() =>
