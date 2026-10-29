@@ -9,6 +9,25 @@ export interface MarkdownDocument {
   properties: number;
 }
 
+/** One frontmatter key and its value as text: one entry for a single value, one per item for a list, none when empty. */
+export interface PageProperty {
+  key: string;
+  values: string[];
+}
+
+/** What a page's properties block shows: its frontmatter, then facts about its file. */
+export interface MarkdownProperties {
+  path: string;
+  /** The path below the opened folder that holds the file, such as "Library/daily/2026-10-28.md". */
+  relativePath: string;
+  properties: PageProperty[];
+  /** When the file was created, or null where the file system does not record it. */
+  createdMs: number | null;
+  modifiedMs: number;
+  /** Bytes on disk, frontmatter included. */
+  size: number;
+}
+
 export interface MarkdownWriteResult {
   revision: string;
 }

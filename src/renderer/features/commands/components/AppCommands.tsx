@@ -10,6 +10,10 @@ import {
 import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import {
+  togglePageProperties,
+  usePagePropertiesStore,
+} from "@/renderer/features/disk-explorer/store/pagePropertiesStore";
+import {
   selectOpenedPath,
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
@@ -33,6 +37,8 @@ const tabs = () => useTabsStore.getState();
 export const AppCommands: React.FC = () => {
   const { navigateFiles } = useShell();
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
+  // The menu item reads Show Properties or Hide Properties, so the list is reported again when it flips.
+  const propertiesOpen = usePagePropertiesStore((state) => state.open);
 
   useEffect(() => {
     const commands: Command[] = [
@@ -219,6 +225,14 @@ export const AppCommands: React.FC = () => {
         keywords: ["pane", "toggle", "right", "day", "log", "chats", "recordings", "digest"],
         perform: () => toggleDaySidebar(),
       },
+      {
+        id: COMMAND_IDS.toggleProperties,
+        name: propertiesOpen ? "Hide Properties" : "Show Properties",
+        type: "action",
+        shortcut: ["CmdOrCtrl+Shift+I"],
+        keywords: ["properties", "frontmatter", "metadata", "file", "info", "path", "created", "modified", "size"],
+        perform: togglePageProperties,
+      },
     ];
     commands.forEach((command) => commandRegistry.registerCommand(command));
     // Tell main what exists, so the menu and the palette can never disagree.
@@ -233,7 +247,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   useEffect(() => {

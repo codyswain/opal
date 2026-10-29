@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
 import { linkMarkStyle, livePreview } from './livePreview';
+import { pageProperties } from './pageProperties';
 import { pageContext, wikiLinkSyntax, wikiLinks } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -84,6 +85,7 @@ export function markdownEditorExtensions(path: string, openNote: (path: string) 
     syntaxHighlighting(highlight),
     wikiLinks,
     livePreview,
+    pageProperties,
     search({ top: true }),
     keymap.of([
       { key: 'Mod-b', run: toggleMarker('**') },

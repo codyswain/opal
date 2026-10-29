@@ -93,6 +93,79 @@
   overflow-wrap: break-word;
 }
 
+/* The properties block under the title: the frontmatter, a hairline, then
+   facts about the file, in the interface's small sans. The frame keeps the
+   space below with padding; the block moves up into the title's own
+   padding, which the frame contains. */
+.opal-editor .cm-editor .cm-md-properties {
+  display: flow-root;
+  padding-bottom: 24px;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: 12px;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  cursor: default;
+}
+
+.opal-editor .cm-editor .cm-md-properties-block {
+  margin-top: -4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--editor-rule);
+  outline: none;
+}
+
+.opal-editor .cm-editor .cm-md-properties-block:focus-visible {
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-editor .cm-editor .cm-md-properties-list {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  column-gap: 12px;
+  margin: 0;
+}
+
+.opal-editor .cm-editor .cm-md-properties-list + .cm-md-properties-file {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--editor-rule);
+}
+
+.opal-editor .cm-editor .cm-md-properties dt {
+  overflow: hidden;
+  color: var(--editor-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-md-properties dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.opal-editor .cm-editor .cm-md-properties .cm-md-properties-empty {
+  color: var(--editor-muted);
+}
+
+.opal-editor .cm-editor .cm-md-properties-link {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary) / 0.55);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-md-properties-link:hover {
+  text-decoration-color: hsl(var(--foreground));
+}
+
 .opal-editor .cm-editor .cm-md-h1 { padding-top: 0.45em; font-size: 1.8em; }
 .opal-editor .cm-editor .cm-md-h2 { padding-top: 0.4em; font-size: 1.5em; }
 .opal-editor .cm-editor .cm-md-h3 { padding-top: 0.3em; font-size: 1.25em; }

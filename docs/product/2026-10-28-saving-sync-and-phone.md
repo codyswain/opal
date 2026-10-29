@@ -72,7 +72,7 @@ on. Opal takes a snapshot before writing it.
 
 Rules by kind of file:
 
-- **`Library/logs/*.md`.** Union merge: keep every added line, drop exact repeats and sort by HH:MM. The daily page in `Library/daily/` is a separate file with no union merge, so log lines and prose never merge together. Until the cleanup commit, the same rule covers the Activity Log of `Inbox/Logs/*.md`. When two machines create the same day, merge against `~/code/vault/Archive/Journal/Template.md`, not an empty file. I replayed all 31 real log merges since Sep 1 with this rule: 0 lines lost and 0 out of order. Today's union merge put 45 pairs out of order.
+- **`Library/logs/*.md`.** Union merge: keep every added line, drop exact repeats and sort by HH:MM. The daily page in `Library/daily/` is a separate file with no union merge, so log lines and prose never merge together. Until the cleanup commit, the same rule covers the Activity Log of `Inbox/Logs/*.md`, and when two machines create the same old daily file, it merges against `~/code/vault/Archive/Journal/Template.md`, not an empty file. I replayed all 31 real log merges since Sep 1 with this rule: 0 lines lost and 0 out of order. Today's union merge put 45 pairs out of order.
 - **`Library/chats/` and `Library/recordings/`.** One machine owns each file, so the newer side wins with no callout, and history keeps the older one. A callout would stop Pocket from updating the note (`pocket_sync.py:306-309` checks `sync_hash`).
 - **Everything else.** Three-way line merge, with a callout on overlap.
 

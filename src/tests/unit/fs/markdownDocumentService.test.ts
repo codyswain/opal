@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, utimes, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { IpcMain } from 'electron';
@@ -69,6 +69,57 @@ describe('MarkdownDocumentService', () => {
     expect(await readFile(item('typed.md'), 'utf8')).toBe('---\nSome notes!\n---\nBody');
     await writeFile(item('empty.md'), '---\n---\nBody');
     expect(await service.read(item('empty.md'))).toMatchObject({ body: 'Body', properties: 0 });
+  });
+
+  it('gives the properties block the frontmatter as text and the file facts from fs.stat', async () => {
+    const daily = path.join(root, 'Library', 'daily', '2026-10-28.md');
+    await mkdir(path.dirname(daily), { recursive: true });
+    const text = [
+      '---',
+      'date: 2026-10-28',
+      'tags:',
+      '  - daily',
+      '  - kigali',
+      'duration_min: 27',
+      'gemini_notes: true',
+      'summary:',
+      'thread: "[[Library/chats/opal-status]]"',
+      'base: &where { site: SF }',
+      'again: *where',
+      '---',
+      '',
+    ].join('\n');
+    await writeFile(daily, text);
+    const modified = new Date(2026, 9, 28, 6, 38);
+    await utimes(daily, modified, modified);
+    const facts = await service.properties(daily);
+    const info = await stat(daily);
+    expect(facts).toEqual({
+      path: daily,
+      relativePath: 'Library/daily/2026-10-28.md',
+      properties: [
+        { key: 'date', values: ['2026-10-28'] },
+        { key: 'tags', values: ['daily', 'kigali'] },
+        { key: 'duration_min', values: ['27'] },
+        { key: 'gemini_notes', values: ['true'] },
+        { key: 'summary', values: [] },
+        { key: 'thread', values: ['[[Library/chats/opal-status]]'] },
+        { key: 'base', values: ['{"site":"SF"}'] },
+        { key: 'again', values: ['{"site":"SF"}'] },
+      ],
+      createdMs: info.birthtimeMs,
+      modifiedMs: modified.getTime(),
+      size: Buffer.byteLength(text),
+    });
+    expect(facts.createdMs).toBeGreaterThan(0);
+    // The count the page shows agrees with the list.
+    expect((await service.read(daily)).properties).toBe(facts.properties.length);
+    // A file without properties still has its facts; one whose block is not a map has no properties.
+    await writeFile(item('plain.md'), 'Just text');
+    expect(await service.properties(item('plain.md'))).toMatchObject({ relativePath: 'plain.md', properties: [], size: 9 });
+    await writeFile(item('list.md'), '---\n- not\n- a map\n---\nBody');
+    expect((await service.properties(item('list.md'))).properties).toEqual([]);
+    await expect(service.properties(path.join(tmp, 'outside.md'))).rejects.toThrow(/not inside/i);
   });
 
   it('refuses a stale revision without touching the file', async () => {
@@ -149,11 +200,14 @@ describe('MarkdownHandlers', () => {
       if (!handler) throw new Error(`Missing ${channel}`);
       return handler({}, ...args);
     };
-    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:read', 'markdown:resolve-links', 'markdown:save-copy', 'markdown:write']);
+    expect([...handlers.keys()].sort()).toEqual(['markdown:create', 'markdown:properties', 'markdown:read', 'markdown:resolve-links', 'markdown:save-copy', 'markdown:write']);
     await writeFile(item('note.md'), '# one\n');
     const read = await invoke('markdown:read', item('note.md')) as { success: true; data: { revision: string } };
     expect(read.success).toBe(true);
     expect(await invoke('markdown:read', '')).toMatchObject({ success: false, error: /Invalid/ });
+    expect(await invoke('markdown:properties', item('note.md'))).toMatchObject({ success: true, data: { relativePath: 'note.md', properties: [], size: 6 } });
+    expect(await invoke('markdown:properties', 42)).toMatchObject({ success: false, error: /Invalid/ });
+    expect(await invoke('markdown:properties', path.join(tmp, 'outside.md'))).toMatchObject({ success: false, error: /not inside/ });
     expect(await invoke('markdown:write', item('note.md'), 42, read.data.revision)).toMatchObject({ success: false });
     await writeFile(item('note.md'), '# external\n');
     expect(await invoke('markdown:write', item('note.md'), '# mine\n', read.data.revision)).toEqual({ success: false, error: expect.stringMatching(/changed on disk/), conflict: true });

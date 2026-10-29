@@ -122,6 +122,8 @@ ipcRenderer.on("markdown:flush", (_event, requestId: number) => {
 
 contextBridge.exposeInMainWorld("markdownAPI", {
   read: (target: string) => ipcRenderer.invoke("markdown:read", target),
+  properties: (target: string) =>
+    ipcRenderer.invoke("markdown:properties", target),
   write: (target: string, body: string, expectedRevision: string) =>
     ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
   create: (parentDir: string, baseName?: string) =>

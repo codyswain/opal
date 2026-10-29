@@ -2,15 +2,23 @@ import { createHash, randomUUID } from 'crypto';
 import { constants } from 'fs';
 import { appendFile, lstat, mkdir, open, rename, stat, unlink, writeFile, type FileHandle } from 'fs/promises';
 import path from 'path';
-import { isMap, parseDocument } from 'yaml';
+import { isMap, isNode, parseDocument, type Document } from 'yaml';
 import { classifyFile } from '@/common/fileKind';
+import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import type { ActivityRecorder } from '@/main/activity/ActivityService';
 import type { RootRegistry } from './RootRegistry';
 import { MetadataError, assertNoSymlinks, splitMarkdown } from './MetadataCodec';
 import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import type { MetadataService } from './MetadataService';
 import { normalizePath } from './paths';
-import { MARKDOWN_DOCUMENT_LIMIT, type MarkdownCopyLabel, type MarkdownDocument, type MarkdownWriteResult } from '@/types/markdown';
+import {
+  MARKDOWN_DOCUMENT_LIMIT,
+  type MarkdownCopyLabel,
+  type MarkdownDocument,
+  type MarkdownProperties,
+  type MarkdownWriteResult,
+  type PageProperty,
+} from '@/types/markdown';
 
 /** Safe, user-facing errors; the IPC layer may show these messages verbatim. */
 export class MarkdownError extends Error {
@@ -42,6 +50,8 @@ export interface ParsedMarkdown {
   hasFrontmatter: boolean;
   /** Top-level frontmatter keys, which Obsidian calls properties. */
   properties: number;
+  /** The same keys with their values as text, for the properties block. */
+  frontmatter: PageProperty[];
 }
 
 interface LoadedFile extends ParsedMarkdown {
@@ -75,6 +85,21 @@ export class MarkdownDocumentService {
       revision: loaded.revision,
       size: loaded.bytes.length,
       properties: loaded.properties,
+    };
+  }
+
+  /** The page's frontmatter as text and its file's path, times and size, for the properties block. */
+  async properties(target: string): Promise<MarkdownProperties> {
+    const loaded = await this.load(target);
+    const info = await stat(loaded.resolved);
+    return {
+      path: loaded.resolved,
+      relativePath: this.relativePath(loaded.resolved),
+      properties: loaded.frontmatter,
+      // Some file systems report no creation time; Node gives 0 for it.
+      createdMs: info.birthtimeMs > 0 ? info.birthtimeMs : null,
+      modifiedMs: info.mtimeMs,
+      size: info.size,
     };
   }
 
@@ -144,6 +169,14 @@ export class MarkdownDocumentService {
     });
   }
 
+  /** The path below the innermost opened folder that holds `resolved`. */
+  private relativePath(resolved: string): string {
+    const root = this.deps.registry.list()
+      .filter((candidate) => isFsPathAtOrBelow(candidate, resolved))
+      .sort((a, b) => b.length - a.length)[0];
+    return root ? path.relative(root, resolved).split(path.sep).join('/') : resolved;
+  }
+
   private async load(target: string): Promise<LoadedFile> {
     const resolved = await assertNoSymlinks(this.deps.registry, target);
     const info = await lstat(resolved);
@@ -203,10 +236,10 @@ export function parseMarkdown(bytes: Buffer): ParsedMarkdown {
     // An unclosed or oversized frontmatter block is edited as ordinary text.
     split = { raw: '', bodyOffset: bomLength, newline: bytes.includes('\r\n') ? '\r\n' : '\n' };
   }
-  const properties = frontmatterProperties(split.raw);
+  const frontmatter = frontmatterEntries(split.raw);
   // A "---" block that is not YAML properties, such as a rule typed above
   // some text, stays in the page as text.
-  if (properties === null) split = { ...split, raw: '', bodyOffset: bomLength };
+  if (frontmatter === null) split = { ...split, raw: '', bodyOffset: bomLength };
   let source: string;
   try {
     // ignoreBOM keeps a U+FEFF that starts the body; the file's own BOM is in the prefix.
@@ -220,15 +253,46 @@ export function parseMarkdown(bytes: Buffer): ParsedMarkdown {
     body: source.replace(/\r\n/g, '\n'),
     newline: split.newline,
     hasFrontmatter: split.bodyOffset > bomLength,
-    properties: properties ?? 0,
+    properties: frontmatter?.length ?? 0,
+    frontmatter: frontmatter ?? [],
   };
 }
 
-/** Top-level frontmatter keys, which Obsidian calls properties: 0 for an empty block, null when the block is not a YAML map. */
-function frontmatterProperties(raw: string): number | null {
-  if (!raw.trim()) return 0;
-  const contents = parseDocument(raw).contents;
-  return isMap(contents) ? contents.items.length : null;
+/**
+ * Top-level frontmatter keys and their values as text, which Obsidian calls
+ * properties: none for an empty block, null when the block is not a YAML map.
+ */
+function frontmatterEntries(raw: string): PageProperty[] | null {
+  if (!raw.trim()) return [];
+  const document = parseDocument(raw);
+  const contents = document.contents;
+  if (!isMap(contents)) return null;
+  return contents.items.map((pair) => ({
+    key: propertyText(plainValue(document, pair.key)),
+    values: propertyValues(plainValue(document, pair.value)),
+  }));
+}
+
+/** A YAML node as plain data; an alias that expands too far stays as written. */
+function plainValue(document: Document, value: unknown): unknown {
+  if (!isNode(value)) return value;
+  try {
+    return value.toJS(document);
+  } catch {
+    return String(value);
+  }
+}
+
+function propertyValues(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : [value];
+  return items.filter((item) => item !== null && item !== undefined && item !== '').map(propertyText);
+}
+
+function propertyText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+  return String(value);
 }
 
 /**

@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
+import { formatFileSize, formatFileTime } from '@/renderer/features/disk-explorer/components/editor/pageProperties';
+import { TooltipProvider } from '@/renderer/shared/ui';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import { openTabs, openedPath, tabPaths } from '@/tests/helpers/tabs';
@@ -22,11 +25,14 @@ beforeEach(() => {
     onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => { changed = null; }; }),
   });
   useDiskStore.setState({ listings: {}, pendingAction: null });
+  usePagePropertiesStore.setState({ open: false });
   openTabs([NOTE]);
 });
 
+const renderEditor = (path: string) => render(<MarkdownEditor path={path} />, { wrapper: TooltipProvider });
+
 async function openEditor(path: string): Promise<EditorView> {
-  render(<MarkdownEditor path={path} />);
+  renderEditor(path);
   const content = await screen.findByTestId('markdown-editor');
   const view = EditorView.findFromDOM(content);
   if (!view) throw new Error('No editor view');
@@ -49,7 +55,7 @@ describe('MarkdownEditor', () => {
     expect(view.contentDOM).toHaveAttribute('spellcheck', 'false');
     expect(screen.getByTestId('editor-save-state')).toHaveAttribute('data-state', 'clean');
     expect(screen.getByText('3 words')).toBeInTheDocument();
-    render(<MarkdownEditor path="/Vault/photo.jpg" />);
+    renderEditor('/Vault/photo.jpg');
     expect(await screen.findByRole('alert')).toHaveTextContent(/Only Markdown/);
   });
 
@@ -61,7 +67,7 @@ describe('MarkdownEditor', () => {
 
   it('writes nothing for a page that was opened, focused, blurred and closed', async () => {
     const api = installMarkdownApi({ [NOTE]: '# Brief\r\n\r\nNo trailing newline  ' });
-    const { unmount } = render(<MarkdownEditor path={NOTE} />);
+    const { unmount } = renderEditor(NOTE);
     const view = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
     act(() => { view.focus(); view.contentDOM.blur(); });
     unmount();
@@ -96,7 +102,7 @@ describe('MarkdownEditor', () => {
     expect(view.dom.querySelector('.cm-search')).not.toBeNull();
   });
 
-  it('leaves Cmd+[, Cmd+] and Cmd+Shift+\\ to the app menu: Back, Forward and the right sidebar', async () => {
+  it('leaves Cmd+[, Cmd+], Cmd+Shift+\\ and Cmd+Shift+I to the app menu: Back, Forward, the right sidebar and properties', async () => {
     installMarkdownApi({ [NOTE]: '  - one' });
     const view = await openEditor(NOTE);
     for (const key of ['[', ']']) {
@@ -107,6 +113,10 @@ describe('MarkdownEditor', () => {
     act(() => { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '(one)' }, selection: { anchor: 0 } }); });
     expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: '\\', shiftKey: true, ...MOD }), 'editor')).toBe(false);
     expect(view.state.selection.main.head).toBe(0);
+    // Cmd+I is italic; with Shift it is View > Show Properties.
+    act(() => { view.dispatch({ selection: { anchor: 1, head: 4 } }); });
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'I', shiftKey: true, ...MOD }), 'editor')).toBe(false);
+    expect(view.state.doc.toString()).toBe('(one)');
   });
 
   it('keeps a whole log page read-only, and still follows the lines the scripts append', async () => {
@@ -200,5 +210,127 @@ describe('MarkdownEditor', () => {
     await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe('Title\nTheir line\nEnd\nAppended by them\n'));
     expect(view.state.doc.toString()).toBe('Title\nTheir line\nEnd\nAppended by them\n');
     expect(screen.queryByTestId('editor-conflict')).toBeNull();
+  });
+});
+
+describe('the properties block', () => {
+  const DAILY_TEXT = '';
+  const FACTS = {
+    properties: [
+      { key: 'date', values: ['2026-10-28'] },
+      { key: 'tags', values: ['daily', 'kigali'] },
+      { key: 'thread', values: ['[[Library/chats/opal-status|Opal status]]'] },
+      { key: 'summary', values: [] },
+    ],
+  };
+
+  function installDaily(extra: Record<string, string> = {}) {
+    const api = installMarkdownApi({ [DAILY]: DAILY_TEXT, ...extra });
+    const properties = api.properties;
+    api.properties = vi.fn(async (target: string) => {
+      const response = await properties(target);
+      return response.success && target === DAILY ? { ...response, data: { ...response.data, ...FACTS, size: 41 } } : response;
+    });
+    return api;
+  }
+
+  /** The block's rows as "term: detail", in order. */
+  const rows = (block: Element) => [...block.querySelectorAll('dt')].map((term) => `${term.textContent}: ${term.nextElementSibling?.textContent}`);
+  const findBlock = () => waitFor(() => {
+    const block = document.querySelector('[data-page-properties]');
+    if (!block) throw new Error('No properties block');
+    return block as HTMLElement;
+  });
+  const toggle = () => screen.getByRole('button', { name: /\d+ words?$/ });
+
+  it('opens from the footer under the title, lists the frontmatter and then the file facts, and closes on a second click', async () => {
+    const api = installDaily();
+    const view = await openEditor(DAILY);
+    expect(view.dom.querySelector('.cm-md-properties')).toBeNull();
+    expect(toggle()).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle());
+    const block = await findBlock();
+    expect(api.properties).toHaveBeenCalledWith(DAILY);
+    expect(toggle()).toHaveAttribute('aria-pressed', 'true');
+    expect(block).toHaveAccessibleName('Properties of 2026-10-28.md');
+    // Under the title and above the text, which it is not part of.
+    const title = view.dom.querySelector('.cm-md-inline-title') as Element;
+    expect(title.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.state.doc.toString()).toBe('');
+    expect(rows(block)).toEqual([
+      'date: 2026-10-28',
+      'tags: daily, kigali',
+      'thread: Opal status',
+      'summary: Empty',
+      'Path: Library/daily/2026-10-28.md',
+      'Created: Oct 28, 2026 at 06:38',
+      'Modified: Oct 28, 2026 at 06:38',
+      'Size: 41 bytes',
+    ]);
+    expect(block.querySelectorAll('dl')).toHaveLength(2);
+    fireEvent.click(toggle());
+    await waitFor(() => expect(view.dom.querySelector('.cm-md-properties')).toBeNull());
+    expect(usePagePropertiesStore.getState().open).toBe(false);
+  });
+
+  it('opens when the menu command runs, and stays open on the next page until it is closed', async () => {
+    installDaily({ [NOTE]: '# Brief\n' });
+    const first = renderEditor(DAILY);
+    await screen.findByTestId('markdown-editor');
+    act(() => usePagePropertiesStore.getState().setOpen(true));
+    await findBlock();
+    first.unmount();
+    renderEditor(NOTE);
+    const block = await findBlock();
+    expect(rows(block)).toEqual(['Path: Notes/brief.md', 'Created: Oct 28, 2026 at 06:38', 'Modified: Oct 28, 2026 at 06:38', 'Size: 8 bytes']);
+    expect(block.querySelectorAll('dl')).toHaveLength(1);
+  });
+
+  it('closes on Escape only while focus is in the block or on its toggle', async () => {
+    installDaily();
+    const view = await openEditor(DAILY);
+    act(() => usePagePropertiesStore.getState().setOpen(true));
+    let block = await findBlock();
+    // In the text, Escape is the editor's.
+    act(() => view.focus());
+    fireEvent.keyDown(view.contentDOM, { key: 'Escape' });
+    expect(usePagePropertiesStore.getState().open).toBe(true);
+    act(() => block.focus());
+    expect(document.activeElement).toBe(block);
+    fireEvent.keyDown(block, { key: 'Escape' });
+    expect(usePagePropertiesStore.getState().open).toBe(false);
+    await waitFor(() => expect(view.dom.querySelector('.cm-md-properties')).toBeNull());
+    expect(view.hasFocus).toBe(true);
+    // On the toggle, Escape closes it and focus stays there.
+    act(() => usePagePropertiesStore.getState().setOpen(true));
+    block = await findBlock();
+    act(() => toggle().focus());
+    fireEvent.keyDown(toggle(), { key: 'Escape' });
+    expect(usePagePropertiesStore.getState().open).toBe(false);
+    expect(document.activeElement).toBe(toggle());
+  });
+
+  it('follows a wiki link value, and reads the file facts again after a save', async () => {
+    const CARD = '/Vault/Library/chats/opal-status.md';
+    const api = installDaily({ [CARD]: '' });
+    const view = await openEditor(DAILY);
+    act(() => usePagePropertiesStore.getState().setOpen(true));
+    const block = await findBlock();
+    expect(api.properties).toHaveBeenCalledTimes(1);
+    act(() => { view.dispatch({ changes: { from: 0, insert: 'A line.' }, userEvent: 'input.type' }); });
+    await waitFor(() => expect(api.write).toHaveBeenCalled(), { timeout: 2000 });
+    await waitFor(() => expect(api.properties).toHaveBeenCalledTimes(2));
+    fireEvent.click(within(block).getByRole('button', { name: 'Opal status' }));
+    await waitFor(() => expect(openedPath()).toBe(CARD));
+  });
+
+  it('writes times as "Oct 28, 2026 at 06:38" and sizes in bytes, KB or MB', () => {
+    expect(formatFileTime(new Date(2026, 9, 28, 6, 38).getTime())).toBe('Oct 28, 2026 at 06:38');
+    expect(formatFileTime(new Date(2026, 0, 2, 23, 5).getTime())).toBe('Jan 2, 2026 at 23:05');
+    expect(formatFileSize(1)).toBe('1 byte');
+    expect(formatFileSize(41)).toBe('41 bytes');
+    expect(formatFileSize(1023)).toBe('1,023 bytes');
+    expect(formatFileSize(12_700)).toBe('12.4 KB');
+    expect(formatFileSize(3_250_000)).toBe('3.1 MB');
   });
 });

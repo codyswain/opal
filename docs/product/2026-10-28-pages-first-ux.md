@@ -14,22 +14,21 @@ first: a file tree on the left and one clean page.
 ## The window
 
 ```
-┌──────────────────────┬──────────────────────────────────────────────────┐
-│ ● ● ●  ▢  ‹  ›       │ [tab] [tab] [tab] +     [ Search ⌘K ]            │  one 40px row
-│                      ├──────────────────────────────────────────────────┤
-│ Today                │                                                  │
-│ Recent               │     Page title                                   │
-│                      │                                                  │
-│ ▸ Archive            │     Body text in a centered column ...           │
-│ ▾ Inbox              │                                                  │
-│   ▸ Logs             │                                                  │
-│   inbox note         │                                                  │
-│ ▸ Library            │                                                  │
-│ AGENTS               │                                                  │
-│ README               │                                                  │
-│                      │                                    1,204 words   │
-│ ⚙ Settings           │                                                  │
-└──────────────────────┴──────────────────────────────────────────────────┘
+┌──────────────────────┬──────────────────────────────────────────┬──────────────────────┐
+│ ● ● ●  ▢  ‹  ›       │ [tab] [tab] +       [ Search ⌘K ]        │ Wed, Oct 28  ‹ › ⋯ ▢ │  one 40px row
+│                      ├──────────────────────────────────────────┼──────────────────────┤
+│ Today                │                                          │ Activity log      22 │
+│ Recent               │     Page title                           │ Chats     4 new · 14 │
+│                      │                                          │ Recordings         4 │
+│ ▸ Archive            │     Body text in a centered column ...   │ Digest             8 │
+│ ▾ Library            │                                          │                      │
+│   ▸ daily            │                                          │                      │
+│   ▸ logs             │                                          │                      │
+│ AGENTS               │                                          │                      │
+│ README               │                                          │                      │
+│                      │               2 properties · 1,204 words │                      │
+│ ⚙ Settings           │                                          │                      │
+└──────────────────────┴──────────────────────────────────────────┴──────────────────────┘
 ```
 
 ### Sidebar
@@ -200,7 +199,8 @@ Tokens follow the design brief from Bastion and Linear:
   stays Inter.
 - An inline title (the file name) above the body. Frontmatter is hidden in
   the page; the footer shows "N properties · N words", muted and
-  right-aligned.
+  right-aligned. On a log page the line starts with "Read-only". The line is
+  the properties toggle (below).
 - Spellcheck off. A page opens at the top without stealing focus, except an
   empty page, which gets the caret.
 - Autosave: about 800ms after the last change, at most 5s while typing, and
@@ -215,6 +215,30 @@ Tokens follow the design brief from Bastion and Linear:
   the cleanup commit, the `## Activity Log` section of an old
   `Inbox/Logs/*.md` page stays read-only.
 
+### Properties
+
+A tucked-away view of a page's metadata, for the rare time it is wanted.
+
+- The footer line is the toggle. It looks like plain muted text until the
+  pointer is on it, and a click never takes focus from the text. View > Show
+  Properties (Hide Properties while open, Cmd+Shift+I) does the same. Cmd+I
+  stays italic and Cmd+Option+I the developer tools.
+- The block sits under the inline title, in the small UI sans: the
+  frontmatter keys and values, a hairline, then Path (from the top of the
+  opened folder), Created, Modified and Size. `markdown:properties` reads them
+  in the main process, the times and size from `fs.stat`. The word count stays
+  in the footer.
+- Read-only, like the rest of Opal's property handling. A value that is a
+  wiki link, such as a chat session's `thread`, opens its note.
+- Opening it scrolls the page to the top so the block shows; closing keeps
+  the scroll. The same click, the menu item, or Escape while focus is in the
+  block or on the footer line closes it. In the text, Escape belongs to the
+  editor.
+- It stays open from page to page until it is closed or Opal quits. It is
+  never saved.
+- It is read again after each save and after a change in the page's folder,
+  so Modified and Size stay current.
+
 ## Out of scope here
 
 Sync across machines, version history, the phone version (see
@@ -224,5 +248,5 @@ Sync across machines, version history, the phone version (see
 
 `npx tsc --noEmit` clean, `npm test` green, `npm run test:e2e` green,
 `npm run lint` with no errors, and screenshots of the window, Today, Recent,
-the tree with files, a page with callouts and lists, and Settings, in light
-and dark.
+the tree with files, a page with callouts and lists, the right sidebar, the
+properties block, and Settings, in light and dark.

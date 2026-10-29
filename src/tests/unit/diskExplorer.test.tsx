@@ -8,6 +8,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { useRecentStore } from '@/renderer/features/disk-explorer/store/recentStore';
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { ShellProvider } from '@/renderer/features/shell/context/ShellContext';
+import { TooltipProvider } from '@/renderer/shared/ui';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
@@ -32,9 +33,11 @@ type StatResult = Awaited<ReturnType<typeof window.diskAPI.stat>>;
 function renderPage() {
   return render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <ShellProvider>
-        <DiskExplorer />
-      </ShellProvider>
+      <TooltipProvider>
+        <ShellProvider>
+          <DiskExplorer />
+        </ShellProvider>
+      </TooltipProvider>
     </MemoryRouter>
   );
 }

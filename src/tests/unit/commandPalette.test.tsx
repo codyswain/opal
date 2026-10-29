@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AppCommands, CommandPalette, usePaletteStore } from '@/renderer/features/commands';
 import { commandRegistry } from '@/renderer/features/commands/services/commandRegistry';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
 import { useSettingsStore } from '@/renderer/features/settings';
 import { ShellProvider } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
@@ -44,6 +45,7 @@ beforeEach(() => {
   usePaletteStore.setState({ open: false, initialQuery: '', newTab: false });
   resetTabs();
   useSettingsStore.setState({ open: false });
+  usePagePropertiesStore.setState({ open: false });
   for (const command of commandRegistry.getAllCommands()) commandRegistry.unregisterCommand(command);
   (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined), closeWindow: vi.fn() };
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })) });
@@ -241,6 +243,20 @@ describe('CommandPalette', () => {
     expect(reported.find((command) => command.id === COMMAND_IDS.nextTab)).toEqual({
       id: COMMAND_IDS.nextTab, label: 'Show Next Tab', accelerator: 'CmdOrCtrl+Shift+]', aliases: ['Ctrl+Tab'],
     });
+  });
+
+  it('reports Show Properties on Cmd+Shift+I, and Hide Properties while the block is open', async () => {
+    renderPalette();
+    const reported = () => ((window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; label: string; accelerator?: string }[])
+      .find((command) => command.id === COMMAND_IDS.toggleProperties);
+    expect(reported()).toMatchObject({ label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' });
+    // The menu sends the command id, as View > Show Properties does.
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.toggleProperties));
+    expect(usePagePropertiesStore.getState().open).toBe(true);
+    await waitFor(() => expect(reported()).toMatchObject({ label: 'Hide Properties', accelerator: 'CmdOrCtrl+Shift+I' }));
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.toggleProperties));
+    expect(usePagePropertiesStore.getState().open).toBe(false);
+    await waitFor(() => expect(reported()?.label).toBe('Show Properties'));
   });
 
   it('keeps the tab-position keys out of the palette', async () => {

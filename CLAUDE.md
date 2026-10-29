@@ -38,7 +38,10 @@ not exist.
 - **Main area:** each tab shows one file or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
   plain text, otherwise "Open in default app"). There is no folder view:
-  folders are browsed in the sidebar tree, which also holds the file actions
+  folders are browsed in the sidebar tree, which also holds the file actions.
+  A page's footer line ("N properties · N words") toggles a read-only
+  properties block under the title: the frontmatter, then the file's path,
+  times and size from `markdown:properties`
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
   every path that crosses IPC is resolved and checked against opened folders
 - **Path alias:** `@/*` maps to `src/*`

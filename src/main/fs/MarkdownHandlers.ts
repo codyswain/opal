@@ -1,7 +1,14 @@
 import type { IpcMain } from 'electron';
 import logger from '@/main/logger';
 import type { IPCResponse } from '@/types/ipc';
-import { LINK_TARGET_LIMIT, type MarkdownCopyLabel, type MarkdownDocument, type MarkdownLinks, type MarkdownWriteResult } from '@/types/markdown';
+import {
+  LINK_TARGET_LIMIT,
+  type MarkdownCopyLabel,
+  type MarkdownDocument,
+  type MarkdownLinks,
+  type MarkdownProperties,
+  type MarkdownWriteResult,
+} from '@/types/markdown';
 import { PathNotAllowedError } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
 import { MarkdownConflictError, MarkdownError, type MarkdownDocumentService } from './MarkdownDocumentService';
@@ -37,6 +44,10 @@ export class MarkdownHandlers {
     ipc.handle('markdown:read', async (_, target: unknown): Promise<MarkdownResponse<MarkdownDocument>> => {
       if (!isNonEmptyString(target)) return invalid();
       return this.respond(() => service.read(target), 'Failed to open the note');
+    });
+    ipc.handle('markdown:properties', async (_, target: unknown): Promise<MarkdownResponse<MarkdownProperties>> => {
+      if (!isNonEmptyString(target)) return invalid();
+      return this.respond(() => service.properties(target), 'Failed to read the properties of the note');
     });
     ipc.handle('markdown:write', async (_, target: unknown, body: unknown, expectedRevision: unknown): Promise<MarkdownResponse<MarkdownWriteResult>> => {
       if (!isNonEmptyString(target) || typeof body !== 'string' || !isNonEmptyString(expectedRevision)) return invalid();

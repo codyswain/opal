@@ -4,10 +4,14 @@ import { Compartment, EditorState, Transaction, type Text } from '@codemirror/st
 import { EditorView, keymap } from '@codemirror/view';
 import { recordOpened } from '../../activity/recordActivity';
 import { fileLocation } from '../../navigation/filesLocation';
+import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePropertiesStore';
 import { useTabsStore } from '../../store/tabsStore';
+import { isLogPage } from './activityLog';
 import { EditorStatus } from './EditorStatus';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
+import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
+import { usePageProperties } from './usePageProperties';
 import './editor.css';
 
 interface MarkdownEditorProps {
@@ -71,6 +75,9 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
   // The hook's state changes identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
+  const propertiesOpen = usePagePropertiesStore((state) => state.open);
+  const facts = usePageProperties(path, propertiesOpen, document.saveState);
+  const wasOpen = useRef(propertiesOpen);
 
   useEffect(() => {
     const created = new EditorView({
@@ -115,6 +122,28 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
     view.current?.dispatch({ effects: conflict.reconfigure(document.conflict ? conflictView(document.conflict.disk) : []) });
   }, [conflict, document.conflict]);
 
+  useEffect(() => {
+    view.current?.dispatch({ effects: setPageProperties.of(facts) });
+  }, [facts]);
+
+  // The block opens under the title, so the page scrolls up to show it. Closing keeps the scroll.
+  useEffect(() => {
+    if (propertiesOpen && !wasOpen.current && view.current) view.current.scrollDOM.scrollTop = 0;
+    wasOpen.current = propertiesOpen;
+  }, [propertiesOpen]);
+
+  // Escape closes the block only while focus is in it or on its toggle. In
+  // the text, Escape belongs to the editor, so there the menu item closes it.
+  const closePropertiesOnEscape = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Escape' || !propertiesOpen || !(event.target instanceof Element)) return;
+    const onToggle = event.target.closest('[data-properties-toggle]') !== null;
+    if (!onToggle && !event.target.closest('[data-page-properties]')) return;
+    event.preventDefault();
+    usePagePropertiesStore.getState().setOpen(false);
+    // Focus in the block would go with it.
+    if (!onToggle) view.current?.focus();
+  };
+
   const keepDiskVersion = () => {
     const current = view.current;
     if (!current || !document.conflict) return;
@@ -124,13 +153,16 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({ path, doc
   };
 
   return (
-    <div className="opal-editor flex h-full min-h-0 flex-col">
+    <div className="opal-editor flex h-full min-h-0 flex-col" onKeyDown={closePropertiesOnEscape}>
       <div ref={host} className="relative min-h-0 flex-1" />
       <EditorStatus
         saveState={document.saveState}
         error={document.error}
         properties={document.properties}
         words={words}
+        readOnly={isLogPage(path)}
+        propertiesOpen={propertiesOpen}
+        onToggleProperties={togglePageProperties}
         onKeepMine={document.resolveConflict}
         onKeepDisk={keepDiskVersion}
         onRetry={() => void document.flush()}

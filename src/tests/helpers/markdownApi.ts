@@ -25,6 +25,22 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
       if (!document) return { success: false as const, error: 'Only Markdown files can be edited here.' };
       return { success: true as const, data: { path: target, body: document.body, revision: document.revision, size: document.body.length, properties: 0 } };
     }),
+    // Paths below "/Vault/" read as relative to it, as below an opened folder.
+    properties: vi.fn(async (target: string) => {
+      const document = documents.get(target);
+      if (!document) return { success: false as const, error: 'Only Markdown files can be edited here.' };
+      return {
+        success: true as const,
+        data: {
+          path: target,
+          relativePath: target.replace(/^\/Vault\//, ''),
+          properties: [],
+          createdMs: new Date(2026, 9, 28, 6, 38).getTime(),
+          modifiedMs: new Date(2026, 9, 28, 6, 38).getTime(),
+          size: new TextEncoder().encode(document.body).length,
+        },
+      };
+    }),
     write: vi.fn(async (target: string, body: string, expectedRevision: string) => {
       const document = documents.get(target);
       if (!document) return { success: false as const, error: 'This file no longer exists.' };

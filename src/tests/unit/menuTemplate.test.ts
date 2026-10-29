@@ -9,6 +9,7 @@ const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.newNote, label: 'New Note', accelerator: 'CmdOrCtrl+N' },
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
+  { id: COMMAND_IDS.toggleProperties, label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' },
   { id: COMMAND_IDS.newTab, label: 'New Tab', accelerator: 'CmdOrCtrl+T' },
   { id: COMMAND_IDS.closeTab, label: 'Close Tab', accelerator: 'CmdOrCtrl+W' },
   { id: COMMAND_IDS.reopenClosedTab, label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T' },
@@ -90,12 +91,16 @@ describe('buildMenuTemplate', () => {
   it('puts Back and Forward in Go and the sidebar toggles on Cmd+\\ and Cmd+Shift+\\, leaving Cmd+B to bold', () => {
     expect(shown(menu(build(), 'Go'))).toEqual(['Back CmdOrCtrl+[', 'Forward CmdOrCtrl+]']);
     expect(findItem(build(), COMMAND_IDS.toggleLeftPane)?.accelerator).toBe('CmdOrCtrl+\\');
-    expect(shown(menu(build(), 'View')).slice(0, 2)).toEqual([
+    expect(shown(menu(build(), 'View')).slice(0, 3)).toEqual([
       'Toggle Sidebar CmdOrCtrl+\\',
       'Toggle Right Sidebar CmdOrCtrl+Shift+\\',
+      'Show Properties CmdOrCtrl+Shift+I',
     ]);
     const accelerators = build().flatMap((entry) => entry.submenu.map((item) => item.accelerator));
     expect(accelerators).not.toContain('CmdOrCtrl+B');
+    // Cmd+I is italic in the editor and Cmd+Option+I opens the developer tools.
+    expect(accelerators).not.toContain('CmdOrCtrl+I');
+    expect(menu(build(), 'View').find((item) => item.role === 'toggleDevTools')?.accelerator).toBeUndefined();
   });
 
   it('shows Previous and Next Tab in Window, with Ctrl+Tab aliases and tab positions hidden', () => {

@@ -1,4 +1,4 @@
-import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownWriteResult, UnsavedPage } from '@/types/markdown';
+import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownProperties, MarkdownWriteResult, UnsavedPage } from '@/types/markdown';
 
 export type MarkdownResult<T> =
   | { success: true; data: T; error?: undefined; conflict?: undefined }
@@ -6,6 +6,8 @@ export type MarkdownResult<T> =
 
 export interface MarkdownAPI {
   read: (target: string) => Promise<MarkdownResult<MarkdownDocument>>;
+  /** The page's frontmatter as text and its file's path, times and size. */
+  properties: (target: string) => Promise<MarkdownResult<MarkdownProperties>>;
   write: (target: string, body: string, expectedRevision: string) => Promise<MarkdownResult<MarkdownWriteResult>>;
   create: (parentDir: string, baseName?: string) => Promise<MarkdownResult<{ path: string }>>;
   /** Writes a page's text to a new copy next to the note, or in the recovery folder when that fails. */
