@@ -114,6 +114,19 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
     return found ?? retainedEntry.current;
   }, [selectedPath, listings, recentItems]);
 
+  // A file in a listing the tree or a folder already read shows at once; any
+  // other file is looked up, and a late answer for a file left behind is dropped.
+  // Refreshing other folders' listings never looks the open file up again, so
+  // its page stays mounted while agents write elsewhere.
+  const listedEntry = useMemo(
+    () =>
+      openedPath
+        ? Object.values(listings)
+            .flat()
+            .find((entry) => entry.path === openedPath && !entry.isDirectory) ?? null
+        : null,
+    [openedPath, listings]
+  );
   const [focusedEntry, setFocusedEntry] = useState<{
     path: string;
     entry: DiskEntry | null;
@@ -124,15 +137,17 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
       setFocusedEntry(null);
       return;
     }
-    const cached = Object.values(listings)
-      .flat()
-      .find((entry) => entry.path === openedPath && !entry.isDirectory);
-    if (cached) {
-      setFocusedEntry({ path: openedPath, entry: cached, loading: false });
+    if (listedEntry) {
+      setFocusedEntry({ path: openedPath, entry: listedEntry, loading: false });
       return;
     }
     let cancelled = false;
-    setFocusedEntry({ path: openedPath, entry: null, loading: true });
+    // An open file stays on screen while it is looked up again; only an answer that it is gone closes it.
+    setFocusedEntry((previous) =>
+      previous?.path === openedPath && previous.entry
+        ? { ...previous, loading: true }
+        : { path: openedPath, entry: null, loading: true }
+    );
     void Promise.resolve(window.diskAPI.stat(openedPath))
       .then((result) => {
         if (!cancelled)
@@ -154,7 +169,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [openedPath, listings]);
+  }, [openedPath, listedEntry]);
   const showDetailPane = !openedPath && isPreviewPaneOpen;
 
   useEffect(() => {
