@@ -85,7 +85,7 @@ describe('live preview', () => {
     expect(lineText(view, 'Some')).toBe('Some bold text and a link.');
   });
 
-  it('keeps "> " hidden until the caret is in it, and never reveals the read-only Activity Log', async () => {
+  it('keeps "> " hidden until the caret is in it, and never reveals a read-only log', async () => {
     const { view } = mount('> Quoted text\n');
     await focusAt(view, 2);
     expect(lineText(view, 'Quoted')).toBe('Quoted text');
@@ -97,6 +97,13 @@ describe('live preview', () => {
     expect(lineText(daily, '10:00')).toBe('10:00 Edited the plan with Robert Xu');
     act(() => { daily.dispatch({ selection: { anchor: log.indexOf('Activity') } }); });
     expect(daily.contentDOM.querySelector('.cm-md-h2')).toHaveTextContent(/^Activity Log$/);
+    const line = '- 10:00 Edited **the plan** with [[Robert Xu]] · agent turn\n';
+    const { view: page, openNote } = mount(line, vi.fn(), '/Vault/Library/logs/2026-10-28 log.md');
+    await focusAt(page, line.indexOf('the plan'));
+    expect(lineText(page, '10:00')).toBe('10:00 Edited the plan with Robert Xu · agent turn');
+    // Its links still open their notes.
+    press(page.contentDOM.querySelector('.cm-md-wikilink') as Element);
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON));
   });
 
   it('holds the revealed lines still while the mouse button is down, so a click does not move the text under it', async () => {

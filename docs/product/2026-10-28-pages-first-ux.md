@@ -38,8 +38,10 @@ first: a file tree on the left and one clean page.
   toggle, back and forward. Back and forward live here and nowhere else.
 - No "Opal" workspace button, no "Open folders" heading, no open-folder
   buttons. Opening another folder stays in Settings only.
-- Nav: **Today** (opens `Inbox/Logs/YYYY-MM-DD.md`, creating it from the
-  template if needed) and **Recent**. No Library item. No Views.
+- Nav: **Today** (opens `Library/daily/YYYY-MM-DD.md`, creating it from the
+  template if needed; the main process returns the path) and **Recent**. No
+  Library item. No Views. Until the cleanup commit, Today opens an existing
+  `Inbox/Logs/YYYY-MM-DD.md` when the daily page does not exist.
 - Under the nav, after some space and no rule: the vault's files. With one
   opened root, the root is not a row; its children start at the top level and
   it is always open. With several roots, each root is a top-level row, open
@@ -174,8 +176,11 @@ Tokens follow the design brief from Bastion and Linear:
   the open document as a text change, keeping cursor and scroll. When the
   page also has unsaved edits, merge three ways (base = last saved text). A
   clean merge is applied silently. A real conflict keeps both and asks.
-- In `Inbox/Logs/*.md`, the `## Activity Log` section and everything after it
-  is read-only in Opal. Only the hook script writes it.
+- Every `Library/logs/*.md` page is read-only in Opal and always reads as
+  rendered. Only the vault's scripts write it. Daily pages in `Library/daily/`
+  are fully editable, even one that holds an `## Activity Log` heading. Until
+  the cleanup commit, the `## Activity Log` section of an old
+  `Inbox/Logs/*.md` page stays read-only.
 
 ## Out of scope here
 

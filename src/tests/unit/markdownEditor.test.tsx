@@ -9,7 +9,10 @@ import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import { openTabs, openedPath, tabPaths } from '@/tests/helpers/tabs';
 
 const NOTE = '/Vault/Notes/brief.md';
-const LOG = '/Vault/Inbox/Logs/2026-10-28.md';
+const LOG_PAGE = '/Vault/Library/logs/2026-10-28 log.md';
+const DAILY = '/Vault/Library/daily/2026-10-28.md';
+/** A daily log from before the Library move; its Activity Log section stays read-only until the cleanup commit. */
+const LEGACY_LOG = '/Vault/Inbox/Logs/2026-10-28.md';
 
 let changed: ((payload: { directories: string[] }) => void) | null = null;
 
@@ -102,9 +105,39 @@ describe('MarkdownEditor', () => {
     expect(view.state.doc.toString()).toBe('  - one');
   });
 
-  it('keeps the Activity Log of a daily log read-only and muted, and still follows the hook appending to it', async () => {
-    const api = installMarkdownApi({ [LOG]: '## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Did a thing\n' });
-    const view = await openEditor(LOG);
+  it('keeps a whole log page read-only, and still follows the lines the scripts append', async () => {
+    const text = '- 09:00 Ran the digest. · [[Library/digests/2026-10-28 digest|Digest]] · routine run\n';
+    const api = installMarkdownApi({ [LOG_PAGE]: text });
+    const view = await openEditor(LOG_PAGE);
+    expect(view.state.readOnly).toBe(true);
+    const tryEdit = (changes: { from: number; to?: number; insert?: string }) => act(() => { view.dispatch({ changes, userEvent: 'input.type' }); });
+    tryEdit({ from: 0, insert: 'x' });
+    tryEdit({ from: 5, to: 9 });
+    tryEdit({ from: view.state.doc.length, insert: 'tail' });
+    expect(view.state.doc.toString()).toBe(text);
+    api.externalEdit(LOG_PAGE, `${text}- 09:05 Filed SW-640. · agent turn\n`);
+    act(() => { changed?.({ directories: ['/Vault/Library/logs'] }); });
+    await waitFor(() => expect(view.state.doc.toString()).toContain('- 09:05 Filed SW-640. · agent turn\n'));
+    tryEdit({ from: 0, insert: 'x' });
+    expect(view.state.doc.toString()).toBe(`${text}- 09:05 Filed SW-640. · agent turn\n`);
+    expect(api.write).not.toHaveBeenCalled();
+  });
+
+  it('lets a daily page be edited everywhere, even below an Activity Log heading', async () => {
+    const text = '## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Did a thing\n';
+    const api = installMarkdownApi({ [DAILY]: text });
+    const view = await openEditor(DAILY);
+    expect(view.state.readOnly).toBe(false);
+    act(() => { view.dispatch({ changes: { from: text.length, insert: 'More.\n' }, userEvent: 'input.type' }); });
+    act(() => { view.dispatch({ changes: { from: text.indexOf('Did'), insert: 'Really ' }, userEvent: 'input.type' }); });
+    expect(view.state.doc.toString()).toBe('## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Really Did a thing\nMore.\n');
+    expect(view.dom.querySelector('.cm-activity-log')).toBeNull();
+    await waitFor(() => expect(api.documents.get(DAILY)?.body).toBe('## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Really Did a thing\nMore.\n'));
+  });
+
+  it('keeps the Activity Log of an old Inbox/Logs page read-only and muted, and still follows the hook appending to it', async () => {
+    const api = installMarkdownApi({ [LEGACY_LOG]: '## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Did a thing\n' });
+    const view = await openEditor(LEGACY_LOG);
     const heading = view.state.doc.toString().indexOf('## Activity Log');
     const tryEdit = (changes: { from: number; to?: number; insert?: string }) => act(() => { view.dispatch({ changes, userEvent: 'input.type' }); });
     tryEdit({ from: heading + 3, insert: 'x' });
@@ -116,13 +149,13 @@ describe('MarkdownEditor', () => {
     expect(view.state.doc.toString()).toContain('Plan ahead\n');
     expect(view.dom.querySelector('.cm-activity-log')).not.toBeNull();
     // The hook appends while the page has an unsaved edit above; both survive.
-    api.externalEdit(LOG, '## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Did a thing\n- 09:05 Did another\n');
+    api.externalEdit(LEGACY_LOG, '## Morning\nPlan\n\n---\n## Activity Log\n- 09:00 Did a thing\n- 09:05 Did another\n');
     act(() => { changed?.({ directories: ['/Vault/Inbox/Logs'] }); });
     await waitFor(() => expect(view.state.doc.toString()).toContain('- 09:05 Did another\n'));
     expect(view.state.doc.toString()).toContain('Plan ahead\n');
     const muted = [...view.dom.querySelectorAll('.cm-activity-log')].map((element) => element.textContent).join('\n');
     expect(muted).toContain('09:05 Did another');
-    await waitFor(() => expect(api.documents.get(LOG)?.body).toBe('## Morning\nPlan ahead\n\n---\n## Activity Log\n- 09:00 Did a thing\n- 09:05 Did another\n'));
+    await waitFor(() => expect(api.documents.get(LEGACY_LOG)?.body).toBe('## Morning\nPlan ahead\n\n---\n## Activity Log\n- 09:00 Did a thing\n- 09:05 Did another\n'));
   });
 
   it('follows an external change while clean, keeping the cursor and writing nothing', async () => {

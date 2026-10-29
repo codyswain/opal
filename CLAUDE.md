@@ -2,7 +2,11 @@
 
 A desktop app for reading and editing the Markdown pages in a folder on disk.
 Pages come first. There is no chat and no Today screen: "Today" is a shortcut
-that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
+that opens the day's page (`Library/daily/YYYY-MM-DD.md`) in the editor,
+creating it from the vault's template when it does not exist. Activity logs
+are separate, read-only files in `Library/logs/`. Until the cleanup commit,
+Today opens an existing `Inbox/Logs/YYYY-MM-DD.md` when the daily page does
+not exist.
 
 ## Stack
 
@@ -21,6 +25,10 @@ that opens the day's log page (`Inbox/Logs/YYYY-MM-DD.md`) in the editor.
 
 ## Architecture
 
+- **Vault days:** `src/main/vault/` knows the vault layout. `VaultService`
+  creates the daily page; `DayService` answers `vault:day` with a day's page,
+  log, chats, recordings and digest, and sends `vault:day-changed`. The parsing
+  is in `src/common/dayModel.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`

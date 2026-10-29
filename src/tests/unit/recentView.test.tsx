@@ -12,7 +12,7 @@ import { installActivityApi, recentItem, recentResult } from '@/tests/helpers/ac
 import { openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const ROOT = '/Vault';
-const LOG = '/Vault/Inbox/Logs/2026-10-28.md';
+const LOG = '/Vault/Library/daily/2026-10-28.md';
 const PERSON = '/Vault/Library/people/Alec.md';
 const PAPER = '/Vault/Library/papers/paper.pdf';
 const README = '/Vault/README.md';
@@ -66,7 +66,7 @@ describe('RecentView', () => {
 
     const today = within(screen.getByRole('region', { name: 'Today' }));
     expect(today.getByText('2026-10-28')).toBeInTheDocument();
-    expect(today.getByText('Inbox/Logs')).toBeInTheDocument();
+    expect(today.getByText('Library/daily')).toBeInTheDocument();
     expect(today.getByText(/^2:50\sPM$/)).toBeInTheDocument();
     expect(row(PERSON)).toHaveTextContent(/AlecLibrary\/people9:15\sAM/);
     expect(row(PAPER)).toHaveTextContent('paper.pdfLibrary/papersSaturday');

@@ -32,8 +32,8 @@ import { openPathLink, openWikiLink, pageContext, parseWikiTarget, resolvedLinks
  * written only while the page has focus and a selection touches them: inline
  * marks (links, emphasis, code) when the selection touches that span,
  * line marks (headings, rules, callout titles) when it touches the line. A
- * page opened to read looks like Obsidian's reading view, and the read-only
- * Activity Log always does.
+ * page opened to read looks like Obsidian's reading view, and a read-only
+ * log always does.
  *
  * Tables and fenced code blocks span lines, so they come from a state field
  * as block widgets. Everything else is drawn per line for the viewport.
@@ -93,7 +93,7 @@ const NOTHING_REVEALED: Reveal = { lines: () => false, span: () => false };
 function revealer(state: EditorState): Reveal {
   const { revealed } = state.field(revealState);
   if (!revealed) return NOTHING_REVEALED;
-  // The Activity Log is read-only in Opal, so it always reads as rendered.
+  // Log pages and the old Activity Log section are read-only in Opal, so they always read as rendered.
   const locked = state.field(activityLogSection, false) ?? null;
   const editable = (from: number) => locked === null || from < locked;
   const lines = revealed.ranges.map((range) => [state.doc.lineAt(range.from).from, state.doc.lineAt(range.to).to]);

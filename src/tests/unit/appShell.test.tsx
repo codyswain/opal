@@ -142,7 +142,7 @@ describe('AppShell', () => {
   });
 
   it('names the window after the active page', () => {
-    openTabs(['/Vault/Inbox/Logs/2026-10-28.md', '/Vault/photo.png']);
+    openTabs(['/Vault/Library/daily/2026-10-28.md', '/Vault/photo.png']);
     renderShell();
     expect(document.title).toBe('2026-10-28');
     act(() => useTabsStore.getState().activateNext());
@@ -178,7 +178,7 @@ describe('AppShell', () => {
         success: true as const,
         data: {
           path,
-          entries: path === '/Vault' ? [entry({ path: '/Vault/Inbox', name: 'Inbox', kind: 'directory', isDirectory: true })] : [],
+          entries: path === '/Vault' ? [entry({ path: '/Vault/Library', name: 'Library', kind: 'directory', isDirectory: true })] : [],
         },
       })),
       onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
@@ -186,13 +186,13 @@ describe('AppShell', () => {
         return () => undefined;
       }),
     });
-    useDiskStore.setState({ expanded: { '/Vault/Inbox': true } });
+    useDiskStore.setState({ expanded: { '/Vault/Library': true } });
     renderShell(['/other']);
 
     await waitFor(() =>
       expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault')
     );
-    expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault/Inbox');
+    expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault/Library');
 
     await waitFor(() => expect(useDiskStore.getState().listings['/Vault']).toBeDefined());
     vi.mocked(window.diskAPI.readDirectory).mockClear();

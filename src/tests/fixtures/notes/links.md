@@ -1,6 +1,6 @@
 # Links and embeds
 
-See [[Robert Xu]], [[Robert Xu|Robert]], [[Kigali#Office]] and [[Inbox/Logs/2026-10-27]].
+See [[Robert Xu]], [[Robert Xu|Robert]], [[Kigali#Office]] and [[Library/daily/2026-10-27]].
 
 ![[base-layout.png]]
 ![[catalog.pdf#page=2]]

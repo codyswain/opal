@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { Clock, Settings, Sun } from "lucide-react";
 import { localDate } from "@/common/vaultModel";
 import { browseRecent } from "@/renderer/features/disk-explorer/navigation";
-import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import {
   selectCurrentLocation,
   selectOpenedPath,
@@ -11,6 +10,7 @@ import {
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { useShell } from "../context/ShellContext";
+import { useTodayPage } from "../store/todayPageStore";
 import { openToday } from "../utils/openToday";
 import { FileTree } from "./FileTree";
 import { FrameControls, TrafficLightInset } from "./FrameControls";
@@ -32,15 +32,14 @@ export function WorkspaceSidebar({
   onNavigate,
   onToggleSidebar,
 }: WorkspaceSidebarProps) {
-  const roots = useDiskStore((state) => state.roots);
   const isRecent = useTabsStore((state) => {
     const shown = selectCurrentLocation(state);
     return shown?.mode === "browse" && shown.collection.kind === "recent";
   });
   const openedPath = useTabsStore(selectOpenedPath);
   const { navigateFiles } = useShell();
-  const todayLog = `/Inbox/Logs/${localDate()}.md`;
-  const isToday = roots.some((root) => openedPath === `${root}${todayLog}`);
+  const today = useTodayPage();
+  const isToday = today.path !== null && today.date === localDate() && openedPath === today.path;
 
   const goToToday = async (newTab: boolean) => {
     try {

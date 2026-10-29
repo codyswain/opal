@@ -1,0 +1,4 @@
+- 09:14 Decided to log conversations via CLAUDE.md rather than a Stop hook, since Stop can't run a light model. · [[Library/chats/vault-logging|Vault logging]] · agent turn
+- 09:20 Edited Robert Xu's person note with the Oct 28 call and his two open questions. · [[Library/people/Robert Xu|Robert Xu]], [SW-640](https://linear.app/parametricpbc/issue/SW-640) · 2 connector calls
+- 09:31-09:44 Folded three Slack posts to #sf-nest-1 into one line. · 3 connector calls
+- 08:02 Edited `Library/people/Robert Xu.md`

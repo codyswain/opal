@@ -13,7 +13,6 @@ import os from "os";
 import * as filesystem from "fs/promises";
 import path from "path";
 import { RootRegistry } from "@/main/fs/RootRegistry";
-import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
 import { VaultService } from "@/main/vault/VaultService";
 
 vi.mock("fs/promises", async (importOriginal) => {
@@ -21,60 +20,97 @@ vi.mock("fs/promises", async (importOriginal) => {
   return { ...actual, open: vi.fn(actual.open) };
 });
 
+const TEMPLATE = "---\ndate: {{date:YYYY-MM-DD}}\ntags:\n  - daily\n---\n";
+
 describe("VaultService", () => {
   let temporary: string,
     root: string,
     registry: RootRegistry,
     service: VaultService;
   const date = "2026-09-08";
+  const daily = () => path.join(root, `Library/daily/${date}.md`);
   beforeEach(async () => {
     temporary = await mkdtemp(path.join(os.tmpdir(), "opal-vault-"));
     root = path.join(temporary, "vault");
-    await mkdir(path.join(root, "Inbox/Logs"), { recursive: true });
+    await mkdir(path.join(root, "Library/logs"), { recursive: true });
     registry = new RootRegistry({
       storePath: path.join(temporary, "roots.json"),
     });
     root = await registry.add(root);
-    service = new VaultService({
-      registry,
-      markdown: new MarkdownDocumentService({ registry }),
-    });
+    service = new VaultService({ registry });
   });
   afterEach(async () => {
     await rm(temporary, { recursive: true, force: true });
   });
-  it("discovers vaults without writing", async () => {
+
+  it("discovers vaults by their daily, log or old Inbox/Logs folder, without writing", async () => {
     expect(await service.discover()).toEqual([{ path: root, name: "vault" }]);
-    expect(await readdir(root)).toEqual(["Inbox"]);
+    expect(await readdir(root)).toEqual(["Library"]);
+    const others: string[] = [];
+    for (const [index, folder] of ["Library/daily", "Inbox/Logs", "Library/notes"].entries()) {
+      const other = path.join(temporary, `other-${index}`);
+      await mkdir(path.join(other, folder), { recursive: true });
+      others.push(await registry.add(other));
+    }
+    expect((await service.discover()).map((vault) => vault.path)).toEqual([root, others[0], others[1]]);
   });
-  it("creates the day from the vault template's journal part", async () => {
+
+  it("writes Library/daily/<date>.md from the vault template and returns its path", async () => {
+    await mkdir(path.join(root, "Archive/Journal"), { recursive: true });
+    await writeFile(path.join(root, "Archive/Journal/Template.md"), TEMPLATE);
+    expect(await service.createDay(root, date)).toEqual({ path: daily() });
+    expect(await readFile(daily(), "utf8")).toBe(
+      "---\ndate: 2026-09-08\ntags:\n  - daily\n---\n",
+    );
+  });
+
+  it("fills Obsidian's plain {{date}} and {{title}} and adds no Activity Log", async () => {
     await mkdir(path.join(root, "Archive/Journal"), { recursive: true });
     await writeFile(
       path.join(root, "Archive/Journal/Template.md"),
-      "## Notes\n\n---\n## Activity Log\n- template line\n",
+      "# {{title}}\n\nWritten {{date}}.\n",
     );
     await service.createDay(root, date);
-    const created = await readFile(
-      path.join(root, `Inbox/Logs/${date}.md`),
-      "utf8",
-    );
-    expect(created.startsWith("## Notes")).toBe(true);
-    expect(created.endsWith("## Activity Log\n")).toBe(true);
-    expect(created).not.toContain("template line");
+    const created = await readFile(daily(), "utf8");
+    expect(created).toBe("# 2026-09-08\n\nWritten 2026-09-08.\n");
+    expect(created).not.toContain("Activity Log");
   });
-  it("creates only the exact day once, preserving an existing routine log", async () => {
-    await Promise.all([
+
+  it("writes the two properties when the vault has no template, creating Library/daily", async () => {
+    expect(await service.createDay(root, date)).toEqual({ path: daily() });
+    expect(await readFile(daily(), "utf8")).toBe(
+      "---\ndate: 2026-09-08\ntags:\n  - daily\n---\n",
+    );
+  });
+
+  it("creates only the exact day once, and never overwrites an existing page", async () => {
+    const results = await Promise.all([
       service.createDay(root, date),
       service.createDay(root, date),
     ]);
-    expect(await readdir(path.join(root, "Inbox/Logs"))).toEqual([
+    expect(results).toEqual([{ path: daily() }, { path: daily() }]);
+    expect(await readdir(path.join(root, "Library/daily"))).toEqual([
       `${date}.md`,
     ]);
-    const log = path.join(root, `Inbox/Logs/${date}.md`);
-    await writeFile(log, "routine\n");
-    await service.createDay(root, date);
-    expect(await readFile(log, "utf8")).toBe("routine\n");
+    await writeFile(daily(), "Mine\n");
+    expect(await service.createDay(root, date)).toEqual({ path: daily() });
+    expect(await readFile(daily(), "utf8")).toBe("Mine\n");
   });
+
+  it("opens an existing Inbox/Logs page while the daily page does not exist yet", async () => {
+    const legacy = path.join(root, `Inbox/Logs/${date}.md`);
+    await mkdir(path.dirname(legacy), { recursive: true });
+    await writeFile(legacy, "## Morning\n\n---\n## Activity Log\n");
+    expect(await service.createDay(root, date)).toEqual({ path: legacy });
+    expect(await readdir(root)).toEqual(["Inbox", "Library"]);
+    expect(await readdir(path.join(root, "Library"))).toEqual(["logs"]);
+    expect(await readFile(legacy, "utf8")).toBe("## Morning\n\n---\n## Activity Log\n");
+    // Once the daily page exists, it wins.
+    await mkdir(path.dirname(daily()));
+    await writeFile(daily(), "Moved\n");
+    expect(await service.createDay(root, date)).toEqual({ path: daily() });
+  });
+
   it("does not claim the final daily name if writing the initial contents fails", async () => {
     const realOpen = (
       await vi.importActual<typeof import("fs/promises")>("fs/promises")
@@ -90,29 +126,29 @@ describe("VaultService", () => {
       });
     try {
       await expect(service.createDay(root, date)).rejects.toThrow("disk full");
-      expect(await readdir(path.join(root, "Inbox/Logs"))).toEqual([]);
+      expect(await readdir(path.join(root, "Library/daily"))).toEqual([]);
     } finally {
       opening.mockImplementation(realOpen);
     }
     await service.createDay(root, date);
-    expect(
-      await readFile(path.join(root, `Inbox/Logs/${date}.md`), "utf8"),
-    ).toContain("## Morning");
+    expect(await readFile(daily(), "utf8")).toContain("date: 2026-09-08");
   });
+
   it("refuses a directory occupying the exact daily filename", async () => {
-    await mkdir(path.join(root, `Inbox/Logs/${date}.md`));
+    await mkdir(daily(), { recursive: true });
     await expect(service.createDay(root, date)).rejects.toThrow("not a file");
   });
+
   it("rejects invalid dates, nested roots, and symlink escape even into another allowed root", async () => {
     await expect(service.createDay(root, "2026-02-30")).rejects.toThrow();
     await expect(
-      service.createDay(path.join(root, "Inbox"), date),
+      service.createDay(path.join(root, "Library"), date),
     ).rejects.toThrow();
     const other = path.join(temporary, "other");
     await mkdir(other);
     await registry.add(other);
-    await rm(path.join(root, "Inbox/Logs"), { recursive: true });
-    await symlink(other, path.join(root, "Inbox/Logs"));
+    await rm(path.join(root, "Library"), { recursive: true });
+    await symlink(other, path.join(root, "Library"));
     await expect(service.createDay(root, date)).rejects.toThrow();
     expect(await readdir(other)).toEqual([]);
     expect(await service.discover()).toEqual([]);

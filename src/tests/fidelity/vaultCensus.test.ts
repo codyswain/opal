@@ -58,7 +58,8 @@ describe.skipIf(!ROOT)('vault census', () => {
       const doc = state.doc.toString();
       if (doc !== parsed.body || !joinMarkdown(parsed, doc).equals(bytes)) { failures.push(file); continue; }
       // One typed character lands as one more byte, everything else unchanged.
-      // The middle line of a daily log is often in its read-only Activity Log, so this skips the guard.
+      // Log pages are read-only, and the middle line of an old daily log is often in its
+      // Activity Log, so this skips the guard.
       const at = state.doc.line(Math.ceil(state.doc.lines / 2)).from;
       const edited = joinMarkdown(parsed, state.update({ changes: { from: at, insert: 'x' }, filter: false }).state.doc.toString());
       const offset = parsed.prefix.length + Buffer.byteLength(parsed.source.slice(0, sourceIndex(parsed.source, at)));

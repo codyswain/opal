@@ -1,6 +1,7 @@
 import "@/main/applyTestProfile";
 import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
+import { DayService } from "@/main/vault/DayService";
 import {
   app,
   BrowserWindow,
@@ -404,6 +405,7 @@ const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
     collectionIndex.invalidateDirectories(directories);
     linkIndex.invalidateDirectories(directories);
+    void dayService.changed(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -415,13 +417,19 @@ const markdownDocuments = new MarkdownDocumentService({
   activity: activityService,
   recoveryDir: path.join(userDataDir, "Recovered"),
 });
-const vaultService = new VaultService({
+const vaultService = new VaultService({ registry: rootRegistry });
+const dayService = new DayService({
   registry: rootRegistry,
-  markdown: markdownDocuments,
+  resolveLinks: (from, targets) => linkIndex.resolve(from, targets),
+  onChanged: (change) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("vault:day-changed", change);
+  },
 });
 const vaultHandlers = new VaultHandlers({
   ipc: ipcMain,
   service: vaultService,
+  days: dayService,
 });
 const fileWriter = new FileWriter({
   registry: rootRegistry,

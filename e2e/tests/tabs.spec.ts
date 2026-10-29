@@ -38,7 +38,7 @@ const clickMenuItem = (app: ElectronApplication, label: string) =>
     return false;
   }, label);
 
-/** A vault without Inbox/Logs has no Today, so launch leaves the page empty. */
+/** A folder without Library/daily or Library/logs has no Today, so launch leaves the page empty. */
 async function openTwoTabs(page: Page) {
   await page.getByTestId(`disk-tree-item-${vaultRoot}/readme.md`).click();
   await page.getByTestId(`disk-tree-item-${vaultRoot}/Photos`).click();

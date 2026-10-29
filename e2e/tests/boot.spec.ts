@@ -41,7 +41,7 @@ test.describe("with a vault", () => {
 
   test.beforeAll(async () => {
     vault = await createTempVault();
-    await mkdir(path.join(vault.root, "Inbox/Logs"), { recursive: true });
+    await mkdir(path.join(vault.root, "Library/logs"), { recursive: true });
     root = await realpath(vault.root);
   });
 
@@ -53,18 +53,35 @@ test.describe("with a vault", () => {
     await seedRoots(userDataDir, [root]);
   });
 
-  test("launches into today's log page", async ({ page }) => {
+  test("launches into today's daily page, and the day's files cross the bridge", async ({ page }) => {
     const date = await page.evaluate(() => {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     });
-    const log = path.join(root, "Inbox/Logs", `${date}.md`);
+    const daily = path.join(root, "Library/daily", `${date}.md`);
     await expect
       .poll(() => page.evaluate(() => decodeURIComponent(window.location.hash)))
-      .toContain(`file=${log}`);
-    expect(existsSync(log)).toBe(true);
-    await writeFile(log, "Kept as written\n");
+      .toContain(`file=${daily}`);
+    expect(existsSync(daily)).toBe(true);
+    await writeFile(daily, "Kept as written\n");
     await page.getByRole("button", { name: "Today" }).click();
     await expect(page.getByText("Kept as written")).toBeVisible();
+
+    const log = path.join(root, "Library/logs", `${date} log.md`);
+    await page.evaluate((target) => {
+      const changes: string[] = [];
+      (window as unknown as { dayChanges: string[] }).dayChanges = changes;
+      window.vaultAPI.onDayChanged((change) => changes.push(`${change.root} ${change.date}`));
+      return window.vaultAPI.day(target.root, target.date);
+    }, { root, date });
+    await writeFile(log, "---\ntype: log\n---\n- 09:00 Ran the digest. · routine run\n");
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { dayChanges: string[] }).dayChanges))
+      .toContain(`${root} ${date}`);
+    const day = await page.evaluate((target) => window.vaultAPI.day(target.root, target.date), { root, date });
+    expect(day).toMatchObject({
+      success: true,
+      data: { date, daily, log, entries: [{ time: "09:00", text: "Ran the digest.", kind: "routine run" }] },
+    });
   });
 });

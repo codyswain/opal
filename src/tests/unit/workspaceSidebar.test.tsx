@@ -20,6 +20,7 @@ import { installActivityApi } from "@/tests/helpers/activityApi";
 import { installCollectionsApi } from "@/tests/helpers/collectionsApi";
 import { localDate } from "@/common/vaultModel";
 import { openTabs, resetTabs, tabPaths } from "@/tests/helpers/tabs";
+import { useTodayPage } from "@/renderer/features/shell/store/todayPageStore";
 
 const ROOT = "/Vault";
 const DESIGN = "/Vault/Design";
@@ -74,6 +75,7 @@ beforeEach(() => {
     })),
   });
   resetTabs();
+  useTodayPage.setState({ date: null, path: null });
   useDiskStore.setState({
     roots: [],
     rootsLoaded: false,
@@ -84,8 +86,10 @@ beforeEach(() => {
 });
 
 describe("WorkspaceSidebar", () => {
-  it("opens today's log page from the Today shortcut, creating it first", async () => {
-    const createDay = vi.fn(async () => ({ success: true as const, data: undefined }));
+  it("opens today's page from the Today shortcut, at the path the main process returns", async () => {
+    const today = localDate();
+    const page = `${ROOT}/Library/daily/${today}.md`;
+    const createDay = vi.fn(async () => ({ success: true as const, data: { path: page } }));
     (window as unknown as { vaultAPI: unknown }).vaultAPI = {
       discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT, name: "Vault" }] })),
       createDay,
@@ -93,22 +97,20 @@ describe("WorkspaceSidebar", () => {
     const user = userEvent.setup();
     renderSidebar(false, "/");
     await user.click(screen.getByRole("button", { name: "Today" }));
-    const today = localDate();
-    const log = `${ROOT}/Inbox/Logs/${today}.md`;
     expect(createDay).toHaveBeenCalledWith(ROOT, today);
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
-        `file=${encodeURIComponent(log)}`,
+        `file=${encodeURIComponent(page)}`,
       ),
     );
     // Today counts as an open, so it shows in Recent.
-    expect(window.activityAPI.record).toHaveBeenCalledWith(log, "opened");
+    expect(window.activityAPI.record).toHaveBeenCalledWith(page, "opened");
 
     // Cmd+click opens Today in a new tab instead.
     await user.keyboard("{Meta>}");
     await user.click(screen.getByRole("button", { name: "Today" }));
     await user.keyboard("{/Meta}");
-    await waitFor(() => expect(tabPaths()).toEqual([log, log]));
+    await waitFor(() => expect(tabPaths()).toEqual([page, page]));
   });
 
   it("opens the Settings dialog from the gear", async () => {
@@ -120,14 +122,19 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/files");
   });
 
-  it("marks Today active while today's log is open", () => {
-    const log = `${ROOT}/Inbox/Logs/${localDate()}.md`;
-    useDiskStore.setState({ roots: [ROOT] });
-    openTabs([log]);
+  it("marks Today active while the page Today opened is open", () => {
+    const page = `${ROOT}/Library/daily/${localDate()}.md`;
+    useTodayPage.setState({ date: localDate(), path: page });
+    openTabs([page]);
     renderSidebar();
     expect(screen.getByRole("button", { name: "Today" })).toHaveClass("bg-surface-selected");
 
     act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
+    expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
+
+    // Yesterday's page is not today's.
+    act(() => useTodayPage.setState({ date: "2026-01-01" }));
+    act(() => useTabsStore.getState().open(fileLocation(page)));
     expect(screen.getByRole("button", { name: "Today" })).not.toHaveClass("bg-surface-selected");
   });
 

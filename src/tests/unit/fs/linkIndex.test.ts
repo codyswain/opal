@@ -8,26 +8,30 @@ import { PathNotAllowedError, RootRegistry } from '@/main/fs/RootRegistry';
 describe('resolveLinkTarget', () => {
   const files = [
     '/Vault/Library/people/Robert Xu.md',
-    '/Vault/Inbox/Robert Xu.md',
-    '/Vault/Inbox/Logs/2026-10-28.md',
+    '/Vault/Library/Robert Xu.md',
+    '/Vault/Library/logs/2026-10-28 log.md',
+    '/Vault/Library/daily/2026-10-28.md',
+    '/Vault/Library/digests/2026-10-28 digest.md',
     '/Vault/Library/parametric/base-layout.png',
     '/Vault/Library/parametric/base-electronics/catalog.md',
     '/Vault/Archive/catalog.md',
     '/Vault/Archive/v1.2 notes.md',
     '/Vault/Library/Café.md',
   ];
-  const from = '/Vault/Inbox/Logs/2026-10-28.md';
+  const from = '/Vault/Library/logs/2026-10-28 log.md';
 
   it('finds a note by name, ignoring case and Unicode form, with or without .md', () => {
     expect(resolveLinkTarget('robert xu', '/Vault/Library/people/Ahmed.md', files)).toBe('/Vault/Library/people/Robert Xu.md');
-    expect(resolveLinkTarget('2026-10-28.md', from, files)).toBe(from);
+    expect(resolveLinkTarget('2026-10-28 log.md', from, files)).toBe(from);
+    // Logs and digests carry a suffix, so a bare date always means the daily page.
+    expect(resolveLinkTarget('2026-10-28', from, files)).toBe('/Vault/Library/daily/2026-10-28.md');
     expect(resolveLinkTarget('v1.2 notes', from, files)).toBe('/Vault/Archive/v1.2 notes.md');
     expect(resolveLinkTarget('Café', from, files)).toBe('/Vault/Library/Café.md');
     expect(resolveLinkTarget('base-layout.png', from, files)).toBe('/Vault/Library/parametric/base-layout.png');
   });
 
   it('prefers the linking note\'s folder, then the shortest path', () => {
-    expect(resolveLinkTarget('Robert Xu', '/Vault/Inbox/today.md', files)).toBe('/Vault/Inbox/Robert Xu.md');
+    expect(resolveLinkTarget('Robert Xu', '/Vault/Library/today.md', files)).toBe('/Vault/Library/Robert Xu.md');
     expect(resolveLinkTarget('Robert Xu', '/Vault/Library/people/Ahmed.md', files)).toBe('/Vault/Library/people/Robert Xu.md');
     expect(resolveLinkTarget('catalog', from, files)).toBe('/Vault/Archive/catalog.md');
   });
@@ -35,7 +39,7 @@ describe('resolveLinkTarget', () => {
   it('matches a path from the vault root or relative to the note, and nothing else', () => {
     expect(resolveLinkTarget('Library/people/Robert Xu', from, files)).toBe('/Vault/Library/people/Robert Xu.md');
     expect(resolveLinkTarget('base-electronics/catalog', from, files)).toBe('/Vault/Library/parametric/base-electronics/catalog.md');
-    expect(resolveLinkTarget('../Robert Xu', from, files)).toBe('/Vault/Inbox/Robert Xu.md');
+    expect(resolveLinkTarget('../Robert Xu', from, files)).toBe('/Vault/Library/Robert Xu.md');
     expect(resolveLinkTarget('./catalog', from, files)).toBeNull();
     expect(resolveLinkTarget('Xu', from, files)).toBeNull();
     expect(resolveLinkTarget('  ', from, files)).toBeNull();

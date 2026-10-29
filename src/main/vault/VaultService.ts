@@ -1,147 +1,132 @@
 import { randomUUID } from "crypto";
-import { link, lstat, open, unlink } from "fs/promises";
+import { constants } from "fs";
+import { link, lstat, mkdir, open, unlink } from "fs/promises";
 import path from "path";
-import { MarkdownDocumentService } from "@/main/fs/MarkdownDocumentService";
 import { filesystemMutationQueue } from "@/main/fs/MutationQueue";
 import { RootRegistry } from "@/main/fs/RootRegistry";
-import { isInsideRoot } from "@/main/fs/paths";
 import type { VaultInfo } from "@/types/vault";
-import { splitDailyLog, validDate } from "@/common/vaultModel";
+import { defaultDailyPage, fillDailyTemplate, validDate } from "@/common/vaultModel";
+import {
+  DAY_LAYOUT,
+  LEGACY_DAY_LAYOUT,
+  dailyName,
+  inVault,
+  missing,
+  openedVault,
+} from "./vaultPaths";
 
 interface Dependencies {
   registry: RootRegistry;
-  markdown: MarkdownDocumentService;
 }
-const missing = (error: unknown) =>
-  (error as NodeJS.ErrnoException).code === "ENOENT";
+
+/** A template larger than this is not a daily template. */
+const TEMPLATE_LIMIT = 256 * 1024;
 
 /** All vault layout and ownership rules live on this side of the IPC boundary. */
 export class VaultService {
   constructor(private deps: Dependencies) {}
-
-  private async root(target: string): Promise<string> {
-    if (typeof target !== "string" || !path.isAbsolute(target))
-      throw new Error("Choose an opened vault folder.");
-    const canonical = await this.deps.registry.assertAllowed(target);
-    if (!this.deps.registry.list().includes(canonical))
-      throw new Error("Choose an opened vault folder.");
-    return canonical;
-  }
-
-  /** Reject links at every vault-owned segment, including missing-file ancestors. */
-  private async contained(
-    root: string,
-    target: string,
-    allowMissing = false,
-  ): Promise<string> {
-    const normalized = path.resolve(target);
-    if (!isInsideRoot(root, normalized))
-      throw new Error("This source is outside the selected vault.");
-    let cursor = root;
-    const parts = path
-      .relative(root, normalized)
-      .split(path.sep)
-      .filter(Boolean);
-    for (let index = 0; index < parts.length; index++) {
-      cursor = path.join(cursor, parts[index]);
-      try {
-        const info = await lstat(cursor);
-        if (info.isSymbolicLink())
-          throw new Error(
-            "Symlink sources are not supported in the daily view.",
-          );
-        if (index < parts.length - 1 && !info.isDirectory())
-          throw new Error("A vault folder is not a directory.");
-      } catch (error) {
-        if (allowMissing && missing(error)) return normalized;
-        throw error;
-      }
-    }
-    return normalized;
-  }
 
   private checkDate(date: string): void {
     if (typeof date !== "string" || !validDate(date))
       throw new Error("Choose a valid calendar date.");
   }
 
+  /** An opened folder is a vault when it has a daily, log or old Inbox/Logs folder. */
   async discover(): Promise<VaultInfo[]> {
     const result: VaultInfo[] = [];
     for (const root of this.deps.registry.list()) {
-      try {
-        const folder = await this.contained(
-          await this.root(root),
-          path.join(root, "Inbox/Logs"),
-        );
-        if ((await lstat(folder)).isDirectory())
+      for (const folder of [DAY_LAYOUT.daily, DAY_LAYOUT.logs, LEGACY_DAY_LAYOUT.logs]) {
+        try {
+          const canonical = await openedVault(this.deps.registry, root);
+          const target = await inVault(canonical, path.join(canonical, folder));
+          if (!(await lstat(target)).isDirectory()) continue;
           result.push({ path: root, name: path.basename(root) || root });
-      } catch {
-        /* A non-vault root remains available in Files. */
+          break;
+        } catch {
+          /* A non-vault root remains available in Files. */
+        }
       }
     }
     return result;
   }
 
-  async createDay(target: string, date: string): Promise<undefined> {
+  /** The existing regular file at `file`, or null when nothing is there. */
+  private async existing(root: string, file: string): Promise<string | null> {
+    try {
+      const target = await inVault(root, file);
+      if (!(await lstat(target)).isFile())
+        throw new Error("The daily page path is not a file.");
+      return target;
+    } catch (error) {
+      if (missing(error)) return null;
+      throw error;
+    }
+  }
+
+  private async template(root: string, date: string): Promise<string> {
+    let handle;
+    try {
+      const template = await inVault(root, path.join(root, DAY_LAYOUT.template));
+      handle = await open(template, constants.O_RDONLY | constants.O_NOFOLLOW);
+    } catch (error) {
+      if (missing(error)) return defaultDailyPage(date);
+      throw error;
+    }
+    try {
+      const info = await handle.stat();
+      if (!info.isFile() || info.size > TEMPLATE_LIMIT)
+        throw new Error("The daily template is not a small text file.");
+      return fillDailyTemplate(await handle.readFile("utf8"), date);
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /**
+   * The page Today opens for `date`: `Library/daily/<date>.md`, written from
+   * the vault's template when it does not exist yet. Until the cleanup commit,
+   * an existing `Inbox/Logs/<date>.md` is opened instead when the daily page
+   * does not exist. Never overwrites a file.
+   */
+  async createDay(target: string, date: string): Promise<{ path: string }> {
     this.checkDate(date);
-    const root = await this.root(target);
+    const root = await openedVault(this.deps.registry, target);
     return filesystemMutationQueue.run(async () => {
-      const log = await this.contained(
-        root,
-        path.join(root, "Inbox/Logs", `${date}.md`),
-        true,
-      );
-      await this.contained(root, path.dirname(log));
-      try {
-        if (!(await lstat(log)).isFile())
-          throw new Error("The daily log path is not a file.");
-        return undefined;
-      } catch (error) {
-        if (!missing(error)) throw error;
-      }
-      let journal =
-        "## Morning\n### What matters today\n\n## Evening\n### What I want to remember\n";
-      try {
-        const template = await this.contained(
-          root,
-          path.join(root, "Archive/Journal/Template.md"),
-        );
-        journal = splitDailyLog(
-          (await this.deps.markdown.read(template)).body,
-        ).journal;
-      } catch (error) {
-        if (!missing(error)) throw error;
-      }
+      const page = path.join(root, DAY_LAYOUT.daily, dailyName(date));
+      const found =
+        (await this.existing(root, page)) ??
+        (await this.existing(root, path.join(root, LEGACY_DAY_LAYOUT.logs, dailyName(date))));
+      if (found) return { path: found };
+      await inVault(root, page, true);
+      await mkdir(path.dirname(page), { recursive: true });
+      await inVault(root, path.dirname(page));
+      const contents = await this.template(root, date);
       const temporary = path.join(
-        path.dirname(log),
+        path.dirname(page),
         `.opal-day-${randomUUID()}`,
       );
       try {
         const handle = await open(temporary, "wx", 0o644);
         try {
-          await handle.writeFile(
-            `${journal.trimEnd()}\n\n---\n## Activity Log\n`,
-            "utf8",
-          );
+          await handle.writeFile(contents, "utf8");
           await handle.sync();
         } finally {
           await handle.close();
         }
-        await this.contained(root, log, true);
+        await inVault(root, page, true);
         // Linking publishes the fully written inode atomically, and never replaces
-        // a daily log a routine created while the template was being written.
+        // a page another app created while the template was being written.
         try {
-          await link(temporary, log);
+          await link(temporary, page);
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          await this.contained(root, log);
-          if (!(await lstat(log)).isFile())
-            throw new Error("The daily log path is not a file.");
+          if (!(await this.existing(root, page)))
+            throw new Error("The daily page path is not a file.");
         }
       } finally {
         await unlink(temporary).catch(() => undefined);
       }
-      return undefined;
+      return { path: page };
     });
   }
 }

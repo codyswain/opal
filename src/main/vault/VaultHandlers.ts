@@ -2,6 +2,7 @@ import type { IpcMain } from "electron";
 import path from "path";
 import type { VaultResult } from "@/types/vault";
 import { validDate } from "@/common/vaultModel";
+import type { DayService } from "./DayService";
 import type { VaultService } from "./VaultService";
 
 const nonempty = (value: unknown, limit = 32768): value is string =>
@@ -20,14 +21,23 @@ const invalid = (): VaultResult<never> => ({
 
 export class VaultHandlers {
   constructor(
-    private deps: { ipc: Pick<IpcMain, "handle">; service: VaultService },
+    private deps: {
+      ipc: Pick<IpcMain, "handle">;
+      service: VaultService;
+      days: DayService;
+    },
   ) {}
   registerAll(): void {
-    const { ipc, service } = this.deps;
+    const { ipc, service, days } = this.deps;
     ipc.handle("vault:discover", () => this.respond(() => service.discover()));
     ipc.handle("vault:create-day", (_, root: unknown, day: unknown) =>
       target(root) && date(day)
         ? this.respond(() => service.createDay(root, day))
+        : invalid(),
+    );
+    ipc.handle("vault:day", (_, root: unknown, day: unknown) =>
+      target(root) && date(day)
+        ? this.respond(() => days.day(root, day))
         : invalid(),
     );
   }

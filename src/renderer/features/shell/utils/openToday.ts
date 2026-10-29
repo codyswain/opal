@@ -5,11 +5,13 @@ import {
   type FilesNavigationIntent,
 } from "@/renderer/features/disk-explorer/navigation";
 import type { OpenOptions } from "@/renderer/features/disk-explorer/store/tabsStore";
+import { useTodayPage } from "../store/todayPageStore";
 
 /**
- * Today is a shortcut, not a screen: it opens the day's log page in the
- * editor, creating it from the vault's template first when it does not exist,
- * and counts as an open for Recent. Resolves false when no opened folder is a vault (no `Inbox/Logs`).
+ * Today is a shortcut, not a screen: it opens the day's page in the editor,
+ * which the main process creates from the vault's template first when it does
+ * not exist, and counts as an open for Recent. Resolves false when no opened
+ * folder is a vault.
  */
 export async function openToday(
   navigateFiles: (intent: FilesNavigationIntent, options?: Pick<OpenOptions, "newTab">) => void,
@@ -22,7 +24,8 @@ export async function openToday(
   const date = localDate();
   const created = await window.vaultAPI.createDay(root, date);
   if ("error" in created) throw new Error(created.error);
-  const page = `${root}/Inbox/Logs/${date}.md`;
+  const page = created.data.path;
+  useTodayPage.setState({ date, path: page });
   recordOpened(page);
   navigateFiles(focusFile(page), options);
   return true;

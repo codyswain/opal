@@ -1,9 +1,17 @@
-import { EditorState, StateField, type Text } from '@codemirror/state';
+import { EditorState, Facet, StateField, type Text } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 
 const HEADING = /^## Activity Log[ \t]*$/;
 
-/** Daily logs keep an Activity Log that only the vault's hook script writes. */
+/** A day's activity log. Only the vault's scripts write it, so the whole page is read-only. */
+export function isLogPage(path: string): boolean {
+  return /(^|\/)Library\/logs\/[^/]+\.md$/.test(path);
+}
+
+/**
+ * Daily logs from before the Library move keep an Activity Log section that
+ * only the vault's hook script writes. Removed in the cleanup commit.
+ */
 export function isDailyLog(path: string): boolean {
   return /(^|\/)Inbox\/Logs\/[^/]+\.md$/.test(path);
 }
@@ -18,10 +26,13 @@ export function activityLogStart(doc: Text): number | null {
   return null;
 }
 
-/** Where the Activity Log starts on a daily log's page; the field is only there on daily logs. */
+/** Set on a log page, where the read-only part starts at the top. */
+const wholePage = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
+
+/** Where the read-only part of the page starts; the field is only there on log pages and daily logs. */
 export const activityLogSection = StateField.define<number | null>({
-  create: (state) => activityLogStart(state.doc),
-  update: (start, tr) => (tr.docChanged ? activityLogStart(tr.newDoc) : start),
+  create: (state) => (state.facet(wholePage) ? 0 : activityLogStart(state.doc)),
+  update: (start, tr) => (tr.state.facet(wholePage) ? 0 : tr.docChanged ? activityLogStart(tr.newDoc) : start),
 });
 
 const muted = Decoration.line({ class: 'cm-activity-log' });
@@ -36,25 +47,28 @@ const sectionDecorations = EditorView.decorations.compute(['doc', activityLogSec
   return Decoration.set(lines);
 });
 
+// Typing in the read-only part is dropped. Disk changes pass with `filter: false`.
+const dropLockedChanges = EditorState.changeFilter.of((tr) => {
+  const start = tr.startState.field(activityLogSection);
+  if (start === null) return true;
+  let allowed = true;
+  tr.changes.iterChangedRanges((_from, to) => {
+    if (to >= start) allowed = false;
+  });
+  return allowed;
+});
+
 /**
  * Makes the Activity Log section, from its heading line to the end of the
  * page, read-only. Typing there is dropped, and so is anything that would
  * change the heading line: deleting the line break before it, typing at its
- * start, or adding text after the last line. Disk changes pass with
- * `filter: false`.
+ * start, or adding text after the last line.
  */
 export function readOnlyActivityLog() {
-  return [
-    activityLogSection,
-    sectionDecorations,
-    EditorState.changeFilter.of((tr) => {
-      const start = tr.startState.field(activityLogSection);
-      if (start === null) return true;
-      let allowed = true;
-      tr.changes.iterChangedRanges((_from, to) => {
-        if (to >= start) allowed = false;
-      });
-      return allowed;
-    }),
-  ];
+  return [activityLogSection, sectionDecorations, dropLockedChanges];
+}
+
+/** Makes a whole log page read-only. It reads as rendered and still follows lines the scripts append. */
+export function readOnlyLogPage() {
+  return [wholePage.of(true), activityLogSection, dropLockedChanges, EditorState.readOnly.of(true)];
 }

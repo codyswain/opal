@@ -192,7 +192,7 @@ describe('CommandPalette', () => {
     const user = userEvent.setup();
     window.vaultAPI = {
       discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT }] })),
-      createDay: vi.fn(async () => ({ success: true as const, data: undefined })),
+      createDay: vi.fn(async (root: string, date: string) => ({ success: true as const, data: { path: `${root}/Library/daily/${date}.md` } })),
     } as unknown as typeof window.vaultAPI;
     openTabs(['/Vault/inbox.md']);
     renderPalette();
@@ -205,7 +205,7 @@ describe('CommandPalette', () => {
     await user.click(await within(palette).findByTestId('palette-command-nav.today'));
     await waitFor(() => expect(tabPaths()).toHaveLength(2));
     expect(tabPaths()[0]).toBe('/Vault/inbox.md');
-    expect(openedPath()).toMatch(/^\/Vault\/Inbox\/Logs\/\d{4}-\d{2}-\d{2}\.md$/);
+    expect(openedPath()).toMatch(/^\/Vault\/Library\/daily\/\d{4}-\d{2}-\d{2}\.md$/);
   });
 
   it('limits results to commands after > and runs the selected command', async () => {

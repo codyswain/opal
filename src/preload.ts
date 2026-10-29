@@ -1,4 +1,5 @@
 import type { VaultAPI } from "./types/vault";
+import type { VaultDayChange } from "./types/day";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
 import type { MarkdownCopyLabel, UnsavedPage } from "./types/markdown";
@@ -137,5 +138,12 @@ contextBridge.exposeInMainWorld("markdownAPI", {
 const vaultAPI: VaultAPI = {
   discover: () => ipcRenderer.invoke("vault:discover"),
   createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
+  day: (root, date) => ipcRenderer.invoke("vault:day", root, date),
+  onDayChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, change: VaultDayChange) =>
+      callback(change);
+    ipcRenderer.on("vault:day-changed", listener);
+    return () => ipcRenderer.removeListener("vault:day-changed", listener);
+  },
 };
 contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);

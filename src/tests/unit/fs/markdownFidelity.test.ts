@@ -6,6 +6,7 @@ import { EditorState } from '@codemirror/state';
 vi.mock('@/main/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 import { MarkdownDocumentService } from '@/main/fs/MarkdownDocumentService';
 import { RootRegistry } from '@/main/fs/RootRegistry';
+import { isLogPage } from '@/renderer/features/disk-explorer/components/editor/activityLog';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 
 /**
@@ -36,7 +37,8 @@ beforeEach(async () => {
   noteEdited.mockClear();
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-fidelity-'));
   const registry = new RootRegistry({ storePath: path.join(tmp, 'roots.json') });
-  await mkdir(path.join(tmp, 'Vault/Inbox/Logs'), { recursive: true });
+  await mkdir(path.join(tmp, 'Vault/Library/daily'), { recursive: true });
+  await mkdir(path.join(tmp, 'Vault/Library/logs'), { recursive: true });
   root = await registry.add(path.join(tmp, 'Vault'));
   service = new MarkdownDocumentService({ registry, activity: { noteEdited } });
 });
@@ -48,7 +50,8 @@ async function fixtureNames(): Promise<string[]> {
 
 /** Opens a file the way the page does: read through the service, then into the editor's state. */
 async function open(bytes: Buffer, name: string) {
-  const file = path.join(root, name.startsWith('daily') ? `Inbox/Logs/${name}` : name);
+  const folder = { 'daily.md': 'Library/daily', 'log.md': 'Library/logs' }[name];
+  const file = path.join(root, folder ? `${folder}/${name}` : name);
   await writeFile(file, bytes);
   const document = await service.read(file);
   const state = EditorState.create({ doc: document.body, extensions: markdownEditorExtensions(file) });
@@ -57,7 +60,7 @@ async function open(bytes: Buffer, name: string) {
 
 describe('Markdown fidelity', () => {
   it('has fixtures for callouts, links, tables, lists, code, logs and typography', async () => {
-    expect(await fixtureNames()).toEqual(['callouts.md', 'code.md', 'daily-log.md', 'links.md', 'lists.md', 'tables.md', 'typography.md']);
+    expect(await fixtureNames()).toEqual(['callouts.md', 'code.md', 'daily.md', 'links.md', 'lists.md', 'log.md', 'tables.md', 'typography.md']);
   });
 
   for (const [variant, encode] of Object.entries(VARIANTS)) {
@@ -82,6 +85,11 @@ describe('Markdown fidelity', () => {
         // Type one character at the start of a middle line, as the keyboard would.
         const at = state.doc.line(Math.ceil(state.doc.lines / 2)).from;
         const edited = state.update({ changes: { from: at, insert: 'x' }, userEvent: 'input.type' }).state;
+        if (isLogPage(file)) {
+          // A log page is read-only, so the typed character never reaches the text.
+          expect(edited.doc.toString(), name).toBe(document.body);
+          continue;
+        }
         await service.write(file, edited.doc.toString(), document.revision);
         const after = await readFile(file);
         expect(after.length, name).toBe(bytes.length + 1);

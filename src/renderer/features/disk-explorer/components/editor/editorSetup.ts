@@ -7,7 +7,7 @@ import { EditorSelection, EditorState, Transaction, type ChangeSpec, type Extens
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
-import { isDailyLog, readOnlyActivityLog } from './activityLog';
+import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
 import { linkMarkStyle, livePreview } from './livePreview';
 import { pageContext, wikiLinkSyntax, wikiLinks } from './wikiLinks';
 
@@ -23,7 +23,7 @@ export function textChanges(current: string, next: string): ChangeSpec[] {
 /**
  * Brings the editor to `text` the way a collaborator's edit would arrive: only
  * the changed ranges move, so the cursor and scroll stay put, and undo never
- * takes the change back. It passes the read-only Activity Log guard.
+ * takes the change back. It passes the read-only log guard.
  */
 export function replaceText(view: EditorView, text: string): void {
   const current = view.state.doc.toString();
@@ -94,6 +94,6 @@ export function markdownEditorExtensions(path: string, openNote: (path: string) 
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ spellcheck: 'false', 'data-testid': 'markdown-editor' }),
     placeholder('Start writing…'),
-    isDailyLog(path) ? readOnlyActivityLog() : [],
+    isLogPage(path) ? readOnlyLogPage() : isDailyLog(path) ? readOnlyActivityLog() : [],
   ];
 }

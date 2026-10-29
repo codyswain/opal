@@ -38,7 +38,7 @@ Already on `simplify/editor-cm6`:
 - CodeMirror 6 edits the file text itself, and a save writes only the changed span. The branch's census found all 2,779 vault .md files round-trip byte for byte.
 - A save runs 800 ms after the last change, and at least every 5 s while typing. Blur, Cmd+S, leaving the page, closing the window and quitting all flush it (`src/main/window/PendingSavesGuard.ts`, which waits at most 3 s).
 - A disk change reaches a clean page as a minimal edit, so the cursor, scroll and undo stay.
-- The Activity Log section of `Inbox/Logs/*.md` is read-only in Opal.
+- Every `Library/logs/*.md` page is read-only in Opal, and so is the Activity Log section of an old `Inbox/Logs/*.md` page until the cleanup commit.
 
 Still to add:
 
@@ -72,8 +72,8 @@ on. Opal takes a snapshot before writing it.
 
 Rules by kind of file:
 
-- **`Inbox/Logs/*.md`, Activity Log.** Keep every added line, drop exact repeats and sort by HH:MM. When two machines create the same day, merge against `~/code/vault/Archive/Journal/Template.md`, not an empty file. I replayed all 31 real log merges since Sep 1 with this rule: 0 lines lost and 0 out of order. Today's union merge put 45 pairs out of order.
-- **`Library/chats/` and `Inbox/Recordings/`.** One machine owns each file, so the newer side wins with no callout, and history keeps the older one. A callout would stop Pocket from updating the note (`pocket_sync.py:306-309` checks `sync_hash`).
+- **`Library/logs/*.md`.** Union merge: keep every added line, drop exact repeats and sort by HH:MM. The daily page in `Library/daily/` is a separate file with no union merge, so log lines and prose never merge together. Until the cleanup commit, the same rule covers the Activity Log of `Inbox/Logs/*.md`. When two machines create the same day, merge against `~/code/vault/Archive/Journal/Template.md`, not an empty file. I replayed all 31 real log merges since Sep 1 with this rule: 0 lines lost and 0 out of order. Today's union merge put 45 pairs out of order.
+- **`Library/chats/` and `Library/recordings/`.** One machine owns each file, so the newer side wins with no callout, and history keeps the older one. A callout would stop Pocket from updating the note (`pocket_sync.py:306-309` checks `sync_hash`).
 - **Everything else.** Three-way line merge, with a callout on overlap.
 
 Obsidian is one more writer of plain files and needs no changes. One risk
@@ -184,7 +184,7 @@ Each step ships on its own. Effort assumes agents do the work and you test.
    - The History panel and Undo merge.
    - Opal commits its own paths as `opal: <path> (pro)`.
 6. **Log merge driver (1 day).**
-   - Union, HH:MM sort and the template base for `Inbox/Logs`.
+   - Union and HH:MM sort for `Library/logs`, and the template base for `Inbox/Logs` until the cleanup commit.
    - Newer wins for chats and recordings.
    - Switch `.gitattributes` only after it passes the replay of the 31 real log merges.
 7. **Later, if wanted.** The Capacitor wrapper (2 to 4 days, $99 a year).

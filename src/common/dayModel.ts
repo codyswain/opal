@@ -1,0 +1,389 @@
+import { parse } from 'yaml';
+import type { DayChat, DayDigest, DayDigestGroup, DayDigestItem, DayLink, DigestLevel } from '@/types/day';
+
+/*
+ * Reads the files that make up a vault day: log lines, chat transcripts,
+ * recording notes and digests. Pure text in, plain data out; the main process
+ * finds the files and resolves vault links.
+ */
+
+/** A link as written. The main process resolves vault targets to files. */
+export type WrittenLink = Omit<DayLink, 'path'>;
+
+export interface ParsedLogEntry {
+  time: string;
+  until: string | null;
+  text: string;
+  kind: string | null;
+  links: WrittenLink[];
+}
+
+/** `- HH:MM[-HH:MM] <sentence> · <link>, <link> · <kind>`; the links part is optional. */
+export const LOG_LINE = /^- (\d\d:\d\d)(?:-(\d\d:\d\d))? (.+?)(?: · (.+?))? · ((?:\d+ )?(?:agent turn|routine run|connector call)s?)$/;
+/** A line from before the move, `- HH:MM text`, with no kind. */
+export const OLD_LOG_LINE = /^- (\d\d:\d\d) (.+)$/;
+
+const FRONTMATTER = /^\ufeff?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
+
+/** The frontmatter's fields and the text after it. Broken YAML reads as no fields. */
+export function splitFrontmatter(source: string): { data: Record<string, unknown>; body: string } {
+  const match = FRONTMATTER.exec(source);
+  if (!match) return { data: {}, body: source };
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = parse(match[1] ?? '');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = parsed as Record<string, unknown>;
+  } catch {
+    // The note still counts; it just has no readable fields.
+  }
+  return { data, body: source.slice(match[0].length) };
+}
+
+const lines = (body: string): string[] => body.split(/\r?\n/);
+
+const textField = (value: unknown): string | null =>
+  typeof value === 'string' ? value : typeof value === 'number' ? String(value) : null;
+
+const listField = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const WIKI_LINK = String.raw`!?\[\[([^[\]|]+?)(?:\|([^[\]]*))?\]\]`;
+const MARKDOWN_LINK = String.raw`!?\[([^[\]]*)\]\((?:<([^<>]+)>|((?:[^()\s]|\([^()\s]*\))+))(?:\s+"[^"]*")?\)`;
+const LINK = new RegExp(`${WIKI_LINK}|${MARKDOWN_LINK}`, 'g');
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+function decoded(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+/**
+ * Takes the wiki and markdown links out of `source`. The text keeps each
+ * link's label in its place. Wiki links are vault files; a markdown link is
+ * external when its target has a URL scheme.
+ */
+export function readLinks(source: string): { text: string; links: WrittenLink[] } {
+  const links: WrittenLink[] = [];
+  const text = source.replace(LINK, (_whole, wikiTarget?: string, wikiLabel?: string, label?: string, angled?: string, plain?: string) => {
+    if (wikiTarget !== undefined) {
+      const target = wikiTarget.trim();
+      const shown = wikiLabel?.trim() || target.split('#')[0].split('/').pop() || target;
+      links.push({ label: shown, target, external: false });
+      return shown;
+    }
+    const href = (angled ?? plain ?? '').trim();
+    const external = SCHEME.test(href);
+    const target = external ? href : decoded(href);
+    const shown = label?.trim() || target;
+    links.push({ label: shown, target, external });
+    return shown;
+  });
+  return { text, links };
+}
+
+/** One log line in the new or the old format, or null for anything else. */
+export function parseLogLine(line: string): ParsedLogEntry | null {
+  const trimmed = line.trimEnd();
+  const current = LOG_LINE.exec(trimmed);
+  if (current) {
+    const [, time, until, sentence, linkPart, kind] = current;
+    const inline = readLinks(sentence);
+    return {
+      time,
+      until: until ?? null,
+      text: inline.text,
+      kind,
+      links: [...inline.links, ...(linkPart ? readLinks(linkPart).links : [])],
+    };
+  }
+  const old = OLD_LOG_LINE.exec(trimmed);
+  if (!old) return null;
+  // Lines still under an Inbox/Logs heading keep the dash after the time.
+  const { text, links } = readLinks(old[2].replace(/^— /, ''));
+  return { time: old[1], until: null, text, kind: null, links };
+}
+
+/** Every log line in a file, in file order. */
+export function parseLog(source: string): ParsedLogEntry[] {
+  return lines(splitFrontmatter(source).body).flatMap((line) => {
+    const entry = parseLogLine(line);
+    return entry ? [entry] : [];
+  });
+}
+
+/**
+ * Latest time first. Machines append out of order, so the file order only
+ * breaks ties, and the later line comes first.
+ */
+export function newestFirst<T extends { time: string }>(items: readonly T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => b.item.time.localeCompare(a.item.time) || b.index - a.index)
+    .map(({ item }) => item);
+}
+
+export interface ThreadCard {
+  /** The card's frontmatter says `type: thread`. */
+  isThread: boolean;
+  title: string | null;
+  status: string | null;
+  /** "YYYY-MM-DD HH:MM". */
+  created: string | null;
+}
+
+/** A thread card, `Library/chats/<thread>.md`. */
+export function parseThreadCard(source: string): ThreadCard {
+  const { data } = splitFrontmatter(source);
+  return {
+    isThread: data.type === 'thread',
+    title: textField(data.title),
+    status: textField(data.status),
+    created: textField(data.created),
+  };
+}
+
+export interface ChatSession {
+  /** "YYYY-MM-DD HH:MM". */
+  started: string | null;
+  last: string | null;
+  tool: string | null;
+  /** For each date with a stamp in the body: the last stamp's HH:MM and how many prompts Cody sent. */
+  days: Record<string, { last: string; prompts: number }>;
+}
+
+/**
+ * A message stamp: `**Cody** · [date ]HH:MM` or `> [!ai] Claude · [date ]HH:MM`.
+ * The date appears when it changes, so a stamp without one belongs to the last date seen.
+ */
+const STAMP = /^(?:(\*\*)[^*\n]+\*\*|> \[!ai\] ?([^·\n]*?)) · (?:(\d{4}-\d\d-\d\d) )?(\d\d:\d\d)[ \t]*$/;
+
+/** A session transcript, `Library/chats/<thread>/<session>.md`. */
+export function parseSession(source: string): ChatSession {
+  const { data, body } = splitFrontmatter(source);
+  const started = textField(data.started);
+  const days: ChatSession['days'] = {};
+  let date = started?.slice(0, 10) ?? null;
+  for (const line of lines(body)) {
+    const stamp = STAMP.exec(line);
+    if (!stamp) continue;
+    const [, prompt, author, stamped, time] = stamp;
+    if (stamped) date = stamped;
+    // Task notifications and compaction markers are stamped out of order, and
+    // the agent's reply to one carries its own stamp.
+    if (!date || author === 'Automated message') continue;
+    const day = (days[date] ??= { last: time, prompts: 0 });
+    if (time > day.last) day.last = time;
+    if (prompt) day.prompts += 1;
+  }
+  return { started, last: textField(data.last), tool: textField(data.tool), days };
+}
+
+export interface IndexedCard {
+  /** The thread's folder name under Library/chats. */
+  thread: string;
+  path: string;
+  card: ThreadCard;
+}
+
+export interface IndexedSession {
+  thread: string;
+  path: string;
+  session: ChatSession;
+}
+
+/**
+ * The chats of a day: threads whose card was created that day, and threads
+ * with a session that ran that day (started on or before it, last active on or
+ * after it, with a stamp on it). One row per thread, latest activity first.
+ * The card's `updated` field is not used: it holds only the latest activity.
+ */
+export function chatsForDay(date: string, cards: readonly IndexedCard[], sessions: readonly IndexedSession[]): DayChat[] {
+  const cardOf = new Map(cards.filter(({ card }) => card.isThread).map((entry) => [entry.thread, entry]));
+  const chats = new Map<string, DayChat & { active: string | null }>();
+  const chatFor = (thread: string, fallback: string) => {
+    let chat = chats.get(thread);
+    if (!chat) {
+      const card = cardOf.get(thread);
+      chat = {
+        path: card?.path ?? fallback,
+        title: card?.card.title ?? thread,
+        status: card?.card.status ?? null,
+        tool: null,
+        isNew: card?.card.created?.startsWith(date) ?? false,
+        created: card?.card.created ?? null,
+        last: '',
+        prompts: 0,
+        active: null,
+      };
+      chats.set(thread, chat);
+    }
+    return chat;
+  };
+  for (const { thread, path, card } of cardOf.values()) {
+    if (card.created?.startsWith(date)) chatFor(thread, path);
+  }
+  for (const { thread, path, session } of sessions) {
+    const day = session.days[date];
+    if (!day) continue;
+    if (session.started && session.started.slice(0, 10) > date) continue;
+    if (session.last && session.last.slice(0, 10) < date) continue;
+    const chat = chatFor(thread, path);
+    chat.prompts += day.prompts;
+    if (chat.active === null || day.last > chat.active) {
+      chat.active = day.last;
+      chat.tool = session.tool;
+      if (!cardOf.has(thread)) chat.path = path;
+    }
+  }
+  return [...chats.values()]
+    .map(({ active, ...chat }) => ({ ...chat, last: active ?? chat.created?.slice(11, 16) ?? '' }))
+    .sort((a, b) => b.last.localeCompare(a.last) || a.title.localeCompare(b.title));
+}
+
+/** `<date> HHMM <name>.md`, the way Meet and Pocket notes are named. */
+const RECORDING_NAME = /^(\d{4}-\d\d-\d\d) (\d\d)(\d\d) (.+)\.md$/;
+
+/** The date, time and title in a recording note's file name, or null when it is not one. */
+export function recordingName(name: string): { date: string; time: string; title: string } | null {
+  const match = RECORDING_NAME.exec(name);
+  if (!match) return null;
+  return { date: match[1], time: `${match[2]}:${match[3]}`, title: match[4].replace(/ \((?:Meet|Pocket)\)$/, '') };
+}
+
+export interface ParsedRecording {
+  title: string | null;
+  source: string | null;
+  durationMin: number | null;
+  speakers: string[];
+  attendees: string[];
+  hasSummary: boolean;
+  links: WrittenLink[];
+}
+
+/** Whether a Summary section holds more than a placeholder such as "_Gemini has not written notes for this meeting yet._". */
+function summaryHasText(body: string[]): boolean {
+  const start = body.findIndex((line) => /^## +Summary\s*$/.test(line));
+  if (start < 0) return false;
+  for (const line of body.slice(start + 1)) {
+    if (/^## /.test(line)) break;
+    const value = line.trim();
+    if (!value || /^_.+_$/.test(value)) continue;
+    // Gemini writes this notice in place of a summary.
+    return !value.startsWith("A summary wasn't produced");
+  }
+  return false;
+}
+
+/** A recording note, `Library/recordings/<date> HHMM <name>.md`. */
+export function parseRecording(source: string): ParsedRecording {
+  const { data, body } = splitFrontmatter(source);
+  const bodyLines = lines(body);
+  const firstSection = bodyLines.findIndex((line) => /^## /.test(line));
+  const header = (firstSection < 0 ? bodyLines : bodyLines.slice(0, firstSection)).filter((line) => !/^# /.test(line));
+  const duration = typeof data.duration_min === 'number' ? data.duration_min : Number.parseFloat(textField(data.duration_min) ?? '');
+  return {
+    title: textField(data.title),
+    source: textField(data.source),
+    durationMin: Number.isFinite(duration) ? duration : null,
+    speakers: listField(data.speakers),
+    attendees: listField(data.attendees),
+    hasSummary: summaryHasText(bodyLines),
+    links: readLinks(header.join('\n')).links.filter((link) => link.external),
+  };
+}
+
+const PRIORITY_EMOJI: Record<string, DigestLevel> = {
+  '🔴': 'high',
+  '🟠': 'medium',
+  '🟡': 'medium',
+  '🟢': 'low',
+  '⚪': 'low',
+  '⚫': 'low',
+};
+const PRIORITY_WORD: Record<string, DigestLevel> = { urgent: 'high', high: 'high', medium: 'medium', low: 'low' };
+const EMOJI_ITEM = new RegExp(`^[-*] (${Object.keys(PRIORITY_EMOJI).join('|')})\\uFE0F?\\s*(.+)$`, 'u');
+const LIST_ITEM = /^(?:[-*+]|\d+[.)]) +(.+)$/;
+const SECTION = /^## +(.+?)(?: +#+)?\s*$/;
+const FOLDED_CALLOUT = /^> ?\[![^\]]+\][-+] *(.*)$/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const REPLY_DRAFTED = /\s*\(reply drafted\)\s*$/i;
+
+function digestItem(value: string, capitalize = false): DayDigestItem {
+  let text = readLinks(value).text;
+  const replyDrafted = REPLY_DRAFTED.test(text);
+  text = text.replace(REPLY_DRAFTED, '').replace(/\*\*|__/g, '').replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
+  if (capitalize) text = text.charAt(0).toUpperCase() + text.slice(1);
+  return { text, replyDrafted };
+}
+
+/** A folded callout's title: its bold lead, or the whole title without one. */
+function calloutTitle(title: string): string {
+  return (/^\*\*(.+?)\*\*/.exec(title)?.[1] ?? title).trim();
+}
+
+/**
+ * A morning digest, `Library/digests/<date> digest.md`. With a Top 3 section,
+ * the top group is the Top 3 and "Also worth doing" fills the other groups by
+ * its priority word (Urgent counts as high). Older digests mark each item with
+ * a priority emoji instead. The emoji never reaches the output.
+ */
+export function parseDigest(source: string): Omit<DayDigest, 'path'> {
+  let title = '';
+  let section: string | null = null;
+  let fence: string | null = null;
+  const sections: string[] = [];
+  const top: DayDigestItem[] = [];
+  const also: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
+  const marked: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
+  let hasTop = false;
+  for (const line of lines(splitFrontmatter(source).body)) {
+    const marker = FENCE.exec(line)?.[1];
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    if (!title && line.startsWith('# ')) {
+      title = line.slice(2).trim();
+      continue;
+    }
+    const heading = SECTION.exec(line);
+    if (heading) {
+      section = heading[1].trim().toLowerCase();
+      sections.push(heading[1].trim());
+      if (section === 'top 3') hasTop = true;
+      continue;
+    }
+    const callout = FOLDED_CALLOUT.exec(line);
+    if (callout) {
+      const name = calloutTitle(callout[1]);
+      if (name) sections.push(name);
+      continue;
+    }
+    const emoji = EMOJI_ITEM.exec(line);
+    if (emoji) {
+      marked[PRIORITY_EMOJI[emoji[1]]].push(digestItem(emoji[2]));
+      continue;
+    }
+    const item = LIST_ITEM.exec(line)?.[1];
+    if (!item) continue;
+    if (section === 'top 3') top.push(digestItem(item));
+    else if (section === 'also worth doing') {
+      const word = /^(urgent|high|medium|low)\s*:\s*/i.exec(item);
+      // An item without a priority word is neither raised nor dropped.
+      const level = word ? PRIORITY_WORD[word[1].toLowerCase()] : 'medium';
+      also[level].push(digestItem(word ? item.slice(word[0].length) : item, Boolean(word)));
+    }
+  }
+  const levels = hasTop ? also : marked;
+  const groups: DayDigestGroup[] = [];
+  if (hasTop && top.length) groups.push({ level: 'top', items: top });
+  for (const level of ['high', 'medium', 'low'] as const) {
+    if (levels[level].length) groups.push({ level, items: levels[level] });
+  }
+  return { title, groups, sections };
+}
