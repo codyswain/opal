@@ -12,15 +12,15 @@ const MenuRadioGroup = MenuPrimitive.RadioGroup;
 
 const itemStyles = [
   'relative flex h-row-compact cursor-default select-none items-center rounded-row px-2',
-  'text-control text-foreground-secondary outline-none',
-  'transition-colors duration-hover ease-standard',
+  'text-ui text-foreground-secondary outline-none',
+  'transition-hover focus:duration-0',
   'focus:bg-surface-hover focus:text-foreground',
   'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
 ].join(' ');
 
 const contentStyles = [
   'z-50 min-w-44 overflow-hidden rounded-overlay',
-  'border border-border-subtle bg-surface-raised p-1 text-foreground shadow-overlay',
+  'border border-border-overlay bg-surface-raised p-1 text-foreground shadow-overlay',
   'data-[state=open]:animate-in data-[state=closed]:animate-out',
   'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
   'duration-overlay ease-standard',
@@ -114,7 +114,7 @@ const MenuLabel = React.forwardRef<
   <MenuPrimitive.Label
     ref={ref}
     className={cn(
-      'px-2 py-1 text-metadata font-medium text-foreground-tertiary',
+      'px-2 py-1 text-label text-foreground-tertiary',
       inset && 'pl-7',
       className
     )}

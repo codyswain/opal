@@ -7,7 +7,6 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Shield,
 } from "lucide-react";
 import {
   IconButton,
@@ -16,7 +15,6 @@ import {
   PopoverTrigger,
 } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
-import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -86,7 +84,7 @@ export function Titlebar({
   return (
     <header
       data-testid="titlebar"
-      className="drag-handle shrink-0 border-b border-border-subtle bg-canvas"
+      className="drag-handle shrink-0 bg-chrome"
     >
       <div className="flex h-header min-w-0 items-center gap-1 px-2">
         {!sidebarOpen ? (
@@ -127,16 +125,6 @@ export function Titlebar({
 
         <div className="min-w-0 flex-1 px-1">
           <Breadcrumbs />
-        </div>
-
-        <div className="no-drag">
-          <IconButton
-            label="Hide Opal contents"
-            shortcut="⌘⇧H"
-            onClick={() => usePrivacyStore.getState().shield()}
-          >
-            <Shield aria-hidden className="h-3.5 w-3.5" strokeWidth={1.5} />
-          </IconButton>
         </div>
 
         {actions ? (

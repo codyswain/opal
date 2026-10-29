@@ -1,3 +1,5 @@
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/inter/opsz-italic.css";
 @import "katex/dist/katex.min.css";
 
 @tailwind base;
@@ -8,15 +10,20 @@
   :root {
     color-scheme: light;
 
-    /* Typography */
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    /* Typography. Inter is bundled; the app never fetches fonts. */
+    --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --font-features: "cv01", "ss03";
     --text-metadata-size: 0.6875rem;
     --text-metadata-line: 0.875rem;
+    --text-label-size: 0.75rem;
+    --text-label-line: 1rem;
     --text-control-size: 0.75rem;
     --text-control-line: 1rem;
     --text-ui-size: 0.8125rem;
     --text-ui-line: 1.125rem;
+    --text-ui-tracking: -0.01em;
     --text-heading-size: 0.9375rem;
     --text-heading-line: 1.25rem;
 
@@ -27,40 +34,53 @@
     --row-height: 2rem;
     --header-height: 2.5rem;
     --sidebar-width: 13.75rem;
-    --inspector-width: 21rem;
     --reading-width: 45rem;
+    --page-inset: 0.5rem;
 
     /* Shape, elevation, and motion */
     --radius: 0.5rem;
-    --radius-row: 0.25rem;
+    --radius-row: 0.375rem;
     --radius-control: 0.375rem;
-    --radius-overlay: 0.625rem;
+    --radius-card: 0.5rem;
+    --radius-overlay: 0.5rem;
     --radius-dialog: 0.75rem;
-    --shadow-overlay: 0 12px 32px hsl(225 20% 20% / 0.12),
-      0 2px 8px hsl(225 20% 20% / 0.08);
-    --shadow-dialog: 0 24px 64px hsl(225 24% 16% / 0.18),
-      0 4px 16px hsl(225 24% 16% / 0.1);
-    --duration-hover: 90ms;
-    --duration-overlay: 120ms;
-    --duration-disclosure: 150ms;
-    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --shadow-control: 0 1px 2px hsl(0 0% 0% / 0.08);
+    --shadow-overlay: 0 3px 12px hsl(0 0% 0% / 0.09);
+    --shadow-dialog: 0 7px 24px hsl(0 0% 0% / 0.06);
+    /* Hover appears at once and fades out over --duration-hover. */
+    --duration-hover: 150ms;
+    --duration-quick: 100ms;
+    --duration-overlay: 160ms;
+    --duration-disclosure: 200ms;
+    --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
 
     /* Semantic light palette */
-    --canvas: 240 14% 99%;
-    --sidebar: 220 18% 97%;
+    --chrome: 240 4.8% 95.9%;
+    --canvas: 0 0% 100%;
     --surface: 0 0% 100%;
     --surface-raised: 0 0% 100%;
-    --surface-hover: 220 14% 95%;
-    --surface-active: 220 13% 92%;
-    --surface-selected: 235 38% 94%;
-    --border-subtle: 220 13% 91%;
-    --border-default: 220 10% 78%;
-    --border-strong: 220 9% 56%;
-    --text-primary: 225 24% 12%;
-    --text-secondary: 220 9% 34%;
-    --text-tertiary: 220 7% 44%;
-    --icon: 220 8% 40%;
-    --focus: 235 62% 54%;
+    --surface-sunken: 300 7.7% 97.5%;
+    /* A control raised off a track, such as the selected segment. */
+    --surface-lift: 0 0% 100%;
+    /* Overlays carry their own alpha, so they take no opacity modifier. */
+    --surface-hover: 0 0% 0% / 0.04;
+    --surface-active: 0 0% 0% / 0.07;
+    --surface-selected: 0 0% 0% / 0.07;
+    --border-subtle: 270 4.5% 91.4%;
+    --border-default: 300 3.6% 89%;
+    --border-strong: 270 2.9% 86.3%;
+    --border-overlay: 0 0% 0% / 0.08;
+    --page-ring: var(--border-subtle);
+    --text-primary: 225 9.1% 17.3%;
+    --text-secondary: 217 9.8% 26.1%;
+    --text-tertiary: 247 3.9% 44.9%;
+    --icon: 253 3.8% 53.5%;
+    --focus: 234 56.3% 59.6%;
+    --link: 234 56.3% 59.6%;
+    --selection: color-mix(in lch, #7070ff, transparent 64%);
+    --scrollbar-thumb: 0 0% 0% / 0.1;
+    --scrollbar-thumb-hover: 0 0% 0% / 0.2;
     --success: 145 62% 32%;
     --warning: 37 92% 38%;
     --danger: 0 72% 48%;
@@ -77,7 +97,7 @@
     --primary-foreground: 0 0% 100%;
     --secondary: var(--surface-hover);
     --secondary-foreground: var(--text-primary);
-    --muted: var(--surface-hover);
+    --muted: var(--surface-sunken);
     --muted-foreground: var(--text-secondary);
     --accent: var(--surface-active);
     --accent-foreground: var(--text-primary);
@@ -86,40 +106,42 @@
     --border: var(--border-default);
     --input: var(--border-strong);
     --ring: var(--focus);
-    --gradient-start: 235 62% 50%;
-    --gradient-end: 245 58% 57%;
   }
 
   .dark {
     color-scheme: dark;
-    --canvas: 240 5% 9%;
-    --sidebar: 235 6% 11%;
-    --surface: 235 6% 13%;
-    --surface-raised: 235 6% 15%;
-    --surface-hover: 235 6% 18%;
-    --surface-active: 235 7% 21%;
-    --surface-selected: 235 24% 22%;
-    --border-subtle: 235 5% 17%;
-    --border-default: 235 5% 25%;
-    --border-strong: 235 5% 44%;
-    --text-primary: 220 12% 94%;
-    --text-secondary: 220 7% 72%;
-    --text-tertiary: 220 6% 62%;
-    --icon: 220 7% 70%;
-    --focus: 235 72% 70%;
+    --chrome: 210 11.1% 3.5%;
+    --canvas: 210 6.2% 6.3%;
+    --surface: 210 6.2% 6.3%;
+    --surface-raised: 210 3.8% 10.2%;
+    --surface-sunken: 210 4.8% 8.2%;
+    --surface-lift: 0 0% 100% / 0.08;
+    --surface-hover: 0 0% 100% / 0.03;
+    --surface-active: 0 0% 100% / 0.04;
+    --surface-selected: 0 0% 100% / 0.04;
+    --border-subtle: 223 9.1% 15.1%;
+    --border-default: 230 6.5% 18%;
+    --border-strong: 240 5.5% 21.6%;
+    --border-overlay: 0 0% 100% / 0.08;
+    --page-ring: 0 0% 100% / 0.05;
+    --text-primary: 180 6.7% 97.1%;
+    --text-secondary: 220 8% 84%;
+    --text-tertiary: 219 6.4% 56.9%;
+    --icon: 218 5.3% 40.6%;
+    --focus: 234 56.3% 59.6%;
+    --link: 240 100% 72%;
+    --selection: color-mix(in lch, #5e6ad2, black 10%);
+    --scrollbar-thumb: 0 0% 100% / 0.1;
+    --scrollbar-thumb-hover: 0 0% 100% / 0.2;
     --success: 145 58% 54%;
     --warning: 39 92% 58%;
     --danger: 0 78% 64%;
     --info: 212 88% 67%;
-    /* Filled actions stay darker than focus/status colors for white text. */
-    --primary: 235 58% 48%;
+    /* Filled destructive actions stay darker than the status color for white text. */
     --destructive: 0 68% 43%;
-    --shadow-overlay: 0 16px 40px hsl(240 20% 2% / 0.42),
-      0 2px 10px hsl(240 20% 2% / 0.32);
-    --shadow-dialog: 0 28px 72px hsl(240 24% 2% / 0.5),
-      0 6px 18px hsl(240 24% 2% / 0.38);
-    --gradient-start: 235 62% 56%;
-    --gradient-end: 245 58% 63%;
+    --shadow-control: 0 2px 4px hsl(0 0% 0% / 0.1);
+    --shadow-overlay: 0 4px 24px hsl(0 0% 0% / 0.2);
+    --shadow-dialog: 0 7px 32px hsl(0 0% 0% / 0.35);
   }
 
   * {
@@ -133,10 +155,13 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-chrome text-foreground antialiased;
     font-family: var(--font-sans);
+    font-feature-settings: var(--font-features);
+    font-optical-sizing: auto;
     font-size: var(--text-ui-size);
     line-height: var(--text-ui-line);
+    letter-spacing: var(--text-ui-tracking);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
   }
@@ -146,16 +171,44 @@
   textarea,
   select {
     font: inherit;
+    letter-spacing: inherit;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  /* The dark selection is opaque, so its text turns white. */
+  .dark ::selection {
+    color: #ffffff;
   }
 }
 
 @layer utilities {
-  .bg-gradient-primary {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--gradient-start)),
-      hsl(var(--gradient-end))
-    );
+  /* Rows and buttons: the hover fill appears at once and fades out. */
+  .transition-hover {
+    transition-property: color, background-color, border-color, opacity,
+      box-shadow;
+    transition-duration: var(--duration-hover);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  .transition-hover:hover {
+    transition-duration: 0s;
+  }
+
+  /*
+   * Scrollbars inside this element show only while the pointer is over it.
+   * scrollbar-color is inherited and repaints on hover; the ::-webkit-scrollbar
+   * pseudo-elements do not repaint when only an ancestor's hover changes.
+   */
+  .scrollbar-on-hover {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .scrollbar-on-hover:hover {
+    scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
   }
 }
 
@@ -174,7 +227,6 @@
   -webkit-app-region: no-drag;
 }
 
-/* Custom scrollbar styling - inspired by Obsidian */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -185,12 +237,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsla(var(--muted-foreground) / 0.3);
+  background: hsl(var(--scrollbar-thumb));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsla(var(--muted-foreground) / 0.5);
+  background: hsl(var(--scrollbar-thumb-hover));
 }
 
 ::-webkit-scrollbar-corner {

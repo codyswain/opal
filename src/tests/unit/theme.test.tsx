@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ThemeProvider, ThemeToggle, useTheme } from '@/renderer/features/theme';
+import { ThemeProvider, useTheme } from '@/renderer/features/theme';
 import {
   DEFAULT_THEME,
   SYSTEM_THEME_QUERY,
@@ -49,6 +49,15 @@ function installMatchMedia(initiallyDark: boolean) {
 function ThemeProbe() {
   const { theme, resolvedTheme } = useTheme();
   return <output>{`${theme}:${resolvedTheme}`}</output>;
+}
+
+function ChooseLight() {
+  const { setTheme } = useTheme();
+  return (
+    <button type="button" onClick={() => setTheme('light')}>
+      Light
+    </button>
+  );
 }
 
 beforeEach(() => {
@@ -145,43 +154,17 @@ describe('ThemeProvider', () => {
     });
   });
 
-  it('cycles the visible toggle through system, light, and dark', async () => {
-    const user = userEvent.setup();
-    render(
-      <ThemeProvider>
-        <ThemeToggle />
-        <ThemeProbe />
-      </ThemeProvider>
-    );
-
-    const toggle = screen.getByRole('button', {
-      name: /theme: system\. switch to light theme/i,
-    });
-    await user.click(toggle);
-    expect(screen.getByText('light:light')).toBeInTheDocument();
-
-    await user.click(toggle);
-    expect(screen.getByText('dark:dark')).toBeInTheDocument();
-
-    await user.click(toggle);
-    expect(screen.getByText('system:light')).toBeInTheDocument();
-  });
-
   it('does not follow OS changes after an explicit theme is selected', async () => {
     const media = installMatchMedia(false);
     const user = userEvent.setup();
     render(
       <ThemeProvider>
-        <ThemeToggle />
+        <ChooseLight />
         <ThemeProbe />
       </ThemeProvider>
     );
 
-    await user.click(
-      screen.getByRole('button', {
-        name: /theme: system\. switch to light theme/i,
-      })
-    );
+    await user.click(screen.getByRole('button', { name: 'Light' }));
 
     act(() => media.setDark(true));
 

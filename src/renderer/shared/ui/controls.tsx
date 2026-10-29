@@ -100,12 +100,12 @@ function SegmentedControl<Value extends string>({
             className={cn(
               'inline-flex items-center justify-center gap-1 rounded-row px-2',
               'text-control text-foreground-secondary outline-none',
-              'transition-colors duration-hover ease-standard',
+              'transition-hover',
               'hover:text-foreground focus-visible:ring-2 focus-visible:ring-focus',
               'disabled:pointer-events-none disabled:opacity-40',
               size === 'compact' ? 'h-6' : 'h-control-compact',
               selected &&
-                'bg-surface-raised text-foreground'
+                'bg-surface-lift text-foreground shadow-control'
             )}
             onClick={() => selectAt(index)}
             onKeyDown={(event) => handleKeyDown(event, index)}
@@ -136,7 +136,7 @@ const Switch = React.forwardRef<
     aria-label={label}
     className={cn(
       'inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full p-0.5',
-      'bg-surface-active outline-none transition-colors duration-hover ease-standard',
+      'bg-surface-active outline-none transition-hover',
       'data-[state=checked]:bg-primary',
       'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1',
       'focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-40',
@@ -147,7 +147,7 @@ const Switch = React.forwardRef<
     <SwitchPrimitive.Thumb
       className={cn(
         'pointer-events-none block h-3 w-3 rounded-full bg-white shadow-sm',
-        'transition-transform duration-hover ease-standard',
+        'transition-transform duration-quick ease-standard',
         'data-[state=checked]:translate-x-3 data-[state=unchecked]:translate-x-0'
       )}
     />
@@ -158,7 +158,7 @@ Switch.displayName = SwitchPrimitive.Root.displayName;
 const chipVariants = cva(
   [
     'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-control',
-    'outline-none transition-colors duration-hover ease-standard',
+    'outline-none transition-hover',
     'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1',
     'focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-40',
   ],

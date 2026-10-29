@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './Tooltip';
 const iconButtonVariants = cva(
   [
     'inline-flex shrink-0 items-center justify-center rounded-control text-icon',
-    'transition-colors duration-hover ease-standard',
+    'transition-hover',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
     'focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
     'disabled:pointer-events-none disabled:opacity-40',

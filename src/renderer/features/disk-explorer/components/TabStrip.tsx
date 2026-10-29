@@ -170,7 +170,7 @@ export const TabStrip: React.FC = () => {
                   onDragEnd={() => { setDragging(null); setDropIndex(null); }}
                   className={[
                     'group relative flex h-9 min-w-[7rem] max-w-[13.5rem] flex-[0_1_13.5rem] cursor-default select-none items-center gap-2 pl-3 pr-1.5 text-xs',
-                    'transition-colors duration-100 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                    'transition-hover outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                     isActive
                       ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_hsl(var(--focus))]'
                       : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
@@ -193,7 +193,7 @@ export const TabStrip: React.FC = () => {
                     onClick={(event) => { event.stopPropagation(); close(path); }}
                     onDoubleClick={(event) => event.stopPropagation()}
                     className={[
-                      'relative flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity duration-100 hover:bg-surface-active',
+                      'relative flex h-5 w-5 shrink-0 items-center justify-center rounded transition-opacity duration-quick hover:bg-surface-active',
                       isActive || unsaved || problem ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
                     ].join(' ')}
                   >

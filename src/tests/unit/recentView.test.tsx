@@ -98,7 +98,8 @@ describe('RecentView', () => {
     installActivityApi({ recent: vi.fn(async () => ({ success: true as const, data: recentResult() })) });
     renderAt('?mode=browse&collection=recent');
     expect(await screen.findByText('Items you open or work on will appear here.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Clear recent activity' })).toBeDisabled();
+    // Clearing history lives in Settings now.
+    expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
   });
 
   it('opens a result in the recent collection, records the open once, and returns to Recent with selection', async () => {
@@ -151,21 +152,17 @@ describe('RecentView', () => {
     expect(screen.getByTestId('breadcrumb')).toBeInTheDocument();
   });
 
-  it('reloads when main reports changed activity and clears on request', async () => {
+  it('reloads when main reports changed activity', async () => {
     let changed: (() => void) | null = null;
     const api = installActivityApi({
       recent: vi.fn(async () => ({ success: true as const, data: rows() })),
       onChanged: vi.fn((callback: () => void) => { changed = callback; return () => undefined; }),
     });
-    const user = userEvent.setup();
     renderAt('?mode=browse&collection=recent');
     await screen.findByText('Opened 10 minutes ago');
     const calls = (api.recent as ReturnType<typeof vi.fn>).mock.calls.length;
     act(() => changed?.());
     await waitFor(() => expect((api.recent as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(calls));
-    await user.click(screen.getByRole('button', { name: 'Clear recent activity' }));
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
-    await waitFor(() => expect(api.clear).toHaveBeenCalled());
   });
 
   it('shows a retryable error when loading fails', async () => {

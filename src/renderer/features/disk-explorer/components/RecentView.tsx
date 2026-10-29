@@ -35,11 +35,9 @@ export const RecentView: React.FC<RecentViewProps> = ({ trailing }) => {
   const loading = useRecentStore((state) => state.loading);
   const error = useRecentStore((state) => state.error);
   const load = useRecentStore((state) => state.load);
-  const clear = useRecentStore((state) => state.clear);
   const filter = useDiskStore((state) => state.filter);
   const setFilter = useDiskStore((state) => state.setFilter);
   const selectedPaths = useDiskStore((state) => state.selectedPaths);
-  const [confirmingClear, setConfirmingClear] = useState(false);
   const [dismissedWarnings, setDismissedWarnings] = useState<string[]>([]);
   const now = useNow();
 
@@ -85,7 +83,6 @@ export const RecentView: React.FC<RecentViewProps> = ({ trailing }) => {
   };
 
   const warnings = (result?.warnings ?? []).filter((warning) => !dismissedWarnings.includes(warning));
-  const hasItems = !!result && result.items.length > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -114,7 +111,7 @@ export const RecentView: React.FC<RecentViewProps> = ({ trailing }) => {
               onClick={() => setFilter('')}
               aria-label="Clear filter"
               data-testid="filter-clear"
-              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors duration-100 hover:text-foreground"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-hover hover:text-foreground"
             >
               <X className="h-3 w-3" />
             </button>
@@ -124,21 +121,6 @@ export const RecentView: React.FC<RecentViewProps> = ({ trailing }) => {
         <Button size="compact" variant="ghost" disabled={!selectedTarget} onClick={showInFolder}>
           Show in folder
         </Button>
-        {confirmingClear ? (
-          <span role="group" aria-label="Confirm clearing recent activity" className="flex items-center gap-1 text-xs">
-            <span>Clear all recent activity? Files are not affected.</span>
-            <Button size="compact" variant="destructive" onClick={() => { setConfirmingClear(false); void clear(); }}>
-              Clear
-            </Button>
-            <Button size="compact" variant="ghost" onClick={() => setConfirmingClear(false)}>
-              Cancel
-            </Button>
-          </span>
-        ) : (
-          <Button size="compact" variant="ghost" disabled={!hasItems} onClick={() => setConfirmingClear(true)}>
-            Clear recent activity
-          </Button>
-        )}
         {trailing}
       </div>
 

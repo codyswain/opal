@@ -1,1 +1,2 @@
-export { Settings } from "./components/Settings";
+export { SettingsDialog } from "./components/Settings";
+export { useSettingsStore } from "./store/settingsStore";

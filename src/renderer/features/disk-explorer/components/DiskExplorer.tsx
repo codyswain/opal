@@ -367,7 +367,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
               className="flex flex-col overflow-hidden border-r border-border/60"
             >
               <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 shrink-0">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="text-label text-foreground-tertiary">
                   Files
                 </span>
                 <button
@@ -376,7 +376,7 @@ export const DiskExplorer: React.FC<DiskExplorerProps> = ({
                   aria-label="Open folder"
                   data-testid="disk-explorer-open-folder"
                   data-disk-shortcuts-ignore="true"
-                  className="rounded p-1 text-muted-foreground transition-colors duration-100 hover:bg-muted"
+                  className="rounded p-1 text-muted-foreground transition-hover hover:bg-muted"
                 >
                   <FolderPlus className="h-4 w-4" />
                 </button>
@@ -552,7 +552,7 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
         type="button"
         aria-label="Dismiss error"
         onClick={clearError}
-        className="rounded p-1 transition-colors duration-100 hover:bg-destructive/20"
+        className="rounded p-1 transition-hover hover:bg-destructive/20"
       >
         <X className="h-3.5 w-3.5" />
       </button>

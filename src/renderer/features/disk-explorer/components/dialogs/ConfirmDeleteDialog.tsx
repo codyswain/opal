@@ -100,7 +100,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
             type="button"
             onClick={cancelDelete}
             data-testid="confirm-delete-cancel"
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
+            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-hover hover:bg-muted"
           >
             Cancel
           </button>

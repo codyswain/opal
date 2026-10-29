@@ -15,11 +15,10 @@ import { useTabsStore } from "@/renderer/features/disk-explorer/store/tabsStore"
 import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
+import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { useTheme } from "@/renderer/features/theme";
-import { usePref } from "@/renderer/shared/prefs/usePref";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
-import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
 
 export const PALETTE_COMMAND_ID = "palette.open";
 
@@ -33,9 +32,6 @@ export const AppCommands: React.FC = () => {
   const { navigateFiles, navigateTo } = useShell();
   const { resolvedTheme, setTheme } = useTheme();
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
-  const toggleInspector = useShellStore((state) => state.toggleInspector);
-  const [bottomPaneOpen, setBottomPaneOpen] = usePref("isBottomPaneOpen", true);
-  const shielded = usePrivacyStore((state) => state.shielded);
 
   useEffect(() => {
     const currentFolder = () =>
@@ -57,14 +53,6 @@ export const AppCommands: React.FC = () => {
               toast.error(error instanceof Error ? error.message : "Could not open today's page."),
             );
         },
-      },
-      {
-        id: COMMAND_IDS.togglePrivacy,
-        name: shielded ? "Reveal Opal contents" : "Hide Opal contents",
-        type: "action",
-        shortcut: ["CmdOrCtrl+Shift+H"],
-        keywords: ["privacy", "shield", "screen"],
-        perform: () => usePrivacyStore.getState().toggle(),
       },
       {
         id: PALETTE_COMMAND_ID,
@@ -97,8 +85,8 @@ export const AppCommands: React.FC = () => {
         name: "Settings…",
         type: "navigation",
         shortcut: ["CmdOrCtrl+,"],
-        keywords: ["settings", "preferences", "api key"],
-        perform: () => navigateTo("/settings"),
+        keywords: ["settings", "preferences", "theme", "folders", "history"],
+        perform: () => useSettingsStore.getState().show(),
       },
       {
         id: COMMAND_IDS.openFolder,
@@ -174,22 +162,6 @@ export const AppCommands: React.FC = () => {
         perform: toggleSidebar,
       },
       {
-        id: COMMAND_IDS.toggleRightPane,
-        name: "Toggle Details Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+Alt+B"],
-        keywords: ["pane", "toggle", "right", "inspector"],
-        perform: toggleInspector,
-      },
-      {
-        id: COMMAND_IDS.toggleBottomPane,
-        name: "Toggle Bottom Pane",
-        type: "paneToggle",
-        shortcut: ["CmdOrCtrl+J"],
-        keywords: ["pane", "toggle"],
-        perform: () => setBottomPaneOpen(!bottomPaneOpen),
-      },
-      {
         id: COMMAND_IDS.toggleTheme,
         name:
           resolvedTheme === "dark"
@@ -216,12 +188,8 @@ export const AppCommands: React.FC = () => {
     navigateFiles,
     navigateTo,
     toggleSidebar,
-    toggleInspector,
-    bottomPaneOpen,
-    setBottomPaneOpen,
     resolvedTheme,
     setTheme,
-    shielded,
   ]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.

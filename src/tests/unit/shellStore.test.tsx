@@ -12,7 +12,6 @@ import {
   SHELL_LIMITS,
   SHELL_PREFERENCE_KEY,
   ShellProvider,
-  resolveInspectorTab,
   sanitizeShellPreferences,
   useShell,
   useShellStore,
@@ -27,17 +26,6 @@ const FILES_ROUTE: ShellRouteDescriptor = {
     title: 'Files',
     breadcrumbs: [{ id: 'vault', label: 'Vault' }],
     actions: <button type="button">New folder</button>,
-  },
-  inspector: {
-    ariaLabel: 'File inspector',
-    tabs: [
-      { id: 'preview', label: 'Preview', content: <div>Preview content</div> },
-      {
-        id: 'properties',
-        label: 'Properties',
-        content: <div>Properties content</div>,
-      },
-    ],
   },
 };
 
@@ -84,9 +72,6 @@ describe('shell preferences', () => {
     const saved = {
       sidebarOpen: false,
       sidebarWidth: 248,
-      inspectorOpen: true,
-      inspectorWidth: 404,
-      inspectorActiveTab: 'properties',
     };
     writePref(SHELL_PREFERENCE_KEY, saved);
 
@@ -97,23 +82,16 @@ describe('shell preferences', () => {
     writePref(SHELL_PREFERENCE_KEY, {
       sidebarOpen: 'yes',
       sidebarWidth: 9_000,
-      inspectorOpen: true,
-      inspectorWidth: -4,
-      inspectorActiveTab: 'x'.repeat(100),
     });
 
     expect(useShellStore.getState().hydrate()).toEqual({
       sidebarOpen: true,
       sidebarWidth: SHELL_LIMITS.sidebar.max,
-      inspectorOpen: true,
-      inspectorWidth: SHELL_LIMITS.inspector.min,
-      inspectorActiveTab: null,
     });
   });
 
   it('falls back safely when the preference envelope is malformed', () => {
     writePref('isLeftSidebarOpen', false);
-    writePref('isRightSidebarOpen', true);
     window.localStorage.setItem(`opal.${SHELL_PREFERENCE_KEY}`, '{bad json');
 
     expect(useShellStore.getState().hydrate()).toEqual(
@@ -121,36 +99,41 @@ describe('shell preferences', () => {
     );
   });
 
-  it('migrates the existing pane visibility preferences', () => {
+  it('migrates the existing sidebar visibility preference', () => {
     writePref('isLeftSidebarOpen', false);
-    writePref('isRightSidebarOpen', true);
 
     expect(useShellStore.getState().hydrate()).toMatchObject({
       sidebarOpen: false,
-      inspectorOpen: true,
     });
     expect(readPref<unknown>(SHELL_PREFERENCE_KEY, null)).toMatchObject({
       sidebarOpen: false,
-      inspectorOpen: true,
     });
   });
 
-  it('persists toggles, bounded widths, and the active inspector tab', () => {
+  it('persists toggles and bounded widths', () => {
     const shell = useShellStore.getState();
     shell.toggleSidebar();
     shell.setSidebarWidth(10);
-    shell.toggleInspector();
-    shell.setInspectorWidth(10_000);
-    shell.setInspectorActiveTab(' properties ');
 
     expect(
       readPref(SHELL_PREFERENCE_KEY, DEFAULT_SHELL_PREFERENCES)
     ).toEqual({
       sidebarOpen: false,
       sidebarWidth: SHELL_LIMITS.sidebar.min,
+    });
+  });
+
+  it('drops the retired inspector fields from stored preferences', () => {
+    writePref(SHELL_PREFERENCE_KEY, {
+      sidebarOpen: true,
+      sidebarWidth: 248,
       inspectorOpen: true,
-      inspectorWidth: SHELL_LIMITS.inspector.max,
-      inspectorActiveTab: 'properties',
+      inspectorWidth: 404,
+    });
+
+    expect(useShellStore.getState().hydrate()).toEqual({
+      sidebarOpen: true,
+      sidebarWidth: 248,
     });
   });
 
@@ -337,15 +320,5 @@ describe('shell route contract', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByTestId('router-location')).toHaveTextContent('/settings');
-  });
-
-  it('resolves a valid inspector tab or the route default', () => {
-    expect(resolveInspectorTab(FILES_ROUTE.inspector, 'properties')?.id).toBe(
-      'properties'
-    );
-    expect(resolveInspectorTab(FILES_ROUTE.inspector, 'missing')?.id).toBe(
-      'preview'
-    );
-    expect(resolveInspectorTab(undefined, 'preview')).toBeNull();
   });
 });

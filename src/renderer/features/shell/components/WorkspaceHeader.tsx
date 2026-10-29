@@ -35,7 +35,7 @@ export function WorkspaceHeader({
   const rootName = currentRoot ? basenameFsPath(currentRoot) : null;
 
   return (
-    <div className="drag-handle flex h-header shrink-0 items-center border-b border-border-subtle pl-[78px] pr-2">
+    <div className="drag-handle flex h-header shrink-0 items-center pl-[78px] pr-2">
       <Menu>
         <MenuTrigger asChild>
           <button
@@ -45,7 +45,7 @@ export function WorkspaceHeader({
                 ? `Choose workspace folder, current ${rootName}`
                 : "Choose workspace folder"
             }
-            className="no-drag flex h-control min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left outline-none transition-colors duration-hover ease-standard hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-focus"
+            className="no-drag flex h-control min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-left outline-none transition-hover hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-focus"
           >
             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-surface-selected text-foreground">
               <Gem aria-hidden className="h-3 w-3" />

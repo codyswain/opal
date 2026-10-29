@@ -5,15 +5,12 @@ import "@/renderer/styles/index.css";
 import { ThemeProvider } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
-import { Settings } from "@/renderer/features/settings";
+import { SettingsDialog } from "@/renderer/features/settings";
 import { AppCommands, CommandPalette } from "@/renderer/features/commands";
 import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
 import { FilesRoute } from "@/renderer/features/disk-explorer";
 import { FILES_ROUTE_PATH } from "@/renderer/features/disk-explorer/navigation";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
-import { PrivacyBoundary } from "@/renderer/features/privacy/PrivacyBoundary";
-import { usePrivacyStore } from "@/renderer/features/privacy/privacyStore";
-import { COMMAND_IDS } from "@/common/commandIds";
 import {
   AppShell,
   ShellProvider,
@@ -25,11 +22,6 @@ import {
 const FILES_ROUTE: ShellRouteDescriptor = {
   id: "files",
   header: { title: "Files" },
-};
-
-const SETTINGS_ROUTE: ShellRouteDescriptor = {
-  id: "settings",
-  header: { title: "Settings" },
 };
 
 const FALLBACK_ROUTE: ShellRouteDescriptor = {
@@ -64,15 +56,6 @@ const APP_ROUTES: ShellRouteObject[] = [
     handle: { shell: FILES_ROUTE },
   },
   {
-    path: "/settings",
-    element: (
-      <div className="h-full overflow-auto">
-        <Settings />
-      </div>
-    ),
-    handle: { shell: SETTINGS_ROUTE },
-  },
-  {
     path: "*",
     element: <Navigate to="/" replace />,
     handle: { shell: FALLBACK_ROUTE },
@@ -84,11 +67,6 @@ const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
 const App: React.FC = () => {
   useEffect(() => {
     return window.systemAPI.onMenuCommand((commandId) => {
-      if (
-        usePrivacyStore.getState().shielded &&
-        commandId !== COMMAND_IDS.togglePrivacy
-      )
-        return;
       try {
         commandRegistry.executeCommand(commandId);
       } catch (error) {
@@ -101,16 +79,15 @@ const App: React.FC = () => {
     <Router>
       <ThemeProvider>
         <TooltipProvider>
-          <PrivacyBoundary>
-            <Toaster />
-            <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
-              <AppCommands />
-              <CommandPalette />
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
-            </ShellProvider>
-          </PrivacyBoundary>
+          <Toaster />
+          <ShellProvider routes={APP_ROUTES} fallbackRoute={FALLBACK_ROUTE}>
+            <AppCommands />
+            <CommandPalette />
+            <SettingsDialog />
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </ShellProvider>
         </TooltipProvider>
       </ThemeProvider>
     </Router>

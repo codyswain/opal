@@ -6,7 +6,7 @@ import { cn } from '@/renderer/shared/utils';
 const buttonVariants = cva(
   [
     'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-control',
-    'text-control font-medium outline-none transition-colors duration-hover ease-standard',
+    'text-ui font-medium outline-none transition-hover',
     'focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-1',
     'focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-40',
   ],

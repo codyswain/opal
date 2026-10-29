@@ -201,7 +201,7 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
                   onClick={onClearFilter}
                   data-testid="disk-folder-clear-filter"
                   data-disk-shortcuts-ignore="true"
-                  className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-colors duration-100 hover:opacity-90"
+                  className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-hover hover:opacity-90"
                 >
                   Clear filter
                 </button>
@@ -276,7 +276,7 @@ export const CollectionView: React.FC<CollectionViewProps> = ({
 
       {/* A Finder-style status bar: counts on the left, layout on the right. */}
       <div className="flex h-8 shrink-0 items-center justify-between border-t border-border-subtle bg-surface px-3" data-testid="collection-status">
-        <span className="truncate text-2xs text-muted-foreground">
+        <span className="truncate text-2xs tabular-nums text-muted-foreground">
           {countLabel ?? `${entries.length} ${entries.length === 1 ? 'item' : 'items'}`}
           {selectedPaths.length > 1 ? ` · ${selectedPaths.length} selected` : ''}
         </span>
@@ -388,7 +388,7 @@ const ModeButton: React.FC<ModeButtonProps> = ({ mode, active, label, Icon, onSe
     data-testid={`disk-folder-view-${mode}`}
     data-disk-shortcuts-ignore="true"
     onClick={() => onSelect(mode)}
-    className={`flex h-6 w-6 items-center justify-center rounded transition-colors duration-100 ${active ? 'bg-surface-active text-foreground' : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}`}
+    className={`flex h-6 w-6 items-center justify-center rounded transition-hover ${active ? 'bg-surface-active text-foreground' : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}`}
   >
     <Icon className="h-3.5 w-3.5" />
   </button>
@@ -436,7 +436,7 @@ const GalleryTile = forwardRef<HTMLButtonElement, EntryProps & Omit<React.HTMLAt
       // min-w-0 is load-bearing: a grid item defaults to min-width:auto, so it
       // refuses to shrink below its content's intrinsic width. A long filename
       // would push the tile past its track and overlap its neighbours.
-      className={`group flex h-full min-w-0 w-full flex-col gap-1.5 rounded-lg p-1.5 text-left transition-colors duration-100 outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`group flex h-full min-w-0 w-full flex-col gap-1.5 rounded-lg p-1.5 text-left transition-hover outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         isSelected ? 'bg-surface-selected' : 'hover:bg-surface-hover'
       } ${isDropTarget ? 'ring-2 ring-focus bg-focus/10' : ''}`}
       {...dragProps}
@@ -462,7 +462,7 @@ const GalleryTile = forwardRef<HTMLButtonElement, EntryProps & Omit<React.HTMLAt
       <span className="min-h-8 break-words px-1 text-xs font-medium leading-snug line-clamp-2 text-foreground">
         {entry.name}
       </span>
-      <span className="truncate px-1 text-2xs text-muted-foreground">{meta}</span>
+      <span className="truncate px-1 text-2xs tabular-nums text-muted-foreground">{meta}</span>
     </button>
   );
 });
@@ -481,8 +481,8 @@ const ListRow = forwardRef<HTMLButtonElement, EntryProps & Omit<React.HTMLAttrib
       data-disk-collection-item="true"
       aria-pressed={isSelected}
       data-testid={`disk-folder-entry-${entry.path}`}
-      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors duration-100 ${
-        isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+      className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-hover ${
+        isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-surface-hover'
       } ${isDropTarget ? 'ring-1 ring-primary bg-primary/10' : ''}`}
       {...dragProps}
     >

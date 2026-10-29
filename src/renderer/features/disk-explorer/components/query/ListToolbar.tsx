@@ -42,7 +42,7 @@ export const ListToolbar: React.FC<ListToolbarProps> = ({ leading, chips, onChip
             data-testid={`disk-folder-view-${value}`}
             data-disk-shortcuts-ignore="true"
             onClick={() => onLayout(value)}
-            className={`flex h-6 items-center gap-1 rounded px-2 text-xs transition-colors duration-100 ${
+            className={`flex h-6 items-center gap-1 rounded px-2 text-xs transition-hover ${
               layout === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >

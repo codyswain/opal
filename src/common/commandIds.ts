@@ -10,10 +10,7 @@ export const COMMAND_IDS = {
   openSettings: "app.openSettings",
   openFolder: "files.openFolder",
   toggleLeftPane: "pane.toggleLeft",
-  toggleRightPane: "pane.toggleRight",
-  toggleBottomPane: "pane.toggleBottom",
   toggleTheme: "theme.toggle",
-  togglePrivacy: "privacy.toggle",
 } as const;
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

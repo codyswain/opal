@@ -9,7 +9,8 @@ export interface RecentState {
 
 export interface RecentActions {
   load: () => Promise<void>;
-  clear: () => Promise<void>;
+  /** Resolves false when main could not clear; the error lands in `error`. */
+  clear: () => Promise<boolean>;
   reset: () => void;
 }
 
@@ -46,9 +47,10 @@ export const useRecentStore = create<RecentStore>((set, get) => ({
     const response = await window.activityAPI.clear();
     if (!response.success) {
       set({ error: response.error });
-      return;
+      return false;
     }
     await get().load();
+    return true;
   },
 
   reset: () => {

@@ -15,7 +15,8 @@ import {
   type FlattenedDirectoryNode,
 } from '../utils/flattenDirectoryTree';
 
-const TREE_ROW_HEIGHT = 28;
+/** A 28px row plus the 2px gap below it. */
+const TREE_ROW_HEIGHT = 30;
 
 interface DirectoryTreeProps {
   onNavigate?: () => void;
@@ -60,10 +61,10 @@ function DirectoryRow({
         onKeyDown={(event) => data.onKeyDown(index, event)}
         style={{ paddingLeft: `${node.depth * 14 + 6}px` }}
         className={cn(
-          'group mx-1 flex h-row-compact cursor-default select-none items-center gap-1 rounded-row pr-2 text-ui text-foreground-secondary outline-none',
-          'transition-colors duration-hover ease-standard hover:bg-surface-hover hover:text-foreground',
+          'group mx-2 flex h-row-compact cursor-default select-none items-center gap-1 rounded-row pr-2 text-ui text-foreground-secondary outline-none',
+          'transition-hover hover:bg-surface-hover hover:text-foreground',
           'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
-          isActive && 'bg-surface-selected text-foreground'
+          isActive && 'bg-surface-selected font-medium text-foreground'
         )}
       >
         {node.isExpandable ? (
@@ -78,12 +79,12 @@ function DirectoryRow({
               event.stopPropagation();
               data.onToggle(node.path);
             }}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-row text-icon outline-none hover:bg-surface-active focus-visible:ring-2 focus-visible:ring-focus"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-row text-icon outline-none transition-hover hover:bg-surface-active focus-visible:ring-2 focus-visible:ring-focus"
           >
             <ChevronRight
               aria-hidden
               className={cn(
-                'h-3.5 w-3.5 transition-transform duration-disclosure ease-standard',
+                'h-3.5 w-3.5 transition-transform duration-quick ease-standard',
                 node.isExpanded && 'rotate-90'
               )}
             />
@@ -267,7 +268,7 @@ export function DirectoryTree({ onNavigate }: DirectoryTreeProps) {
           className="flex h-full min-h-32 flex-col items-center justify-center gap-2 px-4 text-center"
         >
           <Folder aria-hidden className="h-5 w-5 text-icon" />
-          <p className="text-control text-foreground-tertiary">
+          <p className="text-ui text-foreground-tertiary">
             No folders open
           </p>
           <Button

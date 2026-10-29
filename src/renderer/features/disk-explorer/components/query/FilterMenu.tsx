@@ -23,7 +23,7 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ chips, onChange }) => {
           data-testid="filter-menu"
           data-disk-shortcuts-ignore="true"
           aria-label={chips.length > 0 ? `Filter (${chips.length} active)` : 'Filter'}
-          className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-100 hover:bg-surface-hover hover:text-foreground ${
+          className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-hover hover:bg-surface-hover hover:text-foreground ${
             chips.length > 0 ? 'text-foreground' : 'text-muted-foreground'
           }`}
         >

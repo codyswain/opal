@@ -97,7 +97,7 @@ function SidebarResizeHandle({
       onDoubleClick={() => onChange(DEFAULT_SIDEBAR_WIDTH)}
       onKeyDown={onKeyDown}
       onPointerDown={beginResize}
-      className="no-drag absolute inset-y-0 right-[-2px] z-10 w-1 cursor-col-resize bg-transparent outline-none transition-colors hover:bg-focus/40 focus-visible:bg-focus"
+      className="no-drag absolute inset-y-0 right-[-2px] z-10 w-1 cursor-col-resize bg-transparent outline-none transition-hover hover:bg-focus/40 focus-visible:bg-focus"
     />
   );
 }
@@ -229,7 +229,7 @@ export function AppShell({ children }: AppShellProps) {
     <div
       data-testid="app-shell"
       data-layout={layout}
-      className="relative flex h-screen w-screen overflow-hidden bg-canvas text-foreground"
+      className="relative flex h-screen w-screen overflow-hidden bg-chrome text-foreground"
     >
       {isNarrow && sidebarOpen ? (
         <div
@@ -247,9 +247,9 @@ export function AppShell({ children }: AppShellProps) {
           aria-label={isNarrow ? 'Workspace navigation' : undefined}
           onKeyDown={isNarrow ? handleNarrowSidebarKeyDown : undefined}
           className={cn(
-            'relative h-full shrink-0 border-r border-border-subtle',
+            'relative h-full shrink-0',
             isNarrow
-              ? 'fixed inset-y-0 left-0 z-40 shadow-dialog animate-in slide-in-from-left-2 duration-disclosure'
+              ? 'fixed inset-y-0 left-0 z-40 shadow-dialog animate-in slide-in-from-left-2 duration-disclosure ease-emphasized'
               : 'z-10'
           )}
           style={{ width: effectiveSidebarWidth }}
@@ -270,9 +270,10 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       ) : null}
 
+      {/* The chrome ground holds the page as an inset card with a hairline ring. */}
       <section
         ref={workspaceRef}
-        className="flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas"
+        className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         <Titlebar
           compactActions={isNarrow}
@@ -285,7 +286,10 @@ export function AppShell({ children }: AppShellProps) {
           tabIndex={-1}
           data-testid="workspace-surface"
           aria-label={`${route.header.title} workspace`}
-          className="min-h-0 min-w-0 flex-1 overflow-hidden outline-none"
+          className={cn(
+            'mb-page mr-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
+            (isNarrow || !sidebarOpen) && 'ml-page'
+          )}
         >
           {children}
         </main>

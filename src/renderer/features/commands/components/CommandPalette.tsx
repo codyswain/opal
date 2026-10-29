@@ -162,12 +162,12 @@ export const CommandPalette: React.FC = () => {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) hide(); }}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/25 dark:bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
         <DialogPrimitive.Content
           aria-label="Search files and commands"
           data-testid="command-palette"
           onKeyDown={onKeyDown}
-          className="fixed left-1/2 top-[14vh] z-50 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-overlay border border-border-subtle bg-surface-raised text-foreground shadow-overlay outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
+          className="fixed left-1/2 top-[14vh] z-50 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-dialog border border-border-overlay bg-surface-raised text-foreground shadow-overlay outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
         >
           <DialogPrimitive.Title className="sr-only">Search files and commands</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">Type to search files across your opened folders, or start with &gt; for commands.</DialogPrimitive.Description>
@@ -195,7 +195,7 @@ export const CommandPalette: React.FC = () => {
               </p>
             ) : sections.map((section) => (
               <div key={section.title} role="group" aria-label={section.title}>
-                <p className="px-2.5 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-foreground-tertiary">{section.title}</p>
+                <p className="px-2.5 pb-1 pt-2 text-label text-foreground-tertiary">{section.title}</p>
                 {section.items.map((item) => {
                   position += 1;
                   const index = position;

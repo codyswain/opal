@@ -47,9 +47,15 @@ describe('recentStore', () => {
 
   it('clear asks main and reloads', async () => {
     const api = installActivityApi();
-    await useRecentStore.getState().clear();
+    await expect(useRecentStore.getState().clear()).resolves.toBe(true);
     expect(api.clear).toHaveBeenCalled();
     expect(api.recent).toHaveBeenCalled();
+  });
+
+  it('clear reports a failure from main', async () => {
+    installActivityApi({ clear: vi.fn(async () => ({ success: false as const, error: 'nope' })) });
+    await expect(useRecentStore.getState().clear()).resolves.toBe(false);
+    expect(useRecentStore.getState().error).toBe('nope');
   });
 });
 

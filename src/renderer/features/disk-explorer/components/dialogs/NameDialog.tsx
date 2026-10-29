@@ -119,7 +119,7 @@ export const NameDialog: React.FC = () => {
             type="button"
             onClick={cancelAction}
             data-testid="name-dialog-cancel"
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors duration-100 hover:bg-muted"
+            className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-hover hover:bg-muted"
           >
             Cancel
           </button>

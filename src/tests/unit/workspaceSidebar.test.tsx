@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { useSettingsStore } from "@/renderer/features/settings";
 import {
   ShellProvider,
   WorkspaceSidebar,
@@ -27,9 +28,9 @@ const ROUTES: ShellRouteObject[] = [
     handle: { shell: { id: "files", header: { title: "Files" } } },
   },
   {
-    path: "/settings",
+    path: "/",
     element: null,
-    handle: { shell: { id: "settings", header: { title: "Settings" } } },
+    handle: { shell: { id: "opal", header: { title: "Opal" } } },
   },
 ];
 
@@ -120,7 +121,7 @@ describe("WorkspaceSidebar", () => {
       createDay,
     };
     const user = userEvent.setup();
-    renderSidebar(false, "/settings");
+    renderSidebar(false, "/");
     await user.click(screen.getByRole("button", { name: "Today" }));
     const today = localDate();
     expect(createDay).toHaveBeenCalledWith(ROOT, today);
@@ -131,8 +132,17 @@ describe("WorkspaceSidebar", () => {
     );
   });
 
+  it("opens the Settings dialog from the gear", async () => {
+    useSettingsStore.setState({ open: false });
+    const user = userEvent.setup();
+    renderSidebar();
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(useSettingsStore.getState().open).toBe(true);
+    expect(screen.getByTestId("location")).toHaveTextContent("/files");
+  });
+
   it("keeps the sidebar quiet outside the library", async () => {
-    renderSidebar(false, "/settings");
+    renderSidebar(false, "/");
     expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
     expect(screen.queryByText("Open folders")).toBeNull();
@@ -147,7 +157,8 @@ describe("WorkspaceSidebar", () => {
     expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Threads" })).toBeNull();
     expect(screen.getByRole("link", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /theme/i })).toBeNull();
     expect(screen.queryByText("Favorites")).toBeNull();
     expect(screen.queryByText("Search")).toBeNull();
     expect(screen.queryByText("Views")).toBeNull();

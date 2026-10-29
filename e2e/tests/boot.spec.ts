@@ -15,6 +15,17 @@ test("app without a vault launches into the Library", async ({
   await expect(page.getByRole("link", { name: "Library" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Threads" })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.location.hash)).toMatch(/^#\/files/);
+  // The UI font ships in the bundle; the CSP must let the page load it.
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts].some(
+          (face) => face.family.includes("Inter Variable") && face.status === "loaded",
+        );
+      }),
+    )
+    .toBe(true);
   const discovery = await page.evaluate(() => window.vaultAPI.discover());
   expect(discovery).toEqual({ success: true, data: [] });
   // The Chromium profile must live in the test directory too, or every run

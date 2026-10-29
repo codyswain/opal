@@ -35,7 +35,7 @@ export const DiskTree: React.FC = () => {
               type="button"
               onClick={() => void openFolder()}
               data-testid="disk-tree-open-folder"
-              className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-colors duration-100 hover:opacity-90"
+              className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground transition-hover hover:opacity-90"
             >
               Open Folder
             </button>

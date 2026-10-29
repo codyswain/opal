@@ -19,9 +19,8 @@ interface SidebarItemProps {
 
 const rowStyles = [
   'group flex h-row-compact w-full min-w-0 items-center gap-2 rounded-row px-2',
-  'text-left text-ui text-foreground-secondary outline-none',
-  'transition-colors duration-hover ease-standard',
-  'hover:bg-surface-hover hover:text-foreground',
+  'text-left text-ui font-medium text-foreground-secondary outline-none',
+  'transition-hover hover:bg-surface-hover hover:text-foreground',
   'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
 ].join(' ');
 
@@ -35,7 +34,7 @@ function ItemContents({
       <Icon aria-hidden className="h-4 w-4 shrink-0 text-icon" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {trailing ? (
-        <span className="shrink-0 text-metadata text-foreground-tertiary">
+        <span className="shrink-0 text-metadata tabular-nums text-foreground-tertiary">
           {trailing}
         </span>
       ) : null}

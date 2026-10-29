@@ -41,7 +41,7 @@ export const DisplayPopover: React.FC<DisplayPopoverProps> = ({
           type="button"
           data-testid="display-menu"
           data-disk-shortcuts-ignore="true"
-          className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors duration-100 hover:bg-surface-hover hover:text-foreground"
+          className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-hover hover:bg-surface-hover hover:text-foreground"
         >
           <Settings2 aria-hidden className="h-3.5 w-3.5" />
           Display

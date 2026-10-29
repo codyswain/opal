@@ -26,22 +26,39 @@ module.exports = {
           "var(--text-metadata-size)",
           { lineHeight: "var(--text-metadata-line)" },
         ],
+        label: [
+          "var(--text-label-size)",
+          { lineHeight: "var(--text-label-line)", fontWeight: "510" },
+        ],
         control: [
           "var(--text-control-size)",
           { lineHeight: "var(--text-control-line)" },
         ],
-        ui: ["var(--text-ui-size)", { lineHeight: "var(--text-ui-line)" }],
+        ui: [
+          "var(--text-ui-size)",
+          {
+            lineHeight: "var(--text-ui-line)",
+            letterSpacing: "var(--text-ui-tracking)",
+          },
+        ],
         "ui-heading": [
           "var(--text-heading-size)",
           { lineHeight: "var(--text-heading-line)" },
         ],
       },
+      // Inter's variable axis: 510 and 590 are Linear's medium and semibold.
+      fontWeight: {
+        medium: "510",
+        semibold: "590",
+      },
       colors: {
+        chrome: "hsl(var(--chrome))",
         canvas: "hsl(var(--canvas))",
-        sidebar: "hsl(var(--sidebar))",
         surface: {
           DEFAULT: "hsl(var(--surface))",
           raised: "hsl(var(--surface-raised))",
+          sunken: "hsl(var(--surface-sunken))",
+          lift: "hsl(var(--surface-lift))",
           hover: "hsl(var(--surface-hover))",
           active: "hsl(var(--surface-active))",
           selected: "hsl(var(--surface-selected))",
@@ -50,7 +67,9 @@ module.exports = {
           DEFAULT: "hsl(var(--border))",
           subtle: "hsl(var(--border-subtle))",
           strong: "hsl(var(--border-strong))",
+          overlay: "hsl(var(--border-overlay))",
         },
+        "page-ring": "hsl(var(--page-ring))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
@@ -61,6 +80,7 @@ module.exports = {
         },
         icon: "hsl(var(--icon))",
         focus: "hsl(var(--focus))",
+        link: "hsl(var(--link))",
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         danger: "hsl(var(--danger))",
@@ -100,6 +120,7 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
         row: "var(--radius-row)",
         control: "var(--radius-control)",
+        card: "var(--radius-card)",
         overlay: "var(--radius-overlay)",
         dialog: "var(--radius-dialog)",
       },
@@ -114,22 +135,27 @@ module.exports = {
         "control-compact": "var(--control-height-compact)",
         control: "var(--control-height)",
         sidebar: "var(--sidebar-width)",
-        inspector: "var(--inspector-width)",
+      },
+      spacing: {
+        page: "var(--page-inset)",
       },
       maxWidth: {
         reading: "var(--reading-width)",
       },
       boxShadow: {
+        control: "var(--shadow-control)",
         overlay: "var(--shadow-overlay)",
         dialog: "var(--shadow-dialog)",
       },
       transitionDuration: {
         hover: "var(--duration-hover)",
+        quick: "var(--duration-quick)",
         overlay: "var(--duration-overlay)",
         disclosure: "var(--duration-disclosure)",
       },
       transitionTimingFunction: {
         standard: "var(--ease-standard)",
+        emphasized: "var(--ease-emphasized)",
       },
       keyframes: {
         "accordion-down": {

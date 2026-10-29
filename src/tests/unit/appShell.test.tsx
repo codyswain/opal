@@ -24,9 +24,9 @@ const FILES: ShellRouteDescriptor = {
   },
 };
 
-const SETTINGS: ShellRouteDescriptor = {
-  id: 'settings',
-  header: { title: 'Settings' },
+const OTHER: ShellRouteDescriptor = {
+  id: 'other',
+  header: { title: 'Other' },
 };
 
 const ROUTES: ShellRouteObject[] = [
@@ -36,9 +36,9 @@ const ROUTES: ShellRouteObject[] = [
     handle: { shell: FILES },
   },
   {
-    path: '/settings',
-    element: <div>Settings content</div>,
-    handle: { shell: SETTINGS },
+    path: '/other',
+    element: <div>Other content</div>,
+    handle: { shell: OTHER },
   },
 ];
 
@@ -52,8 +52,8 @@ function NativeRouteControl() {
     <button
       hidden
       type="button"
-      data-testid="native-settings-command"
-      onClick={() => navigate('/settings')}
+      data-testid="native-route-command"
+      onClick={() => navigate('/other')}
     />
   );
 }
@@ -109,30 +109,41 @@ beforeEach(() => {
 describe('AppShell', () => {
   it('keeps one frame mounted while route content and context change', async () => {
     const user = userEvent.setup();
-    renderShell();
+    renderShell(['/other']);
     const shell = screen.getByTestId('app-shell');
 
     expect(shell).toHaveAttribute('data-layout', 'wide');
     expect(screen.getByTestId('workspace-sidebar')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Files' })).toBeInTheDocument();
-    expect(screen.getByText('Files content')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Other' })).toBeInTheDocument();
+    expect(screen.getByText('Other content')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Settings' }));
+    await user.click(screen.getByRole('link', { name: 'Library' }));
 
     expect(screen.getByTestId('app-shell')).toBe(shell);
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByText('Settings content')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Files' })).toBeInTheDocument();
+    expect(screen.getByText('Files content')).toBeInTheDocument();
   });
 
   it('uses router history for universal Back and Forward controls', async () => {
     const user = userEvent.setup();
-    renderShell();
+    renderShell(['/other']);
 
-    await user.click(screen.getByRole('link', { name: 'Settings' }));
+    await user.click(screen.getByRole('link', { name: 'Library' }));
     await user.click(screen.getByRole('button', { name: 'Go back' }));
-    expect(screen.getByText('Files content')).toBeInTheDocument();
+    expect(screen.getByText('Other content')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Go forward' }));
-    expect(screen.getByText('Settings content')).toBeInTheDocument();
+    expect(screen.getByText('Files content')).toBeInTheDocument();
+  });
+
+  it('sets the page in the chrome as a card, inset on every free side', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const page = screen.getByTestId('workspace-surface');
+    expect(page).toHaveClass('rounded-card', 'border-page-ring', 'mr-page', 'mb-page');
+    expect(page).not.toHaveClass('ml-page');
+
+    await user.click(screen.getByRole('button', { name: 'Hide workspace sidebar' }));
+    expect(page).toHaveClass('ml-page');
   });
 
   it('uses the persisted desktop collapse state and traffic-light clearance', async () => {
@@ -220,9 +231,9 @@ describe('AppShell', () => {
     await user.click(
       screen.getByRole('button', { name: 'Show workspace sidebar' })
     );
-    await user.click(screen.getByRole('link', { name: 'Settings' }));
+    await user.click(screen.getByRole('link', { name: 'Library' }));
     expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
-    expect(screen.getByText('Settings content')).toBeInTheDocument();
+    expect(screen.getByText('Files content')).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('workspace-surface')).toHaveFocus()
     );
@@ -242,10 +253,10 @@ describe('AppShell', () => {
       ).toHaveFocus()
     );
 
-    act(() => screen.getByTestId('native-settings-command').click());
+    act(() => screen.getByTestId('native-route-command').click());
 
     await waitFor(() =>
-      expect(screen.getByText('Settings content')).toBeInTheDocument()
+      expect(screen.getByText('Other content')).toBeInTheDocument()
     );
     expect(screen.queryByTestId('workspace-sidebar')).toBeNull();
     await waitFor(() =>

@@ -10,7 +10,7 @@ import {
   serializeFilesLocation,
 } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
-import { ThemeToggle } from "@/renderer/features/theme";
+import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
 import { openToday } from "../utils/openToday";
@@ -87,11 +87,16 @@ export function WorkspaceSidebar({
     onNavigate?.();
   };
 
+  const openSettings = () => {
+    onNavigate?.();
+    useSettingsStore.getState().show();
+  };
+
   return (
     <aside
       data-testid="workspace-sidebar"
       aria-label="Workspace"
-      className="flex h-full min-h-0 w-full flex-col bg-sidebar text-foreground"
+      className="scrollbar-on-hover flex h-full min-h-0 w-full flex-col bg-chrome text-foreground"
     >
       <WorkspaceHeader
         roots={roots}
@@ -131,7 +136,7 @@ export function WorkspaceSidebar({
         <>
           <SidebarSection
             title="Open folders"
-            className="flex min-h-0 flex-1 flex-col border-t border-border-subtle pt-1"
+            className="flex min-h-0 flex-1 flex-col pt-3"
             contentClassName="min-h-0 flex-1 px-0"
             action={
               <IconButton
@@ -150,15 +155,8 @@ export function WorkspaceSidebar({
         <div className="flex-1" />
       )}
 
-      <div className="flex shrink-0 items-center gap-1 border-t border-border-subtle p-2">
-        <SidebarItem
-          to="/settings"
-          icon={Settings}
-          label="Settings"
-          onActivate={onNavigate}
-          className="flex-1"
-        />
-        <ThemeToggle />
+      <div className="shrink-0 p-2">
+        <SidebarItem icon={Settings} label="Settings" onActivate={openSettings} />
       </div>
     </aside>
   );

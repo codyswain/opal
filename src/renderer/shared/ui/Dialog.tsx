@@ -15,7 +15,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/55',
+      'fixed inset-0 z-50 bg-black/25 dark:bg-black/50',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
       'duration-overlay ease-standard',
@@ -42,7 +42,7 @@ const DialogContent = React.forwardRef<
       className={cn(
         'fixed left-1/2 top-1/2 z-50 w-full max-w-md',
         '-translate-x-1/2 -translate-y-1/2 rounded-dialog',
-        'border border-border-subtle bg-surface-raised p-4 text-foreground shadow-dialog',
+        'border border-border-overlay bg-surface-raised p-4 text-foreground shadow-dialog',
         'outline-none data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
         'duration-overlay ease-standard',
@@ -57,7 +57,7 @@ const DialogContent = React.forwardRef<
           className={cn(
             'absolute right-2 top-2 inline-flex h-control-compact w-control-compact',
             'items-center justify-center rounded-control text-icon',
-            'transition-colors duration-hover hover:bg-surface-hover hover:text-foreground',
+            'transition-hover hover:bg-surface-hover hover:text-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
             'disabled:pointer-events-none disabled:opacity-40'
           )}

@@ -102,7 +102,7 @@ function Skeleton({
       aria-hidden
       data-testid="skeleton"
       className={cn(
-        'animate-pulse rounded-control bg-surface-active/70',
+        'animate-pulse rounded-control bg-surface-active',
         className
       )}
       {...props}

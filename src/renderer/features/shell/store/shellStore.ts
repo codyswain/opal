@@ -9,23 +9,16 @@ export const SHELL_PREFERENCE_KEY = 'shell.layout';
 
 export const SHELL_LIMITS = {
   sidebar: { min: 180, max: 360 },
-  inspector: { min: 280, max: 520 },
 } as const;
 
 export interface ShellPreferences {
   sidebarOpen: boolean;
   sidebarWidth: number;
-  inspectorOpen: boolean;
-  inspectorWidth: number;
-  inspectorActiveTab: string | null;
 }
 
 export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   sidebarOpen: true,
   sidebarWidth: 220,
-  inspectorOpen: false,
-  inspectorWidth: 336,
-  inspectorActiveTab: null,
 };
 
 export interface ShellActions {
@@ -34,10 +27,6 @@ export interface ShellActions {
   setNarrowLayout(narrow: boolean): void;
   closeNarrowSidebar(): void;
   setSidebarWidth(width: number): void;
-  setInspectorOpen(open: boolean): void;
-  toggleInspector(): void;
-  setInspectorWidth(width: number): void;
-  setInspectorActiveTab(tabId: string | null): void;
   hydrate(): ShellPreferences;
   reset(): void;
 }
@@ -66,13 +55,6 @@ function safeWidth(
   return Math.min(limits.max, Math.max(limits.min, Math.round(value)));
 }
 
-function safeTabId(value: unknown): string | null {
-  if (value === null) return null;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  return normalized.length > 0 && normalized.length <= 80 ? normalized : null;
-}
-
 export function sanitizeShellPreferences(
   value: unknown,
   fallback: ShellPreferences = DEFAULT_SHELL_PREFERENCES
@@ -88,16 +70,6 @@ export function sanitizeShellPreferences(
       fallback.sidebarWidth,
       SHELL_LIMITS.sidebar
     ),
-    inspectorOpen: safeBoolean(
-      candidate.inspectorOpen,
-      fallback.inspectorOpen
-    ),
-    inspectorWidth: safeWidth(
-      candidate.inspectorWidth,
-      fallback.inspectorWidth,
-      SHELL_LIMITS.inspector
-    ),
-    inspectorActiveTab: safeTabId(candidate.inspectorActiveTab),
   };
 }
 
@@ -113,7 +85,6 @@ function readShellPreferences(): ShellPreferences {
   // One-cycle compatibility with App.tsx's pre-shell preference keys.
   const migrated = sanitizeShellPreferences({
     sidebarOpen: readPref('isLeftSidebarOpen', true),
-    inspectorOpen: readPref('isRightSidebarOpen', false),
   });
   writePref(SHELL_PREFERENCE_KEY, migrated);
   return migrated;
@@ -127,9 +98,6 @@ function preferencesFrom(state: ShellStore): ShellPreferences {
   return {
     sidebarOpen: state.sidebarOpen,
     sidebarWidth: state.sidebarWidth,
-    inspectorOpen: state.inspectorOpen,
-    inspectorWidth: state.inspectorWidth,
-    inspectorActiveTab: state.inspectorActiveTab,
   };
 }
 
@@ -172,43 +140,6 @@ export const useShellStore = create<ShellStore>((set) => ({
           state.sidebarWidth,
           SHELL_LIMITS.sidebar
         ),
-      };
-      persist(next);
-      return next;
-    }),
-  setInspectorOpen: (inspectorOpen) =>
-    set((state) => {
-      const next = { ...preferencesFrom(state), inspectorOpen };
-      persist(next);
-      return next;
-    }),
-  toggleInspector: () =>
-    set((state) => {
-      const next = {
-        ...preferencesFrom(state),
-        inspectorOpen: !state.inspectorOpen,
-      };
-      persist(next);
-      return next;
-    }),
-  setInspectorWidth: (width) =>
-    set((state) => {
-      const next = {
-        ...preferencesFrom(state),
-        inspectorWidth: safeWidth(
-          width,
-          state.inspectorWidth,
-          SHELL_LIMITS.inspector
-        ),
-      };
-      persist(next);
-      return next;
-    }),
-  setInspectorActiveTab: (inspectorActiveTab) =>
-    set((state) => {
-      const next = {
-        ...preferencesFrom(state),
-        inspectorActiveTab: safeTabId(inspectorActiveTab),
       };
       persist(next);
       return next;

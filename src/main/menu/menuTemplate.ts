@@ -86,10 +86,7 @@ export function buildMenuTemplate(
     {
       label: "View",
       submenu: [
-        ...item(COMMAND_IDS.togglePrivacy),
         ...item(COMMAND_IDS.toggleLeftPane),
-        ...item(COMMAND_IDS.toggleRightPane),
-        ...item(COMMAND_IDS.toggleBottomPane),
         { type: "separator" },
         ...item(COMMAND_IDS.toggleTheme),
         { type: "separator" },

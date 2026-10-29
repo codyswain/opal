@@ -23,7 +23,7 @@ export const PaneHandle: React.FC<{ direction?: 'horizontal' | 'vertical' }> = (
       aria-hidden="true"
       className={
         (direction === 'horizontal' ? 'w-px h-full' : 'h-px w-full') +
-        ' bg-border transition-colors duration-100' +
+        ' bg-border transition-hover' +
         ' group-hover:bg-[hsl(var(--primary)/0.7)]' +
         ' group-data-[resize-handle-state=drag]:bg-[hsl(var(--primary))]'
       }

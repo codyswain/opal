@@ -8,15 +8,15 @@ const ContextMenuGroup = ContextMenuPrimitive.Group;
 
 const itemStyles = [
   'relative flex h-row-compact cursor-default select-none items-center gap-2 rounded-row px-2',
-  'text-control text-foreground-secondary outline-none',
-  'transition-colors duration-hover ease-standard',
+  'text-ui text-foreground-secondary outline-none',
+  'transition-hover focus:duration-0',
   'focus:bg-surface-hover focus:text-foreground',
   'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
 ].join(' ');
 
 const contentStyles = [
   'z-50 min-w-48 overflow-hidden rounded-overlay',
-  'border border-border-subtle bg-surface-raised p-1 text-foreground shadow-overlay',
+  'border border-border-overlay bg-surface-raised p-1 text-foreground shadow-overlay',
   'data-[state=open]:animate-in data-[state=closed]:animate-out',
   'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
   'duration-overlay ease-standard',
@@ -56,7 +56,7 @@ const ContextMenuSeparator = React.forwardRef<
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 
 const ContextMenuShortcut: React.FC<React.HTMLAttributes<HTMLSpanElement>> = ({ className, ...props }) => (
-  <span className={cn('ml-auto pl-4 text-2xs tracking-wide text-foreground-tertiary', className)} {...props} />
+  <span className={cn('ml-auto pl-4 text-metadata text-foreground-tertiary', className)} {...props} />
 );
 
 export { ContextMenu, ContextMenuTrigger, ContextMenuGroup, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut };

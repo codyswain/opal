@@ -30,22 +30,9 @@ export interface ShellHeaderDescriptor {
   tabs?: React.ReactNode;
 }
 
-export interface ShellInspectorTabDescriptor {
-  id: string;
-  label: string;
-  content: React.ReactNode;
-}
-
-export interface ShellInspectorDescriptor {
-  ariaLabel: string;
-  tabs: readonly ShellInspectorTabDescriptor[];
-  emptyState?: React.ReactNode;
-}
-
 export interface ShellRouteDescriptor {
   id: string;
   header: ShellHeaderDescriptor;
-  inspector?: ShellInspectorDescriptor;
 }
 
 export type ShellRouteDescriptorResolver = (
@@ -85,18 +72,6 @@ export function resolveShellRoute(
     }
   }
   return fallback;
-}
-
-export function resolveInspectorTab(
-  descriptor: ShellInspectorDescriptor | undefined,
-  requestedTabId: string | null
-): ShellInspectorTabDescriptor | null {
-  if (!descriptor || descriptor.tabs.length === 0) return null;
-  return (
-    descriptor.tabs.find((tab) => tab.id === requestedTabId) ??
-    descriptor.tabs[0] ??
-    null
-  );
 }
 
 interface ShellContextValue {

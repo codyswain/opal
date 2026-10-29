@@ -84,9 +84,10 @@ try {
   await page.evaluate(() => { window.location.hash = '#/chat'; });
   await page.getByTestId('chat-index-status').waitFor();
   await shot('08-chat');
-  await page.evaluate(() => { window.location.hash = '#/settings'; });
-  await page.waitForTimeout(500);
+  await page.getByTestId('workspace-sidebar').getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('settings-dialog').waitFor();
   await shot('09-settings');
+  await page.keyboard.press('Escape');
   // Dark theme pass on the two densest screens.
   await page.evaluate(() => { document.documentElement.classList.add('dark'); localStorage.setItem('opal.theme', JSON.stringify({ version: 1, value: 'dark' })); });
   await page.evaluate((v) => { window.location.hash = `#/files?mode=focus&dir=${encodeURIComponent(v + '/Projects/Atlas')}&file=${encodeURIComponent(v + '/Projects/Atlas/plan.md')}`; }, vault);

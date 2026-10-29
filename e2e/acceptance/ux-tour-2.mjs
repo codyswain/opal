@@ -60,7 +60,6 @@ try {
   await page.getByTestId(`disk-folder-entry-${vault}/Reading/sourdough.md`).click({ modifiers: ['Meta'] });
   await page.getByRole('button', { name: 'Preview' }).click();
   await shot(page, '21-preview-pane');
-  await page.evaluate(() => { localStorage.setItem('opal.isRightSidebarOpen', JSON.stringify({ version: 1, value: true })); });
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate((v) => { window.location.hash = `#/files?mode=browse&dir=${encodeURIComponent(v + '/Reading')}`; }, vault);

@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AppCommands, CommandPalette, usePaletteStore } from '@/renderer/features/commands';
 import { commandRegistry } from '@/renderer/features/commands/services/commandRegistry';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { useSettingsStore } from '@/renderer/features/settings';
 import { ShellProvider } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
 import { TooltipProvider } from '@/renderer/shared/ui';
@@ -26,7 +27,7 @@ function renderPalette() {
     <MemoryRouter initialEntries={['/files']}>
       <ThemeProvider>
         <TooltipProvider>
-          <ShellProvider routes={[{ path: '/files', element: null, handle: { shell: { id: 'files', header: { title: 'Files' } } } }, { path: '/settings', element: null, handle: { shell: { id: 'settings', header: { title: 'Settings' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
+          <ShellProvider routes={[{ path: '/files', element: null, handle: { shell: { id: 'files', header: { title: 'Files' } } } }]} fallbackRoute={{ id: 'opal', header: { title: 'Opal' } }}>
             <AppCommands />
             <CommandPalette />
             <LocationProbe />
@@ -39,6 +40,7 @@ function renderPalette() {
 
 beforeEach(() => {
   usePaletteStore.setState({ open: false, initialQuery: '' });
+  useSettingsStore.setState({ open: false });
   for (const command of commandRegistry.getAllCommands()) commandRegistry.unregisterCommand(command);
   (window as unknown as { systemAPI: unknown }).systemAPI = { reportCommands: vi.fn(), onMenuCommand: vi.fn(() => () => undefined) };
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: [ROOT] })) });
@@ -163,13 +165,16 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(within(palette).getAllByRole('option')[0]).toHaveTextContent('Settings…'));
     expect(within(palette).queryByRole('group', { name: 'Files' })).toBeNull();
     await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/settings'));
+    await waitFor(() => expect(useSettingsStore.getState().open).toBe(true));
+    expect(screen.getByTestId('location')).toHaveTextContent('/files');
   });
 
   it('reports every command to main and shows shortcuts', async () => {
     renderPalette();
     const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; accelerator?: string }[];
     expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newNote', 'theme.toggle', 'pane.toggleLeft', 'app.openSettings']));
+    expect(reported.map((command) => command.id)).not.toEqual(expect.arrayContaining(['privacy.toggle']));
+    expect(reported.map((command) => command.id).filter((id) => id.startsWith('pane.'))).toEqual(['pane.toggleLeft']);
     act(() => usePaletteStore.getState().show('>side'));
     const option = await screen.findByTestId('palette-command-pane.toggleLeft');
     expect(option).toHaveTextContent(/⌘B|Ctrl\+B/);
