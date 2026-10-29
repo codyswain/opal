@@ -2,6 +2,7 @@ import { _electron as electron, type ElectronApplication, type Page } from "@pla
 import { appendFile, mkdir, readFile, realpath, writeFile } from "fs/promises";
 import path from "path";
 import { expect, test } from "../fixtures/electronApp";
+import { greySpread } from "../helpers/png";
 import { createTempVault, seedRoots, type TempVault } from "../helpers/tempVault";
 
 const PROJECT_ROOT = path.join(__dirname, "../..");
@@ -88,4 +89,32 @@ test("list numbers of 10 and up stay on one line, and a click in a table leaves 
   const rowHeights = await page.locator(".cm-md-table-source").evaluateAll((lines) => lines.map((line) => line.getBoundingClientRect().height));
   expect(Math.max(...rowHeights)).toBeLessThan(Math.min(...rowHeights) * 1.2);
   expect(await readFile(note, "utf8")).toContain("| 0 |");
+});
+
+/** Only Chromium paints the scrollbar, so only a real window can show the thumb is hidden at rest. */
+test("the page shows no scrollbar at rest, a thumb while it scrolls, and none again a second later", async ({ userDataDir }) => {
+  const note = path.join(root, "Long.md");
+  await writeFile(note, Array.from({ length: 300 }, (_, index) => `Line ${index + 1} of a long page.`).join("\n\n"));
+  const page = await launch(userDataDir);
+  await openNote(page, note);
+  const scroller = page.locator(".cm-scroller");
+  const box = await scroller.evaluate((element) => {
+    const { right, top, height } = element.getBoundingClientRect();
+    return { right, top, height };
+  });
+  // The strip of the scroller's right edge where the scrollbar sits.
+  const strip = () =>
+    page.screenshot({ clip: { x: box.right - 10, y: box.top + 8, width: 10, height: box.height - 16 } });
+  await expect(scroller).not.toHaveAttribute("data-scrollbar", "shown", { timeout: 5000 });
+  await page.waitForTimeout(400);
+  expect(greySpread(await strip())).toBeLessThan(4);
+
+  await page.mouse.move(box.right - 200, box.top + 200);
+  await page.mouse.wheel(0, 600);
+  await expect(scroller).toHaveAttribute("data-scrollbar", "shown");
+  expect(greySpread(await strip())).toBeGreaterThan(15);
+
+  await expect(scroller).toHaveAttribute("data-scrollbar", "hidden", { timeout: 3000 });
+  await page.waitForTimeout(400);
+  expect(greySpread(await strip())).toBeLessThan(4);
 });

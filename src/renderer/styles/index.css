@@ -184,20 +184,6 @@
   .transition-hover:hover {
     transition-duration: 0s;
   }
-
-  /*
-   * Scrollbars inside this element show only while the pointer is over it.
-   * scrollbar-color is inherited and repaints on hover; the ::-webkit-scrollbar
-   * pseudo-elements do not repaint when only an ancestor's hover changes.
-   */
-  .scrollbar-on-hover {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-  }
-
-  .scrollbar-on-hover:hover {
-    scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
-  }
 }
 
 /*
@@ -281,26 +267,73 @@
   -webkit-app-region: no-drag;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/*
+ * Scrollbars, in every scroll area: no thumb at rest. A scroll, or the
+ * pointer on the scrollbar, marks the element data-scrollbar="shown"
+ * (shared/scrollbars/scrollbarVisibility.ts); about a second after the last
+ * scroll the mark turns to "hidden" and the thumb fades out. The thumb is a
+ * grey pill 6px wide, 3px in from the container's outer edge. An element
+ * that sets scrollbar-width or scrollbar-color loses these rules, so none
+ * does except the tab row, which never shows one.
+ */
+@property --scrollbar-alpha {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
-::-webkit-scrollbar-track {
+@layer base {
+  [data-scrollbar] {
+    transition: --scrollbar-alpha 240ms var(--ease-standard);
+  }
+
+  /* It shows at once and fades out. */
+  [data-scrollbar="shown"] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0s;
+  }
+
+  /* The thumb reads the value from its own scroll area, never from one it sits inside. */
+  :where([data-scrollbar]) > :where(:not([data-scrollbar])) {
+    --scrollbar-alpha: 0;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--scrollbar-thumb));
-  border-radius: 3px;
+  min-width: 2rem;
+  min-height: 2rem;
+  border: 0 solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(
+    in srgb,
+    hsl(var(--scrollbar-thumb-hover)) calc(var(--scrollbar-alpha) * 100%),
+    transparent
+  );
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--scrollbar-thumb-hover));
+::-webkit-scrollbar-thumb:vertical {
+  border-width: 2px 3px 2px 1px;
 }
 
-::-webkit-scrollbar-corner {
-  background: transparent;
+::-webkit-scrollbar-thumb:horizontal {
+  border-width: 1px 2px 3px 2px;
+}
+
+[data-scrollbar]::-webkit-scrollbar-thumb:hover,
+[data-scrollbar]::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--text-tertiary) / 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {

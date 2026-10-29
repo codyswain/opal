@@ -4,9 +4,12 @@ import App from "@/renderer/App";
 import "@/renderer/styles/index.css";
 import { mark, measure } from "@/renderer/shared/perf/marks";
 import { installDropGuard } from "@/renderer/shared/dropGuard";
+import { installScrollbarVisibility } from "@/renderer/shared/scrollbars/scrollbarVisibility";
 import { flushPendingSaves } from "@/renderer/features/disk-explorer/components/editor/pendingSaves";
 
 installDropGuard(window);
+// Scrollbars show while a scroll area scrolls, then fade.
+installScrollbarVisibility(document);
 // Closing the window or quitting waits for open pages to save.
 window.markdownAPI.setFlushHandler(flushPendingSaves);
 

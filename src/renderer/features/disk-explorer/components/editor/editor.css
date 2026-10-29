@@ -365,16 +365,6 @@
   padding: 0.35em 0;
 }
 
-/* A table wider than the column keeps a scrollbar in view, so its cut edge
-   reads as one that scrolls. */
-.opal-editor .cm-editor .cm-md-table-scroll::-webkit-scrollbar {
-  height: 8px;
-}
-
-.opal-editor .cm-editor .cm-md-table-scroll::-webkit-scrollbar-thumb {
-  border-radius: 4px;
-  background-color: hsl(var(--scrollbar-thumb-hover));
-}
 
 .opal-editor .cm-editor .cm-md-table table {
   border-collapse: collapse;
