@@ -294,10 +294,12 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       ) : null}
 
-      {/* The chrome ground holds the page as an inset card with a hairline ring. */}
+      {/* The top row is chrome, as both sidebars are. Below it the page is a
+          card with a hairline ring, in a band of the lighter ground on its
+          left, right and bottom. */}
       <section
         ref={workspaceRef}
-        className="flex min-w-0 flex-1 flex-col overflow-hidden"
+        className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground"
       >
         <Titlebar
           sidebarOpen={sidebarOpen}
@@ -311,12 +313,7 @@ export function AppShell({ children }: AppShellProps) {
           tabIndex={-1}
           data-testid="workspace-surface"
           aria-label="Page"
-          className={cn(
-            'mb-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none',
-            (isNarrow || !sidebarOpen) && 'ml-page',
-            // The right sidebar's column keeps its own gap to the page; its overlay does not.
-            (isNarrow || !rightOpen) && 'mr-page'
-          )}
+          className="mx-page mb-page min-h-0 min-w-0 flex-1 overflow-hidden rounded-card border border-page-ring bg-canvas outline-none"
         >
           {children}
         </main>

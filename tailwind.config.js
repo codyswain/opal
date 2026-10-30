@@ -17,6 +17,7 @@ module.exports = {
       white: "#ffffff",
       black: "#000000",
       chrome: "hsl(var(--chrome))",
+      ground: "hsl(var(--ground))",
       canvas: "hsl(var(--canvas))",
       surface: {
         DEFAULT: "hsl(var(--surface))",

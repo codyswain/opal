@@ -6,24 +6,30 @@ themes define the same semantic roles independently; a component never chooses
 a raw palette shade. The values follow the design brief drawn from Linear and
 Bastion (`docs/product/2026-10-28-pages-first-ux.md`, "Look").
 
-## Layout: chrome and page
+## Layout: chrome, ground and page
 
-The sidebar and the top row share one chrome ground. The page sits in it as a
-card: 8 px radius, a 1 px hairline ring, inset 8 px on the right and bottom
-(and on the left when the sidebar is hidden). There are no rules between
-sidebar parts or under the top row; regions are told apart by the step from
-chrome to page and by space.
+Three surfaces, darkest to brightest in light mode (Cody chose option 7 of the
+colour sketch on 2026-10-29: option 1, with the top bar in the sidebar's
+grey). The chrome colours both sidebars and the 40 px top row, so it runs
+down the left, across the top and down the right as one frame. Below the top
+row the page column is the ground, a step lighter, and the page sits in it as
+a card: 8 px radius, a 1 px hairline ring, inset 8 px on the left, right and
+bottom, whether the sidebars are open or not. The ground shows only as that
+band. The right sidebar's cards are page-coloured cards on the chrome. There
+are no rules between sidebar parts or under the top row; regions are told
+apart by the steps between the three greys and by space.
 
 | CSS token | Tailwind | Light | Dark |
 |---|---|---|---|
-| `--chrome` | `bg-chrome` | #f4f4f5 | #08090a |
-| `--canvas` | `bg-canvas` | #ffffff | #0f1011 |
-| `--page-ring` | `border-page-ring` | #e9e9e9 | white at 5% |
+| `--chrome` | `bg-chrome` | #ececec | #0b0b0b |
+| `--ground` | `bg-ground` | #f5f5f5 | #131313 |
+| `--canvas` | `bg-canvas` | #ffffff | #1a1a1a |
+| `--page-ring` | `border-page-ring` | #e2e2e2 | #282828 |
 | `--radius-card` | `rounded-card` | 8 px | 8 px |
 | `--page-inset` | `m*-page` | 8 px | 8 px |
 
 The Electron window background (`WINDOW_BACKGROUND` in `src/main.ts`) is the
-chrome color, so the first frame matches.
+chrome colour, so the first frame matches.
 
 ## Color
 
@@ -43,12 +49,18 @@ fails if a token, a Tailwind colour or a renderer source file brings hue back.
 | CSS token | Tailwind | Use |
 |---|---|---|
 | `--surface` | `bg-surface` | Content on the page; same as the page |
-| `--surface-raised` | `bg-surface-raised` | Menus, popovers, palette, dialogs |
-| `--surface-sunken` | `bg-surface-sunken` | Code blocks, table heads, wells |
-| `--surface-lift` | `bg-surface-lift` | A control raised off a track (selected segment) |
+| `--surface-raised` | `bg-surface-raised` | Menus, popovers, palette, dialogs: #ffffff / #242424 |
+| `--surface-sunken` | `bg-surface-sunken` | Code blocks, table heads, wells: #f9f9f9 / #1f1f1f |
+| `--surface-lift` | `bg-surface-lift` | The active tab pill, a selected segment: #ffffff / white 10.5% |
 | `--surface-hover` | `bg-surface-hover` | Pointer hover: black 4% / white 3% |
-| `--surface-active` | `bg-surface-active` | Pressed control: black 7% / white 4% |
-| `--surface-selected` | `bg-surface-selected` | Current row or item: black 7% / white 4% |
+| `--surface-active` | `bg-surface-active` | Pressed control: black 7% / white 5% |
+| `--surface-selected` | `bg-surface-selected` | Current row or item: black 6.4% / white 7.8% |
+
+The selected overlay is set so a selected sidebar row is #dddddd on the light
+chrome and #1e1e1e on the dark one, the sketch's values; on the page it is
+#efefef and #2c2c2c. Hover on the chrome is #e3e3e3 / #131313, and on the
+page #f5f5f5 / #212121. In dark mode the tab pill is #252525 on the chrome; at
+white 10% Chromium renders it a channel off grey, so it is 10.5%.
 
 Hover, active and selected are neutral overlays, not tints. They carry their
 own alpha, so they take no Tailwind opacity modifier (`bg-surface-hover/50`
@@ -59,21 +71,26 @@ and does take modifiers.
 
 | CSS token | Tailwind | Use |
 |---|---|---|
-| `--border-subtle` | `border-border-subtle` | Hairline inside the page |
-| `--border-default` | `border-border` | Pane and row boundaries |
-| `--border-strong` | `border-border-strong` | Inputs and outline buttons |
+| `--border-subtle` | `border-border-subtle` | Hairline inside the page, the page ring (#e2e2e2 / #282828) |
+| `--border-default` | `border-border` | Pane and row boundaries (#dcdcdc / #303030) |
+| `--border-strong` | `border-border-strong` | Inputs, outline buttons, the hairline between tab pills (#d5d5d5 / #393939) |
 | `--border-overlay` | `border-border-overlay` | Menus, popovers, tooltips, dialogs: black or white at 8% |
-| `--text-primary` | `text-foreground` | Primary content (#2b2b2b / #f7f7f7) |
-| `--text-secondary` | `text-foreground-secondary` | Sidebar rows, supporting text (#424242 / #d6d6d6) |
-| `--text-tertiary` | `text-foreground-tertiary` | Labels and metadata (#6b6b6b / #919191) |
-| `--icon` | `text-icon` | Icons and placeholders only (#8a8a8a / #696969) |
+| `--text-primary` | `text-foreground` | Primary content (#262626 / #ededed) |
+| `--text-secondary` | `text-foreground-secondary` | Sidebar rows, supporting text (#3f3f3f / #cbcbcb) |
+| `--text-tertiary` | `text-foreground-tertiary` | Labels and metadata; the sketch's muted text (#6b6b6b / #8f8f8f) |
+| `--icon` | `text-icon` | Icons and placeholders only (#878787 / #676767) |
 | `--focus` | `ring-focus` | Focus ring: dark on light (#666666), light on dark (#b3b3b3) |
 | `--primary` | `bg-primary` | The one filled button: near black with white text, inverted in dark mode |
 
+The sketch set the text, muted text, border and selection; the rest are
+derived from them. Secondary text is 64% of the text mixed with 36% of the
+muted text, and the icon is the lightest grey that keeps 3:1 on the light
+chrome.
+
 Contrast, light on white and on the chrome / dark on the page and on the
-chrome: primary 14.2 and 12.9 / 17.8 and 18.6; secondary 10.1 and 9.1 / 13.1
-and 13.7; tertiary 5.3 and 4.8 / 6.0 and 6.3; icon 3.5 and 3.1 / 3.5 and 3.6;
-focus 5.7 and 5.2 / 9.0 and 9.4. Text tokens meet 4.5:1 and the icon and
+chrome: primary 15.1 and 12.8 / 14.9 and 16.8; secondary 10.5 and 8.9 / 10.7
+and 12.1; tertiary 5.3 and 4.5 / 5.4 and 6.1; icon 3.6 and 3.0 / 3.1 and 3.5;
+focus 5.7 and 4.9 / 8.3 and 9.4. Text tokens meet 4.5:1 and the icon and
 focus tokens meet 3:1 on both grounds.
 
 Current items and selection use the neutral overlays above. Links in pages
@@ -199,11 +216,11 @@ nonessential animation and smooth scrolling when the OS requests it.
 
 ## Scrollbars
 
-Scrollbars are 6 px with a translucent thumb (`--scrollbar-thumb`). Inside an
-element with `scrollbar-on-hover`, such as the sidebar, the thumb is
-transparent at rest and shows only while the pointer is over it. It uses the
-standard `scrollbar-color`, so with macOS overlay scrollbars it also follows
-the system and appears while scrolling.
+No scroll area shows a thumb at rest. While it scrolls, or while the pointer
+is on its scrollbar, the thumb is a 6 px pill 3 px in from the area's outer
+edge in `--scrollbar-thumb-hover` (black or white at 20%: #cccccc on the
+light page, #484848 on the dark one), and it fades out about a second after
+the last scroll (`shared/scrollbars/scrollbarVisibility.ts`).
 
 ## Theme preference
 

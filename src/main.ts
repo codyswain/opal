@@ -66,9 +66,11 @@ if (process.platform === "win32") {
 const isDevelopment = process.env.NODE_ENV === "development";
 // Always consider it development mode when VITE_DEV_SERVER_URL is defined
 const forceDevTools = typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined";
+// The chrome token (--chrome in src/renderer/styles/index.css), the colour of
+// both sidebars and the top row, so the first frame matches.
 const WINDOW_BACKGROUND = {
-  light: "#F4F4F4",
-  dark: "#090909",
+  light: "#ECECEC",
+  dark: "#0B0B0B",
 } as const;
 const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;

@@ -262,21 +262,23 @@ describe('AppShell', () => {
     expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault');
   });
 
-  it('sets the page in the chrome as a card, inset on every free side', async () => {
+  it('sets the page as a card in the ground, below the chrome top row', async () => {
     const user = userEvent.setup();
     renderShell();
     const page = screen.getByTestId('workspace-surface');
-    // The right sidebar's column keeps the gap on that side.
+    const column = page.parentElement as HTMLElement;
     expect(screen.getByTestId('day-sidebar')).toBeInTheDocument();
-    expect(page).toHaveClass('rounded-card', 'border-page-ring', 'mb-page');
-    expect(page).not.toHaveClass('ml-page');
-    expect(page).not.toHaveClass('mr-page');
+    expect(screen.getByTestId('workspace-sidebar')).toHaveClass('bg-chrome');
+    expect(screen.getByTestId('day-sidebar')).toHaveClass('bg-chrome');
+    expect(screen.getByTestId('titlebar')).toHaveClass('bg-chrome');
+    expect(column).toHaveClass('bg-ground');
+    // The ground shows on the left, right and bottom, with both sidebars open or not.
+    expect(page).toHaveClass('rounded-card', 'border-page-ring', 'bg-canvas', 'mx-page', 'mb-page');
 
     await user.click(screen.getByRole('button', { name: 'Hide sidebar' }));
-    expect(page).toHaveClass('ml-page');
     await user.click(screen.getByRole('button', { name: 'Hide right sidebar' }));
     expect(screen.queryByTestId('day-sidebar')).not.toBeInTheDocument();
-    expect(page).toHaveClass('mr-page');
+    expect(page).toHaveClass('mx-page', 'mb-page');
   });
 
   it('uses the persisted desktop collapse state and traffic-light clearance', async () => {

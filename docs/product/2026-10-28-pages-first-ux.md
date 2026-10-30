@@ -96,7 +96,7 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
 `vault:day`.
 
 - About 300px wide (260px below 1200px), resizable from 240px, as a column of
-  hairline cards on the chrome ground. Its header shares the 40px top row:
+  hairline cards on the chrome. Its header shares the 40px top row:
   the day ("Wed, Oct 28", then "Yesterday" or "Today"; below 280px the
   weekday goes), previous and next day, the options menu and the toggle.
 - Toggle: the panel-right button or View > Toggle Right Sidebar
@@ -203,12 +203,20 @@ Tokens follow the design brief from Bastion and Linear:
 - UI font: Inter Variable, bundled (no network), 13px UI text, weight 510 for
   nav and active items, 400 for tree rows, sentence-case 12px labels, tabular
   numbers for dates and counts.
-- One chrome ground for the sidebar and the top row (light #f4f4f5, dark
-  #08090a). The page sits in it as a card (light #ffffff, dark #0f1011) with an
-  8px radius and a 1px hairline ring, inset 8px on the right and bottom. No
-  rules between sidebar parts or under the top row.
-- Neutral hover and selection overlays (light rgba(0,0,0,.04) and .07, dark
-  rgba(255,255,255,.03) and .04); no accent colour anywhere (see above).
+- Colours (Cody, 2026-10-29, option 7 of the colour sketch in the vault's
+  `.claude/apps/sketches/opal-colours/`): "I think option one is the best,
+  but I think the top bar should be the same color as the sidebar." Three
+  pure greys. The chrome (light #ececec, dark #0b0b0b) colours both sidebars
+  and the 40px top row as one frame. Below the top row the page column is
+  the ground (light #f5f5f5, dark #131313), and the page sits in it as a card
+  (light #ffffff, dark #1a1a1a) with an 8px radius and a 1px hairline ring
+  (#e2e2e2, #282828), inset 8px on the left, right and bottom, so the ground
+  shows only as that band. The right sidebar's cards are page-coloured on the
+  chrome. Text #262626 / #ededed, muted text #6b6b6b / #8f8f8f, a selected
+  sidebar row #dddddd / #1e1e1e. No rules between sidebar parts or under the
+  top row. The full table is in `docs/design-tokens.md`.
+- Neutral hover and selection overlays (light rgba(0,0,0,.04) and .064, dark
+  rgba(255,255,255,.03) and .078); no accent colour anywhere (see above).
 - Rows 28px with a 6px radius and 2px gaps. Hover appears instantly and fades
   out over 150ms.
 - Scrollbars (Cody, 2026-10-29: "I don't need to always see the scroll bar"):
@@ -219,7 +227,7 @@ Tokens follow the design brief from Bastion and Linear:
   Scrolling stays native, keyboard scrolling included
   (`shared/scrollbars/scrollbarVisibility.ts` only listens). A table wider
   than the page follows the same rule.
-- Warmer, less saturated neutrals than today's blue-greys.
+- Pure greys with no tint, warm or cool.
 
 ## The page
 
