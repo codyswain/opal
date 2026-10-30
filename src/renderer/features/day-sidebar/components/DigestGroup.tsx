@@ -38,7 +38,7 @@ function ReplyDrafted() {
 }
 
 /**
- * A checkbox item: the box, its one-line title, and its detail muted below,
+ * A checkbox item: the box, its title, and its detail muted below, each
  * clamped to two lines. The tooltip holds the whole detail, and a click on
  * the text shows all of it in place. Ticking writes the digest file.
  */
@@ -56,7 +56,12 @@ function DigestCheckbox({
   const [open, setOpen] = React.useState(false);
   const checked = item.checked === true;
   const title = (
-    <span className={cn('block', checked ? 'text-foreground-tertiary line-through' : WEIGHTS[level])}>{item.text}</span>
+    <span
+      title={item.detail ? undefined : item.text}
+      className={cn('block', !open && 'line-clamp-2', checked ? 'text-foreground-tertiary line-through' : WEIGHTS[level])}
+    >
+      {item.text}
+    </span>
   );
   return (
     <div className="flex items-start gap-2 rounded-row px-2 py-1 transition-hover hover:bg-surface-hover">

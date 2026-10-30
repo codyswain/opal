@@ -200,6 +200,7 @@ describe('the day rule', () => {
     expect(pageDate(LOG)).toBe('2026-10-28');
     expect(pageDate(DIGEST)).toBe('2026-10-28');
     expect(pageDate(recording('08:59', 'Kigali'))).toBe('2026-10-28');
+    expect(pageDate(`${ROOT}/Library/recordings/transcripts/2026-10-27 0859 Kigali (Meet) transcript.md`)).toBe('2026-10-27');
     expect(pageDate(`${ROOT}/Inbox/Logs/2026-10-27.md`)).toBe('2026-10-27');
     expect(pageDate(TASTE)).toBeNull();
     expect(pageDate(`${ROOT}/Archive/Journal/2026/2026-01-03.md`)).toBeNull();
@@ -517,6 +518,8 @@ describe('DaySidebar', () => {
     // The detail is muted and clamped; its tooltip has all of it, and a click shows it in place.
     const detail = within(digest).getByText(LONG);
     expect(detail).toHaveClass('line-clamp-2', 'text-foreground-tertiary');
+    // A long title is clamped too.
+    expect(within(digest).getByText('Answer Tom on the 409A price and early exercise')).toHaveClass('line-clamp-2');
     const text = within(digest).getByRole('button', { name: /^Answer Tom/ });
     expect(text).toHaveAttribute('title', LONG);
     await user.click(text);
