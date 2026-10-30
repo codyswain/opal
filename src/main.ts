@@ -53,6 +53,7 @@ import {
   registerOpalFileScheme,
   registerOpalFileProtocol,
 } from "@/main/protocol/opalFile";
+import { OpalLinks } from "@/main/protocol/OpalLinks";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -74,6 +75,8 @@ const WINDOW_BACKGROUND = {
 } as const;
 const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;
+// Set once startup has made the first window, so a link never makes a second.
+let windowStarted = false;
 
 // CSP Configuration
 const CSP = [
@@ -292,6 +295,12 @@ const createWindow = () => {
     log.info("Main window finished loading");
   });
 
+  // A reloading window stops listening for links until its renderer is back.
+  const contents = mainWindow.webContents;
+  contents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) opalLinks.detach(contents);
+  });
+
   mainWindow.webContents.on(
     "did-fail-load",
     (_, errorCode, errorDescription) => {
@@ -302,6 +311,17 @@ const createWindow = () => {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+};
+
+/** Brings the window forward for a link, making one when it was closed. */
+const showWindow = () => {
+  if (!windowStarted) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
 };
 
 // --- App Lifecycle Events
@@ -432,6 +452,18 @@ const dayService = new DayService({
   },
 });
 const stackService = new StackService({ registry: rootRegistry });
+const opalLinks = new OpalLinks({
+  registry: rootRegistry,
+  vaults: async () => (await vaultService.discover()).map((vault) => vault.path),
+});
+// macOS hands opal:// links to the app here, the one that launched it before
+// `ready`. The renderer says when it listens; the links wait until then.
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  opalLinks.receive(url);
+  showWindow();
+});
+ipcMain.on("system:open-page-ready", (event) => opalLinks.attach(event.sender));
 const vaultHandlers = new VaultHandlers({
   ipc: ipcMain,
   service: vaultService,
@@ -515,6 +547,7 @@ app.whenReady().then(async () => {
     log.info("Window state loaded");
 
     createWindow();
+    windowStarted = true;
     log.info("Application initialization completed");
   } catch (error) {
     log.error(`Error during app setup: ${error}`);

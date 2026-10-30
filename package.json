@@ -27,7 +27,15 @@
   "config": {
     "forge": {
       "packagerConfig": {
-        "icon": "assets/icons/opal"
+        "icon": "assets/icons/opal",
+        "protocols": [
+          {
+            "name": "Opal link",
+            "schemes": [
+              "opal"
+            ]
+          }
+        ]
       },
       "electronWinstallerConfig": {
         "name": "opal"

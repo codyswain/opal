@@ -28,7 +28,12 @@ import {
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { openToday } from "@/renderer/features/shell/utils/openToday";
-import { AppShell, ShellProvider, useShell } from "@/renderer/features/shell";
+import {
+  AppShell,
+  PageLinks,
+  ShellProvider,
+  useShell,
+} from "@/renderer/features/shell";
 
 /**
  * Launch brings back the tabs of the last session. Today's page opens when
@@ -91,6 +96,7 @@ const App: React.FC = () => {
           <AppToaster />
           <ShellProvider>
             <AppCommands />
+            <PageLinks />
             <CommandPalette />
             <SettingsDialog />
             {/* The sidebar tree starts these file actions. */}

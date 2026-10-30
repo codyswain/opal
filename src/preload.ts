@@ -2,6 +2,7 @@ import type { VaultAPI } from "./types/vault";
 import type { VaultDayChange } from "./types/day";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
+import type { OpenPageRequest } from "./common/opalLink";
 import type { MarkdownCopyLabel, UnsavedPage } from "./types/markdown";
 
 /* 
@@ -49,6 +50,14 @@ contextBridge.exposeInMainWorld("systemAPI", {
       handler(fullScreen);
     ipcRenderer.on("system:full-screen", listener);
     return () => ipcRenderer.removeListener("system:full-screen", listener);
+  },
+  onOpenPage: (handler: (request: OpenPageRequest) => void) => {
+    const listener = (_event: IpcRendererEvent, request: OpenPageRequest) =>
+      handler(request);
+    ipcRenderer.on("system:open-page", listener);
+    // Links that came before anything listened wait in main until this.
+    ipcRenderer.send("system:open-page-ready");
+    return () => ipcRenderer.removeListener("system:open-page", listener);
   },
 });
 

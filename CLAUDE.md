@@ -53,6 +53,12 @@ not exist.
   A page's footer line ("N properties · N words") toggles a read-only
   properties block under the title: the frontmatter, then the file's path,
   times and size from `markdown:properties`
+- **Links in:** `opal://open?path=<path>` (relative to the vault, or
+  absolute) opens that file in a new tab, or switches to the tab showing it.
+  macOS hands the link to `open-url`; `OpalLinks` in `src/main/protocol`
+  checks it against the allowed roots and holds it until the renderer's
+  `PageLinks` listens. The scheme is declared in `packagerConfig.protocols`,
+  so only a packaged build receives links
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
   every path that crosses IPC is resolved and checked against opened folders
 - **Path alias:** `@/*` maps to `src/*`

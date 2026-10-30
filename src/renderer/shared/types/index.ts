@@ -1,5 +1,6 @@
 import type { IPCResponse } from '@/types/ipc';
 import type { ThemeReport } from '@/common/theme';
+import type { OpenPageRequest } from '@/common/opalLink';
 import { CredentialAccount } from "@/types/credentials";
 
 declare global {
@@ -13,6 +14,8 @@ declare global {
       closeWindow: () => void;
       isFullScreen: () => Promise<boolean>;
       onFullScreenChange: (handler: (fullScreen: boolean) => void) => () => void;
+      /** Files that opal:// links name. Links that came earlier arrive once this listens. */
+      onOpenPage: (handler: (request: OpenPageRequest) => void) => () => void;
     };
 
     credentialAPI: {
