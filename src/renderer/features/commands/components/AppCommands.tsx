@@ -40,6 +40,8 @@ export const AppCommands: React.FC = () => {
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
   // The menu item reads Show Properties or Hide Properties, so the list is reported again when it flips.
   const propertiesOpen = usePagePropertiesStore((state) => state.open);
+  // Next Section and Previous Section are there only while a stack is shown, so their keys are free elsewhere.
+  const stackShown = useStackStore((state) => state.move !== null);
 
   useEffect(() => {
     const commands: Command[] = [
@@ -235,27 +237,31 @@ export const AppCommands: React.FC = () => {
         keywords: ["tree", "sidebar", "files", "fold", "close folders"],
         perform: () => useDiskStore.getState().collapseAll(),
       },
-      {
-        id: COMMAND_IDS.nextSection,
-        name: "Next Section",
-        type: "navigation",
-        // A menu accelerator, so it works while a section's editor has focus.
-        shortcut: ["Alt+CmdOrCtrl+Down"],
-        keywords: ["stack", "daily", "page", "scroll", "down"],
-        perform: () => {
-          useStackStore.getState().move?.("next");
-        },
-      },
-      {
-        id: COMMAND_IDS.previousSection,
-        name: "Previous Section",
-        type: "navigation",
-        shortcut: ["Alt+CmdOrCtrl+Up"],
-        keywords: ["stack", "daily", "page", "scroll", "up"],
-        perform: () => {
-          useStackStore.getState().move?.("previous");
-        },
-      },
+      ...(stackShown
+        ? [
+          {
+            id: COMMAND_IDS.nextSection,
+            name: "Next Section",
+            type: "navigation",
+            // A menu accelerator for when no section has focus; a section's editor takes the key itself.
+            shortcut: ["Alt+CmdOrCtrl+Down"],
+            keywords: ["stack", "daily", "page", "scroll", "down"],
+            perform: () => {
+              useStackStore.getState().move?.("next");
+            },
+          } satisfies Command,
+          {
+            id: COMMAND_IDS.previousSection,
+            name: "Previous Section",
+            type: "navigation",
+            shortcut: ["Alt+CmdOrCtrl+Up"],
+            keywords: ["stack", "daily", "page", "scroll", "up"],
+            perform: () => {
+              useStackStore.getState().move?.("previous");
+            },
+          } satisfies Command,
+        ]
+        : []),
       {
         id: COMMAND_IDS.toggleProperties,
         name: propertiesOpen ? "Hide Properties" : "Show Properties",
@@ -278,7 +284,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar, propertiesOpen]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   useEffect(() => {

@@ -6,8 +6,13 @@
  */
 
 export const STACK_WINDOW = {
-  /** Sections this many viewports above or below the view are mounted too. */
+  /** Sections this many viewports below the view are mounted too. */
   nearViewports: 1,
+  /**
+   * Above the view they mount from this far, and still while scrolling up
+   * fast, so they are drawn before they come into view.
+   */
+  aboveViewports: 2,
   /** A live section farther away than this, in viewports... */
   farViewports: 3,
   /** ...for this long is unmounted. */
@@ -54,6 +59,8 @@ export interface StackWindowState {
   farSince: ReadonlyMap<string, number>;
   /** Scrolling faster than `fastViewportsPerSecond`. */
   fast: boolean;
+  /** Which way the view last moved; down when it has not. */
+  direction?: 'up' | 'down';
   /** Editors still reading their file. */
   reading: number;
 }
@@ -98,8 +105,15 @@ export function planStackWindow(geometry: StackGeometry, state: StackWindowState
     if (state.now - since >= STACK_WINDOW.unmountAfterMs) unmount.add(section.path);
   }
 
+  const above = viewport * STACK_WINDOW.aboveViewports;
+  const wanted = (section: SectionGeometry) => {
+    if (inView(section)) return true;
+    const gap = away.get(section.path) ?? 0;
+    if (section.top + section.height <= top) return (!state.fast || state.direction === 'up') && gap < above;
+    return !state.fast && gap < near;
+  };
   const mount = sections
-    .filter((section) => !section.live && !section.folded && (state.fast ? inView(section) : (away.get(section.path) ?? 0) < near))
+    .filter((section) => !section.live && !section.folded && wanted(section))
     .sort((a, b) => rank(a) - rank(b))
     .map((section) => section.path);
 

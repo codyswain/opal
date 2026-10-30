@@ -264,13 +264,22 @@
   --fade-end: 2rem;
 }
 
-/* The sidebar's top row drops Collapse all folders before Search when it runs out of room. */
+/* Inside its padding the sidebar's top row needs 14rem for every control,
+   and 12.25rem without Go forward. Narrower than 14rem, as at the sidebar's
+   13.5rem minimum, it drops Go forward (Cmd+] still works), so Collapse all
+   folders and Search keep their place. */
 .sidebar-top-row {
   container-type: inline-size;
 }
 
-@container (max-width: 15rem) {
-  .sidebar-collapse-all {
+@container (width < 14rem) {
+  .sidebar-top-row .frame-forward {
+    display: none;
+  }
+}
+
+@container (width < 12.25rem) {
+  .sidebar-top-row .sidebar-collapse-all {
     display: none;
   }
 }

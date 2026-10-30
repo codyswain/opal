@@ -305,7 +305,7 @@ describe('digests', () => {
       '  It is still unanswered. `untracked`',
       '- [ ] **Low: Reply to Steven Peng about a summer 2027 internship** (reply drafted)',
       '- [ ] **Read the Capacity thread again**',
-      ' One space is not detail, and ends the item.',
+      ' One space right under the item is detail too, as Markdown reads it.',
       '',
       '## Notes', '', '- [ ] Not an item either.',
     ];
@@ -350,7 +350,7 @@ describe('digests', () => {
         level: 'medium',
         items: [
           { text: "RSVP to Said Aram's Parametric & ACT call, Fri Oct 30 11:00", detail: 'It is still unanswered. untracked', replyDrafted: false, checked: false, at: at("* [ ] **Medium: RSVP to Said Aram's Parametric & ACT call, Fri Oct 30 11:00**") },
-          { text: 'Read the Capacity thread again', detail: null, replyDrafted: false, checked: false, at: at('- [ ] **Read the Capacity thread again**') },
+          { text: 'Read the Capacity thread again', detail: 'One space right under the item is detail too, as Markdown reads it.', replyDrafted: false, checked: false, at: at('- [ ] **Read the Capacity thread again**') },
         ],
       },
       {
@@ -359,6 +359,73 @@ describe('digests', () => {
           { text: 'Reply to Steven Peng about a summer 2027 internship', detail: null, replyDrafted: true, checked: false, at: at('- [ ] **Low: Reply to Steven Peng about a summer 2027 internship** (reply drafted)') },
         ],
       },
+    ]);
+  });
+
+  it('splits a one-line checkbox into its bold title and detail, and reads "**High.**" as a priority word', () => {
+    // The form the 7:00 run wrote on 2026-10-30: one line per Top 3 item, and numbered Also worth doing items.
+    const body = [
+      '## Top 3', '',
+      '- [ ] **Send Tom his offer letter to sign.** You told him "later tonight or tomorrow AM". [thread](https://mail.google.com/mail/u/0/#all/1a17) (reply drafted)',
+      '- [ ] **Prep for the 2pm call:** It is the first call with the founders. Ties to CODY-193.',
+      '1. [ ] **Numbered checkbox title**',
+      '   Three-space detail.',
+      '- [ ] **Bold only, with nothing after it**', '',
+      '## Also worth doing', '',
+      '1. **High.** Ask Jack in your 9:30 whether yambox1 is back. [map card](https://example.com/map#card=cody-213)',
+      '2. **Medium:** Check with Lucas that the print files reached Josh.',
+      '3. **Low.** Prepare Monday\'s talk on Kigali reporting.',
+      '4. High: old numbered with a colon.',
+      '5. **Highline prep** has no priority word.',
+      '- [ ] **High.** Period after the priority word, on one line. [map card](https://x.test)',
+      '- [ ] High: **Priority outside the bold**',
+      '  Its detail.',
+    ];
+    const digest = parseDigest(['---', 'written_by: ai', '---', ...body].join('\n'));
+    const at = (raw: string) => ({ line: body.indexOf(raw), raw });
+    expect(digest.groups).toEqual([
+      {
+        level: 'top',
+        items: [
+          { text: 'Send Tom his offer letter to sign', detail: 'You told him "later tonight or tomorrow AM". thread', replyDrafted: true, checked: false, at: at(body[2]) },
+          { text: 'Prep for the 2pm call', detail: 'It is the first call with the founders. Ties to CODY-193.', replyDrafted: false, checked: false, at: at(body[3]) },
+          { text: 'Numbered checkbox title', detail: 'Three-space detail.', replyDrafted: false, checked: false, at: at(body[4]) },
+          { text: 'Bold only, with nothing after it', detail: null, replyDrafted: false, checked: false, at: at(body[6]) },
+        ],
+      },
+      {
+        level: 'high',
+        items: [
+          { text: 'Ask Jack in your 9:30 whether yambox1 is back. map card', detail: null, replyDrafted: false, checked: null, at: null },
+          { text: 'Old numbered with a colon.', detail: null, replyDrafted: false, checked: null, at: null },
+          { text: 'Period after the priority word, on one line. map card', detail: null, replyDrafted: false, checked: false, at: at(body[15]) },
+          { text: 'Priority outside the bold', detail: 'Its detail.', replyDrafted: false, checked: false, at: at(body[16]) },
+        ],
+      },
+      {
+        level: 'medium',
+        items: [
+          { text: 'Check with Lucas that the print files reached Josh.', detail: null, replyDrafted: false, checked: null, at: null },
+          { text: 'Highline prep has no priority word.', detail: null, replyDrafted: false, checked: null, at: null },
+        ],
+      },
+      { level: 'low', items: [{ text: "Prepare Monday's talk on Kigali reporting.", detail: null, replyDrafted: false, checked: null, at: null }] },
+    ]);
+  });
+
+  it('reads a line right under a checkbox at the margin as its detail', () => {
+    const body = [
+      '## Top 3', '',
+      '- [ ] **Lazy continuation title**',
+      'Its detail, at the margin.',
+      '- [ ] **After a blank line**', '',
+      'A paragraph after the list.', '',
+      '## Notes', '',
+    ];
+    const digest = parseDigest(body.join('\n'));
+    expect(digest.groups[0].items.map((item) => [item.text, item.detail])).toEqual([
+      ['Lazy continuation title', 'Its detail, at the margin.'],
+      ['After a blank line', null],
     ]);
   });
 

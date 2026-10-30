@@ -2,8 +2,8 @@ import { validDate } from '@/common/vaultModel';
 
 /*
  * Which day the right sidebar shows. A dated page (a daily page, a log, a
- * recording or a digest) sets the day. Any other page keeps the last day
- * shown. With nothing set, the sidebar shows today.
+ * recording, a recording's transcript or a digest) sets the day. Any other
+ * page keeps the last day shown. With nothing set, the sidebar shows today.
  */
 
 /**
@@ -11,7 +11,7 @@ import { validDate } from '@/common/vaultModel';
  * Inbox folders count too, so a machine that has not moved yet still works.
  */
 const DATED_PAGE =
-  /(?:^|\/)(?:Library\/(?:daily|logs|recordings|digests)|Inbox\/(?:Logs|Recordings|Digests))\/(\d{4}-\d{2}-\d{2})(?: [^/]*)?\.md$/;
+  /(?:^|\/)(?:Library\/(?:daily|logs|recordings(?:\/transcripts)?|digests)|Inbox\/(?:Logs|Recordings|Digests))\/(\d{4}-\d{2}-\d{2})(?: [^/]*)?\.md$/;
 
 /** The date a dated page belongs to, or null for any other page. */
 export function pageDate(path: string | null): string | null {

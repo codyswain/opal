@@ -321,7 +321,10 @@ const LIST_ITEM = /^(?:[-*+]|\d+[.)]) +(.+)$/;
 export const DIGEST_CHECKBOX = /^(?:[-*+]|\d+[.)]) \[([ xX])\] (.+)$/;
 /** A line under a checkbox item: indented by two or more spaces or a tab. */
 const DETAIL_LINE = /^(?: {2,}|\t)\S/;
-const PRIORITY_LEAD = /^(urgent|high|medium|low)\s*:\s*/i;
+/** The priority word an Also worth doing item starts with, then a colon or a period: "High:" or "High.". */
+const PRIORITY_LEAD = /^(urgent|high|medium|low)\s*[:.]\s*/i;
+/** A title that starts with a bold run and goes on after it: `**Send Tom the offer.** He asked today.` */
+const BOLD_LEAD = /^(\*\*|__)(.+?)\1\s*(.*)$/;
 const SECTION = /^## +(.+?)(?: +#+)?\s*$/;
 const FOLDED_CALLOUT = /^> ?\[![^\]]+\][-+] *(.*)$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
@@ -338,6 +341,19 @@ function digestItem(value: string, capitalize = false): DayDigestItem {
   const replyDrafted = REPLY_DRAFTED.test(value);
   const text = plainText(value.replace(REPLY_DRAFTED, ''));
   return { text: capitalize ? capitalized(text) : text, detail: null, replyDrafted, checked: null, at: null };
+}
+
+/**
+ * The priority word an Also worth doing item starts with, inside its bold
+ * run or before it, and the item without it. `**High.** Ask Jack` leaves an
+ * empty bold run, which goes too.
+ */
+function priorityLead(raw: string): { level: DigestLevel; rest: string } | null {
+  const bold = /^(\*\*|__)/.exec(raw)?.[1] ?? '';
+  const word = PRIORITY_LEAD.exec(raw.slice(bold.length));
+  if (!word) return null;
+  const rest = (bold + raw.slice(bold.length + word[0].length)).replace(/^(\*\*|__)\1\s*/, '');
+  return { level: PRIORITY_WORD[word[1].toLowerCase()], rest };
 }
 
 /** A folded callout's title: its bold lead, or the whole title without one. */
@@ -357,7 +373,9 @@ interface OpenCheckbox {
 /**
  * A checkbox item with its detail. "(reply drafted)" is read from the end of
  * the item's last line, the title's or the detail's. In Also worth doing the
- * title starts with a priority word, which sets the group.
+ * title starts with a priority word, which sets the group. An item written
+ * on one line, a bold run and then more text, takes the bold run as its
+ * title and the rest as its detail.
  */
 function closeCheckbox(open: OpenCheckbox): { item: DayDigestItem; level: DigestLevel } {
   const lastIsTitle = open.details.length === 0;
@@ -367,14 +385,21 @@ function closeCheckbox(open: OpenCheckbox): { item: DayDigestItem; level: Digest
     if (lastIsTitle) open.title = open.title.replace(REPLY_DRAFTED, '');
     else open.details[open.details.length - 1] = last.replace(REPLY_DRAFTED, '');
   }
-  let text = plainText(open.title);
+  let title = open.title;
+  let details = open.details;
   let level: DigestLevel = 'medium';
-  const word = open.also ? PRIORITY_LEAD.exec(text) : null;
-  if (word) {
-    level = PRIORITY_WORD[word[1].toLowerCase()];
-    text = capitalized(text.slice(word[0].length));
+  const lead = open.also ? priorityLead(title) : null;
+  if (lead) {
+    level = lead.level;
+    title = lead.rest;
   }
-  const detail = plainText(open.details.join(' '));
+  const bold = details.length === 0 ? BOLD_LEAD.exec(title) : null;
+  if (bold && bold[3].trim()) {
+    title = bold[2].replace(/[.:]\s*$/, '');
+    details = [bold[3]];
+  }
+  const text = lead ? capitalized(plainText(title)) : plainText(title);
+  const detail = plainText(details.join(' '));
   return { item: { ...open.item, text, detail: detail || null, replyDrafted }, level };
 }
 
@@ -397,6 +422,7 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
   const also: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
   const marked: Record<DigestLevel, DayDigestItem[]> = { high: [], medium: [], low: [] };
   let hasTop = false;
+  let afterBlank = false;
   const close = () => {
     if (!open) return;
     const { item, level } = closeCheckbox(open);
@@ -412,9 +438,13 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
       continue;
     }
     if (fence) continue;
+    const blank = !line.trim();
+    const follows = !afterBlank;
+    afterBlank = blank;
     // Blank lines inside the list do not end an item; indented lines are its detail.
-    if (open && !line.trim()) continue;
-    if (open && DETAIL_LINE.test(line)) {
+    if (open && blank) continue;
+    // So is a line right under it at the margin, which Markdown reads as part of the item.
+    if (open && (DETAIL_LINE.test(line) || (follows && !LIST_ITEM.test(line) && !/^(?:#|>)/.test(line)))) {
       (open as OpenCheckbox).details.push(line.trim());
       continue;
     }
@@ -456,10 +486,9 @@ export function parseDigest(source: string): Omit<DayDigest, 'path'> {
     if (!item) continue;
     if (section === 'top 3') top.push(digestItem(item));
     else {
-      const word = PRIORITY_LEAD.exec(item);
+      const lead = priorityLead(item);
       // An item without a priority word is neither raised nor dropped.
-      const level = word ? PRIORITY_WORD[word[1].toLowerCase()] : 'medium';
-      also[level].push(digestItem(word ? item.slice(word[0].length) : item, Boolean(word)));
+      also[lead?.level ?? 'medium'].push(digestItem(lead ? lead.rest : item, Boolean(lead)));
     }
   }
   close();

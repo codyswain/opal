@@ -63,23 +63,142 @@ const sameSection = (a: StackSection, b: StackSection) =>
   a.defaultOpen === b.defaultOpen && a.readOnly === b.readOnly && sameHeading(a.textHeading, b.textHeading) &&
   a.size === b.size && a.mtimeMs === b.mtimeMs;
 
-/** The new list, keeping each unchanged section's object so its row stays memoized. */
-export function mergeSections(previous: readonly StackSection[], next: readonly StackSection[]): StackSection[] {
+/**
+ * The new list, keeping each unchanged section's object so its row stays
+ * memoized. A section the new list leaves out stays, after the section it
+ * followed, while `keep` says so: one with the caret or unsaved text, such as
+ * a past daily page just emptied, which the list no longer shows.
+ */
+export function mergeSections(
+  previous: readonly StackSection[],
+  next: readonly StackSection[],
+  keep: (path: string) => boolean = () => false,
+): StackSection[] {
   const known = new Map(previous.map((section) => [section.path, section]));
-  return next.map((section) => {
+  const merged = next.map((section) => {
     const old = known.get(section.path);
     return old && sameSection(old, section) ? old : section;
   });
+  const listed = new Set(next.map((section) => section.path));
+  previous.forEach((section, at) => {
+    if (listed.has(section.path) || !keep(section.path)) return;
+    let after = -1;
+    for (let before = at - 1; before >= 0 && after === -1; before -= 1) {
+      after = merged.findIndex((candidate) => candidate.path === previous[before].path);
+    }
+    merged.splice(after + 1, 0, section);
+  });
+  return merged;
+}
+
+/** What the stack keeps still while sections change height. Each y is in px from the top of its content. */
+interface EdgeHold {
+  kind: 'edge';
+  path: string;
+  /** A section at one side of the view, when no line in it can hold: its top, or its end. */
+  edge: 'top' | 'bottom';
+  y: number;
+}
+
+interface LineHold {
+  kind: 'line';
+  path: string;
+  /** A line starting in the view... */
+  pos: number;
+  /**
+   * ...placed by CodeMirror's height estimate rather than its element: the
+   * line CodeMirror itself keeps still, which may not be drawn yet.
+   */
+  estimated: boolean;
+  /** ...and the tops of the section, its text and the line. */
+  section: number;
+  text: number;
+  line: number;
+}
+
+type Hold = EdgeHold | LineHold;
+
+/** Whether CodeMirror has drawn the line at `pos`; outside what it drew, a line's place is only an estimate. */
+function isDrawn(view: EditorView, pos: number): boolean {
+  const block = view.lineBlockAt(pos);
+  return block.from >= view.viewport.from && block.to <= view.viewport.to;
+}
+
+/**
+ * How many of the editor's drawn lines and blocks start above `y` in the
+ * window. They are read from the page, not from CodeMirror's heights, which
+ * stay estimates until it measures the lines it drew.
+ */
+function linesAbove(view: EditorView, y: number): number {
+  const lines = view.contentDOM.children;
+  let low = 0;
+  let high = lines.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (lines[middle].getBoundingClientRect().top < y) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/** A drawn line, not a gap, which stands for lines CodeMirror has not drawn. */
+const isLine = (element: Element, rect: DOMRect) => rect.height > 0 && !element.classList.contains('cm-gap');
+
+/**
+ * The first or last drawn line that starts between `top` and `bottom` in
+ * the window. Null when no line of the section starts there.
+ */
+function lineStartingIn(view: EditorView, top: number, bottom: number, which: 'first' | 'last'): number | null {
+  const lines = view.contentDOM.children;
+  const step = which === 'first' ? 1 : -1;
+  for (let at = which === 'first' ? linesAbove(view, top) : linesAbove(view, bottom) - 1; at >= 0 && at < lines.length; at += step) {
+    const rect = lines[at].getBoundingClientRect();
+    if (rect.top >= bottom || rect.top < top) return null;
+    if (isLine(lines[at], rect)) return view.posAtDOM(lines[at], 0);
+  }
+  return null;
+}
+
+/** The drawn line across `y` in the window, or null over a gap or outside the text. */
+function lineAcross(view: EditorView, y: number): number | null {
+  const at = linesAbove(view, y + 1) - 1;
+  const line = at >= 0 ? view.contentDOM.children[at] : undefined;
+  const rect = line?.getBoundingClientRect();
+  return line && rect && rect.bottom > y && isLine(line, rect) ? view.posAtDOM(line, 0) : null;
+}
+
+/**
+ * The line CodeMirror keeps still itself while its editor has focus: the
+ * one 8 px below the top of the view, or the first drawn line when that one
+ * is not drawn and the first is within 200 px.
+ */
+function editorAnchorAt(view: EditorView, into: number): number {
+  const block = view.lineBlockAtHeight(into + 8);
+  if (block.from >= view.viewport.from) return block.from;
+  const first = view.lineBlockAt(view.viewport.from);
+  return first.top - into > 200 ? block.from : first.from;
+}
+
+/** Where a drawn line or block starts in the window, read from its element when there is one. */
+function lineTopAt(view: EditorView, pos: number): number {
+  const { node, offset } = view.domAtPos(pos, 1);
+  const at = node === view.contentDOM ? view.contentDOM.childNodes[offset] : node;
+  let element: Element | null = at?.nodeType === Node.ELEMENT_NODE ? (at as Element) : (at?.parentElement ?? null);
+  while (element && element.parentElement !== view.contentDOM) element = element.parentElement;
+  if (element) return element.getBoundingClientRect().top;
+  return view.documentTop + view.lineBlockAt(pos).top;
 }
 
 const wantsNewTab = (event: React.MouseEvent) => event.metaKey || event.ctrlKey || event.button === 1;
 
 interface Restore {
   view: StackViewState;
+  /** When the wait began, or began again because more of the list arrived or loaded. */
   started: number;
   settled: number;
-  /** The anchor's editor was asked to put the saved line at the top; the restore waits for it. */
-  refined: boolean;
+  /** How long the list and the part of it in the page were when the wait began. */
+  sections: number;
+  shown: number;
 }
 
 interface PendingCaret {
@@ -99,6 +218,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const head = location.file;
   const kind = location.kind;
   const roots = useDiskStore((state) => state.roots);
+  const rootsLoaded = useDiskStore((state) => state.rootsLoaded);
   const root = useMemo(
     () => [...roots].sort((a, b) => b.length - a.length).find((candidate) => isFsPathAtOrBelow(candidate, head)) ?? null,
     [roots, head],
@@ -119,12 +239,17 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const focused = useRef<string | null>(null);
   const reading = useRef(new Set<string>([head]));
   const farSince = useRef(new Map<string, number>());
-  const anchor = useRef<(StackViewState & { top: number }) | null>(null);
+  // The place to come back to, saved on the tab, and what to keep still while heights change.
+  const place = useRef<StackViewState | null>(null);
+  const hold = useRef<Hold | null>(null);
   const restore = useRef<Restore | null>(null);
   const pendingCaret = useRef<PendingCaret | null>(null);
   const pendingProperties = useRef<string | null>(null);
   const fast = useRef(false);
+  const direction = useRef<'up' | 'down'>('down');
   const lastScroll = useRef<{ top: number; at: number } | null>(null);
+  // The scroll the stack set itself, so its scroll event is not read as reading.
+  const ownScroll = useRef<number | null>(null);
   const frame = useRef(0);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const entry = useRef<TabEntry | null>(null);
@@ -224,7 +349,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         sections: geometry,
         total: kind === 'daily' && state.listed ? state.sections.length : state.shown.length,
       },
-      { now: performance.now(), farSince: farSince.current, fast: fast.current, reading: reading.current.size },
+      { now: performance.now(), farSince: farSince.current, fast: fast.current, direction: direction.current, reading: reading.current.size },
     );
     farSince.current = result.farSince;
     let next: Set<string> | null = null;
@@ -263,90 +388,191 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
 
   // --- Anchoring and restore -----------------------------------------------
 
+  /** Sets the scroll and remembers it, so its scroll event is not read as reading. */
+  const scrollTo = useCallback((top: number) => {
+    const element = scroller.current;
+    if (!element) return;
+    element.scrollTop = top;
+    ownScroll.current = element.scrollTop;
+  }, []);
+
   /**
    * The place to come back to: the section at the top of the view and the
-   * offset into it, and, when the view starts inside the section's text, the
-   * line there. A section's height is only known once CodeMirror has drawn
-   * all of it, so the line is what makes a return exact.
+   * offset into it, and, when the view starts inside a drawn line of the
+   * section's text, that line and how far into it. A section's height is
+   * only known once CodeMirror has drawn all of it, so the line is what makes
+   * a return exact. It is read from the page, as the hold is.
    */
-  const rememberAnchor = useCallback(() => {
+  const rememberPlace = useCallback(() => {
     const view = currentView();
     const element = scroller.current;
     if (!view || !element) return;
-    const held: StackViewState & { top: number } = { ...view, top: topOf(view.anchor) ?? 0 };
     const editor = views.current.get(view.anchor);
     if (editor && !reading.current.has(view.anchor)) {
-      const into = element.getBoundingClientRect().top - editor.documentTop;
-      if (into >= 0 && into < editor.contentHeight) {
-        const block = editor.lineBlockAtHeight(into);
-        held.line = { pos: block.from, into: into - block.top };
-      }
+      const top = element.getBoundingClientRect().top;
+      const pos = lineAcross(editor, top);
+      if (pos !== null) view.line = { pos, into: top - lineTopAt(editor, pos) };
     }
-    anchor.current = held;
+    place.current = view;
   }, [currentView]);
 
   /**
-   * Sections above the anchor changed height, so its top moved: the scroll
-   * moves by the same amount, before paint. Changes inside or below the
-   * anchor leave the view where it is; CodeMirror anchors inside a section.
+   * Whether CodeMirror moves the scroll itself for lines that change height
+   * above the one at the top of the view: it does while its editor has focus.
    */
-  const keepAnchor = useCallback(() => {
+  const editorKeepsLine = useCallback((path: string): boolean => views.current.get(path)?.hasFocus ?? false, []);
+
+  /** The hold measured now, or null once its section, its editor or its drawn line is gone. */
+  const measureHold = useCallback((held: Hold): Hold | null => {
+    const article = articles.current.get(held.path);
+    if (!article) return null;
+    if (held.kind === 'edge') return { ...held, y: article.offsetTop + (held.edge === 'bottom' ? article.offsetHeight : 0) };
+    const editor = views.current.get(held.path);
+    if (!editor || reading.current.has(held.path)) return null;
+    const pos = Math.min(held.pos, editor.state.doc.length);
+    if (!held.estimated && !isDrawn(editor, pos)) return null;
+    // From the window to the content, through the article, whose top the layout knows exactly.
+    const origin = article.offsetTop - article.getBoundingClientRect().top;
+    const text = origin + editor.documentTop;
+    const line = held.estimated ? text + editor.lineBlockAt(pos).top : origin + lineTopAt(editor, pos);
+    return { ...held, pos, section: article.offsetTop, text, line };
+  }, []);
+
+  /**
+   * What to keep still while sections change height: something the reader
+   * saw before the view last moved, so only what has just come into view
+   * shifts. Scrolling down that is the first drawn line starting in the
+   * view, and scrolling up the last one. With no such line in the section
+   * at that side of the view, as over a placeholder, an edge of that section
+   * holds: the one in the view, or else the one on the side the reader came
+   * from. A section at the top whose editor has focus holds the line
+   * CodeMirror keeps still itself, so the two never both move the scroll.
+   */
+  const pickHold = useCallback((): Hold | null => {
     const element = scroller.current;
-    const held = anchor.current;
-    if (!element || !held || restore.current) return;
-    const top = topOf(held.anchor);
-    if (top === null) {
-      rememberAnchor();
+    if (!element) return null;
+    const bounds = element.getBoundingClientRect();
+    const line = { kind: 'line', section: 0, text: 0, line: 0, estimated: false } as const;
+    const atTop = sectionAt(element.scrollTop);
+    const focusedEditor = atTop && editorKeepsLine(atTop) && !reading.current.has(atTop) ? views.current.get(atTop) : undefined;
+    const into = focusedEditor ? bounds.top - focusedEditor.documentTop : -1;
+    if (atTop && focusedEditor && into >= 0) {
+      return measureHold({ ...line, path: atTop, pos: editorAnchorAt(focusedEditor, into), estimated: true });
+    }
+    const up = direction.current === 'up';
+    const path = up ? sectionAt(element.scrollTop + element.clientHeight - 1) : atTop;
+    const article = path ? articles.current.get(path) : undefined;
+    if (!path || !article) return null;
+    const editor = views.current.get(path);
+    if (editor && !reading.current.has(path)) {
+      const pos = lineStartingIn(editor, bounds.top, bounds.bottom, up ? 'last' : 'first');
+      if (pos !== null) return measureHold({ ...line, path, pos });
+    }
+    const topShown = article.offsetTop >= element.scrollTop;
+    const endShown = article.offsetTop + article.offsetHeight <= element.scrollTop + element.clientHeight;
+    const edge = up ? (topShown ? 'top' : 'bottom') : endShown ? 'bottom' : 'top';
+    return measureHold({ kind: 'edge', path, edge, y: 0 });
+  }, [editorKeepsLine, measureHold, sectionAt]);
+
+  /** After the view moved: what to keep still from here, and the place to come back to. */
+  const settle = useCallback(() => {
+    hold.current = pickHold();
+    rememberPlace();
+  }, [pickHold, rememberPlace]);
+
+  /**
+   * Something above the hold changed height, so the hold moved: the scroll
+   * moves by the same amount, before paint. It runs after each layout, and
+   * on each scroll event first, so a change not reported yet is never taken
+   * for where the reader went. An editor with focus keeps its own line
+   * still, from its own measuring, so when the hold is that line only what
+   * moved the editor's text is made up here.
+   */
+  const keepHold = useCallback(() => {
+    const element = scroller.current;
+    const held = hold.current;
+    if (!element || restore.current) return;
+    const now = held ? measureHold(held) : null;
+    if (!held || !now) {
+      hold.current = pickHold();
       return;
     }
-    if (Math.abs(top - held.top) < 1) return;
-    held.top = top;
-    const want = top + held.offset;
-    if (Math.abs(element.scrollTop - want) >= 1) element.scrollTop = want;
-  }, [rememberAnchor]);
+    hold.current = now;
+    let shift = 0;
+    if (now.kind === 'edge' && held.kind === 'edge') shift = now.y - held.y;
+    if (now.kind === 'line' && held.kind === 'line') {
+      shift = now.line - held.line;
+      // CodeMirror has already made up for its own lines, while the hold is its line and the editor still has focus.
+      if (now.estimated && editorKeepsLine(now.path)) shift -= (now.line - now.text) - (held.line - held.text);
+    }
+    if (Math.abs(shift) >= 1) scrollTo(element.scrollTop + shift);
+  }, [editorKeepsLine, measureHold, pickHold, scrollTo]);
 
   const stopRestore = useCallback(() => {
     if (!restore.current) return;
     restore.current = null;
-    rememberAnchor();
-  }, [rememberAnchor]);
+    settle();
+  }, [settle]);
 
+  /**
+   * Puts the saved place back, each frame until it holds. With a saved line
+   * that is once the anchor's editor has drawn it at the top. The wait starts
+   * again each time more of the list arrives or loads, and before the list
+   * has come the anchor is only missing, not gone.
+   */
   const runRestore = useCallback(() => {
     const pending = restore.current;
     const element = scroller.current;
     if (!pending || !element) return;
     const state = latest.current;
-    const waited = performance.now() - pending.started > RESTORE_TIMEOUT_MS;
+    const now = performance.now();
+    if (state.sections.length !== pending.sections || state.shown.length !== pending.shown) {
+      pending.sections = state.sections.length;
+      pending.shown = state.shown.length;
+      pending.started = now;
+    }
     const at = state.sections.findIndex((section) => section.path === pending.view.anchor);
-    if (state.listed && at === -1) {
-      // The anchor's file is gone; the stack opens at the top.
-      element.scrollTop = 0;
-      stopRestore();
+    if (at === -1) {
+      if (state.listed) {
+        // The anchor's file is gone; the stack opens at the top.
+        scrollTo(0);
+        stopRestore();
+        return;
+      }
+      window.requestAnimationFrame(runRestore);
       return;
     }
-    if (at !== -1 && kind === 'daily' && at + 3 >= state.shown.length) {
+    if (kind === 'daily' && at + 3 >= state.shown.length) {
       setLoadedCount((count) => Math.max(count, at + 4));
     }
+    const waited = now - pending.started > RESTORE_TIMEOUT_MS;
     const top = topOf(pending.view.anchor);
     const editor = views.current.get(pending.view.anchor);
-    const line = pending.view.line;
+    // A folded anchor has no text to put the line of.
+    const line = isOpen(state.sections[at]) ? pending.view.line : undefined;
     if (line && editor && !reading.current.has(pending.view.anchor)) {
-      // The anchor's text is drawn: its editor puts the saved line at the top,
-      // measured exactly, and again each frame while sections above it settle.
+      // The anchor's editor is live. Once it has drawn the saved line, the
+      // scroll puts that line where it was, measured on the page, and again
+      // each frame while sections above it settle. Until then its editor
+      // scrolls the line into view, so that it draws it.
       const pos = Math.min(line.pos, editor.state.doc.length);
       const want = element.getBoundingClientRect().top - line.into;
-      const drawn = editor.documentTop + editor.lineBlockAt(pos).top;
-      if (!pending.refined || Math.abs(drawn - want) > 1) {
-        editor.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: -line.into }) });
-        pending.refined = true;
-        pending.settled = 0;
+      if (isDrawn(editor, pos)) {
+        const shift = lineTopAt(editor, pos) - want;
+        if (Math.abs(shift) > 1) {
+          scrollTo(element.scrollTop + shift);
+          pending.settled = 0;
+        } else {
+          pending.settled += 1;
+        }
       } else {
-        pending.settled += 1;
+        editor.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: -line.into }) });
+        pending.settled = 0;
       }
     } else if (top !== null) {
       const want = top + pending.view.offset;
       if (Math.abs(element.scrollTop - want) > 1) {
-        element.scrollTop = want;
+        scrollTo(want);
         pending.settled = 0;
       } else if (!line) {
         pending.settled += 1;
@@ -358,14 +584,16 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       return;
     }
     window.requestAnimationFrame(runRestore);
-  }, [kind, schedule, stopRestore]);
+  }, [isOpen, kind, schedule, scrollTo, stopRestore]);
 
   // --- Saving the place on the tab -----------------------------------------
 
-  // Reads the place remembered on each scroll, not the DOM, which may already be gone when the stack unmounts.
+  // The place remembered on each scroll, measured again while the stack is
+  // in the page, since CodeMirror may have measured the lines it drew since
+  // the last scroll. When the stack unmounts its page may already be gone.
   const saveView = useCallback(() => {
-    const held = anchor.current;
-    const view = restore.current?.view ?? (held ? { anchor: held.anchor, offset: held.offset, ...(held.line ? { line: held.line } : {}) } : null);
+    if (!restore.current && scroller.current?.isConnected) rememberPlace();
+    const view = restore.current?.view ?? place.current;
     const known = entry.current;
     if (!view || !known) return;
     const tabs = useTabsStore.getState();
@@ -377,7 +605,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     if (history[at]?.location.mode !== 'stack') return;
     tabs.saveView(tabId, at, { stack: view });
     entry.current = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history[at] ?? known;
-  }, [index, tabId]);
+  }, [index, rememberPlace, tabId]);
 
   // --- The section the sidebar follows ---------------------------------------
 
@@ -410,7 +638,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     const known = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history[index] ?? null;
     entry.current = known;
     if (known?.stack && !(known.stack.anchor === head && known.stack.offset === 0)) {
-      restore.current = { view: known.stack, started: performance.now(), settled: 0, refined: false };
+      restore.current = { view: known.stack, started: performance.now(), settled: 0, sections: 0, shown: 0 };
       window.requestAnimationFrame(runRestore);
     }
     publishViewed(true);
@@ -433,7 +661,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   // The list of sections comes from the main process, and again after its folders change.
   useEffect(() => {
     if (!root) {
-      setListed(true);
+      // Until the opened folders load the stack waits for them; with none holding the head, it shows alone.
+      if (rootsLoaded) setListed(true);
       return;
     }
     let cancelled = false;
@@ -451,7 +680,9 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       if (result?.success) {
         folders = result.data.folders;
         const next = result.data.sections;
-        setSections((previous) => mergeSections(previous, next.length > 0 ? next : previous));
+        // A live section the planner keeps, with the caret or unsaved text, stays even when the list leaves it out.
+        const keep = (path: string) => latest.current.live.has(path) && isPinned(path);
+        setSections((previous) => mergeSections(previous, next.length > 0 ? next : previous, keep));
       }
       setListed(true);
     };
@@ -466,7 +697,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       if (timer) clearTimeout(timer);
       off();
     };
-  }, [root, kind, head]);
+  }, [root, rootsLoaded, kind, head, isPinned]);
 
   useEffect(() => {
     useStackStore.getState().setLive(tabId, [...live]);
@@ -486,10 +717,10 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       seen = reveal.seq;
       if (reveal.head !== head || !scroller.current) return;
       restore.current = null;
-      scroller.current.scrollTop = 0;
-      rememberAnchor();
+      scrollTo(0);
+      settle();
     });
-  }, [head, rememberAnchor]);
+  }, [head, scrollTo, settle]);
 
   // The properties block shows on one section: the one whose footer was clicked, else the focused one, else the head.
   useEffect(() => {
@@ -503,12 +734,13 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         const element = scroller.current;
         const top = topOf(target);
         if (element && top !== null && (top < element.scrollTop || top > element.scrollTop + element.clientHeight - 120)) {
-          element.scrollTop = top;
+          scrollTo(top);
+          settle();
         }
       }
       wasOpen = state.open;
     });
-  }, [head]);
+  }, [head, scrollTo, settle]);
 
   // --- Scroll, resize and input -------------------------------------------------
 
@@ -518,10 +750,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     if (!element || !inner) return;
     const onScroll = () => {
       const now = performance.now();
+      const top = element.scrollTop;
+      const own = ownScroll.current !== null && Math.abs(top - ownScroll.current) < 1;
+      ownScroll.current = null;
       const previous = lastScroll.current;
-      lastScroll.current = { top: element.scrollTop, at: now };
-      if (previous && now > previous.at) {
-        const speed = (Math.abs(element.scrollTop - previous.top) / (now - previous.at)) * 1000;
+      lastScroll.current = { top, at: now };
+      if (previous && !own && top !== previous.top) direction.current = top < previous.top ? 'up' : 'down';
+      if (previous && !own && now > previous.at) {
+        const speed = (Math.abs(top - previous.top) / (now - previous.at)) * 1000;
         if (speed > element.clientHeight * STACK_WINDOW.fastViewportsPerSecond) {
           fast.current = true;
           if (fastTimer.current) clearTimeout(fastTimer.current);
@@ -532,7 +768,10 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
           }, STACK_WINDOW.settleAfterFastMs);
         }
       }
-      if (!restore.current) rememberAnchor();
+      if (!restore.current) {
+        keepHold();
+        settle();
+      }
       publishViewed();
       schedule();
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -543,6 +782,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     };
     // Reading or typing takes over from a restore still in progress.
     const stop = () => stopRestore();
+    // For 100 ms after a wheel event over its text, CodeMirror moves the
+    // scroll itself to keep its own line still, and only that editor's. The
+    // stack keeps the view still for every section, so the event stops here,
+    // before it reaches the editor, and the two never both correct it.
+    const onWheel = (event: WheelEvent) => {
+      if (event.target instanceof Element && event.target.closest('.cm-content')) event.stopPropagation();
+      stopRestore();
+    };
     const resize = new ResizeObserver((entries) => {
       const width = element.clientWidth;
       const { live: mounted, sections: all } = latest.current;
@@ -553,7 +800,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         const section = all.find((candidate) => candidate.path === path);
         if (body && section) sectionHeights.set(path, { height: body.offsetHeight, width, mtimeMs: section.mtimeMs, size: section.size });
       }
-      keepAnchor();
+      keepHold();
       schedule();
     });
     resize.observe(element);
@@ -561,18 +808,18 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     for (const article of articles.current.values()) resize.observe(article);
     observer.current = resize;
     element.addEventListener('scroll', onScroll, { passive: true });
-    element.addEventListener('wheel', stop, { passive: true });
+    element.addEventListener('wheel', onWheel, { passive: true, capture: true });
     element.addEventListener('pointerdown', stop);
     element.addEventListener('keydown', stop);
     return () => {
       observer.current = null;
       resize.disconnect();
       element.removeEventListener('scroll', onScroll);
-      element.removeEventListener('wheel', stop);
+      element.removeEventListener('wheel', onWheel, { capture: true });
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('keydown', stop);
     };
-  }, [keepAnchor, publishViewed, rememberAnchor, saveView, schedule, stopRestore]);
+  }, [keepHold, publishViewed, saveView, schedule, settle, stopRestore]);
 
   // --- Moving between sections ------------------------------------------------
 
@@ -613,7 +860,10 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     // tall enough to bring it to the top until its text is drawn. The restore
     // loop places it each frame until it holds, as on a return to a saved place.
     const running = restore.current !== null;
-    restore.current = { view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0, refined: false };
+    restore.current = {
+      view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0,
+      sections: state.sections.length, shown: state.shown.length,
+    };
     if (!running) window.requestAnimationFrame(runRestore);
   }, [kind, runRestore]);
 
@@ -626,8 +876,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       const target = from ? neighbour(from, direction, false) : null;
       if (!target) return false;
       const top = topOf(target.path);
-      if (top !== null) element.scrollTop = top;
-      rememberAnchor();
+      if (top !== null) scrollTo(top);
+      settle();
       if (isOpen(target)) focusSection(target.path, 'first', 0);
       else articles.current.get(target.path)?.querySelector<HTMLButtonElement>('.opal-stack-label')?.focus();
       return true;
@@ -636,7 +886,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     return () => {
       if (useStackStore.getState().move === move) useStackStore.getState().setMove(null);
     };
-  }, [focusSection, isOpen, neighbour, rememberAnchor, sectionAt]);
+  }, [focusSection, isOpen, neighbour, scrollTo, sectionAt, settle]);
 
   // --- What sections ask of the stack ---------------------------------------------
 
@@ -698,11 +948,21 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       openNote,
       extensions: (path) =>
         memo(cache.current.extensions, path, () => [
-          sectionKeys((direction, column) => {
-            const target = neighbour(path, direction, true);
-            if (!target) return false;
-            focusSection(target.path, direction === 'next' ? 'first' : 'last', column);
-            return true;
+          sectionKeys(
+            (direction, column) => {
+              const target = neighbour(path, direction, true);
+              if (!target) return false;
+              focusSection(target.path, direction === 'next' ? 'first' : 'last', column);
+              return true;
+            },
+            (direction) => {
+              useStackStore.getState().move?.(direction);
+            },
+          ),
+          // The held line follows edits, so text added above it on another Mac keeps it in view.
+          EditorView.updateListener.of((update) => {
+            const held = hold.current;
+            if (update.docChanged && held?.kind === 'line' && held.path === path) held.pos = update.changes.mapPos(held.pos, 1);
           }),
         ]),
       onLoadedFor: (path) =>

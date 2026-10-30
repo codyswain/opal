@@ -66,6 +66,7 @@ export function FrameControls({
         shortcut="⌘]"
         disabled={!canGoForward}
         onClick={() => useTabsStore.getState().forward()}
+        className="frame-forward"
       >
         <ChevronRight aria-hidden className="h-4 w-4" />
       </IconButton>

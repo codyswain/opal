@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { StackView } from '@/renderer/features/disk-explorer/components/stack/StackView';
+import { StackView, mergeSections } from '@/renderer/features/disk-explorer/components/stack/StackView';
 import { flushPendingSaves } from '@/renderer/features/disk-explorer/components/editor/pendingSaves';
 import { openWikiLink } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { stackLocation, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
@@ -225,6 +225,13 @@ describe('StackView', () => {
     act(() => { useStackStore.getState().move?.('next'); });
     await waitFor(() => expect(next.hasFocus).toBe(true));
     expect(scroller().scrollTop).toBe(SECTION_PX);
+    // In a section's editor Cmd+Option+Down is Next Section too, not CodeMirror's add cursor below.
+    const MOD: KeyboardEventInit = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    act(() => { runScopeHandlers(next, new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, ...MOD }), 'editor'); });
+    const third = viewOf(paths[2]) as EditorView;
+    await waitFor(() => expect(third.hasFocus).toBe(true));
+    expect(next.state.selection.ranges).toHaveLength(1);
+    expect(scroller().scrollTop).toBe(2 * SECTION_PX);
   });
 
   it('opens a section on its own as a new history step', async () => {
@@ -258,6 +265,61 @@ describe('StackView', () => {
     expect(scroller().scrollTop).toBe(0);
   });
 
+  it('returns to the saved place after a relaunch, where the opened folders load after the stack', async () => {
+    useDiskStore.setState({ roots: [], rootsLoaded: false });
+    useTabsStore.getState().saveView(tabId(0), 0, { stack: { anchor: paths[10], offset: 50 } });
+    renderStack();
+    // A second of waiting for the folders does not give up on the place.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1000)));
+    expect(scroller().scrollTop).toBe(0);
+    act(() => useDiskStore.setState({ roots: [ROOT], rootsLoaded: true }));
+    await waitFor(() => expect(scroller().scrollTop).toBe(10 * SECTION_PX + 50), { timeout: 3000 });
+  });
+
+  it('stops a wheel event over the text of a section before its editor, which would move the scroll for its own line', async () => {
+    renderStack();
+    await waitFor(() => expect(viewOf(paths[1])).toBeTruthy());
+    const content = (viewOf(paths[1]) as EditorView).contentDOM;
+    const reached = vi.fn();
+    content.addEventListener('wheel', reached);
+    act(() => { content.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 })); });
+    expect(reached).not.toHaveBeenCalled();
+    // A wheel elsewhere in the stack goes on as usual.
+    const header = article(paths[1]).querySelector('.opal-stack-label') as HTMLElement;
+    const passed = vi.fn();
+    header.addEventListener('wheel', passed);
+    act(() => { header.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 })); });
+    expect(passed).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a past page that was just emptied while its caret is in it', async () => {
+    const stack = vi.fn(async (_root: string, _kind: string, head: string) => ({
+      success: true as const,
+      data: { kind: 'daily' as const, head, sections: paths.map(section), folders: [DAILY] },
+    }));
+    installVault(stack);
+    renderStack();
+    await waitFor(() => expect(viewOf(paths[2])).toBeTruthy());
+    const emptied = viewOf(paths[2]) as EditorView;
+    act(() => emptied.dispatch({ changes: { from: 0, to: emptied.state.doc.length }, userEvent: 'delete' }));
+    // The caret is in it; the stack reads that from the focus event.
+    fireEvent.focusIn(emptied.contentDOM);
+    // The autosave writes the blank page.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1000)));
+    // The list now leaves the blank page out, as StackService does.
+    stack.mockImplementation(async (_root: string, _kind: string, head: string) => ({
+      success: true as const,
+      data: { kind: 'daily' as const, head, sections: paths.filter((path) => path !== paths[2]).map(section), folders: [DAILY] },
+    }));
+    act(() => listeners.forEach((listener) => listener({ directories: [DAILY] })));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    expect(stack).toHaveBeenCalledTimes(2);
+    expect(article(paths[2])).toBeTruthy();
+    expect(viewOf(paths[2])).toBe(emptied);
+    act(() => emptied.dispatch({ changes: { from: 0, insert: 'Typed again.' }, userEvent: 'input.type' }));
+    expect(emptied.state.doc.toString()).toBe('Typed again.');
+  });
+
   it('shows the head alone when the main process cannot list the stack', async () => {
     installVault(vi.fn(async () => ({ success: false as const, error: 'No vault.' })));
     renderStack();
@@ -265,6 +327,21 @@ describe('StackView', () => {
     await frames(3);
     expect(document.querySelectorAll('[data-stack-section]')).toHaveLength(1);
     expect(screen.queryByText('No earlier pages')).toBeInTheDocument();
+  });
+});
+
+describe('mergeSections', () => {
+  const list = (...indexes: number[]) => indexes.map((index) => section(paths[index], index));
+
+  it('keeps unchanged sections, drops what the list left out, and keeps a pinned one after the section it followed', () => {
+    const previous = list(0, 1, 2, 3);
+    expect(mergeSections(previous, list(0, 1, 3)).map((item) => item.path)).toEqual([paths[0], paths[1], paths[3]]);
+    const kept = mergeSections(previous, list(0, 1, 3), (path) => path === paths[2]);
+    expect(kept.map((item) => item.path)).toEqual([paths[0], paths[1], paths[2], paths[3]]);
+    expect(kept[2]).toBe(previous[2]);
+    expect(kept[0]).toBe(previous[0]);
+    // With every earlier section gone too, it goes first.
+    expect(mergeSections(previous, list(3), (path) => path === paths[1]).map((item) => item.path)).toEqual([paths[1], paths[3]]);
   });
 });
 
@@ -376,6 +453,28 @@ describe('recording and chat pages', () => {
     const folded = within(article(OLDER)).getByRole('heading', { level: 2 });
     expect(folded).toHaveTextContent('2026-10-16 · Claude16 prompts · last active 2026-10-19 15:57');
     expect(useStackStore.getState().viewed?.path).toBe(CARD);
+  });
+
+  it('drops typing in the card and in a session, and still follows a rewrite from threads.py', async () => {
+    const api = installMarkdownApi({ [CARD]: CARD_BODY, [NEWER]: '# Newer\n\nFirst prompt.\n', [OLDER]: '# Older\n' });
+    renderChat();
+    await waitFor(() => expect(viewOf(NEWER)).toBeTruthy());
+    await waitFor(() => expect(viewOf(CARD)).toBeTruthy());
+    for (const path of [CARD, NEWER]) {
+      const view = viewOf(path) as EditorView;
+      const before = view.state.doc.toString();
+      expect(view.state.readOnly).toBe(true);
+      act(() => view.dispatch({ changes: { from: view.state.doc.length, insert: 'Cody typed a note here.' }, userEvent: 'input.type' }));
+      act(() => view.dispatch({ changes: { from: 0, insert: 'x' }, userEvent: 'input.type' }));
+      expect(view.state.doc.toString()).toBe(before);
+    }
+    // The next capture rewrites the session; the stack shows it.
+    api.externalEdit(NEWER, '# Newer\n\nFirst prompt.\n\nSecond prompt.\n');
+    act(() => listeners.forEach((listener) => listener({ directories: [`${CHATS}/sf-site-one`] })));
+    await waitFor(() => expect(viewOf(NEWER)?.state.doc.toString()).toBe('# Newer\n\nFirst prompt.\n\nSecond prompt.\n'));
+    expect(within(article(NEWER)).getByRole('button', { name: /^Read-only/ })).toBeInTheDocument();
+    expect(await act(() => flushPendingSaves())).toEqual([]);
+    expect(api.write).not.toHaveBeenCalled();
   });
 
   it('scrolls to a session and opens it when its link in the card is followed', async () => {

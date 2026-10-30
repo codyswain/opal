@@ -34,12 +34,16 @@ function cross(view: EditorView, direction: 'next' | 'previous', move: CrossSect
  * ArrowDown on a section's last line moves the caret to the first line of
  * the next unfolded section, and ArrowUp on its first line to the last line
  * of the previous one. Only with one empty selection and no modifier.
+ * Cmd+Option+Down and Up are View > Next Section and Previous Section
+ * (`jump`), which the section runs itself rather than leave to the menu.
  */
-export function sectionKeys(move: CrossSection): Extension {
+export function sectionKeys(move: CrossSection, jump: (direction: 'next' | 'previous') => void): Extension {
   return Prec.high(
     keymap.of([
       { key: 'ArrowDown', run: (view) => cross(view, 'next', move) },
       { key: 'ArrowUp', run: (view) => cross(view, 'previous', move) },
+      { key: 'Mod-Alt-ArrowDown', run: () => { jump('next'); return true; } },
+      { key: 'Mod-Alt-ArrowUp', run: () => { jump('previous'); return true; } },
     ]),
   );
 }

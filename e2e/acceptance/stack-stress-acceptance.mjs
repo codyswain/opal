@@ -2,8 +2,10 @@
 // 100 daily pages of mixed length, scrolled slowly and quickly from today to
 // the first page and back. Reports frame times and memory, and checks that
 // the stream never holds more than twelve editors, loads every page, and
-// writes nothing. Own userData and temp vault; run from the repository root
-// after the Vite bundles are built: see README.md here.
+// writes nothing. Then it checks that what is in view never jumps while
+// sections above it mount and change height, and that Back and a relaunch
+// return to the same line. Own userData and temp vault; run from the
+// repository root after the Vite bundles are built: see README.md here.
 import { _electron as electron } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, readdir, rm, realpath, stat } from 'fs/promises';
 import os from 'os';
@@ -63,14 +65,19 @@ const mtimes = async () => Object.fromEntries(await Promise.all((await readdir(d
 const before = await mtimes();
 console.log(`vault: ${PAGES + 1} daily pages, ${(bytes / 1024).toFixed(0)} KB`);
 
-const started = Date.now();
-const app = await electron.launch({ args: [PROJECT_ROOT], env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData } });
-const page = await app.firstWindow();
 const errors = [];
-page.on('pageerror', (error) => errors.push(String(error)));
-page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-await page.waitForLoadState('domcontentloaded');
-await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ x: 40, y: 40, width: 1440, height: 900 }));
+const launch = async () => {
+  const launched = await electron.launch({ args: [PROJECT_ROOT], env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData } });
+  const window = await launched.firstWindow();
+  window.on('pageerror', (error) => errors.push(String(error)));
+  window.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await window.waitForLoadState('domcontentloaded');
+  await launched.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ x: 40, y: 40, width: 1440, height: 900 }));
+  return { app: launched, page: window };
+};
+
+const started = Date.now();
+let { app, page } = await launch();
 const stack = page.getByTestId('files-stack');
 await stack.waitFor();
 await page.locator('[data-role="head"] .cm-editor').waitFor();
@@ -157,6 +164,177 @@ check('the stream ends with "No earlier pages"', (await page.locator('.opal-stac
 check('never more than twelve editors', Math.max(slow.maxEditors, fastUp.maxEditors, fastDown.maxEditors) <= 12);
 check('editors far from the view are let go', idle.editors <= 12 && idle.editors < atBottom.sections);
 check('slow scrolling keeps 95% of frames under 33 ms', slow.p95 < 33.4, `p95 ${slow.p95.toFixed(1)} ms`);
+
+// --- Drift ------------------------------------------------------------------
+// While scrolling up, the first line or title in view must move by exactly
+// the reader's own scroll in every painted frame. The reader's scroll is the
+// change in scrollTop less what the page set itself: the stack's and
+// CodeMirror's corrections, counted through the element's scrollTop setter.
+// A frame is read at the next animation frame, or, when sizes changed, in a
+// resize callback made after the stack's, so after its correction.
+await page.evaluate(() => {
+  const element = document.querySelector('[data-testid="files-stack"]');
+  const own = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+  let set = 0;
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get() { return own.get.call(this); },
+    set(value) { const was = own.get.call(this); own.set.call(this, value); set += own.get.call(this) - was; },
+  });
+  let mark = null;
+  let base = null;
+  let frames = [];
+  let current = null;
+  let running = false;
+  const sample = () => ({ y: mark?.isConnected ? mark.getBoundingClientRect().top : null, top: own.get.call(element), set });
+  const resized = new ResizeObserver(() => { if (current) Object.assign(current, sample()); });
+  const tick = () => {
+    if (!running) return;
+    if (current) frames.push(current);
+    current = sample();
+    requestAnimationFrame(tick);
+  };
+  window.__drift = {
+    start() { running = true; frames = []; current = null; requestAnimationFrame(tick); },
+    stop() { running = false; resized.disconnect(); },
+    mark() {
+      resized.disconnect();
+      resized.observe(element.querySelector('.opal-stack-content'));
+      for (const article of element.querySelectorAll('[data-stack-section]')) resized.observe(article);
+      const top = element.getBoundingClientRect().top;
+      mark = [...element.querySelectorAll('.cm-content > :not(.cm-gap), .opal-stack-title-row')]
+        .find((item) => { const rect = item.getBoundingClientRect(); return rect.height > 0 && rect.top >= top && rect.top < top + element.clientHeight; }) ?? null;
+      base = sample();
+      current = sample();
+      frames = [];
+    },
+    // How far each painted frame's mark moved beyond the reader's own scroll.
+    drifts() {
+      const out = frames.filter((frame) => frame.y !== null && base.y !== null).map((frame) => (frame.y - base.y) + (frame.top - base.top) - (frame.set - base.set));
+      frames = [];
+      return out;
+    },
+    scrollBy(delta) { own.set.call(element, own.get.call(element) + delta); },
+    top() { return own.get.call(element); },
+  };
+});
+const driftReport = (label, drifts, steps) => {
+  const off = drifts.filter((step) => step.some((value) => Math.abs(value) > 2));
+  const worst = drifts.flat().reduce((most, value) => Math.max(most, Math.abs(value)), 0);
+  console.log(`drift ${label}: ${off.length} of ${steps} steps moved the text in view by more than 2 px, worst ${worst.toFixed(0)} px`);
+  return off.length;
+};
+await scrollRun(Infinity, 400);
+await page.waitForTimeout(3000);
+const stepped = await page.evaluate(async () => {
+  const drift = window.__drift;
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const steps = [];
+  drift.start();
+  while (drift.top() > 150) {
+    await frame();
+    drift.mark();
+    drift.scrollBy(-150);
+    await frame(); await frame(); await frame();
+    steps.push(drift.drifts());
+  }
+  drift.stop();
+  return steps;
+});
+const steppedOff = driftReport('scrolling up 150 px every 4 frames', stepped, stepped.length);
+// Reading down with the wheel, then flicking back up.
+await page.mouse.move(800, 450);
+for (let index = 0; index < 150; index += 1) { await page.mouse.wheel(0, 120); await page.waitForTimeout(30); }
+await page.waitForTimeout(3000);
+const flicks = [];
+await page.evaluate(() => window.__drift.start());
+for (let index = 0; index < 40 && (await page.evaluate(() => window.__drift.top())) > 800; index += 1) {
+  await page.evaluate(() => window.__drift.mark());
+  await page.mouse.wheel(0, -400);
+  // The wheel may take a few frames; wait until the scroll holds still.
+  await page.evaluate(() => new Promise((resolve) => {
+    let last = null;
+    let still = 0;
+    let count = 0;
+    const check = () => {
+      const top = window.__drift.top();
+      still = top === last ? still + 1 : 0;
+      last = top;
+      count += 1;
+      if (still >= 3 || count > 40) resolve(); else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }));
+  flicks.push(await page.evaluate(() => window.__drift.drifts()));
+}
+await page.evaluate(() => window.__drift.stop());
+const flickOff = driftReport('flicking up with the wheel, 400 px a flick', flicks, flicks.length);
+check('scrolling up never moves the text in view by more than 2 px', steppedOff === 0 && flickOff === 0, `${steppedOff} stepped, ${flickOff} wheel`);
+
+// --- Back and relaunch --------------------------------------------------------
+// The place is the line or block under a point 120 px below the top of the
+// stream, and where it starts. Back and a relaunch must put that same line
+// within 2 px of where it was.
+const place = () => page.evaluate(() => {
+  const element = document.querySelector('[data-testid="files-stack"]');
+  const rect = element.getBoundingClientRect();
+  const under = document.elementFromPoint(rect.left + rect.width / 2 - 100, rect.top + 120);
+  const article = under?.closest('[data-stack-section]');
+  if (!article) return null;
+  const block = [...article.querySelectorAll('.cm-content > *')].find((child) => child.contains(under)) ?? null;
+  return {
+    section: article.dataset.stackSection,
+    text: block ? block.textContent.slice(0, 60) : null,
+    top: Math.round((block ?? article).getBoundingClientRect().top - rect.top),
+  };
+});
+const placeOf = (wanted) => page.evaluate((want) => {
+  const element = document.querySelector('[data-testid="files-stack"]');
+  const article = element?.querySelector(`[data-stack-section="${CSS.escape(want.section)}"]`);
+  if (!article) return null;
+  const block = want.text === null ? article : [...article.querySelectorAll('.cm-content > *')].find((child) => child.textContent.slice(0, 60) === want.text);
+  return block ? Math.round(block.getBoundingClientRect().top - element.getBoundingClientRect().top) : null;
+}, wanted);
+const name = (wanted) => (wanted ? `${wanted.section.split('/').pop()} "${(wanted.text ?? '').slice(0, 24)}" at ${wanted.top}` : 'nothing');
+const clickMenu = (label) => app.evaluate(({ Menu }, wanted) => {
+  for (const top of Menu.getApplicationMenu()?.items ?? []) {
+    for (const item of top.submenu?.items ?? []) {
+      if (item.label === wanted && item.visible) { item.click(); return true; }
+    }
+  }
+  return false;
+}, label);
+await page.evaluate(() => window.__drift.scrollBy(-1e7));
+await page.waitForTimeout(1500);
+const backs = [];
+for (const wheels of [12, 40, 90]) {
+  for (let index = 0; index < wheels; index += 1) { await page.mouse.wheel(0, 120); await page.waitForTimeout(16); }
+  await page.waitForTimeout(1200);
+  const want = await place();
+  // Opened with a click event rather than Playwright's click, which would first scroll the button into view.
+  await page.evaluate((file) => {
+    document.querySelector(`[data-stack-section="${CSS.escape(file)}"] .opal-stack-open`)
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  }, want?.section ?? '');
+  await page.getByTestId('files-focus').waitFor();
+  await page.waitForTimeout(600);
+  await clickMenu('Back');
+  await stack.waitFor();
+  await page.waitForTimeout(3000);
+  backs.push({ want, got: want ? await placeOf(want) : null });
+}
+const backsOk = backs.filter(({ want, got }) => want && got !== null && Math.abs(got - want.top) <= 2);
+for (const { want, got } of backs) console.log(`Back: ${name(want)}, back at ${got}`);
+check('Back returns to the same line, three places down the stream', backsOk.length === backs.length, `${backsOk.length} of ${backs.length}`);
+const beforeQuit = await place();
+// The place is saved on the tab 400 ms after scrolling stops.
+await page.waitForTimeout(800);
+await app.close();
+({ app, page } = await launch());
+await page.getByTestId('files-stack').waitFor();
+await page.waitForTimeout(4000);
+const afterLaunch = beforeQuit ? await placeOf(beforeQuit) : null;
+check('a relaunch returns to the same line', !!beforeQuit && afterLaunch !== null && Math.abs(afterLaunch - beforeQuit.top) <= 2, `${name(beforeQuit)}, after relaunch at ${afterLaunch}`);
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
 await app.close();
