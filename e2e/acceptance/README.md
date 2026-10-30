@@ -19,5 +19,5 @@ Then, from the repository root:
 
 ```bash
 node e2e/acceptance/editor-acceptance.mjs        # Markdown editing: autosave, external edits, conflicts, new note
-node e2e/acceptance/stack-stress-acceptance.mjs  # Today's stream with 100 daily pages: frame times, memory, editor count
+node e2e/acceptance/stack-stress-acceptance.mjs  # Today's stream with 100 daily pages: frame times, memory, editor count, drift, Back and relaunch
 ```

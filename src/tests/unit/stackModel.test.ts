@@ -98,6 +98,12 @@ describe('stack model', () => {
     expect(readOnlyRule('/Vault/Library/logs/2026-10-29 log.md')).toBe(true);
     expect(readOnlyRule('/Vault/Library/daily/2026-10-29.md')).toBe(false);
     expect(readOnlyRule('/Vault/Library/recordings/2026-10-29 0900 Standup.md')).toBe(false);
+    // threads.py rewrites a chat's card and its sessions on every capture.
+    expect(readOnlyRule('/Vault/Library/chats/sf-site-one.md')).toBe(true);
+    expect(readOnlyRule('/Vault/Library/chats/sf-site-one/2026-10-21-claude-f30001cd.md')).toBe(true);
+    expect(readOnlyRule('Library/chats/sf-site-one.md')).toBe(true);
+    expect(readOnlyRule('/Vault/Library/chats/sf-site-one/notes/deeper.md')).toBe(false);
+    expect(readOnlyRule('/Vault/Notes/Library chats.md')).toBe(false);
   });
 });
 
@@ -211,6 +217,8 @@ describe('StackService', () => {
       [older, '2026-10-16 · Claude', '16 prompts · last active 2026-10-19 15:57', 'part', false],
     ]);
     expect(stack.sections[1].textHeading).toEqual({ level: 1, line: 1 });
+    // threads.py rewrites the card and every session, so all of them read as read-only.
+    expect(stack.sections.every((section) => section.readOnly)).toBe(true);
   });
 
   it('shows a card that is not a thread alone, and a thread with no sessions folder alone', async () => {

@@ -34,16 +34,21 @@ const state = (patch: Partial<StackWindowState> = {}): StackWindowState => ({
 const name = (path: string) => Number(path.replace(/.*\/(\d+)\.md$/, '$1'));
 
 describe('planStackWindow', () => {
-  it('mounts what is in view and one viewport around it, nearest first', () => {
+  it('mounts what is in view, two viewports above it and one below, nearest first', () => {
     const plan = planStackWindow({ scrollTop: 2000, viewport: VIEW, sections: sections(20, 400), total: 20 }, state({ reading: 0 }));
-    // In view: 5 and 6 (2000-2800). Near: 3 and 4 above, 7 and 8 below. Four reads at a time.
+    // In view: 5 and 6 (2000-2800). Near: 1 to 4 above, 7 and 8 below. Four reads at a time.
     expect(plan.mount.slice(0, 2).map(name).sort()).toEqual([5, 6]);
     expect(plan.mount.slice(2).map(name).sort()).toEqual([4, 7]);
     const rest = planStackWindow(
       { scrollTop: 2000, viewport: VIEW, sections: sections(20, 400, [4, 5, 6, 7]), total: 20 },
       state({ reading: 0 }),
     );
-    expect(rest.mount.map(name).sort()).toEqual([3, 8]);
+    expect(rest.mount.map(name)).toEqual([3, 8, 2, 1]);
+    const last = planStackWindow(
+      { scrollTop: 2000, viewport: VIEW, sections: sections(20, 400, [1, 2, 3, 4, 5, 6, 7, 8]), total: 20 },
+      state({ reading: 0 }),
+    );
+    expect(last.mount).toEqual([]);
   });
 
   it('keeps at most four reads in flight', () => {
@@ -52,9 +57,11 @@ describe('planStackWindow', () => {
     expect(planStackWindow({ scrollTop: 2000, viewport: VIEW, sections: sections(20, 400), total: 20 }, state({ reading: 4 })).mount).toEqual([]);
   });
 
-  it('mounts only what is in view while scrolling fast', () => {
+  it('mounts only what is in view while scrolling down fast, and what is above it too while scrolling up fast', () => {
     const plan = planStackWindow({ scrollTop: 2000, viewport: VIEW, sections: sections(20, 400), total: 20 }, state({ fast: true }));
     expect(plan.mount.map(name).sort()).toEqual([5, 6]);
+    const up = planStackWindow({ scrollTop: 2000, viewport: VIEW, sections: sections(20, 400, [5, 6]), total: 20 }, state({ fast: true, direction: 'up' }));
+    expect(up.mount.map(name)).toEqual([4, 3, 2, 1]);
   });
 
   it('unmounts a section only after it has been far from the view for two seconds', () => {

@@ -119,6 +119,13 @@ describe('MarkdownEditor', () => {
     expect(view.state.doc.toString()).toBe('(one)');
   });
 
+  it('leaves Cmd+Option+Down alone on a page, where it is not a key of the editor', async () => {
+    installMarkdownApi({ [NOTE]: 'one\ntwo\n' });
+    const view = await openEditor(NOTE);
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, ...MOD }), 'editor')).toBe(false);
+    expect(view.state.selection.main.head).toBe(0);
+  });
+
   it('keeps a whole log page read-only, and still follows the lines the scripts append', async () => {
     const text = '- 09:00 Ran the digest. · [[Library/digests/2026-10-28 digest|Digest]] · routine run\n';
     const api = installMarkdownApi({ [LOG_PAGE]: text });

@@ -7,6 +7,7 @@ import { AppCommands, CommandPalette, usePaletteStore } from '@/renderer/feature
 import { commandRegistry } from '@/renderer/features/commands/services/commandRegistry';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
+import { useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
 import { useSettingsStore } from '@/renderer/features/settings';
 import { ShellProvider } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
@@ -257,6 +258,20 @@ describe('CommandPalette', () => {
     act(() => commandRegistry.executeCommand(COMMAND_IDS.toggleProperties));
     expect(usePagePropertiesStore.getState().open).toBe(false);
     await waitFor(() => expect(reported()?.label).toBe('Show Properties'));
+  });
+
+  it('reports Next Section and Previous Section only while a stack is shown', async () => {
+    useStackStore.setState({ move: null });
+    renderPalette();
+    const ids = () => ((window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string }[]).map((command) => command.id);
+    expect(ids()).not.toContain(COMMAND_IDS.nextSection);
+    const move = vi.fn(() => true);
+    act(() => useStackStore.getState().setMove(move));
+    await waitFor(() => expect(ids()).toEqual(expect.arrayContaining([COMMAND_IDS.nextSection, COMMAND_IDS.previousSection])));
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.previousSection));
+    expect(move).toHaveBeenCalledWith('previous');
+    act(() => useStackStore.getState().setMove(null));
+    await waitFor(() => expect(ids()).not.toContain(COMMAND_IDS.previousSection));
   });
 
   it('keeps the tab-position keys out of the palette', async () => {

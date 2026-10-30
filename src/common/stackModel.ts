@@ -147,11 +147,15 @@ export function isBlankPage(source: string): boolean {
 }
 
 const LOG_PAGE = /(^|\/)Library\/logs\/[^/]+\.md$/;
+/** A thread card, `Library/chats/<thread>.md`, or one of its sessions, `Library/chats/<thread>/<session>.md`. */
+const CHAT_PAGE = /(^|\/)Library\/chats\/[^/]+(\/[^/]+)?\.md$/;
 
 /**
  * Whether Opal shows a page read-only, alone and in a stack. Logs in
- * `Library/logs` are written only by the vault's scripts.
+ * `Library/logs` are written only by the vault's scripts, and threads.py
+ * rewrites a chat's card and its sessions on every capture, so text typed
+ * there would be lost without a conflict.
  */
 export function readOnlyRule(path: string): boolean {
-  return LOG_PAGE.test(path);
+  return LOG_PAGE.test(path) || CHAT_PAGE.test(path);
 }
