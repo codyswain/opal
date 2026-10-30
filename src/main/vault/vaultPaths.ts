@@ -10,6 +10,7 @@ export const DAY_LAYOUT = {
   recordings: "Library/recordings",
   digests: "Library/digests",
   chats: "Library/chats",
+  people: "Library/people",
   template: "Archive/Journal/Template.md",
 } as const;
 

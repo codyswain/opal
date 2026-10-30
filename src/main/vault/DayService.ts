@@ -4,12 +4,13 @@ import path from "path";
 import type { RootRegistry } from "@/main/fs/RootRegistry";
 import { isInsideRoot, normalizePath } from "@/main/fs/paths";
 import { MARKDOWN_DOCUMENT_LIMIT } from "@/types/markdown";
-import type { DayLink, DayLogEntry, DayRecording, VaultDay, VaultDayChange } from "@/types/day";
+import type { DayFile, DayLink, DayLogEntry, DayRecording, VaultDay, VaultDayChange } from "@/types/day";
 import { splitDailyLog, validDate } from "@/common/vaultModel";
 import { classifyFile } from "@/common/fileKind";
 import {
   chatsForDay,
-  documentsForDay,
+  latestFirst,
+  logMentions,
   newestFirst,
   parseDigest,
   parseLog,
@@ -54,6 +55,7 @@ const DAY_FOLDERS = [
   DAY_LAYOUT.recordings,
   DAY_LAYOUT.digests,
   DAY_LAYOUT.chats,
+  DAY_LAYOUT.people,
   ...Object.values(LEGACY_DAY_LAYOUT),
 ];
 
@@ -150,16 +152,45 @@ export class DayService {
       this.recordings(root, date),
       this.digest(root, date),
     ]);
-    const documents = documentsForDay(log.entries, (file) => !this.isDocument(root, file));
-    return { date, daily, ...log, documents, chats, recordings, digest };
+    const mentions = logMentions(log.entries);
+    const documents = latestFirst(mentions.filter((file) => this.isDocument(root, file.path)));
+    const people = latestFirst([
+      ...mentions.filter((file) => this.isPerson(root, file.path)),
+      ...(await this.speakers(root, recordings)),
+    ]);
+    return { date, daily, ...log, documents, chats, recordings, people, digest };
+  }
+
+  private relative(root: string, file: string): string {
+    return path.posix.relative(normalizePath(root), normalizePath(file));
+  }
+
+  /** A note directly in the people folder, other than its index. */
+  private isPerson(root: string, file: string): boolean {
+    const relative = this.relative(root, file);
+    return path.posix.dirname(relative) === DAY_LAYOUT.people && path.posix.basename(relative) !== "index.md";
+  }
+
+  /** The day's meeting speakers who have a person note of their exact name, at the recording's start. */
+  private async speakers(root: string, recordings: readonly DayRecording[]): Promise<DayFile[]> {
+    const found: DayFile[] = [];
+    for (const recording of recordings) {
+      for (const name of new Set(recording.speakers)) {
+        if (!name.trim() || name.startsWith(".") || /[/\\]/.test(name)) continue;
+        const file = await this.file(root, DAY_LAYOUT.people, `${name}.md`);
+        if (file) found.push({ path: file, label: name, last: recording.time });
+      }
+    }
+    return found;
   }
 
   /**
    * Whether a file the log links to belongs in the day's documents: not in a
-   * dot folder, not in a folder the day already shows, and not code or data.
+   * dot folder, not in a folder the day already shows (people included), and
+   * not code or data.
    */
   private isDocument(root: string, file: string): boolean {
-    const relative = path.posix.relative(normalizePath(root), normalizePath(file));
+    const relative = this.relative(root, file);
     if (relative.startsWith("..") || relative.split("/").some((part) => part.startsWith("."))) return false;
     if (DAY_FOLDERS.some((folder) => relative.startsWith(`${folder}/`))) return false;
     return classifyFile(path.posix.basename(relative)) !== "text";

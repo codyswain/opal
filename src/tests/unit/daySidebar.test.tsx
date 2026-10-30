@@ -124,6 +124,10 @@ function oct28(): VaultDay {
       hasSummary: false,
       links: [{ label: 'Notes by Gemini', target: 'https://docs.google.com/document/d/1', external: true, path: null }],
     })),
+    people: [
+      { path: `${ROOT}/Library/people/Lucas Czajka.md`, label: 'Lucas Czajka', last: '11:15' },
+      { path: `${ROOT}/Library/people/John Newsom.md`, label: 'John', last: '08:00' },
+    ],
     digest: {
       path: DIGEST,
       title: 'Digest',
@@ -144,7 +148,7 @@ function oct28(): VaultDay {
   };
 }
 
-const empty = (date: string): VaultDay => ({ date, daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], digest: null });
+const empty = (date: string): VaultDay => ({ date, daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], people: [], digest: null });
 
 let days: Record<string, VaultDay>;
 let changed: ((change: VaultDayChange) => void) | null;
@@ -292,8 +296,8 @@ describe('day sidebar preferences', () => {
     const saved = readPref(DAY_SIDEBAR_PREFERENCE_KEY, null);
     expect(saved).toEqual({
       open: false,
-      sections: { activity: true, documents: true, chats: false, recordings: true, digest: true },
-      collapsed: { activity: false, documents: false, chats: false, recordings: false, digest: true },
+      sections: { activity: true, documents: true, chats: false, recordings: true, people: true, digest: true },
+      collapsed: { activity: false, documents: false, chats: false, recordings: false, people: false, digest: true },
       width: 333,
     });
     useDaySidebarStore.setState(DEFAULT_DAY_SIDEBAR_PREFERENCES);
@@ -375,14 +379,19 @@ describe('DaySidebar', () => {
     expect(within(log).getByRole('button', { name: 'FedEx dataset note' })).toBeInTheDocument();
     expect(within(log).getByRole('button', { name: '+2' })).toBeInTheDocument();
 
-    // The digest first, then what the day touched and its chats, and the activity log last.
+    // The digest first, then what the day touched, its chats, recordings and people, and the activity log last.
     expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
       'Digest',
       'Documents',
       'Chats',
       'Recordings',
+      'People',
       'Activity log',
     ]);
+
+    const people = card('People');
+    expect(within(people).getByRole('button', { name: /^People/ })).toHaveTextContent('People2');
+    expect(within(people).getByRole('button', { name: /Lucas Czajka/ })).toHaveTextContent('11:15Lucas Czajka');
 
     const documents = card('Documents');
     expect(within(documents).getByRole('button', { name: /^Documents/ })).toHaveTextContent('Documents9');

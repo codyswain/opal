@@ -21,7 +21,7 @@ import {
   MenuTrigger,
 } from '@/renderer/shared/ui';
 import { cn } from '@/renderer/shared/utils';
-import type { DayDigest, DayDigestItem, DayLogEntry, VaultDay } from '@/types/day';
+import type { DayDigest, DayDigestItem, DayFile, DayLogEntry, VaultDay } from '@/types/day';
 import { addDays, dayName, pageDate, relativeDayName, shortDayName, shownDay, weekdayName } from '../dayRule';
 import { useDay, useToday } from '../hooks/useDay';
 import { useScrollFade } from '../hooks/useScrollFade';
@@ -36,12 +36,12 @@ import { ChatRow } from './ChatRow';
 import { CardFoot, DayCard, EmptyDayCard, FootButton } from './DayCard';
 import { DaySidebarContext, useDaySidebarContext, vaultRelative, wantsNewTab } from './daySidebarContext';
 import { DigestGroup, digestGroupLabel } from './DigestGroup';
-import { DocumentRow } from './DocumentRow';
+import { FileRow } from './FileRow';
 import { HourGroup, LogEntry } from './LogEntry';
 import { RecordingRow } from './RecordingRow';
 
 /** What each card shows at rest; "Show N more" shows the rest. */
-export const AT_REST = { activity: 3, documents: 8, chats: 8, recordings: 4, digest: 3 } as const;
+export const AT_REST = { activity: 3, documents: 8, chats: 8, recordings: 4, people: 8, digest: 3 } as const;
 /** Past this many entries the full log folds by hour. */
 const FLAT_LOG_LIMIT = 40;
 /** Below this width the header drops the weekday: "Oct 28 Yesterday". */
@@ -170,32 +170,49 @@ function ActivityCard({ day, more, onMore }: CardProps) {
   );
 }
 
-function DocumentsCard({ day, more, onMore }: CardProps) {
-  const collapsed = useDaySidebarStore((state) => state.collapsed.documents);
+interface FilesCardProps extends CardProps {
+  section: 'documents' | 'people';
+  files: DayFile[];
+  /** "document", "documents" */
+  noun: [string, string];
+}
+
+/** Documents and People: one row per file, the latest touched first. */
+function FilesCard({ files, more, noun, onMore, section }: FilesCardProps) {
+  const collapsed = useDaySidebarStore((state) => state.collapsed[section]);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
-  const count = day.documents.length;
-  if (count === 0) return <EmptyDayCard title={DAY_SECTION_TITLES.documents} line="No documents" />;
-  const shown = more ? day.documents : day.documents.slice(0, AT_REST.documents);
+  const title = DAY_SECTION_TITLES[section];
+  const count = files.length;
+  if (count === 0) return <EmptyDayCard title={title} line={`No ${noun[1]}`} />;
+  const shown = more ? files : files.slice(0, AT_REST[section]);
   return (
     <DayCard
-      id="documents"
-      title={DAY_SECTION_TITLES.documents}
+      id={section}
+      title={title}
       value={count.toLocaleString()}
-      summary={`${plural(count, 'document', 'documents')}, last ${day.documents[0].last}`}
+      summary={`${plural(count, noun[0], noun[1])}, last ${files[0].last}`}
       collapsed={collapsed}
-      onToggle={() => toggleCollapsed('documents')}
+      onToggle={() => toggleCollapsed(section)}
     >
-      {shown.map((document) => (
-        <DocumentRow key={document.path} document={document} />
+      {shown.map((file) => (
+        <FileRow key={file.path} file={file} />
       ))}
-      {count > AT_REST.documents ? (
+      {count > AT_REST[section] ? (
         <CardFoot>
-          <FootButton aria-expanded={more} onClick={onMore}>{more ? 'Show fewer' : `Show ${count - AT_REST.documents} more`}</FootButton>
+          <FootButton aria-expanded={more} onClick={onMore}>{more ? 'Show fewer' : `Show ${count - AT_REST[section]} more`}</FootButton>
         </CardFoot>
       ) : null}
     </DayCard>
   );
 }
+
+const DocumentsCard = (props: CardProps) => (
+  <FilesCard {...props} section="documents" files={props.day.documents} noun={['document', 'documents']} />
+);
+
+const PeopleCard = (props: CardProps) => (
+  <FilesCard {...props} section="people" files={props.day.people} noun={['person', 'people']} />
+);
 
 function ChatsCard({ day, more, onMore }: CardProps) {
   const collapsed = useDaySidebarStore((state) => state.collapsed.chats);
@@ -384,6 +401,7 @@ const CARDS: Record<DaySection, React.ComponentType<CardProps>> = {
   activity: ActivityCard,
   documents: DocumentsCard,
   chats: ChatsCard,
+  people: PeopleCard,
   recordings: RecordingsCard,
   digest: DigestCard,
 };
@@ -438,8 +456,8 @@ interface DaySidebarProps {
 /**
  * The right sidebar: one day of the vault beside the page. Its header holds
  * the day, previous and next day, the options menu and the toggle. A column
- * of cards below shows the day's digest, documents, chats, recordings and
- * activity log, and reads again when any of them change on disk.
+ * of cards below shows the day's digest, documents, chats, recordings,
+ * people and activity log, and reads again when any of them change on disk.
  */
 export function DaySidebar({ width }: DaySidebarProps) {
   const { navigateFiles } = useShell();

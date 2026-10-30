@@ -4,7 +4,7 @@ import type {
   DayDigest,
   DayDigestGroup,
   DayDigestItem,
-  DayDocument,
+  DayFile,
   DayLink,
   DayLogEntry,
   DigestLevel,
@@ -134,22 +134,23 @@ export function newestFirst<T extends { time: string }>(items: readonly T[]): T[
     .map(({ item }) => item);
 }
 
-/**
- * The vault files a day's log links to, one row each, the latest touched
- * first. `skip` leaves out files that are not documents. A row takes its
- * label from the latest line that links to it.
- */
-export function documentsForDay(entries: readonly DayLogEntry[], skip: (path: string) => boolean): DayDocument[] {
-  const documents = new Map<string, DayDocument>();
-  for (const entry of entries) {
-    const time = entry.until ?? entry.time;
-    for (const link of entry.links) {
-      if (link.external || !link.path || skip(link.path)) continue;
-      const known = documents.get(link.path);
-      if (!known || time > known.last) documents.set(link.path, { path: link.path, label: link.label, last: time });
-    }
+/** Each vault file a day's log links to, once per link, at the time of its line. */
+export function logMentions(entries: readonly DayLogEntry[]): DayFile[] {
+  return entries.flatMap((entry) =>
+    entry.links.flatMap((link) =>
+      link.external || !link.path ? [] : [{ path: link.path, label: link.label, last: entry.until ?? entry.time }],
+    ),
+  );
+}
+
+/** One row per file, named by its latest mention, the latest first. */
+export function latestFirst(mentions: readonly DayFile[]): DayFile[] {
+  const files = new Map<string, DayFile>();
+  for (const mention of mentions) {
+    const known = files.get(mention.path);
+    if (!known || mention.last > known.last) files.set(mention.path, mention);
   }
-  return [...documents.values()].sort((a, b) => b.last.localeCompare(a.last) || a.label.localeCompare(b.label));
+  return [...files.values()].sort((a, b) => b.last.localeCompare(a.last) || a.label.localeCompare(b.label));
 }
 
 export interface ThreadCard {

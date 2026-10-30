@@ -40,16 +40,12 @@ export interface DayChat {
   prompts: number;
 }
 
-/**
- * A vault file the day's log links to: a note, a deck, a person. Chats,
- * recordings and the day's own files have cards of their own and are left
- * out, and so are code and data files.
- */
-export interface DayDocument {
+/** A vault file the day touched: a note or deck in Documents, a person note in People. */
+export interface DayFile {
   path: string;
-  /** The label of the latest log line's link to it. */
+  /** The label of its latest mention: a log line's link, or a speaker's name. */
   label: string;
-  /** HH:MM of the latest log line that links to it. */
+  /** HH:MM of its latest mention: the log line, or the recording's start. */
   last: string;
 }
 
@@ -115,9 +111,15 @@ export interface VaultDay {
   /** The day's activity log file, when it exists. */
   log: string | null;
   entries: DayLogEntry[];
-  documents: DayDocument[];
+  /**
+   * The files the day's log links to, other than chats, recordings, people
+   * and the day's own files, and not code or data files.
+   */
+  documents: DayFile[];
   chats: DayChat[];
   recordings: DayRecording[];
+  /** Person notes the log links to, and the day's meeting speakers who have one. */
+  people: DayFile[];
   digest: DayDigest | null;
 }
 

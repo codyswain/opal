@@ -30,8 +30,9 @@ not exist.
   creates the daily page and ticks a digest's checkboxes
   (`vault:check-digest-item`, one line through the editor's write queue);
   `DayService` answers `vault:day` with a day's page,
-  log, documents (the files its log links to), chats, recordings and digest,
-  and sends `vault:day-changed`. The parsing
+  log, documents (the files its log links to), chats, recordings, people
+  (person notes the log links to, and meeting speakers who have one) and
+  digest, and sends `vault:day-changed`. The parsing
   is in `src/common/dayModel.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,

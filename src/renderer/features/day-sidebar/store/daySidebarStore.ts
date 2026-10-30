@@ -17,10 +17,10 @@ export const DAY_SIDEBAR_PREFERENCE_KEY = 'daySidebar';
 
 /**
  * The cards top to bottom, and the options menu's order: the digest, then
- * what the day touched, then its chats. The activity log is the least read,
- * so it is last.
+ * what the day touched, its chats, recordings and people. The activity log
+ * is the least read, so it is last.
  */
-export const DAY_SECTIONS = ['digest', 'documents', 'chats', 'recordings', 'activity'] as const;
+export const DAY_SECTIONS = ['digest', 'documents', 'chats', 'recordings', 'people', 'activity'] as const;
 export type DaySection = (typeof DAY_SECTIONS)[number];
 
 export const DAY_SECTION_TITLES: Record<DaySection, string> = {
@@ -28,6 +28,7 @@ export const DAY_SECTION_TITLES: Record<DaySection, string> = {
   documents: 'Documents',
   chats: 'Chats',
   recordings: 'Recordings',
+  people: 'People',
   digest: 'Digest',
 };
 
@@ -56,8 +57,8 @@ export interface DaySidebarPreferences {
 
 export const DEFAULT_DAY_SIDEBAR_PREFERENCES: DaySidebarPreferences = {
   open: true,
-  sections: { activity: true, documents: true, chats: true, recordings: true, digest: true },
-  collapsed: { activity: false, documents: false, chats: false, recordings: false, digest: false },
+  sections: { activity: true, documents: true, chats: true, recordings: true, people: true, digest: true },
+  collapsed: { activity: false, documents: false, chats: false, recordings: false, people: false, digest: false },
   width: null,
 };
 

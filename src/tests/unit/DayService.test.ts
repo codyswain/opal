@@ -175,13 +175,29 @@ describe("DayService", () => {
     expect(day.documents).toEqual([
       { path: path.join(root, "Library/parametric/briefs/gob-call-prep.md"), label: "Gob call prep", last: "15:01" },
       { path: path.join(root, "Library/parametric/briefs/gob-deck.pptx"), label: "Gob deck", last: "14:10" },
-      { path: path.join(root, "Library/people/Robert Xu.md"), label: "Robert", last: "13:09" },
     ]);
+  });
+
+  it("lists the people the log links to and the meeting speakers who have a note, the latest first", async () => {
+    await put("Library/people/Lucas Czajka.md", "# Lucas\n");
+    await put("Library/people/index.md", "# People\n");
+    await put(`Library/logs/${DATE} log.md`, [
+      LOG.trimEnd(),
+      "- 07:30 Indexed Robert again. · [[Library/people/Robert Xu|Robert Xu]], [[Library/people/index|People index]] · agent turn",
+      "",
+    ].join("\n"));
+    const day = await service.day(root, DATE);
+    // Kigali Operators at 08:59 had Lucas Czajka speaking; the 06:38 line and the 07:30 one name Robert.
+    expect(day.people).toEqual([
+      { path: path.join(root, "Library/people/Lucas Czajka.md"), label: "Lucas Czajka", last: "08:59" },
+      { path: path.join(root, "Library/people/Robert Xu.md"), label: "Robert Xu", last: "07:30" },
+    ]);
+    expect(day.documents).toEqual([]);
   });
 
   it("answers an empty day with nulls and empty lists, and refuses bad input", async () => {
     expect(await service.day(root, "2026-01-01")).toEqual({
-      date: "2026-01-01", daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], digest: null,
+      date: "2026-01-01", daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], people: [], digest: null,
     });
     await expect(service.day(root, "2026-02-30")).rejects.toThrow("valid calendar date");
     await expect(service.day(path.join(root, "Library"), DATE)).rejects.toThrow();
