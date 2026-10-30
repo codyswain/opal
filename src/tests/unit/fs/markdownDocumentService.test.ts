@@ -19,16 +19,24 @@ let service: MarkdownDocumentService;
 const noteEdited = vi.fn(async () => undefined);
 const invalidate = vi.fn();
 const item = (name: string) => path.join(root, name);
+/**
+ * The environment without the caller's GIT_* variables. A pre-commit hook in a
+ * linked worktree sets GIT_DIR and GIT_INDEX_FILE to the real repo, and git
+ * would then init, add and commit there instead of in the temp folder.
+ */
+const withoutGitVars = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
 /** Runs git in the opened folder with a fixed identity and no signing or hooks from the user's config. */
 const git = (args: string[], env: Record<string, string> = {}) =>
   execFileSync('git', ['-c', 'user.name=Opal Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', '-c', 'init.defaultBranch=main', ...args], {
     cwd: root,
-    env: { ...process.env, ...env },
+    env: { ...withoutGitVars(), ...env },
   });
 
 beforeEach(async () => {
   noteEdited.mockClear();
   invalidate.mockClear();
+  // The service runs git log in the folder too, and a hook's GIT_DIR would point it at the real repo.
+  for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) vi.stubEnv(key, undefined);
   tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-markdown-'));
   root = path.join(tmp, 'root');
   await mkdir(root);
@@ -36,7 +44,10 @@ beforeEach(async () => {
   root = await registry.add(root);
   service = new MarkdownDocumentService({ registry, metadata: { invalidate }, activity: { noteEdited }, recoveryDir: path.join(tmp, 'Recovered') });
 });
-afterEach(async () => { await rm(tmp, { recursive: true, force: true }); });
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await rm(tmp, { recursive: true, force: true });
+});
 
 describe('MarkdownDocumentService', () => {
   it('reads the body after frontmatter and preserves BOM, frontmatter and CRLF on write', async () => {
