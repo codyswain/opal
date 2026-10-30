@@ -90,6 +90,15 @@ function oct28(): VaultDay {
       ]),
       entry('08:54', 'The untethered SN1 ranked first for the SF mast and tether.', null),
     ],
+    documents: [
+      { path: `${ROOT}/Library/parametric/fedex.md`, label: 'FedEx dataset note', last: '22:54' },
+      ...['21:30', '20:30', '19:30', '18:30', '17:30', '16:30', '15:30'].map((last, index) => ({
+        path: `${ROOT}/Library/notes/note-${index}.md`,
+        label: `Note ${index + 1}`,
+        last,
+      })),
+      { path: `${ROOT}/Library/parametric/briefs/gob-deck.pptx`, label: 'Gob deck', last: '09:10' },
+    ],
     chats: [
       chat('model-training', 'Model Training', '23:31', { created: '2026-10-20 10:00', prompts: 4 }),
       chat('opal-status', 'Opal status', '23:07', { isNew: true, created: '2026-10-28 20:00', prompts: 9 }),
@@ -135,7 +144,7 @@ function oct28(): VaultDay {
   };
 }
 
-const empty = (date: string): VaultDay => ({ date, daily: null, log: null, entries: [], chats: [], recordings: [], digest: null });
+const empty = (date: string): VaultDay => ({ date, daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], digest: null });
 
 let days: Record<string, VaultDay>;
 let changed: ((change: VaultDayChange) => void) | null;
@@ -283,8 +292,8 @@ describe('day sidebar preferences', () => {
     const saved = readPref(DAY_SIDEBAR_PREFERENCE_KEY, null);
     expect(saved).toEqual({
       open: false,
-      sections: { activity: true, chats: false, recordings: true, digest: true },
-      collapsed: { activity: false, chats: false, recordings: false, digest: true },
+      sections: { activity: true, documents: true, chats: false, recordings: true, digest: true },
+      collapsed: { activity: false, documents: false, chats: false, recordings: false, digest: true },
       width: 333,
     });
     useDaySidebarStore.setState(DEFAULT_DAY_SIDEBAR_PREFERENCES);
@@ -366,13 +375,22 @@ describe('DaySidebar', () => {
     expect(within(log).getByRole('button', { name: 'FedEx dataset note' })).toBeInTheDocument();
     expect(within(log).getByRole('button', { name: '+2' })).toBeInTheDocument();
 
-    // Chats first and the activity log last.
+    // The digest first, then what the day touched and its chats, and the activity log last.
     expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
+      'Digest',
+      'Documents',
       'Chats',
       'Recordings',
-      'Digest',
       'Activity log',
     ]);
+
+    const documents = card('Documents');
+    expect(within(documents).getByRole('button', { name: /^Documents/ })).toHaveTextContent('Documents9');
+    expect(within(documents).getByText('FedEx dataset note')).toBeInTheDocument();
+    // Eight at rest, the latest touched first.
+    expect(within(documents).getByText('Note 7')).toBeInTheDocument();
+    expect(within(documents).queryByText('Gob deck')).toBeNull();
+    expect(within(documents).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
 
     const chats = card('Chats');
     expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent('1 new · 10');
@@ -434,6 +452,20 @@ describe('DaySidebar', () => {
 
     await user.click(within(card('Digest')).getByText('Reply to Sol about the Brex request.'));
     expect(openedPath()).toBe(DIGEST);
+  });
+
+  it('opens a document in this tab, and names a file that is not Markdown by its extension', async () => {
+    const user = userEvent.setup();
+    openTabs([DAILY]);
+    renderSidebar();
+    const documents = await screen.findByRole('region', { name: 'Documents' });
+    await user.click(within(documents).getByRole('button', { name: 'Show 1 more' }));
+    const deck = within(documents).getByRole('button', { name: /Gob deck/ });
+    expect(deck).toHaveTextContent('09:10Gob deckpptx');
+    expect(within(documents).getByRole('button', { name: /FedEx dataset note/ })).not.toHaveTextContent('md');
+
+    await user.click(within(documents).getByText('FedEx dataset note'));
+    expect(openedPath()).toBe(`${ROOT}/Library/parametric/fedex.md`);
   });
 
   it('opens a log entry in place with the full sentence and every link, and Escape closes it', async () => {

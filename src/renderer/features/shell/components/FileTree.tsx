@@ -5,6 +5,7 @@ import {
   FixedSizeList,
   type ListChildComponentProps,
 } from 'react-window';
+import { fileTreeLabel } from '@/common/fileKind';
 import { isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
 import { isValidName } from '@/renderer/features/disk-explorer/components/dialogs/NameDialog';
@@ -104,18 +105,20 @@ function RenameField({
   node: FileTreeNode;
   onDone: (focusPath: string | null) => void;
 }) {
-  const [value, setValue] = React.useState(node.label);
+  // The file's own name, not a daily page's "10-30 Fri".
+  const editable = fileTreeLabel(node.name, node.kind);
+  const [value, setValue] = React.useState(editable);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const settled = React.useRef(false);
-  const suffix = node.name.slice(node.label.length);
+  const suffix = node.name.slice(editable.length);
 
   React.useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
     input.focus();
-    const dot = node.isDirectory || suffix ? -1 : node.label.lastIndexOf('.');
-    input.setSelectionRange(0, dot > 0 ? dot : node.label.length);
-  }, [node.isDirectory, node.label, suffix]);
+    const dot = node.isDirectory || suffix ? -1 : editable.lastIndexOf('.');
+    input.setSelectionRange(0, dot > 0 ? dot : editable.length);
+  }, [editable, node.isDirectory, suffix]);
 
   // A blur means focus already went somewhere else; only Enter and Escape
   // return it to the row.
@@ -409,9 +412,11 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     [activate, focusIndex, nodes, toggleExpanded]
   );
 
-  // Root rows (with several roots) take drops but do not move.
+  // Root rows (with several roots) take drops but do not move. Year rows
+  // in the daily folder are not folders on disk, so they do neither.
   const dragProps = React.useCallback(
     (node: FileTreeNode): React.HTMLAttributes<HTMLDivElement> => {
+      if (node.isYearGroup) return {};
       const drop: React.HTMLAttributes<HTMLDivElement> = {
         onDragOver: (event) => {
           if (!node.isDirectory) return;
@@ -518,7 +523,10 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     const node = nodes.find(
       (candidate) => candidate.path === row?.dataset.treePath
     );
-    if (node) {
+    if (node?.isYearGroup) {
+      // A year row offers its daily folder's menu, as blank space does a root's.
+      setMenuTarget({ node: null, folder: parentFsPath(node.path) ?? node.path });
+    } else if (node) {
       setMenuTarget({
         node,
         folder: node.isDirectory ? node.path : parentFsPath(node.path) ?? node.path,

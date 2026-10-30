@@ -214,6 +214,32 @@ describe('tree expansion', () => {
     expect(readDirectory).not.toHaveBeenCalled();
   });
 
+  it('opens a year row in the daily folder without reading it, keeps it across reloads, and reveals pages in it', async () => {
+    const library = '/Vault/Library';
+    const daily = '/Vault/Library/daily';
+    const year = `${daily}/2026`;
+    const listing: Record<string, DiskEntry[]> = {
+      [ROOT]: [entry({ path: library, name: 'Library', kind: 'directory', isDirectory: true })],
+      [library]: [entry({ path: daily, name: 'daily', kind: 'directory', isDirectory: true })],
+      [daily]: [entry({ path: `${daily}/2026-10-30.md`, name: '2026-10-30.md', kind: 'markdown' })],
+    };
+    readDirectory.mockImplementation(async (p: string) => ({ success: true, data: { path: p, entries: listing[p] ?? [] } }));
+    useDiskStore.setState({ roots: [ROOT] });
+
+    await useDiskStore.getState().revealPath(`${daily}/2026-10-30.md`);
+    expect(useDiskStore.getState().expanded).toMatchObject({ [library]: true, [daily]: true, [year]: true });
+    expect(readDirectory.mock.calls.map(([path]) => path)).toEqual([ROOT, library, daily]);
+
+    await useDiskStore.getState().loadDirectory(daily, { force: true });
+    expect(useDiskStore.getState().expanded[year]).toBe(true);
+
+    await useDiskStore.getState().toggleExpanded(year);
+    await useDiskStore.getState().toggleExpanded(year);
+    expect(useDiskStore.getState().expanded[year]).toBe(true);
+    expect(readDirectory.mock.calls.map(([path]) => path)).not.toContain(year);
+    expect(useDiskStore.getState().loading.error).toBeNull();
+  });
+
   it('forgets folders moved away while Opal was closed, without reading them or raising an error', async () => {
     const gone = '/Vault/Gone';
     readDirectory.mockImplementation(async (p: string) =>

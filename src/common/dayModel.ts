@@ -1,5 +1,14 @@
 import { parse } from 'yaml';
-import type { DayChat, DayDigest, DayDigestGroup, DayDigestItem, DayLink, DigestLevel } from '@/types/day';
+import type {
+  DayChat,
+  DayDigest,
+  DayDigestGroup,
+  DayDigestItem,
+  DayDocument,
+  DayLink,
+  DayLogEntry,
+  DigestLevel,
+} from '@/types/day';
 
 /*
  * Reads the files that make up a vault day: log lines, chat transcripts,
@@ -123,6 +132,24 @@ export function newestFirst<T extends { time: string }>(items: readonly T[]): T[
     .map((item, index) => ({ item, index }))
     .sort((a, b) => b.item.time.localeCompare(a.item.time) || b.index - a.index)
     .map(({ item }) => item);
+}
+
+/**
+ * The vault files a day's log links to, one row each, the latest touched
+ * first. `skip` leaves out files that are not documents. A row takes its
+ * label from the latest line that links to it.
+ */
+export function documentsForDay(entries: readonly DayLogEntry[], skip: (path: string) => boolean): DayDocument[] {
+  const documents = new Map<string, DayDocument>();
+  for (const entry of entries) {
+    const time = entry.until ?? entry.time;
+    for (const link of entry.links) {
+      if (link.external || !link.path || skip(link.path)) continue;
+      const known = documents.get(link.path);
+      if (!known || time > known.last) documents.set(link.path, { path: link.path, label: link.label, last: time });
+    }
+  }
+  return [...documents.values()].sort((a, b) => b.last.localeCompare(a.last) || a.label.localeCompare(b.label));
 }
 
 export interface ThreadCard {

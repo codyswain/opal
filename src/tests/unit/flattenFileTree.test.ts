@@ -156,4 +156,62 @@ describe('flattenFileTree', () => {
     expect(nodes).toHaveLength(5_000);
     expect(Math.min(...durations)).toBeLessThan(16);
   });
+
+  describe('the daily pages folder', () => {
+    const library = entry({ path: '/Vault/Library', name: 'Library', kind: 'directory', isDirectory: true });
+    const daily = entry({ path: '/Vault/Library/daily', name: 'daily', kind: 'directory', isDirectory: true });
+    const page = (date: string) =>
+      entry({ path: `/Vault/Library/daily/${date}.md`, name: `${date}.md`, kind: 'markdown' });
+    const listings = {
+      '/Vault': [library],
+      '/Vault/Library': [daily],
+      '/Vault/Library/daily': [page('2025-12-31'), page('2026-10-29'), page('2026-10-30'), readme],
+    };
+
+    it('groups pages under a row per year, newest first, named by month, day and weekday', () => {
+      const nodes = flattenFileTree({
+        roots: ['/Vault'],
+        expanded: { '/Vault/Library': true, '/Vault/Library/daily': true, '/Vault/Library/daily/2026': true },
+        listings,
+      });
+
+      expect(nodes.map((node) => [node.label, node.depth])).toEqual([
+        ['Library', 0],
+        ['daily', 1],
+        ['2026', 2],
+        ['10-30 Fri', 3],
+        ['10-29 Thu', 3],
+        ['2025', 2],
+        ['README', 2],
+      ]);
+      expect(nodes[2]).toMatchObject({
+        path: '/Vault/Library/daily/2026',
+        isDirectory: true,
+        isYearGroup: true,
+        isExpanded: true,
+        parentPath: '/Vault/Library/daily',
+      });
+      expect(nodes[3]).toMatchObject({
+        path: '/Vault/Library/daily/2026-10-30.md',
+        name: '2026-10-30.md',
+        isYearGroup: false,
+        parentPath: '/Vault/Library/daily/2026',
+      });
+    });
+
+    it('leaves pages loose when a real folder has the year’s name, and other folders alone', () => {
+      const real = entry({ path: '/Vault/Library/daily/2026', name: '2026', kind: 'directory', isDirectory: true });
+      const nodes = flattenFileTree({
+        roots: ['/Vault'],
+        expanded: { '/Vault/Library': true, '/Vault/Library/daily': true },
+        listings: { ...listings, '/Vault/Library/daily': [real, page('2026-10-30'), page('2025-12-31')] },
+      });
+
+      expect(nodes.slice(2).map((node) => [node.label, node.isYearGroup])).toEqual([
+        ['2025', true],
+        ['2026', false],
+        ['2026-10-30', false],
+      ]);
+    });
+  });
 });

@@ -253,6 +253,44 @@ describe('FileTree', () => {
     );
   });
 
+  it('shows daily pages by year, renames one by its file name, and gives a year row its folder’s menu', async () => {
+    const user = userEvent.setup();
+    const daily = `${LIBRARY}/daily`;
+    const page = `${daily}/2026-10-30.md`;
+    useDiskStore.setState({
+      listings: {
+        [ROOT]: LISTINGS[ROOT],
+        [LIBRARY]: [entry({ path: daily, name: 'daily', kind: 'directory', isDirectory: true })],
+        [daily]: [entry({ path: page, name: '2026-10-30.md', kind: 'markdown' })],
+      },
+      expanded: { [LIBRARY]: true, [daily]: true, [`${daily}/2026`]: true },
+    });
+    renderTree();
+
+    expect(row(`${daily}/2026`)).toHaveTextContent('2026');
+    expect(row(`${daily}/2026`)).not.toHaveAttribute('draggable');
+    expect(row(page)).toHaveTextContent('10-30 Fri');
+
+    await user.pointer({ keys: '[MouseRight]', target: row(`${daily}/2026`) });
+    const yearMenu = await screen.findByTestId('file-tree-menu');
+    expect(within(yearMenu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'New note',
+      'New folder',
+      'Reveal in Finder',
+    ]);
+    await user.click(within(yearMenu).getByRole('menuitem', { name: 'New folder' }));
+    expect(useDiskStore.getState().pendingAction).toEqual({ kind: 'new-folder', target: daily });
+
+    await user.pointer({ keys: '[MouseRight]', target: row(page) });
+    const menu = await screen.findByTestId('file-tree-menu');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    const input = await screen.findByTestId('file-tree-rename');
+    expect(input).toHaveValue('2026-10-30');
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.type(input, ' old{Enter}');
+    await waitFor(() => expect(window.diskAPI.rename).toHaveBeenCalledWith(page, '2026-10-30 old.md'));
+  });
+
   it('cancels a rename on Escape and refuses a name with a slash', async () => {
     const user = userEvent.setup();
     renderTree();

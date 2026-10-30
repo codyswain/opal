@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { dailyYearGroups, isDailyFolder, isYearGroup, yearGroupOf } from '@/common/dailyTree';
 import {
   isFsPathAtOrBelow,
   parentFsPath,
@@ -153,10 +154,14 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     const nextPaths = new Set(response.data.entries.map(entry => entry.path));
     const removed = (get().listings[dirPath] ?? []).filter(entry => !nextPaths.has(entry.path)).map(entry => entry.path);
     if (removed.length) pathMutationCoordinator.applyExternalRemoval(removed);
+    // The daily folder's year rows are not on disk, but their expansion stays.
+    const shown = isDailyFolder(dirPath, get().roots)
+      ? new Set([...nextPaths, ...dailyYearGroups(dirPath, response.data.entries).groups.map((group) => group.path)])
+      : nextPaths;
 
     set((state) => ({
       listings: { ...state.listings, [dirPath]: response.data.entries },
-      expanded: withoutMissingChildren(state.expanded, dirPath, nextPaths),
+      expanded: withoutMissingChildren(state.expanded, dirPath, shown),
       loading: { ...state.loading, isLoading: false },
     }));
   },
@@ -172,13 +177,13 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
   },
 
   toggleExpanded: async (dirPath) => {
-    const { roots, expanded } = get();
+    const { roots, expanded, listings } = get();
     const willExpand = !isTreeExpanded(roots, expanded, dirPath);
     set((state) => ({ expanded: { ...state.expanded, [dirPath]: willExpand } }));
 
     // Read children on first expand only; collapsing keeps the cache so
-    // re-expanding is instant.
-    if (willExpand) await get().loadDirectory(dirPath);
+    // re-expanding is instant. A year row's pages are in its folder's listing.
+    if (willExpand && !isYearGroup(dirPath, roots, listings)) await get().loadDirectory(dirPath);
   },
 
   collapseAll: () => set((state) => ({ expanded: collapsedTree(state.roots) })),
@@ -221,7 +226,9 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
       folders.push(folder);
       await get().loadDirectory(folder);
     }
-    const { expanded, roots } = get();
+    const { expanded, roots, listings } = get();
+    const year = yearGroupOf(targetPath, roots, listings);
+    if (year && folders[folders.length - 1] === parentFsPath(targetPath)) folders.push(year);
     if (folders.some((folder) => !isTreeExpanded(roots, expanded, folder))) {
       set((state) => ({
         expanded: {

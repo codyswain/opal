@@ -6,8 +6,10 @@ import { isInsideRoot, normalizePath } from "@/main/fs/paths";
 import { MARKDOWN_DOCUMENT_LIMIT } from "@/types/markdown";
 import type { DayLink, DayLogEntry, DayRecording, VaultDay, VaultDayChange } from "@/types/day";
 import { splitDailyLog, validDate } from "@/common/vaultModel";
+import { classifyFile } from "@/common/fileKind";
 import {
   chatsForDay,
+  documentsForDay,
   newestFirst,
   parseDigest,
   parseLog,
@@ -148,7 +150,19 @@ export class DayService {
       this.recordings(root, date),
       this.digest(root, date),
     ]);
-    return { date, daily, ...log, chats, recordings, digest };
+    const documents = documentsForDay(log.entries, (file) => !this.isDocument(root, file));
+    return { date, daily, ...log, documents, chats, recordings, digest };
+  }
+
+  /**
+   * Whether a file the log links to belongs in the day's documents: not in a
+   * dot folder, not in a folder the day already shows, and not code or data.
+   */
+  private isDocument(root: string, file: string): boolean {
+    const relative = path.posix.relative(normalizePath(root), normalizePath(file));
+    if (relative.startsWith("..") || relative.split("/").some((part) => part.startsWith("."))) return false;
+    if (DAY_FOLDERS.some((folder) => relative.startsWith(`${folder}/`))) return false;
+    return classifyFile(path.posix.basename(relative)) !== "text";
   }
 
   /** The absolute path of `relative` when it is a real directory inside the vault. */

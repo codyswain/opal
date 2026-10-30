@@ -159,9 +159,29 @@ describe("DayService", () => {
     });
   });
 
+  it("lists the documents the log links to, the latest touched first, without the day's own folders", async () => {
+    await put("Library/parametric/briefs/gob-call-prep.md", "# Gob call prep\n");
+    await put("Library/parametric/briefs/gob-deck.pptx", "deck");
+    await put(".claude/scripts/routine-run.sh", "echo\n");
+    await put("RAM/triage/state.json", "{}\n");
+    await put(`Library/logs/${DATE} log.md`, [
+      LOG.trimEnd(),
+      "- 13:09 Wrote the Gob prep. · [[Library/parametric/briefs/gob-call-prep|Gob prep]], [[Library/people/Robert Xu|Robert]] · agent turn",
+      "- 13:52-14:10 Built the Gob deck. · [[Library/parametric/briefs/gob-deck.pptx|Gob deck]], [[Library/daily/2026-10-28|Today's page]] · 3 connector calls",
+      "- 15:01 Touched up the prep. · [[Library/parametric/briefs/gob-call-prep|Gob call prep]], [[.claude/scripts/routine-run.sh|routine-run.sh]], [[RAM/triage/state.json|state.json]] · agent turn",
+      "",
+    ].join("\n"));
+    const day = await service.day(root, DATE);
+    expect(day.documents).toEqual([
+      { path: path.join(root, "Library/parametric/briefs/gob-call-prep.md"), label: "Gob call prep", last: "15:01" },
+      { path: path.join(root, "Library/parametric/briefs/gob-deck.pptx"), label: "Gob deck", last: "14:10" },
+      { path: path.join(root, "Library/people/Robert Xu.md"), label: "Robert", last: "13:09" },
+    ]);
+  });
+
   it("answers an empty day with nulls and empty lists, and refuses bad input", async () => {
     expect(await service.day(root, "2026-01-01")).toEqual({
-      date: "2026-01-01", daily: null, log: null, entries: [], chats: [], recordings: [], digest: null,
+      date: "2026-01-01", daily: null, log: null, entries: [], documents: [], chats: [], recordings: [], digest: null,
     });
     await expect(service.day(root, "2026-02-30")).rejects.toThrow("valid calendar date");
     await expect(service.day(path.join(root, "Library"), DATE)).rejects.toThrow();
