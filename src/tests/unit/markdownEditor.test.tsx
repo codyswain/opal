@@ -102,6 +102,40 @@ describe('MarkdownEditor', () => {
     expect(view.dom.querySelector('.cm-search')).not.toBeNull();
   });
 
+  it('bolds the text of whole selected lines and keeps their bullets, boxes, quotes and headings outside the marks', async () => {
+    const text = '- first item\n- second item\n- [ ] a task\n\n> quoted\n## Head\n';
+    installMarkdownApi({ [NOTE]: text });
+    const view = await openEditor(NOTE);
+    const bold = (anchor: number, head: number) => {
+      act(() => { view.dispatch({ selection: { anchor, head } }); });
+      press(view, 'b', MOD);
+      return view.state.doc.toString();
+    };
+    const reset = () => act(() => { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }); });
+    // Shift+Cmd+Left from the end of the line selects back over the hidden "- ".
+    expect(bold(12, 0)).toBe(text.replace('first item', '**first item**'));
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe('first item');
+    expect(view.state.selection.main.head).toBe(view.state.selection.main.from);
+    // A second press with the line still selected takes the bold off.
+    expect(bold(0, view.state.doc.line(1).to)).toBe(text);
+    // A triple-click selects the line break too.
+    expect(bold(0, 13)).toBe(text.replace('first item', '**first item**'));
+    reset();
+    expect(bold(0, view.state.doc.length)).toBe('- **first item**\n- **second item**\n- [ ] **a task**\n\n> **quoted**\n## **Head**\n');
+    expect(bold(0, view.state.doc.length)).toBe(text);
+    // With some lines bold already, the rest are bolded and none is unwrapped.
+    bold(2, 12);
+    expect(bold(0, view.state.doc.line(2).to)).toBe(text.replace('first item', '**first item**').replace('second item', '**second item**'));
+    reset();
+    act(() => { view.dispatch({ selection: { anchor: 0, head: 16 } }); });
+    press(view, 'i', MOD);
+    press(view, 'i', MOD);
+    expect(view.state.doc.toString()).toBe(text);
+    act(() => { view.dispatch({ changes: { from: 0, to: 12, insert: '- **bold**' }, selection: { anchor: 0, head: 10 } }); });
+    press(view, 'i', MOD);
+    expect(view.state.doc.line(1).text).toBe('- ***bold***');
+  });
+
   it('leaves Cmd+[, Cmd+], Cmd+Shift+\\ and Cmd+Shift+I to the app menu: Back, Forward, the right sidebar and properties', async () => {
     installMarkdownApi({ [NOTE]: '  - one' });
     const view = await openEditor(NOTE);
