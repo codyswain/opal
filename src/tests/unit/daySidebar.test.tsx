@@ -249,7 +249,7 @@ describe('the day rule', () => {
     expect(shownDay(state, openedPath(), '2026-10-30')).toBe('2026-10-30');
   });
 
-  it('reads the day Today opens from daily pages only', () => {
+  it('reads the day Daily opens from daily pages only', () => {
     expect(dailyPageDate(DAILY)).toBe('2026-10-28');
     expect(dailyPageDate(`${ROOT}/Inbox/Logs/2026-10-27.md`)).toBe('2026-10-27');
     expect(dailyPageDate(LOG)).toBeNull();
@@ -628,7 +628,23 @@ describe('DaySidebar', () => {
     await user.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Go to today' }));
     expect(await screen.findByText('Nothing yet today.')).toBeInTheDocument();
     expect(screen.getByText('Thu, Oct 29')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
+  });
+
+  it('goes on past today with Next day, where an empty day has nothing planned, and Go to today comes back', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+    expect(await screen.findByText('Nothing yet today.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next day' }));
+    expect(await screen.findByText('Nothing planned for Fri, Oct 30.')).toBeInTheDocument();
+    expect(screen.getByText('Fri, Oct 30')).toBeInTheDocument();
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next day' }));
+    expect(await screen.findByText('Nothing planned for Sat, Oct 31.')).toBeInTheDocument();
+    expect(window.vaultAPI.day).toHaveBeenCalledWith(ROOT, '2026-10-31');
+    expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Sidebar options' }));
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Go to today' }));
+    expect(await screen.findByText('Nothing yet today.')).toBeInTheDocument();
   });
 
   it('reads the day again when the main process says it changed, keeping an open entry open', async () => {

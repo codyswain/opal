@@ -16,6 +16,8 @@ import { installActivityApi, recentResult } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
+import { stackLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 
 const ROOT = '/Vault';
@@ -121,7 +123,7 @@ describe('CommandPalette', () => {
     const user = userEvent.setup();
     renderPalette();
     act(() => usePaletteStore.getState().show());
-    await user.type(await screen.findByRole('combobox'), 'today');
+    await user.type(await screen.findByRole('combobox'), 'daily');
     await waitFor(() => expect(window.diskAPI.searchContent).toHaveBeenCalled());
     await user.keyboard('{ArrowDown}{ArrowUp}');
     const selected = screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
@@ -138,7 +140,7 @@ describe('CommandPalette', () => {
     const palette = await screen.findByTestId('command-palette');
     // One line per file: the name as the tree shows it, and no folder at the top of the vault.
     expect(await within(palette).findByTestId('palette-file-/Vault/inbox.md')).toHaveTextContent(/^inbox$/);
-    expect(within(palette).getByTestId('palette-command-nav.today')).toHaveTextContent('Go to Today');
+    expect(within(palette).getByTestId('palette-command-nav.daily')).toHaveTextContent('Go to Daily');
     expect(within(palette).getByTestId(`palette-command-${COMMAND_IDS.closeTab}`)).toHaveTextContent('Close tab');
     expect(within(palette).queryByTestId('palette-command-palette.open')).toBeNull();
     expect(within(palette).getByRole('group', { name: 'Recent' })).toBeInTheDocument();
@@ -191,7 +193,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(tabPaths()).toEqual(['/Vault/inbox.md', PLAN, PLAN]));
   });
 
-  it('asks only for a file after New Tab, and opens Today there in a new tab when asked with >', async () => {
+  it('asks only for a file after New Tab, and opens Daily there in a new tab when asked with >', async () => {
     const user = userEvent.setup();
     window.vaultAPI = {
       discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT }] })),
@@ -204,11 +206,41 @@ describe('CommandPalette', () => {
     await within(palette).findByTestId('palette-file-/Vault/inbox.md');
     expect(within(palette).queryByRole('group', { name: 'Commands' })).toBeNull();
 
-    await user.type(within(palette).getByRole('combobox'), '>today');
-    await user.click(await within(palette).findByTestId('palette-command-nav.today'));
+    await user.type(within(palette).getByRole('combobox'), '>daily');
+    await user.click(await within(palette).findByTestId('palette-command-nav.daily'));
     await waitFor(() => expect(tabPaths()).toHaveLength(2));
     expect(tabPaths()[0]).toBe('/Vault/inbox.md');
     expect(openedPath()).toMatch(/^\/Vault\/Library\/daily\/\d{4}-\d{2}-\d{2}\.md$/);
+  });
+
+  it('makes tomorrow’s daily page, and opens the stream of daily pages at it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 30, 9, 0));
+      const createDay = vi.fn(async (root: string, date: string) => ({ success: true as const, data: { path: `${root}/Library/daily/${date}.md` } }));
+      window.vaultAPI = {
+        discover: vi.fn(async () => ({ success: true as const, data: [{ path: ROOT }] })),
+        createDay,
+      } as unknown as typeof window.vaultAPI;
+      const user = userEvent.setup();
+      renderPalette();
+      act(() => usePaletteStore.getState().show('>'));
+      const palette = await screen.findByTestId('command-palette');
+      await user.type(within(palette).getByRole('combobox'), 'tomorrow');
+      // Named in title case for the menu, read in sentence case here.
+      const command = await within(palette).findByTestId('palette-command-daily.newTomorrow');
+      expect(command).toHaveTextContent('New daily page for tomorrow');
+      await user.click(command);
+      await waitFor(() => expect(openedPath()).toBe('/Vault/Library/daily/2026-10-30.md'));
+      expect(createDay).toHaveBeenCalledWith(ROOT, '2026-10-31');
+      const tab = useTabsStore.getState().tabs[0];
+      expect(tab.history[tab.index]).toEqual({
+        location: stackLocation('daily', '/Vault/Library/daily/2026-10-30.md'),
+        stack: { anchor: '/Vault/Library/daily/2026-10-31.md', offset: 0 },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('limits results to commands after > and runs the selected command', async () => {

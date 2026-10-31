@@ -15,13 +15,14 @@ interface StackRuntimeState {
    * The right sidebar's day follows it while the stream scrolls.
    */
   viewed: { tabId: string; path: string } | null;
-  /** Asks a stack opened by `head` to scroll back to its top; `seq` makes each ask new. */
-  reveal: { head: string; seq: number } | null;
+  /** Asks a stack opened by `head` to scroll `path`, one of its sections, to the top of the view; `seq` makes each ask new. */
+  reveal: { head: string; path: string; seq: number } | null;
   /** The mounted stack's handler for View > Next Section and Previous Section. */
   move: ((direction: StackMove) => boolean) | null;
   setLive: (tabId: string, paths: readonly string[]) => void;
   setViewed: (tabId: string, path: string | null) => void;
-  revealHead: (head: string) => void;
+  /** Asks for the head itself unless `path` names another section, such as a daily page just made for a later day. */
+  scrollToSection: (head: string, path?: string) => void;
   setMove: (move: ((direction: StackMove) => boolean) | null) => void;
 }
 
@@ -49,7 +50,8 @@ export const useStackStore = create<StackRuntimeState>((set) => ({
       if (path === null) return state.viewed?.tabId === tabId ? { viewed: null } : {};
       return state.viewed?.tabId === tabId && state.viewed.path === path ? {} : { viewed: { tabId, path } };
     }),
-  revealHead: (head) => set((state) => ({ reveal: { head: normalizeFsPath(head), seq: (state.reveal?.seq ?? 0) + 1 } })),
+  scrollToSection: (head, path = head) =>
+    set((state) => ({ reveal: { head: normalizeFsPath(head), path: normalizeFsPath(path), seq: (state.reveal?.seq ?? 0) + 1 } })),
   setMove: (move) => set({ move }),
 }));
 

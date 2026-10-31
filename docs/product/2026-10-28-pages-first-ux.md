@@ -17,7 +17,7 @@ first: a file tree on the left and one clean page.
 ┌──────────────────────┬──────────────────────────────────────────┬──────────────────────┐
 │ ● ● ●  ▢  ‹  ›    ⌕  │ [tab] [tab] +                            │ Wed, Oct 28  ‹ › ⋯ ▢ │  one 40px row
 │                      ├──────────────────────────────────────────┼──────────────────────┤
-│ Today                │                                          │ Chats     4 new · 14 │
+│ Daily                │                                          │ Chats     4 new · 14 │
 │ Recent               │     Page title                           │ Recordings         4 │
 │                      │                                          │ Digest             8 │
 │ ▸ Archive            │     Body text in a centered column ...   │ Activity log      22 │
@@ -49,11 +49,17 @@ first: a file tree on the left and one clean page.
   drops out of the row before Search does.
 - No "Opal" workspace button, no "Open folders" heading, no open-folder
   buttons. Opening another folder stays in Settings only.
-- Nav: **Today** (opens the stream of daily pages headed by
+- Nav: **Daily** (opens the stream of daily pages headed by
   `Library/daily/YYYY-MM-DD.md`, creating that page from the template if
   needed; the main process returns the path; see Stacked pages) and **Recent**. No
-  Library item. No Views. Until the cleanup commit, Today opens an existing
+  Library item. No Views. Until the cleanup commit, Daily opens an existing
   `Inbox/Logs/YYYY-MM-DD.md` when the daily page does not exist.
+- A page for another day: a quiet "+" at the end of the Daily row, shown
+  like Collapse all folders, and a right-click on the row offer Tomorrow
+  (its date muted on the right) and Pick a date…, a small dialog with a date
+  field that starts at tomorrow. A later day opens the stream at its page;
+  an earlier day opens its page alone, made if missing. The palette has New
+  daily page for tomorrow.
 - Under the nav, after some space and no rule: the vault's files. With one
   opened root, the root is not a row; its children start at the top level and
   it is always open. With several roots, each root is a top-level row, open
@@ -66,7 +72,7 @@ first: a file tree on the left and one clean page.
   new tab. Keyboard follows the WAI-ARIA tree pattern (Up/Down, Left/Right,
   Enter, Home/End).
 - The open file is highlighted. When a file opens from outside the tree
-  (Today, Recent, search, a link), its folders expand and it scrolls into view.
+  (Daily, Recent, search, a link), its folders expand and it scrolls into view.
 - Expanded folders persist across launches.
 - File actions live on the tree now that the folder view is gone: a right-click
   menu on rows (New note, New folder, Rename, Move to…, Reveal in Finder, Copy
@@ -97,8 +103,9 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
 
 - About 300px wide (260px below 1200px), resizable from 240px, as a column of
   hairline cards on the chrome. Its header shares the 40px top row:
-  the day ("Wed, Oct 28", then "Yesterday" or "Today"; below 280px the
-  weekday goes), previous and next day, the options menu and the toggle.
+  the day ("Wed, Oct 28", then "Yesterday", "Today" or "Tomorrow"; below
+  280px the weekday goes), previous and next day, the options menu and the
+  toggle.
 - Toggle: the panel-right button or View > Toggle Right Sidebar
   (Cmd+Shift+\). Below 1120px only one sidebar stays open, so opening one
   closes the other and the page keeps about 580px. Below 800px it is an
@@ -106,7 +113,8 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
   at a time, and Escape, a click beside it or opening a page closes it.
 - Which day: a dated page (a daily page, a log, a recording or a digest) sets
   the day. Any other page keeps the last day shown. With nothing set, it
-  shows today. The arrows pick a day until another page opens.
+  shows today. The arrows pick a day until another page opens; next day goes
+  on past today, where an empty day reads "Nothing planned for Sat, Oct 31."
 - The options menu has a check per section and Go to today. Opal remembers
   whether the sidebar is open, its width, the sections shown and the folded
   cards.
@@ -135,7 +143,7 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
 
 ### Tabs (Obsidian and Safari semantics)
 
-- A plain open (tree click, Recent click, palette Enter, Today) replaces the
+- A plain open (tree click, Recent click, palette Enter, Daily) replaces the
   file in the current tab. Cmd+click, middle-click, Cmd+Enter in the palette
   and Cmd+T then a pick open a new tab.
 - No preview tabs, no italic state, no pin-on-double-click.
@@ -148,7 +156,7 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
   Back Cmd+[ and Forward Cmd+], Toggle Sidebar Cmd+\, Toggle Right Sidebar
   Cmd+Shift+\. Cmd+B stays bold.
 - Tabs keep their scroll position. The window title is the active file name.
-- Open tabs restore on relaunch. Launch opens Today only when no tabs were
+- Open tabs restore on relaunch. Launch opens Daily only when no tabs were
   restored or the date changed since the last session.
 - Same-name tabs show their parent folder in muted text; the tooltip is the
   vault-relative path.
@@ -313,9 +321,12 @@ main process lists the files (`vault:stack`).
   scrolls to it and unfolds it. "Open on its own" opens the file as a page.
 - A stack of one file, such as a recording not split yet, reads as a page:
   nothing to fold, no "Open on its own", and its footer line shows.
-- **Today:** today's page on top, then every earlier non-empty page in
-  `Library/daily`, newest first, loading more as the view nears the end. The
-  right sidebar follows the day at the top of the view.
+- **Daily:** the view opens at today's page, with every earlier non-empty
+  page in `Library/daily` below it, newest first, loading more as the view
+  nears the end. Pages made for later days sit above today's, blank or not,
+  the nearest day closest to it, and are reached by scrolling up. The right
+  sidebar follows the day at the top of the view. A section made for a later
+  day is labelled "Tomorrow" or by its weekday.
 - **A recording:** opening a summary file (`Library/recordings/<date> HHMM
   <title>.md`, from the tree, the right sidebar, a link or search) shows it
   on top, with the links and action items, and its transcript file
@@ -338,6 +349,6 @@ Sync across machines, version history, the phone version (see
 ## Definition of done
 
 `npx tsc --noEmit` clean, `npm test` green, `npm run test:e2e` green,
-`npm run lint` with no errors, and screenshots of the window, Today, Recent,
+`npm run lint` with no errors, and screenshots of the window, Daily, Recent,
 the tree with files, a page with callouts and lists, the right sidebar, the
 properties block, and Settings, in light and dark.

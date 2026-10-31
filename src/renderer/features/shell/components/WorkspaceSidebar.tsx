@@ -1,20 +1,16 @@
 import * as React from "react";
-import { toast } from "sonner";
-import { ChevronsDownUp, Clock, Settings, Sun } from "lucide-react";
-import { dailyPageDate } from "@/renderer/features/day-sidebar/dayRule";
-import { useToday } from "@/renderer/features/day-sidebar/hooks/useDay";
+import { ChevronsDownUp, Clock, Settings } from "lucide-react";
 import { browseRecent } from "@/renderer/features/disk-explorer/navigation";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { canCollapseTree } from "@/renderer/features/disk-explorer/store/treeExpansion";
 import {
   selectCurrentLocation,
-  selectOpenedPath,
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
-import { openToday } from "../utils/openToday";
+import { DailyItem } from "./DailyItem";
 import { FileTree } from "./FileTree";
 import { FrameControls, SearchButton, TrafficLightInset } from "./FrameControls";
 import { SidebarItem } from "./SidebarItem";
@@ -60,20 +56,7 @@ export function WorkspaceSidebar({
     const shown = selectCurrentLocation(state);
     return shown?.mode === "browse" && shown.collection.kind === "recent";
   });
-  const openedPath = useTabsStore(selectOpenedPath);
   const { navigateFiles } = useShell();
-  const today = useToday();
-  // A daily page restored on relaunch counts too, and the mark moves on at midnight.
-  const isToday = dailyPageDate(openedPath) === today;
-
-  const goToToday = async (newTab: boolean) => {
-    try {
-      if (await openToday((intent) => navigateFiles(intent, { newTab }))) onNavigate?.();
-      else toast.error("Open your vault folder first.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not open today's page.");
-    }
-  };
 
   const goToRecent = (newTab: boolean) => {
     navigateFiles(browseRecent(), { newTab });
@@ -102,12 +85,7 @@ export function WorkspaceSidebar({
 
       <nav aria-label="Primary" className="shrink-0 pt-1">
         <SidebarSection>
-          <SidebarItem
-            icon={Sun}
-            label="Today"
-            active={isToday}
-            onActivate={(event) => void goToToday(wantsNewTab(event))}
-          />
+          <DailyItem onNavigate={onNavigate} />
           <SidebarItem
             icon={Clock}
             label="Recent"

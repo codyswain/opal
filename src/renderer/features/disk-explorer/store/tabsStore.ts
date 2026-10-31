@@ -74,7 +74,7 @@ export interface TabsState {
   activeId: string | null;
   /** Most recently closed first, history and all; Cmd+Shift+T reopens the head. */
   recentlyClosed: ClosedTab[];
-  /** The day the previous session last saved its tabs. Launch opens Today when it is not today. */
+  /** The day the previous session last saved its tabs. Launch opens Daily when it is not today. */
   lastSessionDate: string | null;
 }
 
@@ -161,7 +161,7 @@ export function selectCanGoForward(state: TabsState): boolean {
 /**
  * The place launch goes back to: the active restored tab, unless nothing was
  * restored or the day has changed since the last session, when launch opens
- * Today instead.
+ * Daily instead.
  */
 export function selectLaunchLocation(
   state: TabsState,

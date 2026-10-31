@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { StackView, mergeSections } from '@/renderer/features/disk-explorer/components/stack/StackView';
+import { STACK_WINDOW } from '@/renderer/features/disk-explorer/components/stack/stackWindow';
 import { flushPendingSaves } from '@/renderer/features/disk-explorer/components/editor/pendingSaves';
 import { openWikiLink } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { stackLocation, fileLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
@@ -255,14 +256,74 @@ describe('StackView', () => {
     expect(usePagePropertiesStore.getState().open).toBe(true);
   });
 
-  it('returns to the saved place, and Today scrolls the stream back to its top', async () => {
+  it('returns to the saved place, and Daily scrolls the stream back to its top', async () => {
     useTabsStore.getState().saveView(tabId(0), 0, { stack: { anchor: paths[10], offset: 50 } });
     renderStack();
     await waitFor(() => expect(scroller().scrollTop).toBe(10 * SECTION_PX + 50), { timeout: 3000 });
     // A saved place keeps the caret where it was: the empty head does not take it.
     expect(viewOf(HEAD)?.hasFocus ?? false).toBe(false);
-    act(() => useStackStore.getState().revealHead(HEAD));
+    act(() => useStackStore.getState().scrollToSection(HEAD));
     expect(scroller().scrollTop).toBe(0);
+  });
+
+  describe('with pages made ahead', () => {
+    // Sunday Nov 1 and Friday Oct 30, above Thursday Oct 29, today's page.
+    const LATER = [day(-3), day(-1)];
+    const later = (path: string) => ({ ...section(path, 1), detail: path === day(-1) ? 'Tomorrow' : 'Sunday' });
+    const answer = (above: readonly string[]) => async (_root: string, _kind: string, head: string) => ({
+      success: true as const,
+      data: { kind: 'daily' as const, head, sections: [...above.map(later), ...paths.map(section)], folders: [DAILY] },
+    });
+    const order = () => [...document.querySelectorAll<HTMLElement>('[data-stack-section]')].map((element) => element.dataset.stackSection);
+
+    beforeEach(() => {
+      installMarkdownApi({
+        ...Object.fromEntries(paths.map((path, index) => [path, index === 0 ? '' : `Notes from ${label(path)}.\n`])),
+        [LATER[0]]: 'Planned for Sunday.\n',
+        [LATER[1]]: '',
+      });
+    });
+
+    it('opens at today’s page with the later days above it, nearest last, and Daily scrolls back to it', async () => {
+      installVault(vi.fn(answer(LATER)));
+      renderStack();
+      await waitFor(() => expect(order().slice(0, 4)).toEqual([...LATER, HEAD, paths[1]]));
+      // The view opens at today's page; the later days are reached by scrolling up.
+      await waitFor(() => expect(scroller().scrollTop).toBe(2 * SECTION_PX));
+      await waitFor(() => expect(viewOf(HEAD)?.hasFocus).toBe(true));
+      expect(useStackStore.getState().viewed?.path).toBe(HEAD);
+      // Five earlier pages load below the head as usual, whatever is above it.
+      expect(order().length).toBeGreaterThanOrEqual(2 + STACK_WINDOW.firstLoad);
+
+      act(() => {
+        scroller().scrollTop = 0;
+        scroller().dispatchEvent(new Event('scroll'));
+      });
+      await waitFor(() => expect(viewOf(LATER[0])).toBeTruthy());
+      act(() => useStackStore.getState().scrollToSection(HEAD));
+      expect(scroller().scrollTop).toBe(2 * SECTION_PX);
+    });
+
+    it('scrolls to a page just made for a later day, asking for the list again', async () => {
+      const stack = installVault();
+      renderStack();
+      await waitFor(() => expect(liveSections()).toEqual(paths.slice(0, 6)));
+      expect(scroller().scrollTop).toBe(0);
+      vi.mocked(stack).mockImplementation(answer(LATER));
+      act(() => useStackStore.getState().scrollToSection(HEAD, LATER[1]));
+      await waitFor(() => expect(stack).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(scroller().scrollTop).toBe(SECTION_PX));
+      expect(order().slice(0, 3)).toEqual([...LATER, HEAD]);
+    });
+
+    it('starts at a later day’s page saved on a new entry', async () => {
+      installVault(vi.fn(answer(LATER)));
+      useTabsStore.getState().saveView(tabId(0), 0, { stack: { anchor: LATER[1], offset: 0 } });
+      renderStack();
+      await waitFor(() => expect(scroller().scrollTop).toBe(SECTION_PX), { timeout: 3000 });
+      // The empty head does not take the caret from a page opened by name.
+      expect(viewOf(HEAD)?.hasFocus ?? false).toBe(false);
+    });
   });
 
   it('returns to the saved place after a relaunch, where the opened folders load after the stack', async () => {

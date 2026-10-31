@@ -92,21 +92,28 @@ export class StackService {
   }
 
   /**
-   * Today's stream: the head, then every earlier daily page in
-   * `Library/daily`, newest first. Past pages with an empty body are left
-   * out; the head always shows.
+   * The stream of daily pages in `Library/daily`, newest first: the days
+   * after the head above it, then the head, then the earlier days. The view
+   * opens at the head. Pages from before today with an empty body are left
+   * out; the head, today and later days always show, since a page made
+   * ahead starts blank.
    */
   private async daily(root: string, head: string): Promise<VaultStack> {
     const folder = path.join(root, DAY_LAYOUT.daily);
     if (path.dirname(head) !== folder) throw new Error("This page does not start a stack.");
     const headDate = dailyHeadDate(head) as string;
     const today = this.deps.today?.() ?? localDate();
-    const names = dailyStreamNames((await this.entries(folder)).filter((entry) => entry.isFile()).map((entry) => entry.name), headDate);
-    const past = await mapLimited(names, READ_CONCURRENCY, async (name) => {
-      const file = path.join(folder, name);
-      const facts = await this.peek(file);
-      return facts && !facts.blank ? { file, facts } : null;
-    });
+    const { later, earlier } = dailyStreamNames(
+      (await this.entries(folder)).filter((entry) => entry.isFile()).map((entry) => entry.name),
+      headDate,
+    );
+    const shown = (names: string[]) =>
+      mapLimited(names, READ_CONCURRENCY, async (name) => {
+        const file = path.join(folder, name);
+        const facts = await this.peek(file);
+        return facts && (!facts.blank || (dailyHeadDate(file) as string) >= today) ? { file, facts } : null;
+      });
+    const [above, below] = await Promise.all([shown(later), shown(earlier)]);
     const section = (file: string, facts: FileFacts, role: StackSection["role"]): StackSection => {
       const date = dailyHeadDate(file) as string;
       return {
@@ -122,13 +129,12 @@ export class StackService {
       };
     };
     const headFacts = (await this.facts(head)) ?? { size: 0, mtimeMs: 0 };
+    const parts = (found: Awaited<ReturnType<typeof shown>>) =>
+      found.flatMap((page) => (page ? [section(page.file, page.facts, "part")] : []));
     return {
       kind: "daily",
       head,
-      sections: [
-        section(head, headFacts, "head"),
-        ...past.flatMap((found) => (found ? [section(found.file, found.facts, "part")] : [])),
-      ],
+      sections: [...parts(above), section(head, headFacts, "head"), ...parts(below)],
       folders: [folder],
     };
   }

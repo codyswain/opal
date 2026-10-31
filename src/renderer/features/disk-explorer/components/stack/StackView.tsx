@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
@@ -203,6 +203,11 @@ interface Restore {
   /** How long the list and the part of it in the page were when the wait began. */
   sections: number;
   shown: number;
+  /**
+   * The answer from the main process that the anchor may still come with:
+   * the first for a place saved before, the next for a page just made.
+   */
+  answers: number;
 }
 
 interface PendingCaret {
@@ -228,7 +233,9 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     [roots, head],
   );
   const [sections, setSections] = useState<StackSection[]>(() => [provisionalHead(location)]);
-  const [listed, setListed] = useState(false);
+  // How many times the main process has answered with the list; none yet means the head shows alone for now.
+  const [answers, setAnswers] = useState(0);
+  const listed = answers > 0;
   const [loadedCount, setLoadedCount] = useState<number>(STACK_WINDOW.firstLoad);
   const [live, setLive] = useState<ReadonlySet<string>>(() => new Set([head]));
   const [propertiesPath, setPropertiesPath] = useState<string | null>(null);
@@ -261,6 +268,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const entry = useRef<TabEntry | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const planRef = useRef<() => void>(() => undefined);
+  // Asks the main process for the list again at once, as a page just made needs.
+  const relist = useRef<() => void>(() => undefined);
   // An empty head takes the caret when the stack first opens, unless the stack returns to a saved place.
   const autoFocusHead = useRef<boolean | null>(null);
   if (autoFocusHead.current === null) {
@@ -275,15 +284,17 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   // The scroll whose strip is still unseen; a later one takes over its frames.
   const seenScroll = useRef(0);
 
-  const shown = useMemo(
-    () => (kind === 'daily' ? sections.slice(0, loadedCount) : sections),
-    [kind, sections, loadedCount],
-  );
+  // In the daily stream the later days above the head are all in the page; the earlier days load as the view nears the end.
+  const shown = useMemo(() => {
+    if (kind !== 'daily') return sections;
+    const above = Math.max(0, sections.findIndex((section) => section.role === 'head'));
+    return sections.slice(0, Math.max(loadedCount, above + STACK_WINDOW.firstLoad));
+  }, [kind, sections, loadedCount]);
   // A recording not split yet, or a card that is not a thread, is the stack's only file and reads as a page.
   const lone = kind !== 'daily' && sections.length === 1;
   // Event handlers and the planner read the latest render through refs, so they never go stale.
-  const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed, lone });
-  latest.current = { sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, listed, lone };
+  const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, answers, lone });
+  latest.current = { sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, answers, lone };
 
   const isOpen = useCallback(
     (section: StackSection) => latest.current.lone || sectionOpen(latest.current.folds, section.path, section.defaultOpen),
@@ -355,7 +366,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         scrollTop: element.scrollTop,
         viewport: element.clientHeight,
         sections: geometry,
-        total: kind === 'daily' && state.listed ? state.sections.length : state.shown.length,
+        total: kind === 'daily' && state.answers > 0 ? state.sections.length : state.shown.length,
       },
       { now: performance.now(), farSince: farSince.current, fast: fast.current, direction: direction.current, reading: reading.current.size },
     );
@@ -456,14 +467,19 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
    * starting there, as over a placeholder that fills the view, an edge of the
    * section there holds: its end when the next section starts in the view,
    * else the side the reader came from, never the end of one whose top is in
-   * view. At the top of the stack nothing is above the view, so nothing
-   * holds and a page opens at its top however its sections load. A section
-   * at the top whose editor has focus holds the line CodeMirror keeps still
-   * itself, so the two never both move the scroll.
+   * view. At the top of the stack the first section's top holds, so a page
+   * opens at its top however its sections load, and a section that comes
+   * above it, such as a later day above today's page, comes in above the
+   * view. A section at the top whose editor has focus holds the line
+   * CodeMirror keeps still itself, so the two never both move the scroll.
    */
   const pickHold = useCallback((): Hold | null => {
     const element = scroller.current;
-    if (!element || element.scrollTop < 1) return null;
+    if (!element) return null;
+    if (element.scrollTop < 1) {
+      const first = latest.current.shown[0]?.path;
+      return first ? measureHold({ kind: 'edge', path: first, edge: 'top', y: 0 }) : null;
+    }
     const bounds = element.getBoundingClientRect();
     const line = { kind: 'line', section: 0, text: 0, line: 0, estimated: false } as const;
     const atTop = sectionAt(element.scrollTop);
@@ -557,9 +573,10 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     }
     const at = state.sections.findIndex((section) => section.path === pending.view.anchor);
     if (at === -1) {
-      if (state.listed) {
-        // The anchor's file is gone; the stack opens at the top.
-        scrollTo(0);
+      // Until the answer it may come with, the anchor is only missing; once the list has come, not for long.
+      if (state.answers >= pending.answers || (state.answers > 0 && now - pending.started > RESTORE_TIMEOUT_MS)) {
+        // The anchor's file is gone; the stack opens at its head.
+        scrollTo(topOf(head) ?? 0);
         stopRestore();
         return;
       }
@@ -608,7 +625,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       return;
     }
     window.requestAnimationFrame(runRestore);
-  }, [isOpen, kind, schedule, scrollTo, stopRestore]);
+  }, [head, isOpen, kind, schedule, scrollTo, stopRestore]);
 
   // --- Saving the place on the tab -----------------------------------------
 
@@ -662,7 +679,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     const known = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history[index] ?? null;
     entry.current = known;
     if (known?.stack && !(known.stack.anchor === head && known.stack.offset === 0)) {
-      restore.current = { view: known.stack, started: performance.now(), settled: 0, sections: 0, shown: 0 };
+      restore.current = { view: known.stack, started: performance.now(), settled: 0, sections: 0, shown: 0, answers: 1 };
       window.requestAnimationFrame(runRestore);
     }
     publishViewed(true);
@@ -687,7 +704,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   useEffect(() => {
     if (!root) {
       // Until the opened folders load the stack waits for them; with none holding the head, it shows alone.
-      if (rootsLoaded) setListed(true);
+      if (rootsLoaded) setAnswers((count) => Math.max(count, 1));
       return;
     }
     let cancelled = false;
@@ -709,9 +726,10 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         const keep = (path: string) => latest.current.live.has(path) && isPinned(path);
         setSections((previous) => mergeSections(previous, next.length > 0 ? next : previous, keep));
       }
-      setListed(true);
+      setAnswers((count) => count + 1);
     };
     void ask();
+    relist.current = () => void ask();
     const off = window.diskAPI.onChanged(({ directories }) => {
       if (!directories.some((directory) => folders.includes(directory))) return;
       if (timer) clearTimeout(timer);
@@ -719,6 +737,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     });
     return () => {
       cancelled = true;
+      relist.current = () => undefined;
       if (timer) clearTimeout(timer);
       off();
     };
@@ -733,7 +752,40 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     schedule();
   }, [schedule, live, shown, folds, statuses, propertiesPath, propertiesOpen]);
 
-  // Pressing Today on a stream already shown scrolls back to its top.
+  // A new list can add or drop sections above what the view holds still, as a
+  // page made for a later day comes above today's: the scroll moves with them
+  // before paint. On the first render this picks the first hold.
+  useLayoutEffect(() => {
+    keepHold();
+  }, [keepHold, shown]);
+
+  /**
+   * Scrolls a section's top to the top of the view, without unfolding it;
+   * the first section scrolls to the very top, with the space above its
+   * title. A page just made is not in the list yet, so the list is asked for
+   * again and the restore loop waits for that answer.
+   */
+  const placeAtTop = useCallback((path: string) => {
+    const state = latest.current;
+    const top = state.shown[0]?.path === path ? 0 : topOf(path);
+    revealed.current = 0;
+    if (top !== null) {
+      restore.current = null;
+      scrollTo(top);
+      settle();
+      return;
+    }
+    const known = state.sections.some((section) => section.path === path);
+    const running = restore.current !== null;
+    restore.current = {
+      view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0,
+      sections: state.sections.length, shown: state.shown.length, answers: state.answers + (known ? 0 : 1),
+    };
+    if (!known) relist.current();
+    if (!running) window.requestAnimationFrame(runRestore);
+  }, [runRestore, scrollTo, settle]);
+
+  // Daily on a stream already shown scrolls back to today's page, and a page made for a later day scrolls to that page.
   useEffect(() => {
     let seen = useStackStore.getState().reveal?.seq ?? 0;
     return useStackStore.subscribe((state) => {
@@ -741,12 +793,9 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       if (!reveal || reveal.seq === seen) return;
       seen = reveal.seq;
       if (reveal.head !== head || !scroller.current) return;
-      restore.current = null;
-      revealed.current = 0;
-      scrollTo(0);
-      settle();
+      placeAtTop(reveal.path);
     });
-  }, [head, scrollTo, settle]);
+  }, [head, placeAtTop]);
 
   // The properties block shows on one section: the one whose footer was clicked, else the focused one, else the head.
   // It opens at the top of the section's text, so the section's top comes into view and holds still while it draws.
@@ -916,7 +965,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     const running = restore.current !== null;
     restore.current = {
       view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0,
-      sections: state.sections.length, shown: state.shown.length,
+      sections: state.sections.length, shown: state.shown.length, answers: state.answers,
     };
     if (!running) window.requestAnimationFrame(runRestore);
   }, [kind, runRestore]);
@@ -1034,7 +1083,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
             return;
           }
           views.current.set(path, view);
-          if (latest.current.sections[0]?.path === path) autoFocusHead.current = false;
+          if (path === head) autoFocusHead.current = false;
           const caret = pendingCaret.current;
           if (caret?.path === path) {
             pendingCaret.current = null;
@@ -1056,7 +1105,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
           store.setOpen(true);
         }),
     };
-  }, [focusSection, neighbour, revealSection, saveView, schedule]);
+  }, [focusSection, head, neighbour, revealSection, saveView, schedule]);
 
   // Focus moves between sections without React; the planner reads it from a ref.
   const onFocus = (event: React.FocusEvent) => {

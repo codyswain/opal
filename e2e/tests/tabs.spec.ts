@@ -38,7 +38,7 @@ const clickMenuItem = (app: ElectronApplication, label: string) =>
     return false;
   }, label);
 
-/** A folder without Library/daily or Library/logs has no Today, so launch leaves the page empty. */
+/** A folder without Library/daily or Library/logs has no Daily, so launch leaves the page empty. */
 async function openTwoTabs(page: Page) {
   await page.getByTestId(`disk-tree-item-${vaultRoot}/readme.md`).click();
   await page.getByTestId(`disk-tree-item-${vaultRoot}/Photos`).click();
@@ -106,7 +106,7 @@ test('tabs answer the native menu and come back on relaunch', async ({ userDataD
   await app.close();
 
   // The same day, launch brings the tabs back, the active one included,
-  // instead of opening Today.
+  // instead of opening Daily.
   app = await launchOpal(userDataDir);
   page = await app.firstWindow();
   await expect.poll(() => tabs(page)).toEqual(['*readme', 'alpha.png']);

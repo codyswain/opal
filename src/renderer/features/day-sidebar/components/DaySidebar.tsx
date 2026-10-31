@@ -430,11 +430,10 @@ function DayCards({ date, day, today }: { date: string; day: VaultDay; today: st
   const [more, toggleMore] = useOpenSet();
   const nothing = day.entries.length === 0 && day.chats.length === 0 && day.recordings.length === 0 && !day.digest;
   if (nothing) {
-    return date === today ? (
-      <Note title="Entries appear as chats, hooks and routines write to today's log.">Nothing yet today.</Note>
-    ) : (
-      <Note>Nothing recorded on {dayName(date)}.</Note>
-    );
+    if (date === today) {
+      return <Note title="Entries appear as chats, hooks and routines write to today's log.">Nothing yet today.</Note>;
+    }
+    return date > today ? <Note>Nothing planned for {dayName(date)}.</Note> : <Note>Nothing recorded on {dayName(date)}.</Note>;
   }
   const shown = DAY_SECTIONS.filter((section) => sections[section]);
   if (shown.length === 0) return <Note>Every section is hidden. Choose sections in the options menu.</Note>;
@@ -520,7 +519,7 @@ export function DaySidebar({ width }: DaySidebarProps) {
           <IconButton label="Previous day" onClick={() => pickDay(addDays(date, -1))}>
             <ChevronLeft aria-hidden className="h-4 w-4" />
           </IconButton>
-          <IconButton label="Next day" disabled={date >= today} onClick={() => pickDay(addDays(date, 1))}>
+          <IconButton label="Next day" onClick={() => pickDay(addDays(date, 1))}>
             <ChevronRight aria-hidden className="h-4 w-4" />
           </IconButton>
           <Menu>

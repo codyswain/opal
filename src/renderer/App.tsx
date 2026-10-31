@@ -27,7 +27,7 @@ import {
   selectLaunchLocation,
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
-import { openToday } from "@/renderer/features/shell/utils/openToday";
+import { openDaily } from "@/renderer/features/shell/utils/openDaily";
 import {
   AppShell,
   PageLinks,
@@ -36,8 +36,8 @@ import {
 } from "@/renderer/features/shell";
 
 /**
- * Launch brings back the tabs of the last session. Today's page opens when
- * nothing came back or the day has changed since; without a vault the page
+ * Launch brings back the tabs of the last session. Daily opens when nothing
+ * came back or the day has changed since; without a vault the page
  * area is left to the files route.
  */
 const StartPage: React.FC = () => {
@@ -57,7 +57,7 @@ const StartPage: React.FC = () => {
       files();
       return;
     }
-    void openToday(navigateFiles)
+    void openDaily(navigateFiles)
       .then((opened) => {
         if (!opened) files();
       })

@@ -106,7 +106,7 @@ export interface DayDigest {
  */
 export interface VaultDay {
   date: string;
-  /** The page Today opens for the date, when it exists. */
+  /** The date's daily page, the one Daily opens for today, when it exists. */
   daily: string | null;
   /** The day's activity log file, when it exists. */
   log: string | null;

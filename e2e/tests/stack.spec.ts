@@ -19,7 +19,7 @@ const editorOf = (page: Page, file: string) => section(page, file).getByTestId("
  * each saving its own file, and the quit waiting for all of them. The
  * window and stack logic is covered by unit tests.
  */
-test("Today's stream saves two typed sections on quit, and takes an append to a lower one while the top one is typed in", async ({
+test("The daily stream saves two typed sections on quit, and takes an append to a lower one while the top one is typed in", async ({
   userDataDir,
 }) => {
   const vault = await createTempVault();
@@ -37,10 +37,10 @@ test("Today's stream saves two typed sections on quit, and takes an append to a 
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
 
-    // Launch opens Today: today's page, created from no template, on top.
+    // Launch opens Daily: today's page, created from no template, on top.
     await expect(page.getByTestId("files-stack")).toBeVisible();
     await expect(section(page, older)).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Today/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Daily/ })).toBeVisible();
     await editorOf(page, today).click();
     await page.keyboard.press("Meta+ArrowDown");
     await page.keyboard.type("Typed in today.");
@@ -66,7 +66,7 @@ test("Today's stream saves two typed sections on quit, and takes an append to a 
   }
 });
 
-test("scrolling Today loads earlier pages, keeps few editors, and the right sidebar follows the page at the top", async ({
+test("scrolling Daily loads earlier pages, keeps few editors, and the right sidebar follows the page at the top", async ({
   userDataDir,
 }) => {
   const vault = await createTempVault();

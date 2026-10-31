@@ -11,7 +11,8 @@ test("app without a vault launches with the sidebar", async ({
 }) => {
   await expect(page.getByTestId("app-shell")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Today" })).toBeVisible();
+  // Exact, since the row's "New daily page" button matches a loose name.
+  await expect(page.getByRole("button", { name: "Daily", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Recent" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Library" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Threads" })).toHaveCount(0);
@@ -64,8 +65,8 @@ test.describe("with a vault", () => {
       .toContain(`file=${daily}`);
     expect(existsSync(daily)).toBe(true);
     await writeFile(daily, "Kept as written\n");
-    // The tab is named Today too, so its close button also matches a loose name.
-    await page.getByRole("button", { name: "Today", exact: true }).click();
+    // The tab is named Daily too, so its close button also matches a loose name.
+    await page.getByRole("button", { name: "Daily", exact: true }).click();
     await expect(page.getByText("Kept as written")).toBeVisible();
 
     const log = path.join(root, "Library/logs", `${date} log.md`);

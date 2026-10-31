@@ -182,6 +182,14 @@
   ::selection {
     background: var(--selection);
   }
+
+  /* A date field's focused part takes the selection grey, not the system's blue highlight. */
+  input[type='date']::-webkit-datetime-edit-month-field:focus,
+  input[type='date']::-webkit-datetime-edit-day-field:focus,
+  input[type='date']::-webkit-datetime-edit-year-field:focus {
+    background: var(--selection);
+    color: hsl(var(--foreground));
+  }
 }
 
 @layer utilities {

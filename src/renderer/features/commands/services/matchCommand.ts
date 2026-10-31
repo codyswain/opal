@@ -30,17 +30,17 @@ export function rankCommands(commands: readonly Command[], term: string, limit =
     .map(({ command }) => command);
 }
 
-/** The sidebar's names for its two pages stay capitalised in any label. */
-const PAGE_NAMES = new Set(['Today', 'Recent']);
+/** The sidebar's names for its two pages stay capitalised where a label ends with one, as in "Go to Daily". */
+const PAGE_NAMES = new Set(['Daily', 'Recent']);
 
 /**
  * Commands are named in title case for the macOS menu; the palette, like the
  * rest of Opal, reads them in sentence case: "Close All Tabs" is "Close all tabs".
  */
 export function sentenceCase(name: string): string {
-  return name
-    .split(' ')
-    .map((word, index) => (index === 0 || PAGE_NAMES.has(word) ? word : word.toLowerCase()))
+  const words = name.split(' ');
+  return words
+    .map((word, index) => (index === 0 || (index === words.length - 1 && PAGE_NAMES.has(word)) ? word : word.toLowerCase()))
     .join(' ');
 }
 

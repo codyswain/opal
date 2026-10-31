@@ -277,7 +277,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     return nodes[0]?.path ?? null;
   }, [keyboardPath, nodes, openedPath]);
 
-  // A file opened anywhere but the tree (Today, Recent, the palette, a tab)
+  // A file opened anywhere but the tree (Daily, Recent, the palette, a tab)
   // gets its folders expanded and scrolls into view.
   React.useEffect(() => {
     const fromTree = openedFromTree.current === openedPath;

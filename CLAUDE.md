@@ -1,12 +1,12 @@
 # Project: Opal
 
 A desktop app for reading and editing the Markdown pages in a folder on disk.
-Pages come first. There is no chat and no Today screen: "Today" opens a
-stream of daily pages, the day's page (`Library/daily/YYYY-MM-DD.md`) on top
-and the earlier ones below it, creating the day's page from the vault's
-template when it does not exist. Activity logs
+Pages come first. There is no chat and no Today screen: "Daily" opens a
+stream of daily pages at the day's page (`Library/daily/YYYY-MM-DD.md`), the
+earlier ones below it and pages made for later days above it, creating the
+day's page from the vault's template when it does not exist. Activity logs
 are separate, read-only files in `Library/logs/`. Until the cleanup commit,
-Today opens an existing `Inbox/Logs/YYYY-MM-DD.md` when the daily page does
+Daily opens an existing `Inbox/Logs/YYYY-MM-DD.md` when the daily page does
 not exist.
 
 ## Stack
@@ -44,7 +44,7 @@ not exist.
   own editor that saves and merges on its own (`components/stack/`). The
   main process lists the files (`StackService`, `vault:stack`); `canonical()`
   in the tabs store decides by path which opens become stacks. Three kinds:
-  Today's stream of daily pages, a recording (the summary file, then
+  the stream of daily pages, a recording (the summary file, then
   `transcripts/<stem> transcript.md`) and a chat (the thread card, then its
   sessions, newest first). Sections near the view have a live editor and the
   rest are placeholders

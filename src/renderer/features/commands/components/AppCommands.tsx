@@ -2,6 +2,8 @@ import React, { useEffect } from "react";
 import { toast } from "sonner";
 import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from "@/common/commandIds";
 import { parentFsPath } from "@/common/fsPaths";
+import { localDate } from "@/common/vaultModel";
+import { addDays } from "@/renderer/features/day-sidebar/dayRule";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
   browseRecent,
@@ -20,7 +22,7 @@ import {
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
-import { openToday } from "@/renderer/features/shell/utils/openToday";
+import { openDaily, openDailyPage } from "@/renderer/features/shell/utils/openDaily";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
@@ -28,6 +30,15 @@ import { usePaletteStore } from "../store/paletteStore";
 export const PALETTE_COMMAND_ID = "palette.open";
 
 const tabs = () => useTabsStore.getState();
+
+/** Daily and the new daily page say so when no opened folder is a vault, or when the main process refused. */
+function reportOpen(opened: Promise<boolean>, failure: string): void {
+  void opened
+    .then((done) => {
+      if (!done) toast.error("Open your vault folder first.");
+    })
+    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : failure));
+}
 
 /**
  * Registers every application command once and owns the palette shortcuts.
@@ -46,19 +57,22 @@ export const AppCommands: React.FC = () => {
   useEffect(() => {
     const commands: Command[] = [
       {
-        id: "nav.today",
-        name: "Go to Today",
+        id: "nav.daily",
+        name: "Go to Daily",
         type: "navigation",
-        keywords: ["home", "journal", "daily"],
-        perform: ({ newTab } = {}) => {
-          void openToday(navigateFiles, { newTab })
-            .then((opened) => {
-              if (!opened) toast.error("Open your vault folder first.");
-            })
-            .catch((error: unknown) =>
-              toast.error(error instanceof Error ? error.message : "Could not open today's page."),
-            );
-        },
+        keywords: ["home", "journal", "today"],
+        perform: ({ newTab } = {}) => reportOpen(openDaily(navigateFiles, { newTab }), "Could not open today's page."),
+      },
+      {
+        id: "daily.newTomorrow",
+        name: "New Daily Page for Tomorrow",
+        type: "action",
+        keywords: ["create", "journal", "plan", "next day"],
+        perform: ({ newTab } = {}) =>
+          reportOpen(
+            openDailyPage(navigateFiles, addDays(localDate(), 1), { newTab }),
+            "Could not open tomorrow's page.",
+          ),
       },
       {
         id: PALETTE_COMMAND_ID,

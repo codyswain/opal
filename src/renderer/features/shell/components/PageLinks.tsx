@@ -16,7 +16,7 @@ import { useShell } from '../context/ShellContext';
 /**
  * Opens the file an opal:// link names in a new tab, or switches to the tab
  * that already shows it. Listens only once the app is on the files route, so
- * the start page's Today never opens over a linked file.
+ * the start page's Daily never opens over a linked file.
  */
 export function PageLinks(): null {
   const { location, navigateFiles } = useShell();

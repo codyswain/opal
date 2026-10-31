@@ -34,7 +34,10 @@ export interface StackSection {
 export interface VaultStack {
   kind: StackKind;
   head: string;
-  /** The head first, then the other files in order. Each path at most once. */
+  /**
+   * The files in order, each path at most once. The head comes first, except
+   * in the daily stream, where the days after it come above it.
+   */
   sections: StackSection[];
   /** Folders whose changes can change the list. */
   folders: string[];

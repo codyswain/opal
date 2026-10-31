@@ -35,14 +35,14 @@ export function vaultFolder(path: string, roots: readonly string[]): string {
 }
 
 /**
- * A tab's name. Today's stream of daily pages is "Today" while its head is
+ * A tab's name. The stream of daily pages is "Daily" while its head is
  * today's page; any other stack goes by its head's name, as the head opened
  * alone does.
  */
 export function locationName(location: FilesLocation, today = localDate()): string {
   const path = locationPath(location);
   if (!path) return 'Recent';
-  if (location.mode === 'stack' && location.kind === 'daily' && dailyHeadDate(path) === today) return 'Today';
+  if (location.mode === 'stack' && location.kind === 'daily' && dailyHeadDate(path) === today) return 'Daily';
   const name = basenameFsPath(path);
   return fileTreeLabel(name, classifyFile(name));
 }

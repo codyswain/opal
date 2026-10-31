@@ -1,4 +1,4 @@
-// Disposable Electron acceptance for Today's stream under load: a vault with
+// Disposable Electron acceptance for the daily stream under load: a vault with
 // 100 daily pages of mixed length, scrolled slowly and quickly from today to
 // the first page and back. Reports frame times and memory, and checks that
 // the stream never holds more than twelve editors, loads every page, and

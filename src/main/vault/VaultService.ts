@@ -95,7 +95,7 @@ export class VaultService {
   }
 
   /**
-   * The page Today opens for `date`: `Library/daily/<date>.md`, written from
+   * The daily page for `date`: `Library/daily/<date>.md`, written from
    * the vault's template when it does not exist yet. Until the cleanup commit,
    * an existing `Inbox/Logs/<date>.md` is opened instead when the daily page
    * does not exist. Never overwrites a file.
@@ -103,7 +103,7 @@ export class VaultService {
   async createDay(target: string, date: string): Promise<{ path: string }> {
     this.checkDate(date);
     const root = await openedVault(this.deps.registry, target);
-    // Any other opened folder stays as it is; Today never adds Library/daily to it.
+    // Any other opened folder stays as it is; Daily never adds Library/daily to it.
     if (!(await this.isVault(root))) throw new Error("Choose an opened vault folder.");
     return filesystemMutationQueue.run(async () => {
       const page = path.join(root, DAY_LAYOUT.daily, dailyName(date));

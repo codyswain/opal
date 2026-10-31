@@ -59,12 +59,12 @@ async function openNote(page: Page, file: string) {
 /** The menu item, the IPC call and the main process together: the block shows the file facts the main process read. */
 test("View > Show Properties opens the block under the title, and it stays open on a log page", async ({ electronApp, page }) => {
   const daily = path.join(root, "Library/daily/2026-10-28.md");
-  // Launch opens Today in a vault with Library/daily; the test's page comes after it.
+  // Launch opens Daily in a vault with Library/daily; the test's page comes after it.
   const today = await page.evaluate(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
-  // Today is a stream of daily pages; its head's title is drawn by the stack.
+  // Daily is a stream of daily pages; its head's title is drawn by the stack.
   await expect(page.locator('[data-role="head"] .opal-stack-label')).toHaveText(today, { timeout: 15000 });
   await openNote(page, daily);
   const toggle = page.locator("[data-properties-toggle]");

@@ -35,7 +35,7 @@ export function dailyHeadDate(path: string): string | null {
  * opens alone. A recording's summary file (`Library/recordings/<date> HHMM
  * <title>.md`) opens its recording page and a thread card
  * (`Library/chats/<thread>.md`) its chat page. Daily pages are never
- * upgraded by path: only Today opens the stream, so a daily page opened from
+ * upgraded by path: only Daily opens the stream, so a daily page opened from
  * anywhere else opens alone. Transcripts and sessions are one folder down,
  * so they open alone too.
  */
@@ -109,17 +109,28 @@ export function isStackHead(kind: StackKind, path: string): boolean {
 }
 
 /**
- * The names in a daily folder that a stream headed by `headDate` shows after
- * the head, newest first: valid dated names, none dated after the head, the
- * head itself left out. At most `limit` names.
+ * The names in a daily folder that a stream headed by `headDate` shows
+ * around the head, newest first, as the whole stream reads: the later days
+ * above it and the earlier days below it. Only valid dated names, the head
+ * itself left out, and at most `limit` on each side, those nearest the head.
  */
-export function dailyStreamNames(names: readonly string[], headDate: string, limit = DAILY_STREAM_LIMIT): string[] {
-  const dates = new Set<string>();
+export function dailyStreamNames(
+  names: readonly string[],
+  headDate: string,
+  limit = DAILY_STREAM_LIMIT,
+): { later: string[]; earlier: string[] } {
+  const later = new Set<string>();
+  const earlier = new Set<string>();
   for (const name of names) {
     const match = DAILY_NAME.exec(name);
-    if (match && validDate(match[1]) && match[1] < headDate) dates.add(match[1]);
+    if (!match || !validDate(match[1]) || match[1] === headDate) continue;
+    (match[1] > headDate ? later : earlier).add(match[1]);
   }
-  return [...dates].sort().reverse().slice(0, limit).map((date) => `${date}.md`);
+  const named = (dates: string[]) => dates.map((date) => `${date}.md`);
+  return {
+    later: named([...later].sort().slice(0, limit).reverse()),
+    earlier: named([...earlier].sort().reverse().slice(0, limit)),
+  };
 }
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -129,15 +140,17 @@ function noon(day: string): Date {
   return new Date(year, month - 1, date, 12);
 }
 
-/** "Today", "Yesterday", or the weekday: the muted text after a daily section's date. */
+/** "Today", "Yesterday", "Tomorrow", or the weekday: the muted text after a daily section's date. */
 export function dailyDetail(date: string, today: string): string {
   if (date === today) return 'Today';
-  const yesterday = noon(today);
-  yesterday.setDate(yesterday.getDate() - 1);
   const at = noon(date);
-  if (at.getFullYear() === yesterday.getFullYear() && at.getMonth() === yesterday.getMonth() && at.getDate() === yesterday.getDate()) {
-    return 'Yesterday';
-  }
+  const away = (days: number) => {
+    const day = noon(today);
+    day.setDate(day.getDate() + days);
+    return at.getFullYear() === day.getFullYear() && at.getMonth() === day.getMonth() && at.getDate() === day.getDate();
+  };
+  if (away(-1)) return 'Yesterday';
+  if (away(1)) return 'Tomorrow';
   return WEEKDAYS[at.getDay()];
 }
 

@@ -19,7 +19,7 @@ export function pageDate(path: string | null): string | null {
   return match && validDate(match[1]) ? match[1] : null;
 }
 
-/** The pages Today opens: daily pages, and old Inbox/Logs pages until the cleanup commit. */
+/** The pages Daily opens: daily pages, and old Inbox/Logs pages until the cleanup commit. */
 const DAILY_PAGE = /(?:^|\/)(?:Library\/daily|Inbox\/Logs)\/(\d{4}-\d{2}-\d{2})\.md$/;
 
 /** The date of a daily page, or null for any other page. */
@@ -90,9 +90,10 @@ export function shortDayName(day: string): string {
 /** "Wed, Oct 28" */
 export const dayName = (day: string) => `${weekdayName(day)}, ${shortDayName(day)}`;
 
-/** "Today", "Yesterday", or nothing. */
+/** "Today", "Yesterday", "Tomorrow", or nothing. */
 export function relativeDayName(day: string, today: string): string | null {
   if (day === today) return 'Today';
   if (day === addDays(today, -1)) return 'Yesterday';
+  if (day === addDays(today, 1)) return 'Tomorrow';
   return null;
 }

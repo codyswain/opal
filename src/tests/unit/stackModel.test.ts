@@ -37,20 +37,30 @@ describe('stack model', () => {
     expect(stackKindForPath('/Vault/Notes/brief.md')).toBeNull();
   });
 
-  it('lists earlier daily pages newest first, leaving out the head, later days and other names', () => {
+  it('lists the later and the earlier daily pages around the head, newest first, leaving out the head and other names', () => {
     const names = [
-      '2026-10-27.md', '2026-10-29.md', '2026-10-30.md', '2026-09-01.md', 'notes.md',
-      '2026-10-28.md', '2026-02-30.md', '2026-10-28 copy.md', '2026-10-26.txt',
+      '2026-10-27.md', '2026-10-29.md', '2026-10-30.md', '2026-09-01.md', 'notes.md', '2026-11-02.md',
+      '2026-10-28.md', '2026-02-30.md', '2026-10-28 copy.md', '2026-10-26.txt', '2026-10-31.md',
     ];
-    expect(dailyStreamNames(names, '2026-10-29')).toEqual(['2026-10-28.md', '2026-10-27.md', '2026-09-01.md']);
-    expect(dailyStreamNames(names, '2026-10-29', 2)).toEqual(['2026-10-28.md', '2026-10-27.md']);
+    expect(dailyStreamNames(names, '2026-10-29')).toEqual({
+      later: ['2026-11-02.md', '2026-10-31.md', '2026-10-30.md'],
+      earlier: ['2026-10-28.md', '2026-10-27.md', '2026-09-01.md'],
+    });
+    // The limit keeps the days nearest the head on each side.
+    expect(dailyStreamNames(names, '2026-10-29', 2)).toEqual({
+      later: ['2026-10-31.md', '2026-10-30.md'],
+      earlier: ['2026-10-28.md', '2026-10-27.md'],
+    });
   });
 
-  it('names a day Today, Yesterday or by its weekday', () => {
+  it('names a day Today, Yesterday, Tomorrow or by its weekday', () => {
     expect(dailyDetail('2026-10-29', '2026-10-29')).toBe('Today');
     expect(dailyDetail('2026-10-28', '2026-10-29')).toBe('Yesterday');
     expect(dailyDetail('2026-10-27', '2026-10-29')).toBe('Tuesday');
     expect(dailyDetail('2026-02-28', '2026-03-01')).toBe('Yesterday');
+    expect(dailyDetail('2026-10-30', '2026-10-29')).toBe('Tomorrow');
+    expect(dailyDetail('2026-11-01', '2026-10-31')).toBe('Tomorrow');
+    expect(dailyDetail('2026-10-31', '2026-10-29')).toBe('Saturday');
   });
 
   it('treats a page with only frontmatter and whitespace as blank', () => {
@@ -133,9 +143,11 @@ describe('StackService', () => {
     await rm(temporary, { recursive: true, force: true });
   });
 
-  it('lists the head, then earlier non-empty daily pages newest first', async () => {
+  it('lists later pages above the head, blank ones too, then earlier non-empty pages, newest first', async () => {
     const head = await put('Library/daily/2026-10-29.md', '---\ndate: 2026-10-29\n---\n');
     await put('Library/daily/2026-10-30.md', 'Tomorrow, written ahead.');
+    // A page just made for a later day is blank, and shows.
+    await put('Library/daily/2026-11-02.md', '---\ndate: 2026-11-02\n---\n');
     await put('Library/daily/2026-10-28.md', 'Yesterday.');
     await put('Library/daily/2026-10-27.md', '---\ndate: 2026-10-27\n---\n\n');
     await put('Library/daily/2026-10-20.md', '- [ ] Something');
@@ -146,21 +158,28 @@ describe('StackService', () => {
     expect(stack.head).toBe(head);
     expect(stack.folders).toEqual([path.join(root, 'Library/daily')]);
     expect(stack.sections.map((section) => [path.basename(section.path), section.label, section.detail, section.role])).toEqual([
+      ['2026-11-02.md', '2026-11-02', 'Monday', 'part'],
+      ['2026-10-30.md', '2026-10-30', 'Tomorrow', 'part'],
       ['2026-10-29.md', '2026-10-29', 'Today', 'head'],
       ['2026-10-28.md', '2026-10-28', 'Yesterday', 'part'],
       ['2026-10-20.md', '2026-10-20', 'Tuesday', 'part'],
     ]);
     expect(stack.sections.every((section) => section.defaultOpen && !section.readOnly)).toBe(true);
-    expect(stack.sections[1].size).toBe('Yesterday.'.length);
+    expect(stack.sections[3].size).toBe('Yesterday.'.length);
   });
 
-  it('starts a stream from an earlier day, leaving out the days after it', async () => {
-    await put('Library/daily/2026-10-29.md', 'Today.');
-    const head = await put('Library/daily/2026-10-28.md', 'Yesterday.');
-    await put('Library/daily/2026-10-27.md', 'Before.');
+  it('starts a stream from an earlier day with the days after it above, today shown even when blank', async () => {
+    await put('Library/daily/2026-10-29.md', '');
+    await put('Library/daily/2026-10-27.md', '');
+    const head = await put('Library/daily/2026-10-26.md', 'Monday.');
+    await put('Library/daily/2026-10-25.md', 'Before.');
     const stack = await service.stack(root, 'daily', head);
-    expect(stack.sections.map((section) => section.label)).toEqual(['2026-10-28', '2026-10-27']);
-    expect(stack.sections[0].detail).toBe('Yesterday');
+    expect(stack.sections.map((section) => [section.label, section.role])).toEqual([
+      ['2026-10-29', 'part'],
+      ['2026-10-26', 'head'],
+      ['2026-10-25', 'part'],
+    ]);
+    expect(stack.sections[1].detail).toBe('Monday');
   });
 
   it('notices a past page that gains a body', async () => {

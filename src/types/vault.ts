@@ -15,7 +15,7 @@ export interface DigestItemTick {
 }
 export interface VaultAPI {
   discover: () => Promise<VaultResult<VaultInfo[]>>;
-  /** The page Today opens for the date, created from the vault's template when missing. */
+  /** The date's daily page, the one Daily opens for today, created from the vault's template when missing. */
   createDay: (root: string, date: string) => Promise<VaultResult<{ path: string }>>;
   /** Everything the vault holds for the date. */
   day: (root: string, date: string) => Promise<VaultResult<VaultDay>>;

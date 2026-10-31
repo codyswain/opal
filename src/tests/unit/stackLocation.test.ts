@@ -63,7 +63,7 @@ describe('stack locations', () => {
 
   it('keep "alone" only on a stack head, so each place has one key', () => {
     expect(canonical(aloneLocation(NOTE))).toEqual(fileLocation(NOTE));
-    // Daily pages are never upgraded by path: opened from anywhere but Today, they open alone.
+    // Daily pages are never upgraded by path: opened from anywhere but Daily, they open alone.
     expect(canonical(fileLocation(TODAY))).toEqual(fileLocation(TODAY));
     expect(canonical(stackLocation('daily', TODAY))).toEqual(stackLocation('daily', TODAY));
   });
@@ -86,8 +86,8 @@ describe('stack locations', () => {
     expect(locationName(stackLocation('chat', card))).toBe('sf-site-one');
   });
 
-  it('name Today’s stream "Today" while its head is today, and by its date after', () => {
-    expect(locationName(stackLocation('daily', TODAY), '2026-10-29')).toBe('Today');
+  it('name the daily stream "Daily" while its head is today, and by its date after', () => {
+    expect(locationName(stackLocation('daily', TODAY), '2026-10-29')).toBe('Daily');
     expect(locationName(stackLocation('daily', TODAY), '2026-10-30')).toBe('2026-10-29');
     expect(locationName(fileLocation(TODAY), '2026-10-29')).toBe('2026-10-29');
     expect(tabLabels([stackLocation('daily', OCT_25), fileLocation(OCT_25)], [ROOT]).map((label) => label.name)).toEqual(['2026-10-25', '2026-10-25']);
