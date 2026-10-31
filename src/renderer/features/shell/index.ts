@@ -2,6 +2,7 @@ export * from './components/AppShell';
 export * from './components/FileTree';
 export * from './components/FrameControls';
 export * from './components/PageLinks';
+export * from './components/PinnedSection';
 export * from './components/SidebarItem';
 export * from './components/SidebarSection';
 export * from './components/Titlebar';

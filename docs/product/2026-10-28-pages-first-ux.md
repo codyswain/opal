@@ -64,6 +64,15 @@ first: a file tree on the left and one clean page.
   opened root, the root is not a row; its children start at the top level and
   it is always open. With several roots, each root is a top-level row, open
   by default.
+- **Pinned**, between the nav and the files (2026-10-30): pinned files in
+  Cody's order under a small "Pinned" label, and nothing at all while nothing
+  is pinned. Pin from a file's menu in the tree or the tab strip, or Pin page
+  in the palette (in a stack, the section in view); drag rows to reorder, or
+  drag a file in from the tree. Each opened folder keeps its pins in
+  `.opal/pins.json`, which git carries to the other Macs. Opal reads it again
+  when the window gains focus, and each pin or unpin keeps what the file
+  gained or lost since it was read. A pin whose file is missing is greyed
+  out. Renames and moves in Opal carry pins along, and Move to Trash unpins.
 - The tree lists files and folders, folders first, then files, by name with
   numeric collation. Dotfiles and `.opal.yaml` carriers stay hidden (the main
   process already filters them). Markdown labels drop `.md`.

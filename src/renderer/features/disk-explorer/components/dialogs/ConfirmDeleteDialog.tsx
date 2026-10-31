@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/renderer/shared/ui';
+import { pathMutationCoordinator } from '../../navigation/pathMutationCoordinator';
 import { useDiskStore } from '../../store/diskStore';
 
 /**
@@ -44,6 +45,7 @@ export const ConfirmDeleteDialog: React.FC = () => {
     }
 
     cancelDelete();
+    pathMutationCoordinator.applyTrash(pendingDelete);
   };
 
   return (

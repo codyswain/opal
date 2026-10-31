@@ -9,9 +9,10 @@ import {
   browseRecent,
   focusFile,
 } from "@/renderer/features/disk-explorer/navigation";
-import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
+import { shownPath, toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
-import { useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
+import { isPinned, usePinsStore } from "@/renderer/features/disk-explorer/store/pinsStore";
+import { selectViewedPath, useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import {
   togglePageProperties,
   usePagePropertiesStore,
@@ -53,6 +54,14 @@ export const AppCommands: React.FC = () => {
   const propertiesOpen = usePagePropertiesStore((state) => state.open);
   // Next Section and Previous Section are there only while a stack is shown, so their keys are free elsewhere.
   const stackShown = useStackStore((state) => state.move !== null);
+  // Pin page or Unpin page is there only while a file is open. In a stack it
+  // acts on the section in view, as the day sidebar does.
+  const openedPath = useTabsStore(selectOpenedPath);
+  const activeTab = useTabsStore((state) => state.activeId);
+  const viewedPath = useStackStore((state) => selectViewedPath(state, { activeId: activeTab }));
+  const pagePath = viewedPath ?? openedPath;
+  const fileOpen = pagePath !== null;
+  const pagePinned = usePinsStore((state) => isPinned(state.byRoot, pagePath));
 
   useEffect(() => {
     const commands: Command[] = [
@@ -276,6 +285,20 @@ export const AppCommands: React.FC = () => {
           } satisfies Command,
         ]
         : []),
+      ...(fileOpen
+        ? [
+          {
+            id: "page.togglePin",
+            name: pagePinned ? "Unpin page" : "Pin page",
+            type: "action",
+            keywords: ["pin", "pinned", "sidebar", "bookmark", "favorite"],
+            perform: () => {
+              const page = shownPath();
+              if (page) usePinsStore.getState().toggle(page);
+            },
+          } satisfies Command,
+        ]
+        : []),
       {
         id: COMMAND_IDS.toggleProperties,
         name: propertiesOpen ? "Hide Properties" : "Show Properties",
@@ -298,7 +321,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   useEffect(() => {

@@ -13,6 +13,7 @@ import { useShell } from "../context/ShellContext";
 import { DailyItem } from "./DailyItem";
 import { FileTree } from "./FileTree";
 import { FrameControls, SearchButton, TrafficLightInset } from "./FrameControls";
+import { PinnedSection } from "./PinnedSection";
 import { SidebarItem } from "./SidebarItem";
 import { SidebarSection } from "./SidebarSection";
 
@@ -94,6 +95,8 @@ export function WorkspaceSidebar({
           />
         </SidebarSection>
       </nav>
+
+      <PinnedSection onNavigate={onNavigate} />
 
       <div className="min-h-0 flex-1 pt-4">
         <FileTree onNavigate={onNavigate} />

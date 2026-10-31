@@ -232,7 +232,8 @@ describe('AppShell', () => {
   });
 
   it('loads the opened folders for the tree and keeps cached listings live on every route', async () => {
-    let changed: ((payload: { directories: string[] }) => void) | undefined;
+    // The preload hands each change to every listener; the pins listen too.
+    const listeners: Array<(payload: { directories: string[] }) => void> = [];
     installDiskApi({
       listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
       readDirectory: vi.fn(async (path: string) => ({
@@ -243,7 +244,7 @@ describe('AppShell', () => {
         },
       })),
       onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
-        changed = callback;
+        listeners.push(callback);
         return () => undefined;
       }),
     });
@@ -257,7 +258,7 @@ describe('AppShell', () => {
 
     await waitFor(() => expect(useDiskStore.getState().listings['/Vault']).toBeDefined());
     vi.mocked(window.diskAPI.readDirectory).mockClear();
-    act(() => changed?.({ directories: ['/Vault', '/Vault/Uncached'] }));
+    act(() => listeners.forEach((listener) => listener({ directories: ['/Vault', '/Vault/Uncached'] })));
     await waitFor(() => expect(window.diskAPI.readDirectory).toHaveBeenCalledTimes(1));
     expect(window.diskAPI.readDirectory).toHaveBeenCalledWith('/Vault');
   });

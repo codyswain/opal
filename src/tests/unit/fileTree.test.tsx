@@ -327,6 +327,7 @@ describe('FileTree', () => {
       within(menu).getAllByRole('menuitem').map((item) => item.textContent)
     ).toEqual([
       'Open in new tab',
+      'Pin',
       'New note',
       'New folder',
       'Rename',

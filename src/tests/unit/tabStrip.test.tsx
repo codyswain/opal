@@ -13,6 +13,8 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 import { useDocumentStatusStore } from '@/renderer/features/disk-explorer/store/documentStatusStore';
+import { usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
+import { installPinsApi, setPins } from '@/tests/helpers/pinsApi';
 
 const A = '/V/alpha.md';
 const B = '/V/beta.png';
@@ -177,14 +179,14 @@ describe('TabStrip', () => {
     expect(tabPaths()).toEqual([B, C, A]);
   });
 
-  it('offers bulk closing, Reveal in Finder and Copy path from the context menu', async () => {
+  it('offers bulk closing, Pin, Reveal in Finder and Copy path from the context menu', async () => {
     const user = userEvent.setup();
     openTabs([A, B, C], 2);
     renderStrip();
     await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${B}`) });
     const menu = await screen.findByRole('menu');
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'Close tab⌘W', 'Close other tabs', 'Close tabs to the right', 'Close all tabs', 'Reveal in Finder', 'Copy path',
+      'Close tab⌘W', 'Close other tabs', 'Close tabs to the right', 'Close all tabs', 'Pin', 'Reveal in Finder', 'Copy path',
     ]);
     await user.click(within(menu).getByRole('menuitem', { name: 'Close tabs to the right' }));
     expect(tabPaths()).toEqual([A, B]);
@@ -192,6 +194,41 @@ describe('TabStrip', () => {
     await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${A}`) });
     await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Close other tabs' }));
     expect(tabPaths()).toEqual([A]);
+  });
+
+  it('pins and unpins the file a tab shows', async () => {
+    const user = userEvent.setup();
+    const api = installPinsApi();
+    setPins({ '/V': [] });
+    openTabs([A, { mode: 'browse', collection: RECENT_COLLECTION }]);
+    renderStrip();
+    const menuFor = async (key: string) => {
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${key}`) });
+      return screen.findByRole('menu');
+    };
+    await user.click(within(await menuFor(A)).getByRole('menuitem', { name: 'Pin' }));
+    expect(usePinsStore.getState().byRoot['/V']).toEqual([A]);
+    expect(api.set).toHaveBeenLastCalledWith('/V', [A], []);
+    await user.click(within(await menuFor(A)).getByRole('menuitem', { name: 'Unpin' }));
+    expect(usePinsStore.getState().byRoot['/V']).toEqual([]);
+    expect(within(await menuFor('recent')).queryByRole('menuitem', { name: /^(Pin|Unpin)$/ })).toBeNull();
+  });
+
+  it('offers no Pin on the stream of daily pages, whose first page would open alone', async () => {
+    const user = userEvent.setup();
+    installPinsApi();
+    setPins({ '/V': [] });
+    const day = '/V/Library/daily/2026-10-30.md';
+    openTabs([stackLocation('daily', day), stackLocation('recording', '/V/Library/recordings/standup.md')]);
+    renderStrip();
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${day}`) });
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toContain('Reveal in Finder');
+    expect(within(menu).queryByRole('menuitem', { name: /^(Pin|Unpin)$/ })).toBeNull();
+    await user.keyboard('{Escape}');
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('tab-/V/Library/recordings/standup.md') });
+    menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Pin' })).toBeInTheDocument();
   });
 
   it('lists every tab in a menu once the row is crowded', async () => {

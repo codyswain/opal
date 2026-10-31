@@ -12,7 +12,8 @@ export interface AppPathMutation {
   newPath: string;
 }
 
-export type PathRemovalReason = 'external' | 'root-removed';
+/** `trashed` is Move to Trash in Opal; `external` is any other file that went away. */
+export type PathRemovalReason = 'external' | 'trashed' | 'root-removed';
 export interface PreparedPathMutation {
   commit(): void;
   rollback(): void;
@@ -40,6 +41,7 @@ export interface PathMutationCoordinator {
   register(participant: PathMutationParticipant): () => void;
   applyAppMutation(mutation: AppPathMutation): boolean;
   applyExternalRemoval(paths: readonly string[]): boolean;
+  applyTrash(path: string): boolean;
   applyRootRemoval(rootPath: string): boolean;
   reconcileAllowedRoots(roots: readonly string[]): boolean;
 }
@@ -137,6 +139,14 @@ export function createPathMutationCoordinator(): PathMutationCoordinator {
       if (normalized.length === 0) return false;
       prepare((participant) =>
         participant.preparePathRemoval?.(normalized, 'external')
+      );
+      return true;
+    },
+    applyTrash(path) {
+      const normalized = normalizedRemovalPaths([path]);
+      if (normalized.length !== 1) return false;
+      prepare((participant) =>
+        participant.preparePathRemoval?.(normalized, 'trashed')
       );
       return true;
     },
