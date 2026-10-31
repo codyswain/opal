@@ -51,7 +51,7 @@ function draggedTreeFile(): string | null {
 }
 
 /**
- * The pinned files, under Today and Recent: each opened folder's
+ * The pinned files, under Daily and Recent: each opened folder's
  * `.opal/pins.json`, folders in the tree's order. Nothing shows while
  * nothing is pinned. Rows drag to reorder, and a file dragged from the tree
  * is pinned where it drops.

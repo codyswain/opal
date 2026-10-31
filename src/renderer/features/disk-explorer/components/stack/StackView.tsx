@@ -37,10 +37,6 @@ const RESTORE_TIMEOUT_MS = 1500;
 /** The place is saved on the tab this long after scrolling stops, so a relaunch finds it. */
 const SAVE_AFTER_MS = 400;
 
-const RING: unknown[][] = []; (window as unknown as { __ring: unknown[][] }).__ring = RING;
-const rec = (...v: unknown[]) => { RING.push([Math.round(performance.now()), ...v]); if (RING.length > 4000) RING.splice(0, 1000); };
-const tail = (p: string | undefined) => (p ?? '').slice(-13, -3);
-const lastH = new Map<string, number>();
 const noteName = (path: string) => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
 
 /** The head as a section before the main process has answered, so it can render at once. */
@@ -387,7 +383,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       next.add(mount);
       reading.current.add(mount);
     }
-    if (next) rec('P', tail(mount), result.unmount.map(tail).join(','), fast.current ? 'fast' : '');
     if (next) setLive(next);
     if (result.loadMore && kind === 'daily') {
       setLoadedCount((count) => Math.min(state.sections.length, Math.max(count, state.shown.length) + STACK_WINDOW.loadStep));
@@ -541,7 +536,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const settle = useCallback(() => {
     hold.current = pickHold();
     rememberPlace();
-    rec('S', hold.current?.kind, tail(hold.current?.path), hold.current?.kind === 'line' ? hold.current.pos : hold.current?.edge, Math.round(scroller.current?.scrollTop ?? -1), revealed.current);
   }, [pickHold, rememberPlace]);
 
   /**
@@ -569,7 +563,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       // CodeMirror has already made up for its own lines, while the hold is its line and the editor still has focus.
       if (now.estimated && editorKeepsLine(now.path)) shift -= (now.line - now.text) - (held.line - held.text);
     }
-    if (Math.abs(shift) >= 1) rec('K', Math.round(shift), now.kind, tail(now.path), now.kind === 'line' ? now.pos : now.edge, Math.round(element.scrollTop));
     if (Math.abs(shift) >= 1) scrollTo(element.scrollTop + shift);
   }, [editorKeepsLine, measureHold, pickHold, scrollTo]);
 
@@ -880,7 +873,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
           }, STACK_WINDOW.settleAfterFastMs);
         }
       }
-      rec('O', Math.round(top), own ? 'own' : '', revealed.current);
       if (!restore.current) {
         keepHold();
         // The stack's own scroll keeps what it holds; the reader's picks it again from the view it reached.
@@ -906,7 +898,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
             if (seenScroll.current !== scroll || !scroller.current) return;
             revealed.current = 0;
             if (!restore.current) hold.current = pickHold();
-            rec('E', hold.current?.kind, tail(hold.current?.path), hold.current?.kind === 'line' ? hold.current.pos : hold.current?.edge, Math.round(scroller.current?.scrollTop ?? -1));
           }));
         }
       }
@@ -931,7 +922,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         const section = all.find((candidate) => candidate.path === path);
         if (body && section) sectionHeights.set(path, { height: body.offsetHeight, width, mtimeMs: section.mtimeMs, size: section.size });
       }
-      for (const observed of entries) { const path = (observed.target as HTMLElement).dataset.stackSection; if (!path) continue; const h = Math.round((observed.target as HTMLElement).offsetHeight); const was = lastH.get(path); lastH.set(path, h); if (was !== undefined && was !== h) rec('R', tail(path), h - was, Math.round((observed.target as HTMLElement).offsetTop - element.scrollTop), mounted.has(path) ? (reading.current.has(path) ? 'reading' : 'live') : 'ph'); }
       fitHead();
       keepHold();
       fitHead();

@@ -20,8 +20,6 @@ import { installActivityApi, recentResult } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
-import { stackLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 
 const ROOT = '/Vault';

@@ -84,11 +84,20 @@ describe('pins store', () => {
     expect(api.set).toHaveBeenCalledWith(LIBRARY, [], [INVESTORS]);
   });
 
-  it('writes nothing for a folder whose pins were not read', () => {
-    const api = installPinsApi();
+  it('waits for the first read before pinning, keeping the pins already in the file', async () => {
+    const api = installPinsApi([{ root: ROOT, pins: [INVESTORS], missing: [] }]);
     usePinsStore.getState().pin(README);
     expect(api.set).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalledWith("Opal could not read this folder's pins.");
+    await vi.waitFor(() => expect(api.set).toHaveBeenCalledWith(ROOT, [INVESTORS, README], [INVESTORS]));
+    expect(usePinsStore.getState().byRoot[ROOT]).toEqual([INVESTORS, README]);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for a folder whose pins cannot be read', async () => {
+    const api = installPinsApi();
+    usePinsStore.getState().pin(README);
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith("Opal could not read this folder's pins."));
+    expect(api.set).not.toHaveBeenCalled();
   });
 
   it('carries a pin along a rename', () => {

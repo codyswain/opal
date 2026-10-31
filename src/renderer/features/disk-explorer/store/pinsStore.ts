@@ -151,7 +151,12 @@ export const usePinsStore = create<PinsStore>((set, get) => ({
     const { byRoot } = get();
     const root = pinList(byRoot, path);
     if (!root) {
-      toast.error("Opal could not read this folder's pins.");
+      // A pin made before the folder's pins were read (just after launch)
+      // waits for that read; main still merges the write with the file.
+      void get().load().then(() => {
+        if (pinList(get().byRoot, path)) get().pin(path, at);
+        else toast.error("Opal could not read this folder's pins.");
+      });
       return;
     }
     const others = byRoot[root].filter((pin) => pin !== path);
