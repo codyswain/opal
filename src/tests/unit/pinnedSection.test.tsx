@@ -126,6 +126,15 @@ describe('PinnedSection', () => {
     renderSidebar();
     expect(shown()).toEqual(['10-30 Fri', 'investors', 'photo.png', 'plan']);
     expect(pinned(INVESTORS)).toHaveAttribute('title', 'Vault/Library/parametric/investors.md');
+    // The list scrolls past 40% of the sidebar; rows must not shrink below the tree's row height first.
+    expect(pinned(INVESTORS)).toHaveClass('h-row-compact', 'shrink-0');
+  });
+
+  it('shows a file once when the lists of an opened folder and a folder inside it both name it', () => {
+    useDiskStore.setState({ roots: [ROOT, LIBRARY] });
+    setPins({ [ROOT]: [INVESTORS, README], [LIBRARY]: [INVESTORS, DAY] });
+    renderSidebar();
+    expect(shown()).toEqual(['investors', 'README', '10-30 Fri']);
   });
 
   it('opens a pin in this tab, in a new tab with Cmd+click or middle-click, and marks the open one', async () => {
@@ -173,14 +182,14 @@ describe('PinnedSection', () => {
 
     await user.click(within(await menuFor(README)).getByRole('menuitem', { name: 'Pin' }));
     expect(shown()).toEqual(['README']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README], []);
 
     await user.click(within(await menuFor(NOTES)).getByRole('menuitem', { name: 'Pin' }));
     expect(shown()).toEqual(['README', 'notes']);
 
     await user.click(within(await menuFor(README)).getByRole('menuitem', { name: 'Unpin' }));
     expect(shown()).toEqual(['notes']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES], [README, NOTES]);
 
     const folderMenu = await menuFor(LIBRARY);
     expect(within(folderMenu).queryByRole('menuitem', { name: /^(Pin|Unpin)$/ })).toBeNull();
@@ -211,7 +220,7 @@ describe('PinnedSection', () => {
     menu = await menuFor(README);
     await user.click(within(menu).getByRole('menuitem', { name: 'Unpin' }));
     expect(shown()).toEqual(['notes']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES], [README, NOTES]);
   });
 
   it('reorders pins by dragging a row up or down', () => {
@@ -228,7 +237,7 @@ describe('PinnedSection', () => {
     expect(pinned(INVESTORS).className).toContain('after:absolute');
     dragAt('drop', section, transfer, 80);
     expect(shown()).toEqual(['notes', 'investors', 'README']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES, INVESTORS, README]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES, INVESTORS, README], [README, NOTES, INVESTORS]);
 
     layOutRows();
     transfer = dataTransfer();
@@ -237,7 +246,7 @@ describe('PinnedSection', () => {
     expect(pinned(NOTES).className).toContain('before:absolute');
     dragAt('drop', section, transfer, 5);
     expect(shown()).toEqual(['investors', 'notes', 'README']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [INVESTORS, NOTES, README]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [INVESTORS, NOTES, README], [NOTES, INVESTORS, README]);
 
     // Dropped just above itself, a row stays where it is.
     layOutRows();
@@ -247,6 +256,25 @@ describe('PinnedSection', () => {
     dragAt('drop', section, transfer, 35);
     expect(shown()).toEqual(['investors', 'notes', 'README']);
     expect(api.set).not.toHaveBeenCalled();
+  });
+
+  it('keeps the drop line among the rows of the dragged file\'s own folder', () => {
+    const LATER = '/Other/later.md';
+    useDiskStore.setState({ roots: [ROOT, OTHER] });
+    setPins({ [ROOT]: [README, NOTES], [OTHER]: [PLAN, LATER] });
+    renderSidebar();
+    const section = screen.getByTestId('pinned-section');
+    layOutRows();
+
+    // Between plan and later is in the other folder, so the line stops at the end of README's folder.
+    const transfer = dataTransfer();
+    fireEvent.dragStart(pinned(README), { dataTransfer: transfer });
+    dragAt('dragOver', section, transfer, 80);
+    expect(pinned(PLAN).className).toContain('before:absolute');
+    expect(pinned(LATER).className).not.toContain('before:absolute');
+    dragAt('drop', section, transfer, 80);
+    expect(shown()).toEqual(['notes', 'README', 'plan', 'later']);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES, README], [README, NOTES]);
   });
 
   it('pins a file dragged from the tree where it drops, and moves nothing when a pin drops on a folder', async () => {
@@ -259,7 +287,7 @@ describe('PinnedSection', () => {
     expect(dragAt('dragOver', section, dataTransfer(), 0).defaultPrevented).toBe(true);
     dragAt('drop', section, dataTransfer({ 'text/plain': NOTES }), 0);
     expect(shown()).toEqual(['notes', 'README']);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES, README]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [NOTES, README], [README]);
 
     // A folder from the tree is not taken.
     fireEvent.dragStart(treeRow(LIBRARY), { dataTransfer: dataTransfer() });

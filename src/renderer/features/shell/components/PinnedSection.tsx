@@ -67,11 +67,23 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const labelId = React.useId();
 
-  const pins = React.useMemo(
-    () => roots.flatMap((root) => byRoot[root] ?? []),
-    [byRoot, roots]
-  );
-  if (pins.length === 0) return null;
+  // Each pin once, under the first folder whose list holds it. With one
+  // opened folder inside another, both lists can name the same file.
+  const rows = React.useMemo(() => {
+    const seen = new Set<string>();
+    const listed: { root: string; path: string }[] = [];
+    for (const root of roots) {
+      for (const path of byRoot[root] ?? []) {
+        if (!seen.has(path)) listed.push({ root, path });
+        seen.add(path);
+      }
+    }
+    return listed;
+  }, [byRoot, roots]);
+  if (rows.length === 0) return null;
+
+  /** The folder whose pins a dragged file is placed among. */
+  const rootOf = (path: string) => rows.find((row) => row.path === path)?.root ?? pinRoot(byRoot, path);
 
   const open = (path: string, newTab: boolean) => {
     if (missing.includes(path)) {
@@ -89,37 +101,42 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
     });
   };
 
-  const dropTarget = (event: React.DragEvent<HTMLElement>): number => {
-    const rows = [...(listRef.current?.querySelectorAll<HTMLElement>('[data-pin-path]') ?? [])];
-    for (const [index, row] of rows.entries()) {
+  // Pins are kept per folder, so the drop line stays among the rows of the
+  // dragged file's own folder, where the pin will land.
+  const dropTarget = (event: React.DragEvent<HTMLElement>, path: string): number => {
+    const root = rootOf(path);
+    const start = rows.findIndex((row) => roots.indexOf(row.root) >= roots.indexOf(root ?? ''));
+    const first = start === -1 ? rows.length : start;
+    const last = first + rows.filter((row) => row.root === root).length;
+    const shown = [...(listRef.current?.querySelectorAll<HTMLElement>('[data-pin-path]') ?? [])];
+    let index = shown.findIndex((row) => {
       const box = row.getBoundingClientRect();
-      if (event.clientY < box.top + box.height / 2) return index;
-    }
-    return rows.length;
+      return event.clientY < box.top + box.height / 2;
+    });
+    if (index === -1) index = shown.length;
+    return Math.max(first, Math.min(index, last));
   };
 
   const onDragOver = (event: React.DragEvent<HTMLElement>) => {
-    if (!dragging && !draggedTreeFile()) return;
+    const path = dragging ?? draggedTreeFile();
+    if (!path) return;
     event.preventDefault();
     // The tree allows only a move; dropping here pins the file and leaves it where it is.
     event.dataTransfer.dropEffect = 'move';
-    setDropIndex(dropTarget(event));
+    setDropIndex(dropTarget(event, path));
   };
 
   const onDrop = (event: React.DragEvent<HTMLElement>) => {
     const path = dragging ?? draggedTreeFile();
-    const target = dropIndex ?? dropTarget(event);
     setDragging(null);
     setDropIndex(null);
     if (!path) return;
+    const target = dropIndex ?? dropTarget(event, path);
     event.preventDefault();
     clearActiveDragSourcePath();
-    // Pins are kept per folder, so its place is after the pins of its own
-    // folder that are above the drop line.
-    const root = pinRoot(byRoot, path);
-    const above = pins
-      .slice(0, target)
-      .filter((pin) => pin !== path && pinRoot(byRoot, pin) === root).length;
+    // Its place is after the pins of its own folder that are above the drop line.
+    const root = rootOf(path);
+    const above = rows.slice(0, target).filter((row) => row.path !== path && row.root === root).length;
     usePinsStore.getState().pin(path, above);
   };
 
@@ -138,7 +155,7 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
         Pinned
       </div>
       <div ref={listRef} className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2">
-        {pins.map((path, index) => {
+        {rows.map(({ path }, index) => {
           const gone = missing.includes(path);
           return (
             <ContextMenu key={path}>
@@ -165,7 +182,8 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
                     setDropIndex(null);
                   }}
                   className={cn(
-                    'relative flex h-row-compact w-full min-w-0 items-center gap-2 rounded-row px-2',
+                    // shrink-0 keeps the row height once the list is long enough to scroll.
+                    'relative flex h-row-compact w-full min-w-0 shrink-0 items-center gap-2 rounded-row px-2',
                     'text-left text-ui text-foreground-secondary outline-none',
                     'transition-hover hover:bg-surface-hover hover:text-foreground',
                     'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
@@ -174,8 +192,8 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
                     dragging === path && 'opacity-50',
                     dropIndex === index &&
                       'before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-foreground/40',
-                    dropIndex === pins.length &&
-                      index === pins.length - 1 &&
+                    dropIndex === rows.length &&
+                      index === rows.length - 1 &&
                       'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-foreground/40'
                   )}
                 >

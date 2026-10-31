@@ -39,7 +39,8 @@ not exist.
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`
 - **Pins:** each opened folder keeps its pinned files in `.opal/pins.json`
   (paths from the folder's top), so git syncs them across Macs. `PinsService`
-  in `src/main/pins` reads and writes it (`pins:list`, `pins:set`);
+  in `src/main/pins` reads and writes it (`pins:list`, `pins:set`, which
+  keeps what the file gained or lost since the renderer read it);
   `pinsStore` in `disk-explorer` follows renames, moves and Move to Trash
   through `pathMutationCoordinator`, and `PinnedSection` shows the pins
   under the sidebar's nav

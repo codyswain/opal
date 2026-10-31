@@ -177,6 +177,10 @@ export const TabStrip: React.FC = () => {
             const isActive = tab.id === activeId;
             const label = labels[index];
             const file = tabFile(tab);
+            // A recording or chat stack is pinned by its first file, which opens the same stack.
+            // The stream of daily pages has no one file to pin: its first page opens alone.
+            const location = tabLocation(tab);
+            const pinnable = !(location.mode === 'stack' && location.kind === 'daily');
             const shownStatuses = tabStatuses(tab);
             const unsaved = shownStatuses.some(hasUnsavedChanges);
             const problem = shownStatuses.some(hasProblem);
@@ -257,9 +261,11 @@ export const TabStrip: React.FC = () => {
                   {file ? (
                     <>
                       <ContextMenuSeparator />
-                      <ContextMenuItem onSelect={() => usePinsStore.getState().toggle(file)}>
-                        {isPinned(pins, file) ? 'Unpin' : 'Pin'}
-                      </ContextMenuItem>
+                      {pinnable ? (
+                        <ContextMenuItem onSelect={() => usePinsStore.getState().toggle(file)}>
+                          {isPinned(pins, file) ? 'Unpin' : 'Pin'}
+                        </ContextMenuItem>
+                      ) : null}
                       <ContextMenuItem onSelect={() => void window.diskAPI.reveal(file)}>Reveal in Finder</ContextMenuItem>
                       <ContextMenuItem onSelect={() => void navigator.clipboard?.writeText(file)}>Copy path</ContextMenuItem>
                     </>

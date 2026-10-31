@@ -14,8 +14,12 @@ export type PinsResult<T> =
 export interface PinsAPI {
   /** Every opened folder's pins, read from its `.opal/pins.json`. */
   list: () => Promise<PinsResult<RootPins[]>>;
-  /** Writes the whole ordered list of an opened folder's pins. */
-  set: (root: string, paths: string[]) => Promise<PinsResult<RootPins>>;
+  /**
+   * Writes the whole ordered list of an opened folder's pins. `base` is the
+   * list the change was made to; main merges in what the file gained or lost
+   * since then and answers with what it wrote.
+   */
+  set: (root: string, paths: string[], base: string[]) => Promise<PinsResult<RootPins>>;
 }
 declare global {
   interface Window {

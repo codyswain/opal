@@ -35,14 +35,53 @@ describe('pins store', () => {
     setPins({ [ROOT]: [INVESTORS], [OTHER]: [] });
     usePinsStore.getState().pin(README, 0);
     expect(pins()[ROOT]).toEqual([README, INVESTORS]);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README, INVESTORS]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README, INVESTORS], [INVESTORS]);
     usePinsStore.getState().pin(README);
     expect(pins()[ROOT]).toEqual([INVESTORS, README]);
     usePinsStore.getState().toggle(PLAN);
-    expect(api.set).toHaveBeenLastCalledWith(OTHER, [PLAN]);
+    expect(api.set).toHaveBeenLastCalledWith(OTHER, [PLAN], []);
     usePinsStore.getState().toggle(README);
     expect(pins()).toEqual({ [ROOT]: [INVESTORS], [OTHER]: [PLAN] });
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [INVESTORS]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [INVESTORS], [INVESTORS, README]);
+  });
+
+  it('shows what main wrote when the file gained a pin since it was read, unless the list changed here meanwhile', async () => {
+    const REMOTE = '/Vault/from-the-mini.md';
+    const api = installPinsApi([], {
+      set: vi.fn(async (root: string, written: string[]) => ({
+        success: true as const,
+        data: { root, pins: [...written, REMOTE], missing: [REMOTE] },
+      })),
+    });
+    setPins({ [ROOT]: [INVESTORS] });
+    usePinsStore.getState().pin(README);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [INVESTORS, README], [INVESTORS]);
+    await vi.waitFor(() => expect(pins()[ROOT]).toEqual([INVESTORS, README, REMOTE]));
+    expect(usePinsStore.getState().missing).toEqual([REMOTE]);
+
+    // A second change before the first answer: only the newer answer is shown.
+    setPins({ [ROOT]: [] });
+    usePinsStore.getState().pin(README);
+    usePinsStore.getState().pin(INVESTORS);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README, INVESTORS], [README]);
+    await vi.waitFor(() => expect(pins()[ROOT]).toEqual([README, INVESTORS, REMOTE]));
+  });
+
+  it('unpins and reorders a pin held in an outer folder\'s list when one opened folder is inside another', () => {
+    const LIBRARY = '/Vault/Library';
+    const api = installPinsApi();
+    setPins({ [ROOT]: [README, INVESTORS], [LIBRARY]: [] });
+    usePinsStore.getState().pin(INVESTORS, 0);
+    expect(pins()).toEqual({ [ROOT]: [INVESTORS, README], [LIBRARY]: [] });
+    usePinsStore.getState().toggle(INVESTORS);
+    expect(pins()).toEqual({ [ROOT]: [README], [LIBRARY]: [] });
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [README], [INVESTORS, README]);
+
+    // Named in both lists, it leaves both.
+    setPins({ [ROOT]: [INVESTORS], [LIBRARY]: [INVESTORS] });
+    usePinsStore.getState().unpin(INVESTORS);
+    expect(pins()).toEqual({ [ROOT]: [], [LIBRARY]: [] });
+    expect(api.set).toHaveBeenCalledWith(LIBRARY, [], [INVESTORS]);
   });
 
   it('writes nothing for a folder whose pins were not read', () => {
@@ -57,7 +96,7 @@ describe('pins store', () => {
     setPins({ [ROOT]: [README, INVESTORS] });
     pathMutationCoordinator.applyAppMutation({ kind: 'rename', oldPath: README, newPath: '/Vault/Start here.md' });
     expect(pins()[ROOT]).toEqual(['/Vault/Start here.md', INVESTORS]);
-    expect(api.set).toHaveBeenCalledWith(ROOT, ['/Vault/Start here.md', INVESTORS]);
+    expect(api.set).toHaveBeenCalledWith(ROOT, ['/Vault/Start here.md', INVESTORS], [README, INVESTORS]);
   });
 
   it('carries pins along a move of the file or of a folder above it', () => {
@@ -84,7 +123,7 @@ describe('pins store', () => {
 
     pathMutationCoordinator.applyTrash('/Vault/Library');
     expect(pins()[ROOT]).toEqual([README]);
-    expect(api.set).toHaveBeenCalledWith(ROOT, [README]);
+    expect(api.set).toHaveBeenCalledWith(ROOT, [README], [README, INVESTORS]);
   });
 
   it('forgets a closed folder, and drops a load that read the file before a change', async () => {

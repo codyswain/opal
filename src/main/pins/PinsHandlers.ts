@@ -27,9 +27,9 @@ export class PinsHandlers {
   registerAll(): void {
     const { ipc, service } = this.deps;
     ipc.handle("pins:list", () => this.respond(() => service.list()));
-    ipc.handle("pins:set", (_, root: unknown, paths: unknown) =>
-      absolute(root) && pathList(paths)
-        ? this.respond(() => service.set(root, paths))
+    ipc.handle("pins:set", (_, root: unknown, paths: unknown, base: unknown) =>
+      absolute(root) && pathList(paths) && pathList(base)
+        ? this.respond(() => service.set(root, paths, base))
         : invalid(),
     );
   }

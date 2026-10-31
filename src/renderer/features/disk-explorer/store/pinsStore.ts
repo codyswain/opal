@@ -41,6 +41,14 @@ export function pinRoot(byRoot: PinsByRoot, path: string): string | null {
   );
 }
 
+/**
+ * The opened folder whose list holds `path`, else the one it would join. With
+ * one opened folder inside another, a pin can sit in the outer folder's list.
+ */
+export function pinList(byRoot: PinsByRoot, path: string): string | null {
+  return Object.keys(byRoot).find((root) => byRoot[root].includes(path)) ?? pinRoot(byRoot, path);
+}
+
 export function isPinned(byRoot: PinsByRoot, path: string | null): boolean {
   return path !== null && Object.values(byRoot).some((pins) => pins.includes(path));
 }
@@ -77,19 +85,38 @@ function samePaths(left: readonly string[] = [], right: readonly string[] = []):
 
 // Loads are numbered so a slow earlier answer never replaces a newer one,
 // and every local change bumps the revision so a load that read the file
-// before the change was written is dropped.
+// before the change was written is dropped. The write's answer then shows
+// what the file holds.
 let request = 0;
 let revision = 0;
 
-function save(root: string, pins: string[]): void {
+/**
+ * Writes a folder's pins. `base` is the list they were changed from, so main
+ * can keep what the file gained or lost since (a pull from another Mac). Its
+ * answer is shown unless the list changed again here meanwhile.
+ */
+function save(root: string, pins: string[], base: string[]): void {
   revision++;
   const failed = (error: string) => {
     toast.error(error);
     void usePinsStore.getState().load();
   };
-  void window.pinsAPI.set(root, pins).then(
+  void window.pinsAPI.set(root, pins, base).then(
     (response) => {
-      if (!response.success) failed(response.error);
+      if (!response.success) {
+        failed(response.error);
+        return;
+      }
+      const { byRoot, missing } = usePinsStore.getState();
+      const written = response.data;
+      if (!samePaths(byRoot[root], pins)) return;
+      const absent = [...missing.filter((pin) => !written.pins.includes(pin)), ...written.missing];
+      const sameMissing = absent.length === missing.length && absent.every((pin) => missing.includes(pin));
+      if (samePaths(written.pins, pins) && sameMissing) return;
+      usePinsStore.setState({
+        byRoot: { ...byRoot, [root]: written.pins },
+        missing: sameMissing ? missing : absent,
+      });
     },
     () => failed('The pins could not be saved.')
   );
@@ -109,15 +136,20 @@ export const usePinsStore = create<PinsStore>((set, get) => ({
       return;
     }
     if (token !== request || since !== revision || !response.success) return;
-    set({
-      byRoot: Object.fromEntries(response.data.map((folder) => [folder.root, folder.pins])),
-      missing: response.data.flatMap((folder) => folder.missing),
-    });
+    const byRoot: PinsByRoot = Object.fromEntries(response.data.map((folder) => [folder.root, folder.pins]));
+    const missing = response.data.flatMap((folder) => folder.missing);
+    const previous = get();
+    // An unchanged answer keeps the old objects, so the sidebar and tabs do not render again.
+    const sameRoots =
+      samePaths(Object.keys(byRoot), Object.keys(previous.byRoot)) &&
+      Object.keys(byRoot).every((root) => samePaths(byRoot[root], previous.byRoot[root]));
+    if (sameRoots && samePaths(missing, previous.missing)) return;
+    set({ byRoot, missing });
   },
 
   pin: (path, at) => {
     const { byRoot } = get();
-    const root = pinRoot(byRoot, path);
+    const root = pinList(byRoot, path);
     if (!root) {
       toast.error("Opal could not read this folder's pins.");
       return;
@@ -127,16 +159,17 @@ export const usePinsStore = create<PinsStore>((set, get) => ({
     const pins = [...others.slice(0, index), path, ...others.slice(index)];
     if (samePaths(pins, byRoot[root])) return;
     set({ byRoot: { ...byRoot, [root]: pins } });
-    save(root, pins);
+    save(root, pins, byRoot[root]);
   },
 
   unpin: (path) => {
     const { byRoot, missing } = get();
-    const root = pinRoot(byRoot, path);
-    if (!root || !byRoot[root].includes(path)) return;
-    const pins = byRoot[root].filter((pin) => pin !== path);
-    set({ byRoot: { ...byRoot, [root]: pins }, missing: missing.filter((pin) => pin !== path) });
-    save(root, pins);
+    const holding = Object.keys(byRoot).filter((root) => byRoot[root].includes(path));
+    if (holding.length === 0) return;
+    const next = { ...byRoot };
+    for (const root of holding) next[root] = byRoot[root].filter((pin) => pin !== path);
+    set({ byRoot: next, missing: missing.filter((pin) => pin !== path) });
+    for (const root of holding) save(root, next[root], byRoot[root]);
   },
 
   toggle: (path) => {
@@ -153,11 +186,11 @@ function prepare(next: (previous: PinsState) => PinsState) {
     (root) => !samePaths(updated.byRoot[root], previous.byRoot[root])
   );
   if (changed.length === 0) return;
-  const apply = (state: PinsState) => {
+  const apply = (state: PinsState, from: PinsState) => {
     usePinsStore.setState({ byRoot: state.byRoot, missing: state.missing });
-    for (const root of changed) save(root, state.byRoot[root] ?? []);
+    for (const root of changed) save(root, state.byRoot[root] ?? [], from.byRoot[root] ?? []);
   };
-  return { commit: () => apply(updated), rollback: () => apply(previous) };
+  return { commit: () => apply(updated, previous), rollback: () => apply(previous, updated) };
 }
 
 // Move to Trash in Opal unpins. A file gone from disk any other way stays

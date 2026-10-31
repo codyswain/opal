@@ -8,6 +8,8 @@ import { commandRegistry } from '@/renderer/features/commands/services/commandRe
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
 import { useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
+import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { stackLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
 import { installPinsApi, setPins } from '@/tests/helpers/pinsApi';
 import { useSettingsStore } from '@/renderer/features/settings';
@@ -287,10 +289,31 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(pinCommand()?.label).toBe('Pin page'));
     act(() => commandRegistry.executeCommand('page.togglePin'));
     expect(usePinsStore.getState().byRoot[ROOT]).toEqual([PLAN]);
-    expect(api.set).toHaveBeenLastCalledWith(ROOT, [PLAN]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [PLAN], []);
     await waitFor(() => expect(pinCommand()?.label).toBe('Unpin page'));
     act(() => usePaletteStore.getState().show('>unpin'));
     expect(await screen.findByTestId('palette-command-page.togglePin')).toHaveTextContent('Unpin page');
+  });
+
+  it('pins the section in view when a stream of daily pages is shown, not the stream\'s first page', async () => {
+    const api = installPinsApi();
+    setPins({ [ROOT]: [] });
+    const today = '/Vault/Library/daily/2026-10-30.md';
+    const monday = '/Vault/Library/daily/2026-10-26.md';
+    renderPalette();
+    const pinCommand = () => ((window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; label: string }[])
+      .find((command) => command.id === 'page.togglePin');
+    act(() => openTabs([stackLocation('daily', today)]));
+    const tabId = useTabsStore.getState().activeId ?? '';
+    act(() => useStackStore.getState().setViewed(tabId, monday));
+    act(() => commandRegistry.executeCommand('page.togglePin'));
+    expect(usePinsStore.getState().byRoot[ROOT]).toEqual([monday]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [monday], []);
+    await waitFor(() => expect(pinCommand()?.label).toBe('Unpin page'));
+    // Scrolled back to today's page, which is not pinned.
+    act(() => useStackStore.getState().setViewed(tabId, today));
+    await waitFor(() => expect(pinCommand()?.label).toBe('Pin page'));
+    act(() => useStackStore.getState().setViewed(tabId, null));
   });
 
   it('keeps the tab-position keys out of the palette', async () => {

@@ -175,6 +175,6 @@ contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);
 
 const pinsAPI: PinsAPI = {
   list: () => ipcRenderer.invoke("pins:list"),
-  set: (root, paths) => ipcRenderer.invoke("pins:set", root, paths),
+  set: (root, paths, base) => ipcRenderer.invoke("pins:set", root, paths, base),
 };
 contextBridge.exposeInMainWorld("pinsAPI", pinsAPI);

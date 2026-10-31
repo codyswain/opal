@@ -51,6 +51,18 @@ export function parsePins(root: string, text: string): string[] {
   return pins.slice(0, PINS_LIMIT);
 }
 
+/**
+ * Applies the renderer's change, from `base` (the pins it last knew) to
+ * `wanted`, to the pins the file holds now. A pull can change the file while
+ * Opal stays focused, so a pin added there is kept at the end and one removed
+ * there stays removed. When the file still holds `base`, this is `wanted`.
+ */
+export function mergePins(current: readonly string[], base: readonly string[], wanted: readonly string[]): string[] {
+  const removedThere = base.filter((pin) => !current.includes(pin));
+  const addedThere = current.filter((pin) => !base.includes(pin) && !wanted.includes(pin));
+  return [...wanted.filter((pin) => !removedThere.includes(pin)), ...addedThere];
+}
+
 /** Reads and writes each opened folder's `.opal/pins.json`. */
 export class PinsService {
   constructor(private deps: { registry: RootRegistry }) {}
@@ -73,21 +85,23 @@ export class PinsService {
   }
 
   /**
-   * Replaces an opened folder's pins with `paths`, in that order. The folder
-   * goes through the root registry. The pins are names to keep, not files
-   * read here, so each only has to sit inside that folder; a pinned file
-   * can be missing until a pull brings it.
+   * Writes an opened folder's pins as `paths`, in that order, merged with any
+   * change the file took since the renderer read `base` (see mergePins). The
+   * folder goes through the root registry. The pins are names to keep, not
+   * files read here, so each only has to sit inside that folder; a pinned
+   * file can be missing until a pull brings it.
    */
-  set(target: string, paths: readonly string[]): Promise<RootPins> {
+  set(target: string, paths: readonly string[], base: readonly string[]): Promise<RootPins> {
     return filesystemMutationQueue.run(async () => {
       const root = await openedVault(this.deps.registry, target);
-      const pins = [...new Set(paths.map(normalizePath))];
-      if (pins.length > PINS_LIMIT) throw new Error("That is too many pins.");
-      const stored = pins.map((pin) => {
+      const wanted = [...new Set(paths.map(normalizePath))];
+      for (const pin of wanted) {
         if (pin === root || !isInsideRoot(root, pin))
           throw new Error("Only files inside the folder can be pinned.");
-        return path.relative(root, pin).split(path.sep).join("/");
-      });
+      }
+      const pins = mergePins(await this.read(root), base.map(normalizePath), wanted);
+      if (pins.length > PINS_LIMIT) throw new Error("That is too many pins.");
+      const stored = pins.map((pin) => path.relative(root, pin).split(path.sep).join("/"));
       await this.write(root, { version: 1, pins: stored });
       return { root, pins, missing: await this.missing(pins) };
     });

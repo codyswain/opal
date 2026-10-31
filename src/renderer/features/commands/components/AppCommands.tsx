@@ -7,10 +7,10 @@ import {
   browseRecent,
   focusFile,
 } from "@/renderer/features/disk-explorer/navigation";
-import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
+import { shownPath, toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { isPinned, usePinsStore } from "@/renderer/features/disk-explorer/store/pinsStore";
-import { useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
+import { selectViewedPath, useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import {
   togglePageProperties,
   usePagePropertiesStore,
@@ -43,10 +43,14 @@ export const AppCommands: React.FC = () => {
   const propertiesOpen = usePagePropertiesStore((state) => state.open);
   // Next Section and Previous Section are there only while a stack is shown, so their keys are free elsewhere.
   const stackShown = useStackStore((state) => state.move !== null);
-  // Pin page or Unpin page is there only while a file is open.
+  // Pin page or Unpin page is there only while a file is open. In a stack it
+  // acts on the section in view, as the day sidebar does.
   const openedPath = useTabsStore(selectOpenedPath);
-  const fileOpen = openedPath !== null;
-  const pagePinned = usePinsStore((state) => isPinned(state.byRoot, openedPath));
+  const activeTab = useTabsStore((state) => state.activeId);
+  const viewedPath = useStackStore((state) => selectViewedPath(state, { activeId: activeTab }));
+  const pagePath = viewedPath ?? openedPath;
+  const fileOpen = pagePath !== null;
+  const pagePinned = usePinsStore((state) => isPinned(state.byRoot, pagePath));
 
   useEffect(() => {
     const commands: Command[] = [
@@ -275,8 +279,8 @@ export const AppCommands: React.FC = () => {
             type: "action",
             keywords: ["pin", "pinned", "sidebar", "bookmark", "favorite"],
             perform: () => {
-              const opened = selectOpenedPath(tabs());
-              if (opened) usePinsStore.getState().toggle(opened);
+              const page = shownPath();
+              if (page) usePinsStore.getState().toggle(page);
             },
           } satisfies Command,
         ]

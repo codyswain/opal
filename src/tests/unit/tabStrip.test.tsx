@@ -208,10 +208,27 @@ describe('TabStrip', () => {
     };
     await user.click(within(await menuFor(A)).getByRole('menuitem', { name: 'Pin' }));
     expect(usePinsStore.getState().byRoot['/V']).toEqual([A]);
-    expect(api.set).toHaveBeenLastCalledWith('/V', [A]);
+    expect(api.set).toHaveBeenLastCalledWith('/V', [A], []);
     await user.click(within(await menuFor(A)).getByRole('menuitem', { name: 'Unpin' }));
     expect(usePinsStore.getState().byRoot['/V']).toEqual([]);
     expect(within(await menuFor('recent')).queryByRole('menuitem', { name: /^(Pin|Unpin)$/ })).toBeNull();
+  });
+
+  it('offers no Pin on the stream of daily pages, whose first page would open alone', async () => {
+    const user = userEvent.setup();
+    installPinsApi();
+    setPins({ '/V': [] });
+    const day = '/V/Library/daily/2026-10-30.md';
+    openTabs([stackLocation('daily', day), stackLocation('recording', '/V/Library/recordings/standup.md')]);
+    renderStrip();
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${day}`) });
+    let menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toContain('Reveal in Finder');
+    expect(within(menu).queryByRole('menuitem', { name: /^(Pin|Unpin)$/ })).toBeNull();
+    await user.keyboard('{Escape}');
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('tab-/V/Library/recordings/standup.md') });
+    menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Pin' })).toBeInTheDocument();
   });
 
   it('lists every tab in a menu once the row is crowded', async () => {

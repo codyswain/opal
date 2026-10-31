@@ -53,7 +53,7 @@ describe('ConfirmDeleteDialog', () => {
     await waitFor(() => expect(window.diskAPI.trash).toHaveBeenCalledWith('/V/note.md'));
     await waitFor(() => expect(useDiskStore.getState().pendingDelete).toBeNull());
     expect(usePinsStore.getState().byRoot['/V']).toEqual(['/V/keep.md']);
-    expect(window.pinsAPI.set).toHaveBeenCalledWith('/V', ['/V/keep.md']);
+    expect(window.pinsAPI.set).toHaveBeenCalledWith('/V', ['/V/keep.md'], ['/V/note.md', '/V/keep.md']);
   });
 
   it('does nothing on cancel', async () => {
