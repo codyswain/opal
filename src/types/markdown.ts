@@ -7,6 +7,8 @@ export interface MarkdownDocument {
   size: number;
   /** How many keys the frontmatter holds. The page hides the block and shows this count. */
   properties: number;
+  /** Git was rewriting the file's repo as it was read, so the text may be on its way somewhere else. */
+  gitBusy: boolean;
 }
 
 /** One frontmatter key and its value as text: one entry for a single value, one per item for a list, none when empty. */

@@ -7,6 +7,7 @@ import { classifyFile } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import type { ActivityRecorder } from '@/main/activity/ActivityService';
 import type { RootRegistry } from './RootRegistry';
+import { gitBusy } from './gitActivity';
 import { MetadataError, assertNoSymlinks, splitMarkdown } from './MetadataCodec';
 import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import type { MetadataService } from './MetadataService';
@@ -27,6 +28,10 @@ export class MarkdownError extends Error {
 }
 export class MarkdownConflictError extends MarkdownError {
   constructor(message = 'This file changed on disk since you opened it.') { super(message); this.name = 'MarkdownConflictError'; }
+}
+/** Git is rewriting the file's repo; the write may be tried again once it is done. */
+export class MarkdownHeldError extends MarkdownError {
+  constructor(message = 'Git is changing files in this folder. Try again in a moment.') { super(message); this.name = 'MarkdownHeldError'; }
 }
 
 /** The line a `replaceLine` call changes: its 0-based index in the file, its text now and its new text. */
@@ -95,6 +100,7 @@ export class MarkdownDocumentService {
       revision: loaded.revision,
       size: loaded.bytes.length,
       properties: loaded.properties,
+      gitBusy: await gitBusy(loaded.resolved),
     };
   }
 
@@ -151,7 +157,10 @@ export class MarkdownDocumentService {
 
   /**
    * Replaces the loaded file with `next` atomically, and refuses when the
-   * file's bytes changed since it was loaded. Runs inside the queue.
+   * file's bytes changed since it was loaded or git is rewriting the repo.
+   * A write while `git merge --autostash` runs would land in the tree git
+   * reset to HEAD, and git could then not put the stashed lines back. Runs
+   * inside the queue.
    */
   private async replace(loaded: LoadedFile, next: Buffer): Promise<MarkdownWriteResult> {
     // Saving text that matches the file leaves the file alone.
@@ -165,6 +174,7 @@ export class MarkdownDocumentService {
     try {
       const handle = await open(temporary, 'wx', mode);
       try { await handle.writeFile(next); await handle.sync(); } finally { await handle.close(); }
+      if (await gitBusy(loaded.resolved)) throw new MarkdownHeldError();
       const checked = await original.readFile();
       if (revisionOf(checked) !== loaded.revision) throw new MarkdownConflictError();
       await rename(temporary, loaded.resolved);

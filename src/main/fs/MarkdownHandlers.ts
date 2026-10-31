@@ -11,7 +11,7 @@ import {
 } from '@/types/markdown';
 import { PathNotAllowedError } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
-import { MarkdownConflictError, MarkdownError, type MarkdownDocumentService } from './MarkdownDocumentService';
+import { MarkdownConflictError, MarkdownError, MarkdownHeldError, type MarkdownDocumentService } from './MarkdownDocumentService';
 import type { LinkIndex } from './LinkIndex';
 
 export interface MarkdownHandlerDependencies {
@@ -20,7 +20,7 @@ export interface MarkdownHandlerDependencies {
   links: LinkIndex;
 }
 
-export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true };
+export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true; gitBusy?: true };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -72,6 +72,7 @@ export class MarkdownHandlers {
       return { success: true, data: await operation() };
     } catch (error) {
       if (error instanceof MarkdownConflictError) return { success: false, error: error.message, conflict: true };
+      if (error instanceof MarkdownHeldError) return { success: false, error: error.message, gitBusy: true };
       if (error instanceof MarkdownError || error instanceof MetadataError || error instanceof PathNotAllowedError) {
         return { success: false, error: error.message };
       }
