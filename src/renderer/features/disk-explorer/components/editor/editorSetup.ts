@@ -1,5 +1,5 @@
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
-import { markdown } from '@codemirror/lang-markdown';
+import { deleteMarkupBackward, insertNewlineContinueMarkupCommand, markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { diff } from '@codemirror/merge';
 import { search, searchKeymap } from '@codemirror/search';
@@ -107,6 +107,39 @@ function toggleMarker(marker: string): StateCommand {
   };
 }
 
+// Enter on an empty item always moves it out a level. By default an empty
+// second item instead gets a blank line above it, which makes a tight list loose.
+const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+/** `tr` with the spaces taken off each line it leaves holding only spaces, except the indent before a caret. */
+function withoutSpaceLines(tr: Transaction): Transaction {
+  const { newDoc, newSelection } = tr;
+  const cuts = new Map<number, ChangeSpec>();
+  tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    for (let at = fromB; at <= toB;) {
+      const line = newDoc.lineAt(at);
+      at = line.to + 1;
+      if (!/^[ \t]+$/.test(line.text)) continue;
+      const caret = newSelection.ranges.find((range) => range.head >= line.from && range.head <= line.to);
+      const from = caret ? caret.head : line.from;
+      if (from < line.to) cuts.set(line.number, { from, to: line.to });
+    }
+  });
+  if (cuts.size === 0) return tr;
+  const cut = ChangeSet.of([...cuts.values()], newDoc.length);
+  return tr.startState.update({ changes: tr.changes.compose(cut), selection: newSelection.map(cut), scrollIntoView: true, userEvent: 'input' });
+}
+
+/**
+ * Enter in a list or quote, as in Obsidian. A non-empty item continues, split
+ * at the caret. An empty nested item moves out one level, and an empty
+ * top-level item loses its marker, so the list ends. Numbered lists renumber,
+ * and no line is left holding only spaces. Returns false outside lists and
+ * quotes, so a plain newline runs.
+ */
+export const insertNewlineInList: StateCommand = ({ state, dispatch }) =>
+  continueMarkup({ state, dispatch: (tr) => dispatch(withoutSpaceLines(tr)) });
+
 // Inline styles as classes for editor.css. Marks still showing on an edited line are muted.
 const highlight = HighlightStyle.define([
   { tag: tags.strong, class: 'cm-md-strong' },
@@ -134,13 +167,15 @@ export function markdownEditorExtensions(path: string, openNote: (path: string) 
     EditorState.lineSeparator.of('\n'),
     pageContext.of({ path, openNote }),
     history(),
-    markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle], completeHTMLTags: false }),
+    markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle], completeHTMLTags: false, addKeymap: false }),
     syntaxHighlighting(highlight),
     wikiLinks,
     livePreview,
     pageProperties,
     search({ top: true }),
     keymap.of([
+      { key: 'Enter', run: insertNewlineInList },
+      { key: 'Backspace', run: deleteMarkupBackward },
       { key: 'Mod-b', run: toggleMarker('**') },
       { key: 'Mod-i', run: toggleMarker('*') },
       ...searchKeymap,
