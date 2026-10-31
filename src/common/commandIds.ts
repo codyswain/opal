@@ -8,7 +8,7 @@
  */
 export const COMMAND_IDS = {
   openSettings: "app.openSettings",
-  openFolder: "files.openFolder",
+  goToFile: "files.goTo",
   newNote: "files.newNote",
   collapseAllFolders: "files.collapseAll",
   toggleLeftPane: "pane.toggleLeft",

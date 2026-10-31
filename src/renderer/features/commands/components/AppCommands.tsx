@@ -124,14 +124,13 @@ export const AppCommands: React.FC = () => {
         perform: () => useSettingsStore.getState().show(),
       },
       {
-        id: COMMAND_IDS.openFolder,
-        name: "Open Folder…",
+        id: COMMAND_IDS.goToFile,
+        name: "Go to File…",
         type: "navigation",
         shortcut: ["CmdOrCtrl+O"],
-        keywords: ["files", "folder", "open", "disk", "add"],
-        perform: () => {
-          void useDiskStore.getState().openFolder();
-        },
+        keywords: [],
+        hidden: true,
+        perform: () => usePaletteStore.getState().show("", { filesOnly: true }),
       },
       {
         id: COMMAND_IDS.newNote,
@@ -324,6 +323,7 @@ export const AppCommands: React.FC = () => {
   }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
+  // Cmd+O is Go to File, a menu accelerator, so it works while the editor has focus.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;

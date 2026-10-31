@@ -35,7 +35,7 @@ function makeMenu() {
 
 const COMMANDS = [
   { id: COMMAND_IDS.openSettings, label: 'Settings…', accelerator: 'CmdOrCtrl+,' },
-  { id: COMMAND_IDS.openFolder, label: 'Open Folder…', accelerator: 'CmdOrCtrl+O' },
+  { id: COMMAND_IDS.goToFile, label: 'Go to File…', accelerator: 'CmdOrCtrl+O' },
 ];
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ describe('AppMenu', () => {
   it('replaces the previous menu when installed again', () => {
     const menu = makeMenu();
     menu.install(COMMANDS);
-    menu.install([{ id: COMMAND_IDS.openFolder, label: 'Open Folder…' }]);
+    menu.install([{ id: COMMAND_IDS.goToFile, label: 'Go to File…' }]);
 
     expect(menuStub.setApplicationMenu).toHaveBeenCalledTimes(2);
     expect(allItems(built!).some((item) => item.label === 'Settings…')).toBe(false);

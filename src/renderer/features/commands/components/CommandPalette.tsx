@@ -38,13 +38,14 @@ function useCommandList(): Command[] {
  * registered command. Empty shows what was touched recently; a leading `>`
  * limits results to commands, as in most editors. A file is one line, as in
  * Obsidian's quick switcher: its name as the tree shows it, then its folder.
- * Files come best match first (matchFile.ts in main). New Tab asks only for
- * a file.
+ * Files come best match first (matchFile.ts in main). Go to File (Cmd+O) and
+ * New Tab ask only for a file.
  */
 export const CommandPalette: React.FC = () => {
   const open = usePaletteStore((state) => state.open);
   const initialQuery = usePaletteStore((state) => state.initialQuery);
   const newTabMode = usePaletteStore((state) => state.newTab);
+  const filesOnly = usePaletteStore((state) => state.filesOnly);
   const hide = usePaletteStore((state) => state.hide);
   const roots = useDiskStore((state) => state.roots);
   const { navigateFiles } = useShell();
@@ -120,8 +121,8 @@ export const CommandPalette: React.FC = () => {
     const matched = rankCommands(commands.filter((command) => !command.hidden), term, commandMode ? Infinity : term ? COMMAND_LIMIT_WITH_FILES : Infinity)
       .map((command): PaletteItem => ({ kind: 'command', command }));
     if (commandMode) return [{ title: 'Commands', items: matched }];
-    // A new tab is for a file, so New Tab lists no commands unless asked with `>`.
-    const commandSection = { title: 'Commands', items: newTabMode ? [] : matched };
+    // Go to File and New Tab are for a file, so they list no commands unless asked with `>`.
+    const commandSection = { title: 'Commands', items: filesOnly ? [] : matched };
     if (!term) return [{ title: 'Recent', items: recent }, commandSection].filter((section) => section.items.length > 0);
     const named = new Set(files.map((item) => (item.kind === 'file' ? item.entry.path : '')));
     return [
@@ -129,7 +130,7 @@ export const CommandPalette: React.FC = () => {
       { title: 'Inside files', items: content.filter((item) => item.kind === 'file' && !named.has(item.entry.path)) },
       commandSection,
     ].filter((section) => section.items.length > 0);
-  }, [commands, term, commandMode, newTabMode, recent, files, content]);
+  }, [commands, term, commandMode, filesOnly, recent, files, content]);
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 
   const active = Math.max(0, flat.findIndex((item) => itemKey(item) === activeKey));
@@ -171,7 +172,7 @@ export const CommandPalette: React.FC = () => {
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={newTabMode ? 'Open a file in a new tab' : 'Search files, or > for commands'}
+              placeholder={newTabMode ? 'Open a file in a new tab' : filesOnly ? 'Open a file' : 'Search files, or > for commands'}
               aria-label="Search files and commands"
               aria-activedescendant={flat[active] ? `palette-item-${active}` : undefined}
               role="combobox"

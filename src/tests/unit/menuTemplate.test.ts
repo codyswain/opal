@@ -5,7 +5,7 @@ import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 /** What the renderer reports; AppCommands holds the real list. */
 const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.openSettings, label: 'Settings…', accelerator: 'CmdOrCtrl+,' },
-  { id: COMMAND_IDS.openFolder, label: 'Open Folder…', accelerator: 'CmdOrCtrl+O' },
+  { id: COMMAND_IDS.goToFile, label: 'Go to File…', accelerator: 'CmdOrCtrl+O' },
   { id: COMMAND_IDS.newNote, label: 'New Note', accelerator: 'CmdOrCtrl+N' },
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
@@ -82,7 +82,7 @@ describe('buildMenuTemplate', () => {
     expect(shown(menu(build(), 'File'))).toEqual([
       'New Tab CmdOrCtrl+T',
       'New Note CmdOrCtrl+N',
-      'Open Folder… CmdOrCtrl+O',
+      'Go to File… CmdOrCtrl+O',
       '-',
       'Close Tab CmdOrCtrl+W',
       'Close Window CmdOrCtrl+Shift+W',
@@ -152,7 +152,7 @@ describe('buildMenuTemplate', () => {
 
   it('omits commands that are not supplied, with no stray separators or empty menus', () => {
     const template = build([{ id: COMMAND_IDS.openSettings, label: 'Settings…' }]);
-    expect(findItem(template, COMMAND_IDS.openFolder)).toBeUndefined();
+    expect(findItem(template, COMMAND_IDS.goToFile)).toBeUndefined();
     expect(labels(template)).not.toContain('Go');
     expect(shown(menu(template, 'File'))).toEqual(['Close Window CmdOrCtrl+Shift+W']);
     expect(shown(menu(template, 'Window'))).toEqual(['Minimize', 'Zoom', '-', 'Bring All to Front']);
