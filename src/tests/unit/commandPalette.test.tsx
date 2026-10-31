@@ -150,7 +150,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 
-  it('searches file names across the vault as you type, folders left out, and opens the chosen one', async () => {
+  it('searches file names across the vault as you type, best match first, folders left out, and opens the chosen one', async () => {
     const api = installCollectionsApi({
       query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })),
     });
@@ -162,10 +162,12 @@ describe('CommandPalette', () => {
     const file = await screen.findByTestId(`palette-file-${PLAN}`);
     expect(file).toHaveTextContent(/^planProjects\/Atlas$/);
     expect(file).toHaveAttribute('title', 'Projects/Atlas/plan.md');
-    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
-      filters: [{ field: 'name', op: 'contains', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
+    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([{
+      version: 1,
+      filters: [{ field: 'name', op: 'matches', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
       scope: { kind: 'all-roots' },
-    });
+      sort: { field: 'match', direction: 'desc' },
+    }, { limit: 20 }]);
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openedPath()).toBe(PLAN));
     expect(tabPaths()).toEqual([PLAN]);

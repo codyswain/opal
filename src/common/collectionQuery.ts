@@ -22,7 +22,7 @@ export const FILE_KINDS: readonly FileKind[] = [
   'directory', 'markdown', 'text', 'pdf', 'image', 'audio', 'video', 'other',
 ];
 
-const SORT_FIELDS = new Set(['touched', 'name']);
+const SORT_FIELDS = new Set(['touched', 'name', 'match']);
 
 function fail(message: string): never {
   throw new CollectionQueryError(message);
@@ -43,7 +43,7 @@ function validateFilter(value: unknown): CollectionFilter {
   const { field, op } = value;
   switch (field) {
     case 'name': {
-      if (op !== 'contains' && op !== 'not-contains') fail('Name filters support contains and does not contain.');
+      if (op !== 'contains' && op !== 'not-contains' && op !== 'matches') fail('Name filters support contains, does not contain and matches.');
       if (typeof value.value !== 'string') fail('Name filters need text.');
       const text = value.value.trim();
       if (text.length === 0) fail('Name filters need text.');

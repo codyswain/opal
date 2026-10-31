@@ -2,6 +2,7 @@ import { constants, type Dirent } from "fs";
 import { lstat, open, readdir } from "fs/promises";
 import path from "path";
 import type { RootRegistry } from "@/main/fs/RootRegistry";
+import { mapLimited } from "@/main/mapLimited";
 import { isInsideRoot, normalizePath } from "@/main/fs/paths";
 import { MARKDOWN_DOCUMENT_LIMIT } from "@/types/markdown";
 import type { DayFile, DayLink, DayLogEntry, DayRecording, VaultDay, VaultDayChange } from "@/types/day";
@@ -63,19 +64,6 @@ interface CachedFile {
   mtimeMs: number;
   size: number;
   value: unknown;
-}
-
-async function mapLimited<T, R>(items: readonly T[], limit: number, map: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await map(items[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 /**

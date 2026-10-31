@@ -19,7 +19,7 @@ type PaletteItem =
 
 const itemKey = (item: PaletteItem): string => item.kind === 'file' ? `file:${item.entry.path}` : `command:${item.command.id}`;
 
-const FILE_LIMIT = 8;
+const FILE_LIMIT = 20;
 const RECENT_LIMIT = 6;
 const COMMAND_LIMIT_WITH_FILES = 5;
 export const FILE_SEARCH_DEBOUNCE_MS = 120;
@@ -38,7 +38,8 @@ function useCommandList(): Command[] {
  * registered command. Empty shows what was touched recently; a leading `>`
  * limits results to commands, as in most editors. A file is one line, as in
  * Obsidian's quick switcher: its name as the tree shows it, then its folder.
- * New Tab asks only for a file.
+ * Files come best match first (matchFile.ts in main). New Tab asks only for
+ * a file.
  */
 export const CommandPalette: React.FC = () => {
   const open = usePaletteStore((state) => state.open);
@@ -85,7 +86,7 @@ export const CommandPalette: React.FC = () => {
     const timer = setTimeout(() => {
       void window.collectionsAPI.query(
         // Files only, as in Obsidian's quick switcher; folders open in the tree.
-        { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'contains', value: term.slice(0, 200) }, { field: 'kind', op: 'not-in', values: ['directory'] }], sort: { field: 'touched', direction: 'desc' } },
+        { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value: term.slice(0, 200) }, { field: 'kind', op: 'not-in', values: ['directory'] }], sort: { field: 'match', direction: 'desc' } },
         { limit: FILE_LIMIT }
       ).then((response) => {
         if (token !== request.current) return;

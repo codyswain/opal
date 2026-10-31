@@ -1,7 +1,8 @@
 import type { FileKind } from '@/common/fileKind';
 import type { DiskEntry } from './disk';
 
-export type CollectionSortField = 'touched' | 'name';
+/** `match` puts the best `matches` hits first; see evaluateQuery for the ties. */
+export type CollectionSortField = 'touched' | 'name' | 'match';
 export type SortDirection = 'asc' | 'desc';
 
 export interface CollectionSort {
@@ -14,8 +15,12 @@ export interface CollectionScope {
   kind: 'all-roots';
 }
 
+/**
+ * `matches` is the file switcher's match: on the name first, then every word
+ * of the text in the path or the frontmatter title (matchFile.ts).
+ */
 export type CollectionFilter =
-  | { field: 'name'; op: 'contains' | 'not-contains'; value: string }
+  | { field: 'name'; op: 'contains' | 'not-contains' | 'matches'; value: string }
   | { field: 'kind'; op: 'in' | 'not-in'; values: FileKind[] };
 
 export type CollectionFilterField = CollectionFilter['field'];
