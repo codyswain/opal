@@ -1,7 +1,7 @@
-import { isInsideRoot } from '@/main/fs/paths';
 import type { ActivityRecord } from '@/types/activity';
 import type { CollectionFilter, CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { IndexedItem } from './CollectionIndex';
+import { matchTier, type MatchTarget } from './matchFile';
 
 export interface EvaluationInput {
   items: readonly IndexedItem[];
@@ -19,11 +19,14 @@ interface SortableRow {
   row: CollectionRow;
   name: string;
   path: string;
+  /** The worst tier among the `matches` filters; 0 without one. */
+  tier: number;
 }
 
 function matches(row: CollectionRow, filter: CollectionFilter): boolean {
   switch (filter.field) {
     case 'name': {
+      if (filter.op === 'matches') return true; // Checked with its tier in evaluateCollectionQuery.
       const found = row.entry.name.toLowerCase().includes(filter.value.toLowerCase());
       return filter.op === 'contains' ? found : !found;
     }
@@ -41,6 +44,17 @@ function compareRows(query: CollectionQuery): (a: SortableRow, b: SortableRow) =
   const byName = (a: SortableRow, b: SortableRow) =>
     collator.compare(a.name, b.name) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (query.sort.field === 'name') return (a, b) => sign * byName(a, b);
+  if (query.sort.field === 'match') {
+    // Best first when descending: the tier, then Markdown above attachments,
+    // then the latest touch, then the latest change on disk.
+    const best = (a: SortableRow, b: SortableRow) =>
+      a.tier - b.tier ||
+      Number(b.row.entry.kind === 'markdown') - Number(a.row.entry.kind === 'markdown') ||
+      (b.row.touchedAt ?? 0) - (a.row.touchedAt ?? 0) ||
+      b.row.entry.mtimeMs - a.row.entry.mtimeMs ||
+      byName(a, b);
+    return (a, b) => (sign < 0 ? best(a, b) : best(b, a));
+  }
   return (a, b) => {
     const left = a.row.touchedAt;
     const right = b.row.touchedAt;
@@ -52,12 +66,41 @@ function compareRows(query: CollectionQuery): (a: SortableRow, b: SortableRow) =
   };
 }
 
+/** The worst tier over every `matches` text, or null when one of them does not match. */
+function worstTier(searches: readonly string[], target: MatchTarget): number | null {
+  let worst = 0;
+  for (const search of searches) {
+    const tier = matchTier(search, target);
+    if (tier === null) return null;
+    worst = Math.max(worst, tier);
+  }
+  return worst;
+}
+
+/**
+ * The innermost opened root holding the item, which its path is matched
+ * from. Compares as isInsideRoot does but without normalizing: roots and
+ * indexed paths are normalized already, and normalizing both on every item
+ * took most of each keystroke's search.
+ */
+function rootOf(allowedRoots: readonly string[], target: string): string | null {
+  let found: string | null = null;
+  for (const root of allowedRoots) {
+    const inside = target === root || target.startsWith(root === '/' ? '/' : `${root}/`);
+    if (inside && (found === null || root.length > found.length)) found = root;
+  }
+  return found;
+}
+
 export function evaluateCollectionQuery(input: EvaluationInput): CollectionRow[] {
   const { query, allowedRoots } = input;
+  const searches = query.filters.flatMap((filter) => (filter.field === 'name' && filter.op === 'matches' ? [filter.value] : []));
   const rows: SortableRow[] = [];
   for (const item of input.items) {
     // Roots are containers, not results; overlapping roots yield one row per item.
-    if (allowedRoots.includes(item.path) || !allowedRoots.some((root) => isInsideRoot(root, item.path))) continue;
+    if (allowedRoots.includes(item.path)) continue;
+    const root = rootOf(allowedRoots, item.path);
+    if (root === null) continue;
     // A record whose identity no longer matches the item belongs to a
     // replaced file; its history is not inherited, matching Recent.
     const stored = input.activity(item.path);
@@ -67,9 +110,10 @@ export function evaluateCollectionQuery(input: EvaluationInput): CollectionRow[]
       entry: { path: item.path, name: item.name, kind: item.kind, isDirectory: item.isDirectory, size: item.size, mtimeMs: item.mtimeMs },
       touchedAt: touchedAt > 0 ? touchedAt : null,
     };
-    if (query.filters.every((filter) => matches(row, filter))) {
-      rows.push({ row, name: item.name, path: item.path });
-    }
+    if (!query.filters.every((filter) => matches(row, filter))) continue;
+    const tier = searches.length === 0 ? 0
+      : worstTier(searches, { name: item.name, relativePath: item.path.slice(root === '/' ? 1 : root.length + 1), title: item.title });
+    if (tier !== null) rows.push({ row, name: item.name, path: item.path, tier });
   }
   rows.sort(compareRows(query));
   return rows.map((sortable) => sortable.row);

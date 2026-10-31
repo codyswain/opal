@@ -47,7 +47,7 @@ function renderPalette() {
 }
 
 beforeEach(() => {
-  usePaletteStore.setState({ open: false, initialQuery: '', newTab: false });
+  usePaletteStore.setState({ open: false, initialQuery: '', newTab: false, filesOnly: false });
   resetTabs();
   useSettingsStore.setState({ open: false });
   usePagePropertiesStore.setState({ open: false });
@@ -150,7 +150,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 
-  it('searches file names across the vault as you type, folders left out, and opens the chosen one', async () => {
+  it('searches file names across the vault as you type, best match first, folders left out, and opens the chosen one', async () => {
     const api = installCollectionsApi({
       query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })),
     });
@@ -162,10 +162,12 @@ describe('CommandPalette', () => {
     const file = await screen.findByTestId(`palette-file-${PLAN}`);
     expect(file).toHaveTextContent(/^planProjects\/Atlas$/);
     expect(file).toHaveAttribute('title', 'Projects/Atlas/plan.md');
-    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
-      filters: [{ field: 'name', op: 'contains', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
+    expect((api.query as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([{
+      version: 1,
+      filters: [{ field: 'name', op: 'matches', value: 'pla' }, { field: 'kind', op: 'not-in', values: ['directory'] }],
       scope: { kind: 'all-roots' },
-    });
+      sort: { field: 'match', direction: 'desc' },
+    }, { limit: 20 }]);
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openedPath()).toBe(PLAN));
     expect(tabPaths()).toEqual([PLAN]);
@@ -193,6 +195,36 @@ describe('CommandPalette', () => {
     await screen.findByTestId(`palette-file-${PLAN}`);
     await user.keyboard('{Enter}');
     await waitFor(() => expect(tabPaths()).toEqual(['/Vault/inbox.md', PLAN, PLAN]));
+  });
+
+  it('opens on Cmd+O, the Go to File menu item, asking only for a file, which opens in the current tab', async () => {
+    installCollectionsApi({
+      query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })),
+    });
+    const user = userEvent.setup();
+    openTabs(['/Vault/inbox.md']);
+    renderPalette();
+    const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; label: string; accelerator?: string }[];
+    expect(reported.find((command) => command.id === COMMAND_IDS.goToFile)).toMatchObject({ label: 'Go to File…', accelerator: 'CmdOrCtrl+O' });
+    // Another folder opens from Settings only.
+    expect(reported.map((command) => command.id)).not.toContain('files.openFolder');
+    expect(reported.filter((command) => command.accelerator === 'CmdOrCtrl+O')).toHaveLength(1);
+
+    // The menu sends the command id, as the key does.
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.goToFile));
+    const palette = await screen.findByTestId('command-palette');
+    expect(within(palette).getByRole('combobox')).toHaveAttribute('placeholder', 'Open a file');
+    await within(palette).findByTestId('palette-file-/Vault/inbox.md');
+    expect(within(palette).queryByRole('group', { name: 'Commands' })).toBeNull();
+    await user.type(within(palette).getByRole('combobox'), 'pla');
+    await within(palette).findByTestId(`palette-file-${PLAN}`);
+    expect(within(palette).queryByRole('group', { name: 'Commands' })).toBeNull();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(tabPaths()).toEqual([PLAN]));
+
+    // Cmd+K still opens the whole palette.
+    await user.keyboard('{Meta>}k{/Meta}');
+    expect(await screen.findByRole('group', { name: 'Commands' })).toBeInTheDocument();
   });
 
   it('asks only for a file after New Tab, and opens Daily there in a new tab when asked with >', async () => {

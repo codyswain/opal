@@ -38,6 +38,12 @@ first: a file tree on the left and one clean page.
   Search (Cmd+K), which opens the palette. Back and forward live here and
   nowhere else. Search moved here from the middle of the tab row (Cody,
   2026-10-29), so the tabs have their whole row.
+- Cmd+O (File > Go to File…) opens the palette for files only, as Obsidian's
+  quick switcher does (2026-10-31). Files rank by the exact name, then a
+  prefix, a word start, a substring, then every typed word in the path or
+  the frontmatter title; Markdown above attachments, then the latest touch.
+  The names are listed once the window shows, so the first search does not
+  wait for them.
 - Collapse all folders (Obsidian has the same) is an icon just left of
   Search. It shows only while the pointer is over the sidebar or focus is in
   it, and only when a folder is open, so the row stays quiet at rest. View >

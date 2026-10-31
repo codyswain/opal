@@ -20,7 +20,7 @@ function makeEntries(count: number): DiskEntry[] {
 }
 
 function makeItems(count: number): IndexedItem[] {
-  return makeEntries(count).map((entry) => ({ ...entry, id: null }));
+  return makeEntries(count).map((entry) => ({ ...entry, id: null, title: null }));
 }
 
 /** Median of several runs — a single timing on a shared CI runner is noise. */
@@ -71,6 +71,27 @@ describe('keystroke budget', () => {
         touchedAt: () => 0,
         allowedRoots: [ROOT],
         query: search('file-4'),
+      })
+    );
+    expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs);
+  });
+
+  it('ranks 5,000 file names, paths and titles within the keystroke budget', () => {
+    // Date-prefixed names in nested folders, some with a title, like a vault's.
+    const vault = items.map((entry, index) => ({
+      ...entry,
+      path: `${ROOT}/Library/folder-${index % 40}/sub ${index % 7}/2026-10-${String(index % 28).padStart(2, '0')} note ${index}.md`,
+      name: `2026-10-${String(index % 28).padStart(2, '0')} note ${index}.md`,
+      kind: 'markdown' as const,
+      title: index % 3 === 0 ? `Meeting about topic ${index}` : null,
+    }));
+    const elapsed = medianMs(() =>
+      evaluateCollectionQuery({
+        items: vault,
+        activity: () => null,
+        touchedAt: () => 0,
+        allowedRoots: [ROOT],
+        query: { ...search('ignored'), filters: [{ field: 'name', op: 'matches', value: 'topic 12 meeting' }], sort: { field: 'match', direction: 'desc' } },
       })
     );
     expect(elapsed).toBeLessThan(BUDGETS.keystrokeMs);

@@ -9,7 +9,7 @@ const DAY = 24 * 3600 * 1000;
 
 function item(over: Partial<IndexedItem> & { path: string }): IndexedItem {
   const name = over.path.split('/').pop() ?? over.path;
-  return { name, kind: 'markdown', isDirectory: false, size: 10, mtimeMs: NOW - 5 * DAY, id: null, ...over };
+  return { name, kind: 'markdown', isDirectory: false, size: 10, mtimeMs: NOW - 5 * DAY, id: null, title: null, ...over };
 }
 
 const items: IndexedItem[] = [
@@ -107,5 +107,68 @@ describe('sorting', () => {
     expect(paths(run([], { field: 'touched', direction: 'asc' }))).toEqual([
       '/V/notes.md', '/V/Blank.md', '/V/Projects/atlas.pdf', '/V/Projects/Deep/cover.png', '/V/Projects/Deep', '/V/mystery.pdf', '/V/Projects',
     ]);
+  });
+});
+
+describe('file switcher match', () => {
+  const vault = [
+    item({ path: '/V/Library/people', kind: 'directory', isDirectory: true }),
+    item({ path: '/V/Library/people/Ada Lovelace.md', mtimeMs: NOW - 30 * DAY }),
+    item({ path: '/V/Library/1-on-1s/2026-10-27 Ada Lovelace (draft).md', mtimeMs: NOW - DAY }),
+    item({ path: '/V/Library/offers/Ada Lovelace Offer Letter.pdf', kind: 'pdf', mtimeMs: NOW - DAY }),
+    item({ path: '/V/Library/data/freight-large-dataset.md', mtimeMs: NOW - 9 * DAY }),
+    item({ path: '/V/Library/data/freight_box_r4.png', kind: 'image', mtimeMs: NOW }),
+    item({ path: '/V/Library/data/freight-box-v3-dataset.md', mtimeMs: NOW - 2 * DAY }),
+    item({ path: '/V/Library/chats/2026-09-28-codex-01a0e734.md', title: 'Freight box review' }),
+  ];
+  const touched: Record<string, ActivityRecord> = {
+    '/V/Library/data/freight-large-dataset.md': { path: '/V/Library/data/freight-large-dataset.md', id: null, openedAt: NOW - DAY, organizedAt: null, editedAt: null },
+  };
+  const find = (value: string) => evaluateCollectionQuery({
+    items: vault,
+    activity: (target) => touched[target] ?? null,
+    touchedAt,
+    allowedRoots: ['/V'],
+    query: {
+      version: 1,
+      scope: { kind: 'all-roots' },
+      filters: [{ field: 'name', op: 'matches', value }, { field: 'kind', op: 'not-in', values: ['directory'] }],
+      sort: { field: 'match', direction: 'desc' },
+    },
+  }).map((row) => row.entry.path.replace('/V/Library/', ''));
+
+  it('puts the exact name first, even when a date-prefixed name is newer', () => {
+    expect(find('Ada Lovelace')).toEqual([
+      'people/Ada Lovelace.md',
+      'offers/Ada Lovelace Offer Letter.pdf',
+      '1-on-1s/2026-10-27 Ada Lovelace (draft).md',
+    ]);
+  });
+
+  it('puts Markdown above attachments in a tier, then the latest touch, then the latest change', () => {
+    expect(find('freight')).toEqual([
+      'data/freight-large-dataset.md',
+      'data/freight-box-v3-dataset.md',
+      'data/freight_box_r4.png',
+      'chats/2026-09-28-codex-01a0e734.md',
+    ]);
+  });
+
+  it('finds every word in the name, then in the path or title', () => {
+    expect(find('freight dataset')).toEqual(['data/freight-large-dataset.md', 'data/freight-box-v3-dataset.md']);
+    // The chat's title has both words, and it is Markdown.
+    expect(find('box freight')).toEqual(['data/freight-box-v3-dataset.md', 'chats/2026-09-28-codex-01a0e734.md', 'data/freight_box_r4.png']);
+    expect(find('people ada')).toEqual(['people/Ada Lovelace.md']);
+  });
+
+  it('never matches the opened folder\'s own path', () => {
+    const rows = evaluateCollectionQuery({
+      items: [item({ path: '/home/quokka/vault/plan.md' })],
+      activity: () => null,
+      touchedAt,
+      allowedRoots: ['/home/quokka/vault'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value: 'quokka' }], sort: { field: 'match', direction: 'desc' } },
+    });
+    expect(rows).toEqual([]);
   });
 });

@@ -40,7 +40,7 @@ describe('validateCollectionQuery', () => {
 
   it.each([
     ['unknown field', [{ field: 'tags', op: 'is-empty' }]],
-    ['unknown op', [{ field: 'name', op: 'matches', value: 'x' }]],
+    ['unknown op', [{ field: 'name', op: 'fuzzy', value: 'x' }]],
     ['empty name', [{ field: 'name', op: 'contains', value: '   ' }]],
     ['long name', [{ field: 'name', op: 'contains', value: 'x'.repeat(257) }]],
     ['unknown kind', [{ field: 'kind', op: 'in', values: ['spreadsheet'] }]],

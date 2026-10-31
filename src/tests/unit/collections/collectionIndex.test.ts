@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -21,7 +21,7 @@ beforeEach(async () => {
   root = path.join(tmp, 'root');
   await mkdir(item('Sub', 'Deep'), { recursive: true });
   await mkdir(item('.hidden'), { recursive: true });
-  await writeFile(item('a.md'), '---\ntags: [research, " ", ""]\nannotation: "  "\n---\n# a');
+  await writeFile(item('a.md'), '---\ntitle: "  Alpha notes "\ntags: [research, " ", ""]\nannotation: "  "\n---\n# a');
   await writeFile(item('photo.jpg'), 'jpg');
   await writeFile(item('photo.jpg.opal.yaml'), `schema: 1\nid: ${PHOTO_ID}\ntags: [reference]\nannotation: A photo\n`);
   await writeFile(item('broken.pdf'), 'pdf');
@@ -38,15 +38,22 @@ afterEach(async () => { await rm(tmp, { recursive: true, force: true }); });
 const flushTimers = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 describe('CollectionIndex', () => {
-  it('summarizes every visible item with its identity once asked', async () => {
-    const snapshot = await index.get();
-    expect(names(snapshot)).toEqual(['.', 'Sub', 'Sub/Deep', 'Sub/Deep/b.txt', 'a.md', 'broken.pdf', 'broken.pdf.opal.yaml', 'photo.jpg']);
+  it('summarizes every visible item once asked, and reads identities and titles after', async () => {
+    const listed = await index.get();
+    expect(names(listed)).toEqual(['.', 'Sub', 'Sub/Deep', 'Sub/Deep/b.txt', 'a.md', 'broken.pdf', 'broken.pdf.opal.yaml', 'photo.jpg']);
+    // A query waits only for the names; the metadata follows in the background.
+    expect(listed.items.find((entry) => entry.path === item('photo.jpg'))?.id).toBeNull();
+    let snapshot = listed;
+    await vi.waitFor(async () => {
+      snapshot = await index.get();
+      expect(snapshot.items.find((entry) => entry.path === item('photo.jpg'))?.id).toBe(PHOTO_ID);
+    });
     const by = (name: string) => {
       const found = snapshot.items.find((entry) => entry.path === item(...name.split('/')));
       if (!found) throw new Error(`missing ${name}`);
       return found;
     };
-    expect(by('a.md')).toMatchObject({ kind: 'markdown', isDirectory: false, id: null });
+    expect(by('a.md')).toMatchObject({ kind: 'markdown', isDirectory: false, id: null, title: 'Alpha notes' });
     expect(by('photo.jpg')).toMatchObject({ kind: 'image', id: PHOTO_ID });
     expect(by('Sub')).toMatchObject({ kind: 'directory', isDirectory: true, id: FOLDER_ID });
     expect(by('Sub/Deep/b.txt')).toMatchObject({ kind: 'text', size: 1 });
@@ -70,6 +77,15 @@ describe('CollectionIndex', () => {
     expect(snapshot.items.find((entry) => entry.path === item('a.md'))?.size).toBe(15);
   });
 
+  it('reads a changed file\'s title again after a refresh', async () => {
+    const titleOf = async (name: string) => (await index.get()).items.find((entry) => entry.path === item(name))?.title;
+    await vi.waitFor(async () => expect(await titleOf('a.md')).toBe('Alpha notes'));
+    await writeFile(item('a.md'), '---\ntitle: Beta notes\n---\n# a');
+    index.invalidateDirectories([root]);
+    await flushTimers();
+    await vi.waitFor(async () => expect(await titleOf('a.md')).toBe('Beta notes'));
+  });
+
   it('coalesces several changed directories into one update and moves a renamed subtree', async () => {
     await index.get();
     await rename(item('Sub'), item('Renamed'));
@@ -78,7 +94,9 @@ describe('CollectionIndex', () => {
     await flushTimers();
     const snapshot = await index.get();
     expect(names(snapshot)).toEqual(['.', 'Renamed', 'Renamed/Deep', 'Renamed/Deep/b.txt', 'a.md', 'broken.pdf', 'broken.pdf.opal.yaml', 'photo.jpg']);
-    expect(snapshot.items.find((entry) => entry.path === item('Renamed'))?.id).toBe(FOLDER_ID);
+    await vi.waitFor(async () => {
+      expect((await index.get()).items.find((entry) => entry.path === item('Renamed'))?.id).toBe(FOLDER_ID);
+    });
   });
 
   it('ignores hidden directories and changes before the first build', async () => {

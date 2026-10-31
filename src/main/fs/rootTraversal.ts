@@ -3,6 +3,9 @@ import path from 'path';
 import { isInsideRoot } from './paths';
 import { assertNoSymlinks, isValidAdjacentCarrier } from './MetadataCodec';
 import type { RootRegistry } from './RootRegistry';
+import { mapLimited } from '@/main/mapLimited';
+
+const LIST_CONCURRENCY = 16;
 
 /**
  * The one set of traversal rules shared by every scanner: hidden entries and
@@ -42,6 +45,39 @@ export async function listChildren(registry: RootRegistry, directory: string): P
     else if (entry.isFile() && !(await isValidAdjacentCarrier(registry, target))) children.files.push(target);
   }
   return children;
+}
+
+/**
+ * Every directory and file under a directory, the directory included, under
+ * the same rules as walkRoot. The directories of one level are listed in
+ * parallel, so the order is not walkRoot's.
+ */
+export async function listTree(
+  registry: RootRegistry,
+  directory: string,
+  onError: TraversalVisitor['onError'],
+): Promise<DirectoryChildren> {
+  const tree: DirectoryChildren = { directories: [], files: [] };
+  let level = [directory];
+  while (level.length > 0) {
+    const listed = await mapLimited(level, LIST_CONCURRENCY, async (current) => {
+      try {
+        return { current, children: await listChildren(registry, current) };
+      } catch (error) {
+        onError(current, error);
+        return null;
+      }
+    });
+    level = [];
+    for (const entry of listed) {
+      if (!entry) continue;
+      tree.directories.push(entry.current);
+      // A loop, not a spread: a folder of many thousand files would overflow the argument list.
+      for (const file of entry.children.files) tree.files.push(file);
+      for (const child of entry.children.directories) level.push(child);
+    }
+  }
+  return tree;
 }
 
 export async function walkRoot(registry: RootRegistry, root: string, visitor: TraversalVisitor): Promise<void> {

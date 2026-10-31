@@ -148,6 +148,9 @@ const createWindow = () => {
   // empty window for the duration of the renderer's startup.
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
+    // Lists the file names behind the file switcher now, so the first search
+    // does not wait for them.
+    collectionIndex.warm();
   });
 
   // Debounced because macOS emits resize and move continuously during a drag;
