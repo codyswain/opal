@@ -79,11 +79,11 @@ test("Enter on an empty todo moves it out a level, then ends the list, and the f
   await page.keyboard.press("Enter");
   await page.keyboard.press("Tab");
   await page.keyboard.type("Check dates");
-  // An empty nested task moves out a level; an empty top-level one ends the list.
+  // An empty nested task moves out a level; an empty top-level one ends the
+  // list, and the next line starts a paragraph below a blank line.
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Pack");
-  await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Done for today.");

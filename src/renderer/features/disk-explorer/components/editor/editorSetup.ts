@@ -1,6 +1,6 @@
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { deleteMarkupBackward, insertNewlineContinueMarkupCommand, markdown } from '@codemirror/lang-markdown';
-import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { HighlightStyle, indentUnit, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { diff } from '@codemirror/merge';
 import { search, searchKeymap } from '@codemirror/search';
 import { ChangeSet, EditorSelection, EditorState, Transaction, type ChangeSpec, type Extension, type Line, type SelectionRange, type StateCommand } from '@codemirror/state';
@@ -111,8 +111,11 @@ function toggleMarker(marker: string): StateCommand {
 // second item instead gets a blank line above it, which makes a tight list loose.
 const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
 
-/** `tr` with the spaces taken off each line it leaves holding only spaces, except the indent before a caret. */
-function withoutSpaceLines(tr: Transaction): Transaction {
+/**
+ * `tr` with the spaces taken off each line it leaves holding only spaces.
+ * The indent before a caret stays when `keepIndent` says so for the line.
+ */
+function withoutSpaceLines(tr: Transaction, keepIndent: (line: Line) => boolean = () => true): Transaction {
   const { newDoc, newSelection } = tr;
   const cuts = new Map<number, ChangeSpec>();
   tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
@@ -121,24 +124,123 @@ function withoutSpaceLines(tr: Transaction): Transaction {
       at = line.to + 1;
       if (!/^[ \t]+$/.test(line.text)) continue;
       const caret = newSelection.ranges.find((range) => range.head >= line.from && range.head <= line.to);
-      const from = caret ? caret.head : line.from;
+      const from = caret && keepIndent(line) ? caret.head : line.from;
       if (from < line.to) cuts.set(line.number, { from, to: line.to });
     }
   });
   if (cuts.size === 0) return tr;
   const cut = ChangeSet.of([...cuts.values()], newDoc.length);
-  return tr.startState.update({ changes: tr.changes.compose(cut), selection: newSelection.map(cut), scrollIntoView: true, userEvent: 'input' });
+  return tr.startState.update({ changes: tr.changes.compose(cut), selection: newSelection.map(cut), scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) });
+}
+
+// A list item's line: any indent and quote marks, then a bullet or a number.
+const ITEM_LINE = /^[\s>]*(?:[-+*]|\d+[.)])(?:[ \t]|$)/;
+const hasText = (line: Line) => /[^\s>]/.test(line.text);
+
+/**
+ * `tr` with a blank line between a list and each caret that `tr` left on an
+ * empty line by taking an item's marker off. Text typed on the line straight
+ * after a list item belongs to that item; after a blank line it starts a
+ * paragraph. A list item below gets a blank line too, so it stays a list.
+ */
+function blankLinesAroundEnd(tr: Transaction): Transaction {
+  const { startState, newDoc, newSelection } = tr;
+  if (newSelection.ranges.length !== startState.selection.ranges.length) return tr;
+  const changes: ChangeSpec[] = [];
+  const carets = new Map<number, number>();
+  newSelection.ranges.forEach((range, index) => {
+    const line = newDoc.lineAt(range.head);
+    if (!ITEM_LINE.test(startState.doc.lineAt(startState.selection.ranges[index].head).text) || hasText(line)) return;
+    const above = line.number > 1 && hasText(newDoc.line(line.number - 1));
+    if (!above) return;
+    const below = line.number < newDoc.lines && hasText(newDoc.line(line.number + 1));
+    // A quote's blank line keeps its ">".
+    const blank = line.text.trimEnd();
+    changes.push({ from: line.from, to: line.to, insert: `${blank}\n${line.text}${below ? `\n${blank}` : ''}` });
+    carets.set(index, blank.length + 1 + range.head - line.from);
+  });
+  if (changes.length === 0) return tr;
+  const extra = ChangeSet.of(changes, newDoc.length);
+  const ranges = newSelection.ranges.map((range, index) => {
+    const offset = carets.get(index);
+    return offset === undefined ? range.map(extra) : EditorSelection.cursor(extra.mapPos(newDoc.lineAt(range.head).from, -1) + offset);
+  });
+  return startState.update({
+    changes: tr.changes.compose(extra),
+    selection: EditorSelection.create(ranges, newSelection.mainIndex),
+    scrollIntoView: true,
+    userEvent: 'input',
+  });
 }
 
 /**
  * Enter in a list or quote, as in Obsidian. A non-empty item continues, split
  * at the caret. An empty nested item moves out one level, and an empty
- * top-level item loses its marker, so the list ends. Numbered lists renumber,
- * and no line is left holding only spaces. Returns false outside lists and
- * quotes, so a plain newline runs.
+ * top-level item loses its marker, so the list ends and the caret starts a
+ * paragraph below a blank line. Numbered lists renumber, and no line is left
+ * holding only spaces. Returns false outside lists and quotes, so a plain
+ * newline runs.
  */
-export const insertNewlineInList: StateCommand = ({ state, dispatch }) =>
-  continueMarkup({ state, dispatch: (tr) => dispatch(withoutSpaceLines(tr)) });
+export const insertNewlineInList: StateCommand = ({ state, dispatch }) => {
+  let unchanged = false;
+  const handled = continueMarkup({
+    state,
+    dispatch: (tr) => {
+      if (tr.newDoc.eq(state.doc)) unchanged = true;
+      else dispatch(blankLinesAroundEnd(withoutSpaceLines(tr)));
+    },
+  });
+  // An item below one indented before its quote's ">" gets its own marker
+  // back, a change of nothing. One indent after the ">" comes off instead.
+  return unchanged ? indentInQuote(false)({ state, dispatch }) : handled;
+};
+
+/**
+ * Backspace just after a list or quote marker takes one level of markup off.
+ * On a top-level item that leaves an empty line, not the spaces that would
+ * carry on the item above.
+ */
+export const deleteMarkupInList: StateCommand = ({ state, dispatch }) =>
+  deleteMarkupBackward({
+    state,
+    dispatch: (tr) => dispatch(withoutSpaceLines(tr, (line) => {
+      const before = tr.startState.doc.lineAt(tr.changes.invertedDesc.mapPos(line.from));
+      return !/^(?:[-+*]|\d+[.)])/.test(before.text);
+    })),
+  });
+
+// A quote's ">" marks, and the space after each, at the start of a line.
+const QUOTE_MARKS = /^ {0,3}(?:> ?)+/;
+
+/**
+ * Tab and Shift+Tab when every selected line is in a quote: the indent goes
+ * after the ">" marks, so a list in a callout nests. Returns false otherwise,
+ * and for Shift+Tab when no line has an indent there, so lines indent as usual.
+ */
+function indentInQuote(more: boolean): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const lines = new Map<number, Line>();
+    for (const range of state.selection.ranges) {
+      const last = state.doc.lineAt(range.to);
+      // A selection that ends at the start of a line leaves that line alone.
+      const end = !range.empty && range.to === last.from && last.from > range.from ? last.number - 1 : last.number;
+      for (let number = state.doc.lineAt(range.from).number; number <= end; number += 1) lines.set(number, state.doc.line(number));
+    }
+    const quoted = [...lines.values()].map((line) => ({ line, quote: QUOTE_MARKS.exec(line.text)?.[0] ?? '' }));
+    if (quoted.some(({ quote }) => !quote)) return false;
+    const unit = state.facet(indentUnit);
+    const changes = quoted.flatMap(({ line, quote }): ChangeSpec[] => {
+      const from = line.from + quote.length;
+      if (more) return [{ from, insert: unit }];
+      const indent = /^(?:\t| {1,4})/.exec(line.text.slice(quote.length))?.[0] ?? '';
+      return indent ? [{ from, to: from + Math.min(indent.length, unit.length) }] : [];
+    });
+    if (changes.length === 0) return false;
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: more ? 'input.indent' : 'delete.dedent' }));
+    return true;
+  };
+}
 
 // Inline styles as classes for editor.css. Marks still showing on an edited line are muted.
 const highlight = HighlightStyle.define([
@@ -175,7 +277,8 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     search({ top: true }),
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
-      { key: 'Backspace', run: deleteMarkupBackward },
+      { key: 'Backspace', run: deleteMarkupInList },
+      { key: 'Tab', run: indentInQuote(true), shift: indentInQuote(false) },
       { key: 'Mod-b', run: toggleMarker('**') },
       { key: 'Mod-i', run: toggleMarker('*') },
       ...searchKeymap,
