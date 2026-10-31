@@ -393,14 +393,17 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   }, [keyboardPath, nodes, openedPath]);
 
   // A file opened anywhere but the tree (Daily, Recent, the palette, a tab)
-  // gets its folders expanded and scrolls into view.
+  // gets its folders expanded and scrolls into view. Keyed on the roots'
+  // paths: every rename or move builds a new roots array, which would
+  // otherwise scroll the tree back to the open file.
+  const rootsKey = roots.join('\n');
   React.useEffect(() => {
     const fromTree = openedFromTree.current === openedPath;
     openedFromTree.current = null;
     if (!openedPath || fromTree) return;
     setRevealTarget(openedPath);
     void revealPath(openedPath);
-  }, [openedPath, revealPath, roots]);
+  }, [openedPath, revealPath, rootsKey]);
 
   // scrollToItem(index, 'smart'), except that a row above the visible ones,
   // or behind the stuck rows, lands just below its folders' stuck rows.

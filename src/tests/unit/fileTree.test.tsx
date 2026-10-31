@@ -701,6 +701,16 @@ describe('FileTree', () => {
       expect(row(book(8))).toHaveAttribute('aria-selected', 'true');
     });
 
+    it('stays where it is when a rename or move rebuilds the roots', async () => {
+      renderTree();
+      act(() => openTabs([book(8)]));
+      await waitFor(() => expect(row(book(8))).toHaveAttribute('aria-selected', 'true'));
+      const list = scrollTree(900);
+
+      await act(async () => useDiskStore.setState((state) => ({ roots: [...state.roots] })));
+      expect(list.scrollTop).toBe(900);
+    });
+
     it('keeps a row focused by Tab clear of the stuck rows', async () => {
       const user = userEvent.setup();
       renderTree();
