@@ -8,7 +8,8 @@ import { validDate } from './vaultModel';
  * folder on disk: it cannot be renamed, moved or dropped on.
  */
 
-const DAILY_FOLDER = 'Library/daily';
+/** Where a vault's daily pages are, from the top of the opened folder. */
+export const DAILY_FOLDER = 'Library/daily';
 const DAILY_NAME = /^(\d{4}-\d\d-\d\d)\.md$/;
 const YEAR = /^\d{4}$/;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

@@ -161,6 +161,58 @@ describe('file switcher match', () => {
     expect(find('people ada')).toEqual(['people/Ada Lovelace.md']);
   });
 
+  it('puts a recording\'s summary above its transcript, which the recording page shows too', () => {
+    const recordings = [
+      item({ path: '/V/Library/recordings/2026-10-30 0900 Zipline Working Group (Meet).md', mtimeMs: NOW - 2 * DAY }),
+      item({ path: '/V/Library/recordings/transcripts/2026-10-30 0900 Zipline Working Group (Meet) transcript.md', mtimeMs: NOW - DAY }),
+      item({ path: '/V/Library/notes/zipline working group plan.md', mtimeMs: NOW - 9 * DAY }),
+    ];
+    const rows = evaluateCollectionQuery({
+      items: recordings,
+      activity: () => null,
+      touchedAt,
+      allowedRoots: ['/V'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value: 'zipline working group' }], sort: { field: 'match', direction: 'desc' } },
+    });
+    expect(rows.map((row) => row.entry.path.replace('/V/Library/', ''))).toEqual([
+      'notes/zipline working group plan.md',
+      'recordings/2026-10-30 0900 Zipline Working Group (Meet).md',
+      'recordings/transcripts/2026-10-30 0900 Zipline Working Group (Meet) transcript.md',
+    ]);
+  });
+
+  it('finds a daily page by the name the tree shows, "10-30 Fri", above newer files of that date', () => {
+    const days = [
+      item({ path: '/V/Library/daily/2026-10-30.md', mtimeMs: NOW - 2 * DAY }),
+      item({ path: '/V/Library/logs/2026-10-30 log.md', mtimeMs: NOW - DAY }),
+      item({ path: '/V/Library/chats/opal/2026-10-30-claude-01a0e734.md', mtimeMs: NOW }),
+      // Only a page directly in Library/daily goes by the tree's name.
+      item({ path: '/V/Archive/daily/2026-10-30.md', mtimeMs: NOW }),
+    ];
+    const search = (value: string) => evaluateCollectionQuery({
+      items: days,
+      activity: () => null,
+      touchedAt,
+      allowedRoots: ['/V'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value }], sort: { field: 'match', direction: 'desc' } },
+    }).map((row) => row.entry.path.replace('/V/', ''));
+    expect(search('10-30 Fri')).toEqual(['Library/daily/2026-10-30.md']);
+    expect(search('10-30')[0]).toBe('Library/daily/2026-10-30.md');
+    expect(search('2026-10-30').slice(0, 2)).toEqual(['Archive/daily/2026-10-30.md', 'Library/daily/2026-10-30.md']);
+  });
+
+  it('matches each item\'s path from its own root when one root\'s name starts another folder\'s', () => {
+    // Under /V, "Photos-old" is not inside the opened folder /V/Photos.
+    const rows = evaluateCollectionQuery({
+      items: [item({ path: '/V/Photos-old/trip.md' }), item({ path: '/V/Photos/beach.md' })],
+      activity: () => null,
+      touchedAt,
+      allowedRoots: ['/V', '/V/Photos'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value: 'photos' }], sort: { field: 'match', direction: 'desc' } },
+    });
+    expect(rows.map((row) => row.entry.path)).toEqual(['/V/Photos-old/trip.md']);
+  });
+
   it('never matches the opened folder\'s own path', () => {
     const rows = evaluateCollectionQuery({
       items: [item({ path: '/home/quokka/vault/plan.md' })],

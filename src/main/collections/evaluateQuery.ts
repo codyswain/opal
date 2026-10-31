@@ -1,3 +1,5 @@
+import { DAILY_FOLDER, dailyFileDate, dailyTreeLabel } from '@/common/dailyTree';
+import { TRANSCRIPTS_FOLDER } from '@/common/stackModel';
 import type { ActivityRecord } from '@/types/activity';
 import type { CollectionFilter, CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { IndexedItem } from './CollectionIndex';
@@ -15,12 +17,16 @@ export interface EvaluationInput {
 // collator on every comparison, which dominated a 10,000-row name sort.
 const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
 
+const TRANSCRIPTS = `Library/recordings/${TRANSCRIPTS_FOLDER}/`;
+
 interface SortableRow {
   row: CollectionRow;
   name: string;
   path: string;
   /** The worst tier among the `matches` filters; 0 without one. */
   tier: number;
+  /** A recording's transcript, which its summary's recording page shows too. */
+  transcript: boolean;
 }
 
 function matches(row: CollectionRow, filter: CollectionFilter): boolean {
@@ -46,10 +52,12 @@ function compareRows(query: CollectionQuery): (a: SortableRow, b: SortableRow) =
   if (query.sort.field === 'name') return (a, b) => sign * byName(a, b);
   if (query.sort.field === 'match') {
     // Best first when descending: the tier, then Markdown above attachments,
-    // then the latest touch, then the latest change on disk.
+    // then a recording's summary above its transcript, then the latest
+    // touch, then the latest change on disk.
     const best = (a: SortableRow, b: SortableRow) =>
       a.tier - b.tier ||
       Number(b.row.entry.kind === 'markdown') - Number(a.row.entry.kind === 'markdown') ||
+      Number(a.transcript) - Number(b.transcript) ||
       (b.row.touchedAt ?? 0) - (a.row.touchedAt ?? 0) ||
       b.row.entry.mtimeMs - a.row.entry.mtimeMs ||
       byName(a, b);
@@ -111,9 +119,16 @@ export function evaluateCollectionQuery(input: EvaluationInput): CollectionRow[]
       touchedAt: touchedAt > 0 ? touchedAt : null,
     };
     if (!query.filters.every((filter) => matches(row, filter))) continue;
-    const tier = searches.length === 0 ? 0
-      : worstTier(searches, { name: item.name, relativePath: item.path.slice(root === '/' ? 1 : root.length + 1), title: item.title });
-    if (tier !== null) rows.push({ row, name: item.name, path: item.path, tier });
+    const relativePath = item.path.slice(root === '/' ? 1 : root.length + 1);
+    let tier = 0;
+    if (searches.length > 0) {
+      // A daily page goes by "10-30 Fri" in the tree, so that matches it too.
+      const date = relativePath === `${DAILY_FOLDER}/${item.name}` ? dailyFileDate(item.name) : null;
+      const found = worstTier(searches, { name: item.name, relativePath, title: item.title, label: date && dailyTreeLabel(date) });
+      if (found === null) continue;
+      tier = found;
+    }
+    rows.push({ row, name: item.name, path: item.path, tier, transcript: relativePath.startsWith(TRANSCRIPTS) });
   }
   rows.sort(compareRows(query));
   return rows.map((sortable) => sortable.row);

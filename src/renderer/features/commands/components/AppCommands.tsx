@@ -130,7 +130,11 @@ export const AppCommands: React.FC = () => {
         shortcut: ["CmdOrCtrl+O"],
         keywords: [],
         hidden: true,
-        perform: () => usePaletteStore.getState().show("", { filesOnly: true }),
+        // With no folder open there is nothing to find yet, so it opens one.
+        perform: () => {
+          if (useDiskStore.getState().roots.length === 0) void useDiskStore.getState().openFolder();
+          else usePaletteStore.getState().show("", { filesOnly: true });
+        },
       },
       {
         id: COMMAND_IDS.newNote,

@@ -43,6 +43,16 @@ describe('matchTier', () => {
     expect(matchTier('notes', file('v1.2 notes'))).toBe(MatchTier.WordStart);
   });
 
+  it('matches the name the tree shows like the file name', () => {
+    const day: MatchTarget = { ...file('Library/daily/2026-10-30.md'), label: '10-30 Fri' };
+    expect(matchTier('10-30 Fri', day)).toBe(MatchTier.Exact);
+    expect(matchTier('10-30', day)).toBe(MatchTier.Prefix);
+    expect(matchTier('fri', day)).toBe(MatchTier.WordStart);
+    expect(matchTier('2026-10-30', day)).toBe(MatchTier.Exact);
+    expect(matchTier('fri 10', day)).toBe(MatchTier.NameWords);
+    expect(matchTier('sat', day)).toBeNull();
+  });
+
   it('compares decomposed and composed accents as the same name', () => {
     expect(matchTier('Café', file('Café.md'))).toBe(MatchTier.Exact);
   });

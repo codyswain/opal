@@ -227,6 +227,20 @@ describe('CommandPalette', () => {
     expect(await screen.findByRole('group', { name: 'Commands' })).toBeInTheDocument();
   });
 
+  it('opens the folder picker from Go to File while no folder is open', async () => {
+    const original = useDiskStore.getState().openFolder;
+    const openFolder = vi.fn(async () => undefined);
+    useDiskStore.setState({ roots: [], openFolder });
+    try {
+      renderPalette();
+      act(() => commandRegistry.executeCommand(COMMAND_IDS.goToFile));
+      expect(openFolder).toHaveBeenCalledTimes(1);
+      expect(usePaletteStore.getState().open).toBe(false);
+    } finally {
+      useDiskStore.setState({ openFolder: original });
+    }
+  });
+
   it('asks only for a file after New Tab, and opens Daily there in a new tab when asked with >', async () => {
     const user = userEvent.setup();
     window.vaultAPI = {
