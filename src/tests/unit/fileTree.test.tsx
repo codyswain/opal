@@ -21,7 +21,7 @@ import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import type { DiskEntry } from '@/types/disk';
-import { openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
+import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: toastError }) }));
@@ -470,14 +470,20 @@ describe('FileTree', () => {
     // Library, Archive (closed), Books, Book 00 … Book 39, README, notes.
     const ROWS = 45;
 
-    /** Scrolls the list as the browser would; happy-dom has no layout, so it is given the sizes. */
-    function scrollTree(offset: number) {
+    /** Sets the list's offset; happy-dom has no layout, so it is given the sizes. */
+    function setScroll(offset: number, rows = ROWS) {
       const list = screen.getByRole('tree').firstElementChild as HTMLElement;
       Object.defineProperties(list, {
         clientHeight: { value: 600, configurable: true },
-        scrollHeight: { value: ROWS * 30, configurable: true },
+        scrollHeight: { value: rows * 30, configurable: true },
       });
       list.scrollTop = offset;
+      return list;
+    }
+
+    /** Scrolls the list as the browser would. */
+    function scrollTree(offset: number, rows = ROWS) {
+      const list = setScroll(offset, rows);
       fireEvent.scroll(list);
       return list;
     }
@@ -590,6 +596,196 @@ describe('FileTree', () => {
       expect(list.scrollTop).toBe(240);
       await waitFor(() => expect(row(book(7))).toHaveFocus());
       expect(sticky(BOOKS)).toBeInTheDocument();
+    });
+
+    it('moves the stuck rows within the browser’s scroll event, before react-window re-renders', async () => {
+      renderTree();
+      const list = setScroll(300);
+      // Outside act, as the browser delivers it, so react-window's own
+      // update waits for React's scheduler as it does in the app.
+      const react = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+      const actEnvironment = react.IS_REACT_ACT_ENVIRONMENT;
+      react.IS_REACT_ACT_ENVIRONMENT = false;
+      try {
+        list.dispatchEvent(new Event('scroll'));
+        expect(querySticky(BOOKS)).toBeInTheDocument();
+        expect(list.firstElementChild).not.toHaveStyle({ pointerEvents: 'none' });
+      } finally {
+        react.IS_REACT_ACT_ENVIRONMENT = actEnvironment;
+      }
+      // react-window's render lands later; it turns off pointer events while scrolling.
+      await waitFor(() => expect(list.firstElementChild).toHaveStyle({ pointerEvents: 'none' }));
+      expect(sticky(BOOKS)).toBeInTheDocument();
+    });
+
+    it('pushes a stuck folder up as the row after its last one scrolls up', () => {
+      const zeta = Array.from({ length: 20 }, (_, index) =>
+        entry({ path: `${ROOT}/Zeta ${index}.md`, name: `Zeta ${index}.md`, kind: 'markdown' })
+      );
+      useDiskStore.setState((state) => ({
+        listings: { ...state.listings, [ROOT]: [...LISTINGS[ROOT], ...zeta] },
+      }));
+      renderTree();
+
+      // Book 39, the last row in Library and Books, is the 43rd row.
+      scrollTree(1240, ROWS + 20);
+      expect(sticky(LIBRARY).parentElement).toHaveStyle({ top: '0px' });
+      expect(sticky(BOOKS).parentElement).toHaveStyle({ top: '20px' });
+
+      scrollTree(1270, ROWS + 20);
+      expect(sticky(LIBRARY).parentElement).toHaveStyle({ top: '-10px' });
+      expect(querySticky(BOOKS)).toBeNull();
+    });
+
+    it('commits a rename in progress when a stuck row is clicked', async () => {
+      // react-window turns off pointer events for a moment after a scroll.
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      renderTree();
+      scrollTree(300);
+
+      await user.pointer({ keys: '[MouseRight]', target: row(book(30)) });
+      await user.click(
+        within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'Rename' })
+      );
+      const input = await screen.findByTestId('file-tree-rename');
+      await waitFor(() => expect(input).toHaveFocus());
+      await user.clear(input);
+      await user.type(input, 'Renamed');
+
+      // The click scrolls Book 30's row, and its rename field, out of the list.
+      await user.click(sticky(BOOKS));
+      await waitFor(() =>
+        expect(window.diskAPI.rename).toHaveBeenCalledWith(book(30), 'Renamed.md')
+      );
+      scrollTree(300);
+      expect(screen.queryByTestId('file-tree-rename')).toBeNull();
+    });
+
+    it('brings a stuck folder’s own row out to rename it', async () => {
+      const user = userEvent.setup();
+      renderTree();
+      const list = scrollTree(300);
+
+      fireEvent.contextMenu(sticky(BOOKS));
+      await user.click(
+        within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'Rename' })
+      );
+      const input = await screen.findByTestId('file-tree-rename');
+      expect(list.scrollTop).toBe(30);
+      expect(input).toHaveValue('Books');
+      await waitFor(() => expect(input).toHaveFocus());
+    });
+
+    it('leaves the tree where it is when Move to Trash starts from a stuck row', async () => {
+      const user = userEvent.setup();
+      renderTree();
+      const list = scrollTree(300);
+
+      fireEvent.contextMenu(sticky(BOOKS));
+      await user.click(
+        within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', {
+          name: 'Move to Trash',
+        })
+      );
+      await waitFor(() => expect(useDiskStore.getState().pendingDelete).toBe(BOOKS));
+      expect(list.scrollTop).toBe(300);
+    });
+
+    it('reveals a file opened elsewhere below the stuck rows', async () => {
+      renderTree();
+      const list = scrollTree(300);
+
+      // Book 08 is behind the stuck Books row.
+      act(() => openTabs([book(8)]));
+      await waitFor(() => expect(list.scrollTop).toBe(270));
+      expect(row(book(8))).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('keeps a row focused by Tab clear of the stuck rows', async () => {
+      const user = userEvent.setup();
+      renderTree();
+      // Book 08 becomes the tree's tab stop, then focus leaves the tree.
+      act(() => row(book(8)).focus());
+      act(() => row(book(8)).blur());
+      const list = scrollTree(300);
+
+      await user.tab();
+      expect(row(book(8))).toHaveFocus();
+      expect(list.scrollTop).toBe(270);
+    });
+
+    it('keeps a folder the keyboard opens clear of the stuck rows', async () => {
+      const user = userEvent.setup();
+      const drafts = `${BOOKS}/Drafts`;
+      useDiskStore.setState((state) => ({
+        listings: {
+          ...state.listings,
+          [BOOKS]: [
+            entry({ path: drafts, name: 'Drafts', kind: 'directory', isDirectory: true }),
+            ...state.listings[BOOKS],
+          ],
+          [drafts]: [entry({ path: `${drafts}/Plot.md`, name: 'Plot.md', kind: 'markdown' })],
+        },
+      }));
+      renderTree();
+      act(() => row(drafts).focus());
+      // Drafts' row sits at 50 to 78, partly behind the stuck rows, which end at 60.
+      const list = scrollTree(40, ROWS + 1);
+      expect(sticky(BOOKS)).toBeInTheDocument();
+
+      await user.keyboard('{ArrowRight}');
+      expect(row(drafts)).toHaveAttribute('aria-expanded', 'true');
+      expect(list.scrollTop).toBe(30);
+      expect(querySticky(drafts)).toBeNull();
+    });
+
+    it('gives a stuck year row its daily folder’s menu', async () => {
+      const user = userEvent.setup();
+      const daily = `${LIBRARY}/daily`;
+      const year = `${daily}/2026`;
+      useDiskStore.setState({
+        listings: {
+          [ROOT]: LISTINGS[ROOT],
+          [LIBRARY]: [entry({ path: daily, name: 'daily', kind: 'directory', isDirectory: true })],
+          [daily]: Array.from({ length: 30 }, (_, index) => {
+            const name = `2026-10-${String(index + 1).padStart(2, '0')}.md`;
+            return entry({ path: `${daily}/${name}`, name, kind: 'markdown' });
+          }),
+        },
+        expanded: { [LIBRARY]: true, [daily]: true, [year]: true },
+      });
+      renderTree();
+      scrollTree(300, 35);
+
+      expect(sticky(year)).toHaveTextContent('2026');
+      fireEvent.contextMenu(sticky(year));
+      const menu = await screen.findByTestId('file-tree-menu');
+      expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'New note',
+        'New folder',
+        'Reveal in Finder',
+      ]);
+      await user.click(within(menu).getByRole('menuitem', { name: 'New folder' }));
+      expect(useDiskStore.getState().pendingAction).toEqual({ kind: 'new-folder', target: daily });
+    });
+
+    it('takes drops on a stuck root row when several roots are open', async () => {
+      const other = '/Other';
+      useDiskStore.setState((state) => ({
+        roots: [ROOT, other],
+        listings: { ...state.listings, [other]: [] },
+        expanded: { ...state.expanded, [ROOT]: true },
+      }));
+      renderTree();
+      scrollTree(300, ROWS + 2);
+      const source = book(20);
+
+      fireEvent.dragStart(row(source), { dataTransfer: dataTransfer() });
+      const over = createEvent.dragOver(sticky(ROOT), { dataTransfer: dataTransfer(), cancelable: true });
+      fireEvent(sticky(ROOT), over);
+      expect(over.defaultPrevented).toBe(true);
+      fireEvent.drop(sticky(ROOT), { dataTransfer: dataTransfer(source) });
+      await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(source, ROOT));
     });
   });
 });

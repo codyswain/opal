@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { ChevronRight, Trash2 } from 'lucide-react';
+import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
 import {
   FixedSizeList,
@@ -72,7 +73,8 @@ interface FileTreeRowData {
   outlinedPath: string | null;
   nodes: readonly FileTreeNode[];
   onActivate: (node: FileTreeNode, event: React.MouseEvent) => void;
-  onFocusIndex: (index: number) => void;
+  /** `fromKeyboard`: the row matches :focus-visible, as after Tab and not after a click. */
+  onFocusIndex: (index: number, fromKeyboard: boolean) => void;
   onKeyDown: (index: number, event: React.KeyboardEvent) => void;
   /** Ends a rename; a path hands keyboard focus back to that row. */
   onRenameDone: (focusPath: string | null) => void;
@@ -220,7 +222,13 @@ function FileTreeRow({
         onAuxClick={(event) => {
           if (event.button === 1) data.onActivate(node, event);
         }}
-        onFocus={() => data.onFocusIndex(index)}
+        onFocus={(event) =>
+          data.onFocusIndex(
+            index,
+            event.target === event.currentTarget &&
+              event.currentTarget.matches(':focus-visible')
+          )
+        }
         onKeyDown={(event) => data.onKeyDown(index, event)}
         {...(isRenaming ? {} : data.dragProps(node))}
         style={{ paddingLeft: `${node.depth * TREE_INDENT + 8}px` }}
@@ -310,8 +318,13 @@ function StickyFolderRows({
               title={node.label}
               data-sticky-path={node.path}
               data-testid={`disk-tree-sticky-${node.path}`}
-              // Focus goes to the folder's own row, never to this copy.
-              onMouseDown={(event) => event.preventDefault()}
+              // Focus goes to the folder's own row, never to this copy. What had
+              // focus still loses it, as a press on a real row takes it, so a
+              // rename in progress commits before the click scrolls it away.
+              onMouseDown={(event) => {
+                event.preventDefault();
+                if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+              }}
               onClick={() => onActivate(folder)}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
@@ -356,6 +369,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   const [moving, setMoving] = React.useState<string | null>(null);
   const [scrollTop, setScrollTop] = React.useState(0);
   const scrollTopRef = React.useRef(0);
+  const listOuterRef = React.useRef<HTMLDivElement>(null);
   const openedFromTree = React.useRef<string | null>(null);
   const typeAhead = React.useRef({ prefix: '', at: 0 });
 
@@ -363,6 +377,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     () => flattenFileTree({ expanded, listings, roots }),
     [expanded, listings, roots]
   );
+  const hasRows = nodes.length > 0;
   const loneRoot = roots.length === 1 ? roots[0] : null;
   const listHeight = Math.max(TREE_ROW_HEIGHT, viewport.height);
   const stuck = React.useMemo(
@@ -465,6 +480,12 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     (index: number, event: React.KeyboardEvent) => {
       const node = nodes[index];
       if (!node || event.target !== event.currentTarget) return;
+      // An opened folder whose row is partly behind the stuck rows sticks
+      // over it, so a toggle from the keyboard brings the row out first.
+      const toggle = () => {
+        scrollToRow(index);
+        void toggleExpanded(node.path);
+      };
 
       switch (event.key) {
         case 'ArrowDown':
@@ -486,13 +507,13 @@ export function FileTree({ onNavigate }: FileTreeProps) {
         case 'ArrowRight':
           if (!node.isDirectory) return;
           event.preventDefault();
-          if (!node.isExpanded) void toggleExpanded(node.path);
+          if (!node.isExpanded) toggle();
           else if (nodes[index + 1]?.depth > node.depth) focusIndex(index + 1);
           return;
         case 'ArrowLeft': {
           event.preventDefault();
           if (node.isDirectory && node.isExpanded) {
-            void toggleExpanded(node.path);
+            toggle();
             return;
           }
           const parent = nodes.findIndex(
@@ -503,7 +524,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
         }
         case 'Enter':
           event.preventDefault();
-          activate(node, event);
+          if (node.isDirectory) toggle();
+          else activate(node, event);
           return;
       }
 
@@ -533,7 +555,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
         }
       }
     },
-    [activate, focusIndex, nodes, toggleExpanded]
+    [activate, focusIndex, nodes, scrollToRow, toggleExpanded]
   );
 
   // Root rows (with several roots) take drops but do not move. Year rows
@@ -596,7 +618,12 @@ export function FileTree({ onNavigate }: FileTreeProps) {
       outlinedPath,
       nodes,
       onActivate: activate,
-      onFocusIndex: (index) => setKeyboardPath(nodes[index]?.path ?? null),
+      onFocusIndex: (index, fromKeyboard) => {
+        setKeyboardPath(nodes[index]?.path ?? null);
+        // The browser scrolls a row focused by Tab only to the tree's top
+        // edge, which can leave it behind the stuck rows.
+        if (fromKeyboard) scrollToRow(index);
+      },
       onKeyDown: handleKeyDown,
       onRenameDone: (path) => {
         setRenamingPath(null);
@@ -613,6 +640,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
       openedPath,
       outlinedPath,
       renamingPath,
+      scrollToRow,
       tabStopPath,
     ]
   );
@@ -622,6 +650,24 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     scrollTopRef.current = scrollOffset;
     setScrollTop(scrollOffset);
   }, []);
+
+  // react-window reports a scroll from its next render, which React runs
+  // after the browser has painted the scrolled rows, so stuck rows that
+  // waited for it would trail them by a frame. They follow the browser's
+  // scroll event instead and render before that paint. handleScroll still
+  // covers the list's own scrollTo calls. The list is mounted only while
+  // there are rows.
+  React.useEffect(() => {
+    const outer = listOuterRef.current;
+    if (!outer) return;
+    const follow = () => {
+      const offset = Math.max(0, outer.scrollTop);
+      scrollTopRef.current = offset;
+      flushSync(() => setScrollTop(offset));
+    };
+    outer.addEventListener('scroll', follow);
+    return () => outer.removeEventListener('scroll', follow);
+  }, [hasRows]);
 
   // A stuck row scrolls the tree to the folder's own row, just below its
   // parents' stuck rows, and focuses it there, as VS Code does.
@@ -704,9 +750,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     store.beginNewFolder(folder);
   };
 
-  // Rename and Move to Trash use the folder's own row (the rename field, the
-  // focus the confirmation returns to), so a menu opened on a stuck row first
-  // brings that row out from under the stuck rows.
+  // Rename types in the folder's own row, so a menu opened on a stuck row
+  // first brings that row out from under the stuck rows.
   const scrollToPath = (path: string) => {
     const index = nodes.findIndex((node) => node.path === path);
     if (index !== -1) scrollToRow(index);
@@ -735,7 +780,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
             className="h-full min-h-0"
             {...blankDragProps}
           >
-            {nodes.length > 0 ? (
+            {hasRows ? (
               <StickyRowsContext.Provider
                 value={
                   <StickyFolderRows
@@ -748,6 +793,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
               >
                 <FixedSizeList
                   ref={listRef}
+                  outerRef={listOuterRef}
                   height={listHeight}
                   width="100%"
                   itemCount={nodes.length}
@@ -830,8 +876,9 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                   tone="destructive"
                   onSelect={afterMenu(() => {
                     // The confirmation hands focus back to this row when it closes.
-                    scrollToPath(menuNode.path);
-                    findRow(treeRef.current, menuNode.path)?.focus();
+                    // A stuck folder's own row may be out of view, and the tree
+                    // stays where it is in case the move is cancelled.
+                    findRow(treeRef.current, menuNode.path)?.focus({ preventScroll: true });
                     useDiskStore.getState().beginDelete(menuNode.path);
                   })}
                 >
