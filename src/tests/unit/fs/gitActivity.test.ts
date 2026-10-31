@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, realpath, rm, utimes, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { gitBusy, gitDirOf } from '@/main/fs/gitActivity';
@@ -32,18 +32,29 @@ describe('gitBusy', () => {
     expect(await gitBusy(path.join(tmp, 'loose', 'note.md'))).toBe(false);
   });
 
-  it.each([
-    ['MERGE_AUTOSTASH', 'file'],
-    ['MERGE_HEAD', 'file'],
-    ['index.lock', 'file'],
-    ['rebase-merge', 'folder'],
-    ['rebase-apply', 'folder'],
-  ])('is true while %s exists, from a file deep in the repo', async (marker, kind) => {
-    const target = path.join(repo, '.git', marker);
-    if (kind === 'folder') await mkdir(target);
-    else await writeFile(target, 'abc\n');
-    expect(await gitBusy(note)).toBe(true);
-    await rm(target, { recursive: true });
+  it.each(['MERGE_AUTOSTASH', 'index.lock', 'rebase-merge/autostash', 'rebase-apply/autostash'])(
+    'is true while %s exists, from a file deep in the repo',
+    async (marker) => {
+      const target = path.join(repo, '.git', marker);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, 'abc\n');
+      expect(await gitBusy(note)).toBe(true);
+      await rm(target);
+      expect(await gitBusy(note)).toBe(false);
+    }
+  );
+
+  it('is false while a stopped merge or rebase waits for a person, or for an index.lock a killed git left', async () => {
+    // A merge or rebase stopped on a conflict keeps these until someone finishes it.
+    await writeFile(path.join(repo, '.git', 'MERGE_HEAD'), 'abc\n');
+    await mkdir(path.join(repo, '.git', 'rebase-merge'));
+    await mkdir(path.join(repo, '.git', 'rebase-apply'));
+    expect(await gitBusy(note)).toBe(false);
+    // Git holds index.lock for milliseconds; this one is a minute old.
+    const lock = path.join(repo, '.git', 'index.lock');
+    await writeFile(lock, '');
+    const old = new Date(Date.now() - 60_000);
+    await utimes(lock, old, old);
     expect(await gitBusy(note)).toBe(false);
   });
 

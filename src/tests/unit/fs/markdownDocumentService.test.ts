@@ -309,6 +309,7 @@ describe('MarkdownHandlers', () => {
     expect(await invoke('markdown:resolve-links', item('note.md'), Array(501).fill('x'))).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', path.join(tmp, 'outside.md'), ['note'])).toMatchObject({ success: false, error: /not inside/ });
     await mkdir(path.join(root, '.git', 'rebase-merge'), { recursive: true });
+    await writeFile(path.join(root, '.git', 'rebase-merge', 'autostash'), 'abc\n');
     const held = await invoke('markdown:read', item('note.md')) as { success: true; data: { revision: string; gitBusy: boolean } };
     expect(held.data.gitBusy).toBe(true);
     expect(await invoke('markdown:write', item('note.md'), '# held\n', held.data.revision)).toEqual({ success: false, error: expect.stringMatching(/Git is changing/), gitBusy: true });

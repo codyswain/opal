@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTOSAVE_DELAY_MS,
   AUTOSAVE_MAX_WAIT_MS,
+  GIT_HOLD_NOTICE_MS,
   GIT_HOLD_RETRY_MS,
   useMarkdownDocument,
   type MarkdownEditorHandle,
@@ -310,6 +311,78 @@ describe('useMarkdownDocument', () => {
       expect(await act(() => flushing)).toEqual([{ name: 'brief', copy: '/Vault/Notes/brief (unsaved copy).md' }]);
       expect(api.documents.get(NOTE)?.body).toBe('a');
     });
+
+    it('says the page is not saved once git has held it for 2 s, and saves when git is done', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      api.setGitBusy(true);
+      editor.type(TYPED);
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS + GIT_HOLD_RETRY_MS * 4); });
+      expect(result.current.saveState).toBe('dirty');
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_NOTICE_MS); });
+      expect(result.current).toMatchObject({ saveState: 'error', error: 'Git is changing files in this folder. The page saves when git is done.' });
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(result.current.error).toBeNull();
+      expect(api.documents.get(NOTE)?.body).toBe(TYPED);
+    });
+
+    // Git reads the files for its stash before it leaves MERGE_AUTOSTASH. A
+    // write that lands in between is not in the stash: the reset takes its
+    // line out, and the stash puts back the text from before it.
+    const WRITTEN = 'Top\n\nMiddle\n\nA\ntok\n';
+
+    it('keeps a line it wrote just before git started, when git takes it out and merges another change', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      editor.type(WRITTEN);
+      await act(async () => { await result.current.flush(); });
+      expect(api.documents.get(NOTE)?.body).toBe(WRITTEN);
+      api.setGitBusy(true);
+      api.externalEdit(NOTE, HEAD);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      expect(editor.text).toBe(WRITTEN);
+      api.externalEdit(NOTE, 'Top!\n\nMiddle\n\nA\n');
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(api.documents.get(NOTE)?.body).toBe('Top!\n\nMiddle\n\nA\ntok\n');
+      expect(editor.text).toBe('Top!\n\nMiddle\n\nA\ntok\n');
+    });
+
+    it('puts back a line it wrote just before git started, when git leaves the text from before it, with no conflict', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      editor.type(WRITTEN);
+      await act(async () => { await result.current.flush(); });
+      api.setGitBusy(true);
+      api.externalEdit(NOTE, HEAD);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      api.externalEdit(NOTE, SAVED, `rev-${NOTE}-1`);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS * 2); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(result.current.conflict).toBeNull();
+      expect(api.documents.get(NOTE)?.body).toBe(WRITTEN);
+    });
+
+    it('merges cleanly when the line it wrote just before git did survive', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      editor.type(WRITTEN);
+      await act(async () => { await result.current.flush(); });
+      const writes = (api.write as ReturnType<typeof vi.fn>).mock.calls.length;
+      api.setGitBusy(true);
+      api.externalEdit(NOTE, HEAD);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      api.externalEdit(NOTE, `Top!\n\nMiddle\n\nA\ntok\n`);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(editor.text).toBe('Top!\n\nMiddle\n\nA\ntok\n'));
+      expect(result.current.saveState).toBe('clean');
+      expect(result.current.conflict).toBeNull();
+      expect((api.write as ReturnType<typeof vi.fn>).mock.calls.length).toBe(writes);
+    });
   });
 
   describe('when a version the page had earlier comes back', () => {
@@ -352,6 +425,49 @@ describe('useMarkdownDocument', () => {
       await waitFor(() => expect(result.current.saveState).toBe('saved'));
       expect(result.current.conflict).toBeNull();
       expect(api.documents.get(NOTE)?.body).toBe(TYPED);
+    });
+
+    it('shows it as a conflict on a clean page too, when it takes out lines the page saved', async () => {
+      // The page's last write may be one git took out: its text is then only in the page.
+      const { api, result, editor } = await savedThenTyped();
+      editor.type(SAVED);
+      expect(result.current.saveState).toBe('clean');
+      api.externalEdit(NOTE, OLD, `rev-${NOTE}-1`);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); });
+      expect(result.current.saveState).toBe('conflict');
+      expect(result.current.conflict).toEqual({ disk: OLD });
+    });
+
+    it('follows it on a clean page when it only takes back a change the page followed', async () => {
+      // The day sidebar ticks a digest item, then unticks it: the file goes back to the bytes it had.
+      const UNTICKED = '# Digest\n\n- [ ] **Book flights**\n';
+      const TICKED = '# Digest\n\n- [x] **Book flights**\n';
+      const { api, result, editor } = await openDocument(UNTICKED);
+      api.externalEdit(NOTE, TICKED);
+      diskChanged();
+      await waitFor(() => expect(editor.text).toBe(TICKED));
+      api.externalEdit(NOTE, UNTICKED, `rev-${NOTE}-1`);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); });
+      expect(editor.text).toBe(UNTICKED);
+      expect(result.current).toMatchObject({ saveState: 'clean', conflict: null });
+      expect(api.write).not.toHaveBeenCalled();
+    });
+
+    it('follows it after a save of its own, when the change it takes back came after that save', async () => {
+      const { api, result, editor } = await openDocument(OLD);
+      editor.type(SAVED);
+      await act(async () => { await result.current.flush(); });
+      api.externalEdit(NOTE, `${SAVED}- [x] ticked\n`);
+      diskChanged();
+      await waitFor(() => expect(editor.text).toBe(`${SAVED}- [x] ticked\n`));
+      // Back to the bytes the page saved, under the revision its write returned.
+      api.externalEdit(NOTE, SAVED, 'rev-2');
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); });
+      expect(editor.text).toBe(SAVED);
+      expect(result.current).toMatchObject({ saveState: 'clean', conflict: null });
     });
 
     it('adopts it without a conflict when the page holds the same text', async () => {

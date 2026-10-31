@@ -41,6 +41,11 @@ export const AUTOSAVE_MAX_WAIT_MS = 5000;
 export const GIT_HOLD_RETRY_MS = 250;
 /** How long the last save before a close or quit waits for git, well inside the 3 s the main process gives it. */
 const SETTLE_HOLD_LIMIT_MS = 1500;
+/** A merge takes git well under a second; a page held longer says it is not saved. */
+export const GIT_HOLD_NOTICE_MS = 2000;
+const GIT_HOLD_MESSAGE = 'Git is changing files in this folder. The page saves when git is done.';
+/** Git found busy this soon after a write may have stashed the file before that write landed. */
+const GIT_RACE_MS = 2000;
 
 const INITIAL: MarkdownDocumentState = {
   status: 'loading', body: null, saveState: 'clean', error: null, properties: 0, conflict: null,
@@ -66,12 +71,17 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 class MarkdownDocumentSession {
   private live = false;
   private revision: string | null = null;
-  /** Revisions this page loaded or saved before the current one. */
-  private earlier = new Set<string>();
+  /** Every revision this page has had: loaded, saved or followed. */
+  private seen = new Set<string>();
+  /** The revisions this page had before its last save. One of them coming back takes the saved lines out of the file. */
+  private beforeSave = new Set<string>();
+  /** The text saved before the last write, and when that write ended. */
+  private lastWrite: { before: string; at: number } | null = null;
   /** An earlier revision the last disk check found back on disk; the next check must find it again. */
   private revert: string | null = null;
   /** Set while git is rewriting the file's repo, or an earlier version waits for a second read: nothing saves meanwhile. */
   private held = false;
+  private heldSince: number | null = null;
   private holdTimer: ReturnType<typeof setTimeout> | null = null;
   private saved = '';
   private latest = '';
@@ -88,9 +98,11 @@ class MarkdownDocumentSession {
   open(): void {
     this.live = true;
     this.revision = null;
-    this.earlier.clear();
+    this.seen.clear();
+    this.beforeSave.clear();
+    this.lastWrite = null;
     this.revert = null;
-    this.held = false;
+    this.release();
     this.conflict = null;
     this.publish(INITIAL);
     // Closing the window or quitting waits for this, and asks before dropping text that did not reach the file.
@@ -225,11 +237,38 @@ class MarkdownDocumentSession {
    * now could be undone, or keep git from putting the stashed lines back, and
    * the disk text may be on its way somewhere else. The page keeps its text,
    * stays unsaved, and checks again in 250 ms.
+   *
+   * Git reads the files for its stash before it leaves any mark in its
+   * folder, so a write that ended just before may be missing from the stash:
+   * the reset takes its lines out and the stash puts back the text from
+   * before it. The page counts those lines as its own again, so the merge
+   * once git is done keeps them. If the write did survive, both sides hold
+   * the same lines and they merge cleanly.
    */
+  private gitHold(): void {
+    if (this.lastWrite && Date.now() - this.lastWrite.at < GIT_RACE_MS) {
+      this.saved = this.lastWrite.before;
+      if (this.latest !== this.saved && this.saveState !== 'dirty') this.publish({ saveState: 'dirty' });
+    }
+    this.lastWrite = null;
+    this.hold();
+  }
+
+  /** Nothing saves until the next disk check finds git done. A hold that lasts says so. */
   private hold(): void {
     this.held = true;
+    this.heldSince ??= Date.now();
+    // Held this long, git has stopped partway or is stuck: the page is not saved, and says so.
+    if (Date.now() - this.heldSince >= GIT_HOLD_NOTICE_MS && this.latest !== this.saved && !this.conflict && this.saveState !== 'error') {
+      this.publish({ saveState: 'error', error: GIT_HOLD_MESSAGE });
+    }
     if (this.holdTimer || !this.live) return;
     this.holdTimer = setTimeout(() => { this.holdTimer = null; void this.serial(() => this.retry()); }, GIT_HOLD_RETRY_MS);
+  }
+
+  private release(): void {
+    this.held = false;
+    this.heldSince = null;
   }
 
   private cancelHold(): void {
@@ -243,7 +282,7 @@ class MarkdownDocumentSession {
   }
 
   private setRevision(revision: string): void {
-    if (this.revision !== null && this.revision !== revision) this.earlier.add(this.revision);
+    this.seen.add(revision);
     this.revision = revision;
   }
 
@@ -269,11 +308,11 @@ class MarkdownDocumentSession {
       this.publish({ status: 'unavailable', error: response.error, body: null });
       return;
     }
-    this.revision = response.data.revision;
+    this.setRevision(response.data.revision);
     this.saved = this.latest = response.data.body;
     this.publish({ status: 'ready', body: response.data.body, saveState: 'clean', error: null, properties: response.data.properties });
     // Opened while git was rewriting the repo: follow the disk once it is done.
-    if (response.data.gitBusy) this.hold();
+    if (response.data.gitBusy) this.gitHold();
   }
 
   private async write(): Promise<void> {
@@ -292,7 +331,7 @@ class MarkdownDocumentSession {
       if (response.gitBusy) {
         // Still unsaved; the hold saves it once git is done.
         this.publish({ saveState: 'dirty' });
-        return this.hold();
+        return this.gitHold();
       }
       if (response.conflict) {
         // Still unsaved until the disk check below folds the two versions together.
@@ -302,7 +341,10 @@ class MarkdownDocumentSession {
       this.publish({ saveState: 'error', error: response.error });
       return;
     }
+    this.beforeSave = new Set(this.seen);
+    this.beforeSave.delete(response.data.revision);
     this.setRevision(response.data.revision);
+    this.lastWrite = { before: this.saved, at: Date.now() };
     this.saved = text;
     if (this.latest === text) {
       this.publish({ saveState: 'saved' });
@@ -317,23 +359,26 @@ class MarkdownDocumentSession {
    * A clean page follows the disk. A dirty one merges: changes on different
    * lines combine and save; changes to the same lines become a conflict the
    * editor shows, or, once the page is closed, a copy that keeps both. While
-   * git is rewriting the repo nothing merges, and a version this page had
-   * earlier coming back is shown as a conflict, never merged in.
+   * git is rewriting the repo nothing merges. A version from before the
+   * page's last save coming back is shown as a conflict, never merged in,
+   * even on a clean page, since that save may be text git took out of the
+   * file. One that only takes back a change the page followed is followed.
    */
   private async reconcileNow(): Promise<void> {
     if (this.revision === null) return;
     let response: ReadResponse;
     try { response = await window.markdownAPI.read(this.path); } catch { return; }
     // A file that went away or became unreadable stays as typed; the next save reports it.
-    if (!response.success) { this.held = false; return; }
+    if (!response.success) { this.release(); return; }
     const { body: disk, revision, properties, gitBusy } = response.data;
-    if (gitBusy) return this.hold();
-    this.held = false;
+    if (gitBusy) return this.gitHold();
+    this.release();
     if (revision === (this.conflict?.revision ?? this.revision)) { this.revert = null; return; }
     // Merging an old version would delete what was saved since, as a merge
     // with the tree git reset to HEAD does. Read again in 250 ms, and if it
-    // is still there, show it beside the page.
-    if (revision !== this.revision && this.earlier.has(revision) && disk !== this.latest) {
+    // is still there, show it beside the page. When the merge base is that
+    // old text already, as after a write git took out, the merge loses nothing.
+    if (revision !== this.revision && this.beforeSave.has(revision) && disk !== this.latest && disk !== this.saved) {
       if (this.revert !== revision) {
         this.revert = revision;
         return this.hold();
