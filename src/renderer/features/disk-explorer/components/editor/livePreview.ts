@@ -24,7 +24,7 @@ import {
   type TableCell,
   type TableModel,
 } from './previewWidgets';
-import { openPathLink, openWikiLink, pageContext, parseWikiTarget, resolvedLinks } from './wikiLinks';
+import { openPathLink, openWikiLink, opensNewTab, pageContext, parseWikiTarget, resolvedLinks } from './wikiLinks';
 
 /*
  * Live preview, as in Obsidian: the document stays the file's text, and
@@ -744,9 +744,9 @@ function linkRevealed(state: EditorState, at: number): boolean {
 }
 
 /** Opens a Markdown link: one with a scheme in the default app, which the main process allows for web and mail, and a path in Opal. */
-function openLink(view: EditorView, href: string): void {
+function openLink(view: EditorView, href: string, newTab: boolean): void {
   if (/^[a-z][a-z0-9+.-]*:/i.test(href)) window.open(href, '_blank');
-  else void openPathLink(view, href);
+  else void openPathLink(view, href, newTab);
 }
 
 /** With a cell caret, Enter and the first typed key show the table's source; a typed character then lands in it. */
@@ -762,27 +762,31 @@ function revealCell(event: KeyboardEvent, view: EditorView): boolean {
 
 const previewClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
-    if (event.button !== 0 || !(event.target instanceof Element)) return false;
+    if (event.button > 1 || !(event.target instanceof Element)) return false;
     const target = event.target;
-    const box = target.closest('.cm-md-task');
+    const box = event.button === 0 && target.closest('.cm-md-task');
     if (box) {
       event.preventDefault();
       toggleTask(view, view.posAtDOM(box));
       return true;
     }
-    // Links drawn as links open on a click, as in Obsidian; Cmd+click opens them while they show as written too.
+    // Links drawn as links open on a click, as in Obsidian. Cmd+click and
+    // middle-click open them in a new tab, and open them while they show as written too.
+    const newTab = opensNewTab(event);
     const wiki = target.closest<HTMLElement>('[data-wiki-target]');
-    if (wiki?.dataset.wikiTarget && (event.metaKey || !linkRevealed(view.state, view.posAtDOM(wiki)))) {
+    if (wiki?.dataset.wikiTarget && (newTab || !linkRevealed(view.state, view.posAtDOM(wiki)))) {
       event.preventDefault();
-      void openWikiLink(view, wiki.dataset.wikiTarget);
+      void openWikiLink(view, wiki.dataset.wikiTarget, newTab);
       return true;
     }
     const link = target.closest<HTMLElement>('[data-href]');
-    if (link?.dataset.href && (event.metaKey || !linkRevealed(view.state, view.posAtDOM(link)))) {
+    if (link?.dataset.href && (newTab || !linkRevealed(view.state, view.posAtDOM(link)))) {
       event.preventDefault();
-      openLink(view, link.dataset.href);
+      openLink(view, link.dataset.href, newTab);
       return true;
     }
+    // The middle button only follows links.
+    if (event.button !== 0) return false;
     const block = target.closest<HTMLElement>('.cm-md-block');
     if (block) {
       event.preventDefault();

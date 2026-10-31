@@ -2,7 +2,7 @@ import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { basenameFsPath } from '@/common/fsPaths';
 import type { MarkdownProperties } from '@/types/markdown';
-import { openWikiLink, parseWikiTarget } from './wikiLinks';
+import { openWikiLink, opensNewTab, parseWikiTarget } from './wikiLinks';
 
 /** Shows the properties block with these facts, or hides it with null. */
 export const setPageProperties = StateEffect.define<MarkdownProperties | null>();
@@ -36,7 +36,9 @@ function valueNode(view: EditorView, value: string): Node {
   button.className = 'cm-md-properties-link';
   button.textContent = link.aliasAt === null ? basenameFsPath(link.target) : match[1].slice(link.aliasAt).trim();
   button.title = `Opens ${link.target}`;
-  button.addEventListener('click', () => { void openWikiLink(view, link.target); });
+  const follow = (event: MouseEvent) => { void openWikiLink(view, link.target, opensNewTab(event)); };
+  button.addEventListener('click', follow);
+  button.addEventListener('auxclick', (event) => { if (event.button === 1) follow(event); });
   return button;
 }
 

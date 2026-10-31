@@ -158,9 +158,10 @@ last (Cody, 2026-10-29). Code: `src/renderer/features/day-sidebar/`. Data:
 
 ### Tabs (Obsidian and Safari semantics)
 
-- A plain open (tree click, Recent click, palette Enter, Daily) replaces the
-  file in the current tab. Cmd+click, middle-click, Cmd+Enter in the palette
-  and Cmd+T then a pick open a new tab.
+- A plain open (tree click, Recent click, a link in a page, palette Enter,
+  Daily) replaces the file in the current tab. Cmd+click, middle-click,
+  Cmd+Enter in the palette and Cmd+T then a pick open a new tab. Cmd+click
+  follows a link in a page even while its syntax shows.
 - No preview tabs, no italic state, no pin-on-double-click.
 - Each tab has its own back/forward history. Switching or closing tabs is
   never a history step.
@@ -333,7 +334,8 @@ main process lists the files (`vault:stack`).
   alone or in a stack.
 - Folds are saved per file and hold in every stack. Option-click on a fold
   control folds or unfolds every section. A link to a file in the stack
-  scrolls to it and unfolds it. "Open on its own" opens the file as a page.
+  scrolls to it and unfolds it; Cmd+click opens it in a new tab. "Open on its
+  own" opens the file as a page.
 - A stack of one file, such as a recording not split yet, reads as a page:
   nothing to fold, no "Open on its own", and its footer line shows.
 - **Daily:** the view opens at today's page, with every earlier non-empty

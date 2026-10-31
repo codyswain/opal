@@ -6,13 +6,14 @@ import type { StackSection } from '@/types/stack';
 import { cn } from '@/renderer/shared/utils/cn';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
 import type { MarkdownSaveState } from '../editor/useMarkdownDocument';
+import type { OpenNote } from '../editor/wikiLinks';
 
 /** What a section asks of its stack. One object for the life of the stack, so sections stay memoized. */
 export interface SectionActions {
   toggleFold: (path: string, event: React.MouseEvent) => void;
   openAlone: (path: string, event: React.MouseEvent) => void;
-  /** Follows a wiki link from inside a section. */
-  openNote: (path: string) => void;
+  /** Follows a link from inside a section. */
+  openNote: OpenNote;
   /** The rest return the same function or extension for a path every time. */
   extensions: (path: string) => Extension;
   onLoadedFor: (path: string) => () => void;

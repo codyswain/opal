@@ -103,7 +103,7 @@ describe('live preview', () => {
     expect(lineText(page, '10:00')).toBe('10:00 Edited the plan with Robert Xu · agent turn');
     // Its links still open their notes.
     press(page.contentDOM.querySelector('.cm-md-wikilink') as Element);
-    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON));
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON, false));
   });
 
   it('holds the revealed lines still while the mouse button is down, so a click does not move the text under it', async () => {
@@ -223,14 +223,14 @@ describe('live preview', () => {
     expect(window.markdownAPI.resolveLinks).toHaveBeenCalledWith(PAGE, ['Robert Xu', 'robert xu', 'Nobody']);
     expect(lineText(view, 'See')).toBe('See Robert Xu, Robert and Nobody.');
     press(view.contentDOM.querySelectorAll('.cm-md-wikilink')[1]);
-    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON));
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON, false));
     expect(view.hasFocus).toBe(false);
   });
 
   it('creates a note that a link names but that does not exist yet, at the top of the opened folder', async () => {
     const { view, openNote } = mount('Meet [[New Person]].\n');
     press(view.contentDOM.querySelector('.cm-md-wikilink') as Element);
-    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/New Person.md'));
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/New Person.md', false));
     expect(window.markdownAPI.create).toHaveBeenCalledWith('/Vault', 'New Person');
   });
 
@@ -249,7 +249,42 @@ describe('live preview', () => {
     expect(open).not.toHaveBeenCalled();
     press(links()[0], { metaKey: true });
     expect(open).toHaveBeenCalledWith('https://example.com', '_blank');
+    // A middle-click opens the browser too, never an Opal tab.
+    press(links()[1], { button: 1 });
+    expect(open).toHaveBeenLastCalledWith('https://bare.example', '_blank');
     open.mockRestore();
+  });
+
+  it('opens a note in a new tab on Cmd+click or middle-click, also while the link shows as written', async () => {
+    const resolveLinks = vi.fn(async (_from: string, targets: string[]) => ({
+      success: true as const,
+      data: Object.fromEntries(targets.map((target) => [target, PERSON])),
+    }));
+    installMarkdownApi({ [PAGE]: '', [PERSON]: '# Robert' }, { resolveLinks });
+    const doc = 'See [[Robert Xu]] and [Robert](../People/Robert%20Xu.md).\n';
+    const { view, openNote } = mount(doc);
+    const wiki = () => view.contentDOM.querySelector('.cm-md-wikilink') as Element;
+    const link = () => view.contentDOM.querySelector('.cm-md-link') as Element;
+    const opened = async (count: number) => {
+      await waitFor(() => expect(openNote).toHaveBeenCalledTimes(count));
+      return openNote.mock.calls[count - 1];
+    };
+    press(wiki(), { metaKey: true });
+    expect(await opened(1)).toEqual([PERSON, true]);
+    press(link(), { button: 1 });
+    expect(await opened(2)).toEqual([PERSON, true]);
+    press(link());
+    expect(await opened(3)).toEqual([PERSON, false]);
+    // The right button follows nothing. With the caret in the link, a click
+    // places the caret, and Cmd+click still opens a new tab.
+    press(wiki(), { button: 2 });
+    view.contentDOM.focus = vi.fn();
+    await focusAt(view, doc.indexOf('Xu]]'));
+    press(wiki());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(openNote).toHaveBeenCalledTimes(3);
+    press(wiki(), { metaKey: true });
+    expect(await opened(4)).toEqual([PERSON, true]);
   });
 
   it('opens a link to a note by its path, relative to the page, in Opal', async () => {
@@ -261,7 +296,7 @@ describe('live preview', () => {
     const { view, openNote } = mount('See [Robert](../People/Robert%20Xu.md#Notes) and [gone](missing.md).\n');
     const [robert] = view.contentDOM.querySelectorAll('.cm-md-link');
     press(robert);
-    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON));
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith(PERSON, false));
     expect(resolveLinks).toHaveBeenCalledWith(PAGE, ['../People/Robert Xu.md']);
   });
 

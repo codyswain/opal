@@ -10,7 +10,7 @@ import { GFM } from '@lezer/markdown';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
 import { linkMarkStyle, livePreview } from './livePreview';
 import { pageProperties } from './pageProperties';
-import { pageContext, wikiLinkSyntax, wikiLinks } from './wikiLinks';
+import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
 export function textChanges(current: string, next: string): ChangeSpec[] {
@@ -127,9 +127,9 @@ const editingKeymap = defaultKeymap.filter((binding) => !MENU_KEYS.has(binding.k
 /**
  * The page editor's setup. The document is the Markdown body exactly as read:
  * only "\n" splits lines, so a stray "\r" stays a character and `toString()`
- * gives back the same text. `openNote` follows a wiki link.
+ * gives back the same text. `openNote` follows a link.
  */
-export function markdownEditorExtensions(path: string, openNote: (path: string) => void = () => undefined): Extension[] {
+export function markdownEditorExtensions(path: string, openNote: OpenNote = () => undefined): Extension[] {
   return [
     EditorState.lineSeparator.of('\n'),
     pageContext.of({ path, openNote }),

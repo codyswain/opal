@@ -63,10 +63,18 @@ export function parseWikiTarget(inner: string): WikiTarget {
   };
 }
 
+/** Opens a followed link's file: in the page's own tab, or in a new tab with `newTab`. */
+export type OpenNote = (path: string, newTab: boolean) => void;
+
 /** The page being edited, and how its links open other pages. */
 export interface PageContext {
   path: string;
-  openNote: (path: string) => void;
+  openNote: OpenNote;
+}
+
+/** A Cmd+click or a middle-click follows a link into a new tab, as it opens a file from the tree. */
+export function opensNewTab(event: MouseEvent): boolean {
+  return event.metaKey || event.ctrlKey || event.button === 1;
 }
 
 export const pageContext = Facet.define<PageContext, PageContext>({
@@ -139,12 +147,12 @@ export const wikiLinks = [resolvedLinks, linkResolver];
  * Follows a wiki link. A link to a note that does not exist yet creates it at
  * the top of the opened folder, the way Obsidian does, and opens it.
  */
-export async function openWikiLink(view: EditorView, target: string): Promise<void> {
+export async function openWikiLink(view: EditorView, target: string, newTab = false): Promise<void> {
   const { path, openNote } = view.state.facet(pageContext);
   const response = await window.markdownAPI.resolveLinks(path, [target]).catch(() => null);
   const resolved = response?.success ? response.data[target] : null;
   if (resolved) {
-    openNote(resolved);
+    openNote(resolved, newTab);
     return;
   }
   const kind = classifyFile(target);
@@ -161,7 +169,7 @@ export async function openWikiLink(view: EditorView, target: string): Promise<vo
     return;
   }
   view.dispatch({ effects: linksResolved.of({ [target]: created.data.path }) });
-  openNote(created.data.path);
+  openNote(created.data.path, newTab);
 }
 
 /**
@@ -169,7 +177,7 @@ export async function openWikiLink(view: EditorView, target: string): Promise<vo
  * the top of the opened folder when it starts with "/". The main process
  * resolves it, so only files under the opened roots open.
  */
-export async function openPathLink(view: EditorView, href: string): Promise<void> {
+export async function openPathLink(view: EditorView, href: string, newTab = false): Promise<void> {
   const { path, openNote } = view.state.facet(pageContext);
   let written = href.replace(/[?#].*$/, '');
   // A link to a heading on this page goes nowhere yet.
@@ -178,6 +186,6 @@ export async function openPathLink(view: EditorView, href: string): Promise<void
   const target = /^(\/|\.\.?\/)/.test(written) ? written : `./${written}`;
   const response = await window.markdownAPI.resolveLinks(path, [target]).catch(() => null);
   const resolved = response?.success ? response.data[target] : null;
-  if (resolved) openNote(resolved);
+  if (resolved) openNote(resolved, newTab);
   else toast.error(`Could not find ${written}.`);
 }

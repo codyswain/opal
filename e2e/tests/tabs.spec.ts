@@ -1,4 +1,5 @@
-import { realpath } from 'fs/promises';
+import { realpath, writeFile } from 'fs/promises';
+import path from 'path';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, launchOpal, test } from '../fixtures/electronApp';
 import { createTempVault, seedRoots, type TempVault } from '../helpers/tempVault';
@@ -116,4 +117,23 @@ test('tabs answer the native menu and come back on relaunch', async ({ userDataD
   await clickMenuItem(app, 'Forward');
   await expect.poll(() => tabs(page)).toEqual(['*beta.png', 'alpha.png']);
   await app.close();
+});
+
+/** Real Cmd+click and middle-click events, which CodeMirror would otherwise take for its own. */
+test('Cmd+click or middle-click on a wiki link opens its note in a new tab beside the page', async ({ userDataDir }) => {
+  await writeFile(path.join(vaultRoot, 'Links.md'), 'See [[readme]] for more.\n');
+  const app = await launchOpal(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await page.getByTestId(`disk-tree-item-${vaultRoot}/Links.md`).click();
+    await expect(page.locator('.cm-md-inline-title')).toHaveText('Links');
+    await page.locator('.cm-md-wikilink').click({ modifiers: ['Meta'] });
+    await expect.poll(() => tabs(page)).toEqual(['Links', '*readme']);
+    await expect(page.locator('.cm-md-inline-title')).toHaveText('readme');
+    await page.locator('[data-testid="tab-strip"] [role="tab"]', { hasText: 'Links' }).click();
+    await page.locator('.cm-md-wikilink').click({ button: 'middle' });
+    await expect.poll(() => tabs(page)).toEqual(['Links', '*readme', 'readme']);
+  } finally {
+    await app.close();
+  }
 });

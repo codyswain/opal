@@ -13,6 +13,7 @@ import { showInlineTitle } from './livePreview';
 import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
+import type { OpenNote } from './wikiLinks';
 import './editor.css';
 
 export type EditorLayout = 'page' | 'section';
@@ -27,8 +28,8 @@ interface MarkdownEditorProps {
   layout?: EditorLayout;
   /** Section layout: an empty file takes the caret when it mounts. Pages always do. */
   autoFocusEmpty?: boolean;
-  /** How a followed link opens. By default it replaces the page in its tab. */
-  openNote?: (path: string) => void;
+  /** How a followed link opens. By default it replaces the page in its tab, or opens a new tab with `newTab`. */
+  openNote?: OpenNote;
   /** Section layout: whether this section shows the properties block. Pages follow the global flag. */
   propertiesShown?: boolean;
   /** Section layout: the footer line's click. Pages toggle the global flag. */
@@ -43,10 +44,10 @@ interface MarkdownEditorProps {
   loadingHeight?: number;
 }
 
-/** A followed link replaces the page in its tab, as a plain open from the tree does. */
-function openNoteInTab(path: string): void {
+/** A followed link replaces the page in its tab, or opens a new tab, as an open from the tree does. */
+function openNoteInTab(path: string, newTab: boolean): void {
   recordOpened(path);
-  useTabsStore.getState().open(fileLocation(path));
+  useTabsStore.getState().open(fileLocation(path), { newTab });
 }
 
 /** Words are runs of text with a letter or digit, so list markers, `#` and `|` do not count. */

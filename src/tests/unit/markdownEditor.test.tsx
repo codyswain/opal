@@ -225,7 +225,7 @@ describe('MarkdownEditor', () => {
     expect(api.write).not.toHaveBeenCalled();
   });
 
-  it('opens a followed wiki link in the same tab', async () => {
+  it('opens a followed wiki link in the same tab, and beside it on Cmd+click', async () => {
     const OTHER = '/Vault/Notes/Other.md';
     installMarkdownApi({ [NOTE]: 'See [[Other]].\n', [OTHER]: '' });
     const view = await openEditor(NOTE);
@@ -233,6 +233,10 @@ describe('MarkdownEditor', () => {
     act(() => { link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
     await waitFor(() => expect(openedPath()).toBe(OTHER));
     expect(tabPaths()).toEqual([OTHER]);
+    act(() => openTabs([NOTE]));
+    act(() => { link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, metaKey: true })); });
+    await waitFor(() => expect(tabPaths()).toEqual([NOTE, OTHER]));
+    expect(openedPath()).toBe(OTHER);
   });
 
   it('shows both sides of a conflicting change and saves the one picked', async () => {
@@ -351,7 +355,7 @@ describe('the properties block', () => {
     expect(document.activeElement).toBe(toggle());
   });
 
-  it('follows a wiki link value, and reads the file facts again after a save', async () => {
+  it('follows a wiki link value, in a new tab on Cmd+click or middle-click, and reads the file facts again after a save', async () => {
     const CARD = '/Vault/Library/chats/opal-status.md';
     const api = installDaily({ [CARD]: '' });
     const view = await openEditor(DAILY);
@@ -361,8 +365,15 @@ describe('the properties block', () => {
     act(() => { view.dispatch({ changes: { from: 0, insert: 'A line.' }, userEvent: 'input.type' }); });
     await waitFor(() => expect(api.write).toHaveBeenCalled(), { timeout: 2000 });
     await waitFor(() => expect(api.properties).toHaveBeenCalledTimes(2));
-    fireEvent.click(within(block).getByRole('button', { name: 'Opal status' }));
+    const link = within(block).getByRole('button', { name: 'Opal status' });
+    fireEvent.click(link);
     await waitFor(() => expect(openedPath()).toBe(CARD));
+    expect(tabPaths()).toEqual([CARD]);
+    act(() => openTabs([DAILY]));
+    fireEvent.click(link, { metaKey: true });
+    await waitFor(() => expect(tabPaths()).toEqual([DAILY, CARD]));
+    fireEvent(link, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    await waitFor(() => expect(tabPaths()).toEqual([DAILY, CARD, CARD]));
   });
 
   it('writes times as "Oct 28, 2026 at 06:38" and sizes in bytes, KB or MB', () => {
