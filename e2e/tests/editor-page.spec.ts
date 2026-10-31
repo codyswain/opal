@@ -2,7 +2,7 @@ import { _electron as electron, type ElectronApplication, type Page } from "@pla
 import { appendFile, mkdir, readFile, realpath, writeFile } from "fs/promises";
 import path from "path";
 import { expect, test } from "../fixtures/electronApp";
-import { greySpread } from "../helpers/png";
+import { greySpread, pngGreys } from "../helpers/png";
 import { createTempVault, seedRoots, type TempVault } from "../helpers/tempVault";
 
 const PROJECT_ROOT = path.join(__dirname, "../..");
@@ -118,3 +118,40 @@ test("the page shows no scrollbar at rest, a thumb while it scrolls, and none ag
   await page.waitForTimeout(400);
   expect(greySpread(await strip())).toBeLessThan(4);
 });
+
+test("the page runs to the card's edge under its footer, so a cut-off callout fades out", async ({ userDataDir }) => {
+  const note = path.join(root, "Callout.md");
+  const lines = Array.from({ length: 80 }, (_, index) => `> Line ${index + 1} of a long callout.`).join("\n>\n");
+  await writeFile(note, `# Callout\n\n> [!ai] Codex\n${lines}\n`);
+  const page = await launch(userDataDir);
+  await openNote(page, note);
+  const edges = await page.evaluate(() => {
+    const bottom = (selector: string) => (document.querySelector(selector) as Element).getBoundingClientRect();
+    const card = bottom("main").bottom;
+    const scroller = bottom(".cm-scroller");
+    const status = bottom(".opal-editor-status");
+    const callout = bottom(".cm-md-callout-first");
+    return { card, scroller: scroller.bottom, statusTop: status.top, statusBottom: status.bottom, left: callout.left, right: callout.right };
+  });
+  // The scroller ends at the card's border, under the footer, not above it.
+  expect(Math.abs(edges.card - 1 - edges.scroller)).toBeLessThanOrEqual(1);
+  expect(Math.abs(edges.statusBottom - edges.scroller)).toBeLessThanOrEqual(1);
+  expect(edges.statusTop).toBeLessThan(edges.scroller - 30);
+  // At the card's edge the callout has faded into the page: the strip across
+  // it has the page's own colour, as the margin beside it does.
+  const y = edges.scroller - 4;
+  const strip = await page.screenshot({ clip: { x: edges.left + 4, y, width: Math.min(300, edges.right - edges.left - 8), height: 3 } });
+  const margin = await page.screenshot({ clip: { x: edges.left - 24, y, width: 16, height: 3 } });
+  expect(greySpread(strip)).toBeLessThan(4);
+  expect(Math.abs(meanGrey(strip) - meanGrey(margin))).toBeLessThan(2);
+  // The footer floats over the text but its line still takes the click.
+  await page.locator("[data-properties-toggle]").click();
+  await expect(page.locator("[data-properties-toggle]")).toHaveAttribute("aria-pressed", "true");
+});
+
+function meanGrey(png: Buffer): number {
+  const image = pngGreys(png);
+  let sum = 0;
+  for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) sum += image.grey(x, y);
+  return sum / (image.width * image.height);
+}

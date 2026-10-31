@@ -74,6 +74,31 @@
   padding: 0 2rem 1rem;
 }
 
+/* A page runs to the card's bottom edge and the footer floats over it on a
+   fade of the page's ground, so a box cut off at the bottom fades out rather
+   than ending in a straight line across the white. The fade stops short of
+   the scrollbar. A save problem puts the footer back below the text, where
+   its message hides nothing. */
+.opal-editor[data-layout="page"] {
+  position: relative;
+}
+
+.opal-editor[data-layout="page"]:not([data-problem]) .opal-editor-status {
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 0;
+  padding-top: 1.25rem;
+  /* The text keeps its place 1rem from the page's edge. */
+  padding-right: calc(1rem - 10px);
+  background: linear-gradient(hsl(var(--canvas) / 0), hsl(var(--canvas)) 1.25rem);
+  pointer-events: none;
+}
+
+.opal-editor[data-layout="page"]:not([data-problem]) .opal-editor-status button {
+  pointer-events: auto;
+}
+
 .opal-editor .cm-editor .cm-scroller {
   font-family: inherit;
   line-height: var(--editor-line);
