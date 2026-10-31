@@ -463,4 +463,133 @@ describe('FileTree', () => {
       expect(toastError).toHaveBeenCalledWith('Something already exists')
     );
   });
+
+  describe('sticky folders', () => {
+    const ARCHIVE = `${LIBRARY}/Archive`;
+    const book = (index: number) => `${BOOKS}/Book ${String(index).padStart(2, '0')}.md`;
+    // Library, Archive (closed), Books, Book 00 … Book 39, README, notes.
+    const ROWS = 45;
+
+    /** Scrolls the list as the browser would; happy-dom has no layout, so it is given the sizes. */
+    function scrollTree(offset: number) {
+      const list = screen.getByRole('tree').firstElementChild as HTMLElement;
+      Object.defineProperties(list, {
+        clientHeight: { value: 600, configurable: true },
+        scrollHeight: { value: ROWS * 30, configurable: true },
+      });
+      list.scrollTop = offset;
+      fireEvent.scroll(list);
+      return list;
+    }
+
+    const sticky = (path: string) => screen.getByTestId(`disk-tree-sticky-${path}`);
+    const querySticky = (path: string) => screen.queryByTestId(`disk-tree-sticky-${path}`);
+
+    beforeEach(() => {
+      useDiskStore.setState({
+        listings: {
+          [ROOT]: LISTINGS[ROOT],
+          [LIBRARY]: [
+            entry({ path: ARCHIVE, name: 'Archive', kind: 'directory', isDirectory: true }),
+            entry({ path: BOOKS, name: 'Books', kind: 'directory', isDirectory: true }),
+          ],
+          [BOOKS]: Array.from({ length: 40 }, (_, index) =>
+            entry({ path: book(index), name: book(index).split('/').pop() ?? '', kind: 'markdown' })
+          ),
+        },
+        expanded: { [LIBRARY]: true, [BOOKS]: true },
+      });
+    });
+
+    it('holds the folders of the top row at the top, hidden from assistive technology', () => {
+      renderTree();
+      expect(querySticky(LIBRARY)).toBeNull();
+
+      scrollTree(300);
+      expect(sticky(LIBRARY)).toHaveTextContent('Library');
+      expect(sticky(BOOKS)).toHaveTextContent('Books');
+      expect(querySticky(ARCHIVE)).toBeNull();
+      expect(sticky(LIBRARY).closest('[aria-hidden]')).toHaveAttribute('aria-hidden', 'true');
+      for (const path of [LIBRARY, BOOKS]) {
+        expect(sticky(path)).toHaveAttribute('tabindex', '-1');
+        expect(sticky(path)).not.toHaveAttribute('data-tree-path');
+        expect(sticky(path)).not.toHaveAttribute('role');
+      }
+      expect(sticky(BOOKS)).toHaveStyle({ paddingLeft: '24px' });
+
+      scrollTree(0);
+      expect(querySticky(LIBRARY)).toBeNull();
+    });
+
+    it('scrolls a stuck folder’s own row into place on click and focuses it', async () => {
+      renderTree();
+      const list = scrollTree(300);
+
+      fireEvent.click(sticky(BOOKS));
+      // Books shows in its own row, just below Library's stuck row.
+      expect(list.scrollTop).toBe(30);
+      expect(querySticky(BOOKS)).toBeNull();
+      expect(sticky(LIBRARY)).toBeInTheDocument();
+      await waitFor(() => expect(row(BOOKS)).toHaveFocus());
+      expect(useDiskStore.getState().expanded[BOOKS]).toBe(true);
+    });
+
+    it('opens the folder’s own menu on a stuck row', async () => {
+      const user = userEvent.setup();
+      renderTree();
+      scrollTree(300);
+
+      fireEvent.contextMenu(sticky(BOOKS));
+      const menu = await screen.findByTestId('file-tree-menu');
+      expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'New note',
+        'New folder',
+        'Rename',
+        'Move to…',
+        'Reveal in Finder',
+        'Copy path',
+        'Move to Trash',
+      ]);
+      expect(sticky(BOOKS)).toHaveClass('ring-1');
+      await user.click(within(menu).getByRole('menuitem', { name: 'New folder' }));
+      expect(useDiskStore.getState().pendingAction).toEqual({ kind: 'new-folder', target: BOOKS });
+    });
+
+    it('moves a row dropped on a stuck folder into that folder', async () => {
+      renderTree();
+      scrollTree(300);
+      const source = book(20);
+
+      fireEvent.dragStart(row(source), { dataTransfer: dataTransfer() });
+      const over = createEvent.dragOver(sticky(LIBRARY), {
+        dataTransfer: dataTransfer(),
+        cancelable: true,
+      });
+      fireEvent(sticky(LIBRARY), over);
+      expect(over.defaultPrevented).toBe(true);
+      expect(sticky(LIBRARY)).toHaveClass('ring-1');
+
+      fireEvent.drop(sticky(LIBRARY), { dataTransfer: dataTransfer(source) });
+      await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(source, LIBRARY));
+
+      // Books is the row's own folder already.
+      vi.mocked(window.diskAPI.move).mockClear();
+      fireEvent.drop(sticky(BOOKS), { dataTransfer: dataTransfer(source) });
+      expect(window.diskAPI.move).not.toHaveBeenCalled();
+    });
+
+    it('keeps a row reached by keyboard clear of the stuck rows', async () => {
+      const user = userEvent.setup();
+      renderTree();
+      const list = scrollTree(300);
+
+      // Book 08 is behind the stuck Books row and Book 07 behind Library's;
+      // Up to Book 07 scrolls it out below them.
+      act(() => row(book(8)).focus());
+      await user.keyboard('{ArrowUp}');
+      expect(list.scrollTop).toBe(240);
+      await waitFor(() => expect(row(book(7))).toHaveFocus());
+      expect(sticky(BOOKS)).toBeInTheDocument();
+    });
+  });
 });

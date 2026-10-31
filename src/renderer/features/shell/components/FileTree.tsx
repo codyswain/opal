@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import {
   FixedSizeList,
   type ListChildComponentProps,
+  type ListOnScrollProps,
 } from 'react-window';
 import { fileTreeLabel } from '@/common/fileKind';
 import { isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
@@ -40,10 +41,22 @@ import {
   flattenFileTree,
   type FileTreeNode,
 } from '../utils/flattenFileTree';
+import {
+  offsetBelowStickyFolders,
+  stickyFolders,
+  type StickyFolder,
+} from '../utils/stickyFolders';
 
 /** A 28px row plus the 2px gap below it. */
 const TREE_ROW_HEIGHT = 30;
 const TREE_INDENT = 16;
+/** At most this many folder rows stick at the top of the tree. */
+const MAX_STICKY_LEVELS = 4;
+/** The look a tree row and its stuck copy share. */
+const ROW_CLASS = cn(
+  'mx-2 flex h-row-compact cursor-default select-none items-center gap-2 rounded-row pr-2 text-ui text-foreground-secondary outline-none',
+  'transition-hover hover:bg-surface-hover hover:text-foreground'
+);
 /** Keys typed within this window extend the type-ahead prefix. */
 const TYPE_AHEAD_MS = 500;
 
@@ -212,8 +225,7 @@ function FileTreeRow({
         {...(isRenaming ? {} : data.dragProps(node))}
         style={{ paddingLeft: `${node.depth * TREE_INDENT + 8}px` }}
         className={cn(
-          'mx-2 flex h-row-compact cursor-default select-none items-center gap-2 rounded-row pr-2 text-ui text-foreground-secondary outline-none',
-          'transition-hover hover:bg-surface-hover hover:text-foreground',
+          ROW_CLASS,
           'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
           isActive && 'bg-surface-selected font-medium text-foreground',
           data.outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
@@ -240,6 +252,86 @@ function FileTreeRow({
   );
 }
 
+/** The stuck folder rows, which TreeInner draws inside the list's scroll area. */
+const StickyRowsContext = React.createContext<React.ReactNode>(null);
+
+/**
+ * react-window's inner element, with the stuck folder rows first. Inside the
+ * scroll area they are as wide as the rows beside the scrollbar, and
+ * position: sticky keeps them at the top while the rows scroll under them.
+ */
+const TreeInner = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  function TreeInner({ children, ...props }, ref) {
+    const stickyRows = React.useContext(StickyRowsContext);
+    return (
+      <div ref={ref} {...props}>
+        {stickyRows}
+        {children}
+      </div>
+    );
+  }
+);
+
+interface StickyFolderRowsProps {
+  folders: readonly StickyFolder[];
+  outlinedPath: string | null;
+  onActivate: (folder: StickyFolder) => void;
+  dragProps: (node: FileTreeNode) => React.HTMLAttributes<HTMLDivElement>;
+}
+
+/**
+ * Copies of the stuck folders' rows. The folders' own rows stay in the tree,
+ * so the copies are hidden from assistive technology and never take focus.
+ */
+function StickyFolderRows({
+  folders,
+  outlinedPath,
+  onActivate,
+  dragProps,
+}: StickyFolderRowsProps) {
+  if (folders.length === 0) return null;
+  return (
+    <div aria-hidden className="sticky top-0 z-10 h-0">
+      {folders.map((folder, level) => {
+        const { node, top } = folder;
+        const { onDragOver, onDragLeave, onDrop } = dragProps(node);
+        return (
+          <div
+            key={node.path}
+            // Outer folders cover inner ones as the inner ones are pushed out.
+            style={{ top, height: TREE_ROW_HEIGHT, zIndex: folders.length - level }}
+            className={cn(
+              'absolute inset-x-0 bg-chrome',
+              level === folders.length - 1 && 'border-b border-border-subtle'
+            )}
+          >
+            <div
+              tabIndex={-1}
+              title={node.label}
+              data-sticky-path={node.path}
+              data-testid={`disk-tree-sticky-${node.path}`}
+              // Focus goes to the folder's own row, never to this copy.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onActivate(folder)}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              style={{ paddingLeft: `${node.depth * TREE_INDENT + 8}px` }}
+              className={cn(
+                ROW_CLASS,
+                outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
+              )}
+            >
+              <ChevronRight aria-hidden className="h-4 w-4 shrink-0 rotate-90 p-px text-icon" />
+              <span className="min-w-0 flex-1 truncate">{node.label}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The menu target: a row, or the blank space below the rows (the lone root). */
 type MenuTarget = { node: FileTreeNode | null; folder: string };
 
@@ -262,6 +354,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   const [menuTarget, setMenuTarget] = React.useState<MenuTarget | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [moving, setMoving] = React.useState<string | null>(null);
+  const [scrollTop, setScrollTop] = React.useState(0);
+  const scrollTopRef = React.useRef(0);
   const openedFromTree = React.useRef<string | null>(null);
   const typeAhead = React.useRef({ prefix: '', at: 0 });
 
@@ -270,6 +364,11 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     [expanded, listings, roots]
   );
   const loneRoot = roots.length === 1 ? roots[0] : null;
+  const listHeight = Math.max(TREE_ROW_HEIGHT, viewport.height);
+  const stuck = React.useMemo(
+    () => stickyFolders(nodes, scrollTop, TREE_ROW_HEIGHT, listHeight, MAX_STICKY_LEVELS),
+    [listHeight, nodes, scrollTop]
+  );
   const tabStopPath = React.useMemo(() => {
     const has = (path: string | null) =>
       path !== null && nodes.some((node) => node.path === path);
@@ -288,13 +387,37 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     void revealPath(openedPath);
   }, [openedPath, revealPath, roots]);
 
+  // scrollToItem(index, 'smart'), except that a row above the visible ones,
+  // or behind the stuck rows, lands just below its folders' stuck rows.
+  const scrollToRow = React.useCallback(
+    (index: number) => {
+      const list = listRef.current;
+      if (!list) return;
+      const offset = scrollTopRef.current;
+      const below = offsetBelowStickyFolders(
+        nodes,
+        index,
+        TREE_ROW_HEIGHT,
+        listHeight,
+        MAX_STICKY_LEVELS
+      );
+      // More than a screen away, 'smart' centres the row, clear of the stuck rows.
+      if (below < offset && offset <= index * TREE_ROW_HEIGHT + listHeight) {
+        list.scrollTo(below);
+      } else {
+        list.scrollToItem(index, 'smart');
+      }
+    },
+    [listHeight, nodes]
+  );
+
   React.useEffect(() => {
     if (!revealTarget) return;
     const index = nodes.findIndex((node) => node.path === revealTarget);
     if (index === -1) return;
-    listRef.current?.scrollToItem(index, 'smart');
+    scrollToRow(index);
     setRevealTarget(null);
-  }, [nodes, revealTarget]);
+  }, [nodes, revealTarget, scrollToRow]);
 
   const openFile = React.useCallback(
     (path: string, inNewTab: boolean) => {
@@ -328,14 +451,14 @@ export function FileTree({ onNavigate }: FileTreeProps) {
       const node = nodes[index];
       if (!node) return;
       setKeyboardPath(node.path);
-      listRef.current?.scrollToItem(index, 'smart');
+      scrollToRow(index);
       window.requestAnimationFrame(() => {
         treeRef.current
           ?.querySelector<HTMLElement>(`[data-tree-index="${index}"]`)
           ?.focus();
       });
     },
-    [nodes]
+    [nodes, scrollToRow]
   );
 
   const handleKeyDown = React.useCallback(
@@ -463,13 +586,14 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     []
   );
 
+  const outlinedPath =
+    dropTargetPath ?? (menuOpen ? menuTarget?.node?.path ?? null : null);
   const itemData = React.useMemo<FileTreeRowData>(
     () => ({
       activePath: openedPath,
       tabStopPath,
       renamingPath,
-      outlinedPath:
-        dropTargetPath ?? (menuOpen ? menuTarget?.node?.path ?? null : null),
+      outlinedPath,
       nodes,
       onActivate: activate,
       onFocusIndex: (index) => setKeyboardPath(nodes[index]?.path ?? null),
@@ -483,22 +607,44 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     [
       activate,
       dragProps,
-      dropTargetPath,
       focusPath,
       handleKeyDown,
-      menuOpen,
-      menuTarget,
       nodes,
       openedPath,
+      outlinedPath,
       renamingPath,
       tabStopPath,
     ]
+  );
+  const itemKey = React.useCallback((index: number) => nodes[index].path, [nodes]);
+
+  const handleScroll = React.useCallback(({ scrollOffset }: ListOnScrollProps) => {
+    scrollTopRef.current = scrollOffset;
+    setScrollTop(scrollOffset);
+  }, []);
+
+  // A stuck row scrolls the tree to the folder's own row, just below its
+  // parents' stuck rows, and focuses it there, as VS Code does.
+  const showStuckFolder = React.useCallback(
+    (folder: StickyFolder) => {
+      listRef.current?.scrollTo(
+        offsetBelowStickyFolders(
+          nodes,
+          folder.index,
+          TREE_ROW_HEIGHT,
+          listHeight,
+          MAX_STICKY_LEVELS
+        )
+      );
+      focusPath(folder.node.path);
+    },
+    [focusPath, listHeight, nodes]
   );
 
   // The blank space below the rows stands for the lone root: it takes drops
   // and offers the root's menu.
   const isOverRow = (event: React.SyntheticEvent) =>
-    !!(event.target as HTMLElement).closest('[role="treeitem"]');
+    !!(event.target as HTMLElement).closest('[role="treeitem"], [data-sticky-path]');
   const blankDragProps: React.HTMLAttributes<HTMLDivElement> = loneRoot
     ? {
         onDragOver: (event) => {
@@ -519,11 +665,10 @@ export function FileTree({ onNavigate }: FileTreeProps) {
 
   const handleContextMenu = (event: React.MouseEvent) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>(
-      '[data-tree-path]'
+      '[data-tree-path], [data-sticky-path]'
     );
-    const node = nodes.find(
-      (candidate) => candidate.path === row?.dataset.treePath
-    );
+    const path = row?.dataset.treePath ?? row?.dataset.stickyPath;
+    const node = nodes.find((candidate) => candidate.path === path);
     if (node?.isYearGroup) {
       // A year row offers its daily folder's menu, as blank space does a root's.
       setMenuTarget({ node: null, folder: parentFsPath(node.path) ?? node.path });
@@ -559,6 +704,14 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     store.beginNewFolder(folder);
   };
 
+  // Rename and Move to Trash use the folder's own row (the rename field, the
+  // focus the confirmation returns to), so a menu opened on a stuck row first
+  // brings that row out from under the stuck rows.
+  const scrollToPath = (path: string) => {
+    const index = nodes.findIndex((node) => node.path === path);
+    if (index !== -1) scrollToRow(index);
+  };
+
   const reportFailure = (result: { success: boolean; error?: string }) => {
     if (!result.success) toast.error(result.error ?? 'Something went wrong.');
   };
@@ -583,18 +736,31 @@ export function FileTree({ onNavigate }: FileTreeProps) {
             {...blankDragProps}
           >
             {nodes.length > 0 ? (
-              <FixedSizeList
-                ref={listRef}
-                height={Math.max(TREE_ROW_HEIGHT, viewport.height)}
-                width="100%"
-                itemCount={nodes.length}
-                itemData={itemData}
-                itemKey={(index) => nodes[index].path}
-                itemSize={TREE_ROW_HEIGHT}
-                overscanCount={6}
+              <StickyRowsContext.Provider
+                value={
+                  <StickyFolderRows
+                    folders={stuck}
+                    outlinedPath={outlinedPath}
+                    onActivate={showStuckFolder}
+                    dragProps={dragProps}
+                  />
+                }
               >
-                {FileTreeRow}
-              </FixedSizeList>
+                <FixedSizeList
+                  ref={listRef}
+                  height={listHeight}
+                  width="100%"
+                  itemCount={nodes.length}
+                  itemData={itemData}
+                  itemKey={itemKey}
+                  itemSize={TREE_ROW_HEIGHT}
+                  overscanCount={6}
+                  innerElementType={TreeInner}
+                  onScroll={handleScroll}
+                >
+                  {FileTreeRow}
+                </FixedSizeList>
+              </StickyRowsContext.Provider>
             ) : null}
           </div>
         </ContextMenuTrigger>
@@ -625,7 +791,12 @@ export function FileTree({ onNavigate }: FileTreeProps) {
             {canMutate ? (
               <>
                 <ContextMenuSeparator />
-                <ContextMenuItem onSelect={afterMenu(() => setRenamingPath(menuNode.path))}>
+                <ContextMenuItem
+                  onSelect={afterMenu(() => {
+                    scrollToPath(menuNode.path);
+                    setRenamingPath(menuNode.path);
+                  })}
+                >
                   Rename
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={afterMenu(() => setMoving(menuNode.path))}>
@@ -659,6 +830,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                   tone="destructive"
                   onSelect={afterMenu(() => {
                     // The confirmation hands focus back to this row when it closes.
+                    scrollToPath(menuNode.path);
                     findRow(treeRef.current, menuNode.path)?.focus();
                     useDiskStore.getState().beginDelete(menuNode.path);
                   })}
