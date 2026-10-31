@@ -25,7 +25,9 @@ function DateForm({ defaultDate, onCancel, onCreate }: { defaultDate: string; on
   const [invalid, setInvalid] = useState(false);
 
   return (
+    // Chromium blocks the submit of a part-filled date with its own bubble; without its check the date reads empty and gets the message here.
     <form
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if (validDate(date)) onCreate(date);

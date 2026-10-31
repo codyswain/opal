@@ -288,10 +288,13 @@ describe("a new daily page", () => {
     expect(field).toHaveAttribute("type", "date");
     expect(field).toHaveValue("2026-10-31");
 
+    // Chromium reads a part-filled date as empty and fails its own check, which must not block the submit with its own bubble.
+    const check = vi.spyOn(field as HTMLInputElement, "checkValidity").mockReturnValue(false);
     fireEvent.change(field, { target: { value: "" } });
     await user.click(within(dialog).getByRole("button", { name: "Create" }));
     expect(within(dialog).getByRole("alert")).toHaveTextContent("Choose a full date.");
     expect(createDay).not.toHaveBeenCalled();
+    check.mockRestore();
 
     fireEvent.change(field, { target: { value: "2026-11-05" } });
     expect(within(dialog).queryByRole("alert")).toBeNull();

@@ -204,8 +204,8 @@ interface Restore {
   sections: number;
   shown: number;
   /**
-   * The answer from the main process that the anchor may still come with:
-   * the first for a place saved before, the next for a page just made.
+   * The ask for the list whose answer the anchor may still come with: the
+   * first for a place saved before, a new one for a page just made.
    */
   answers: number;
 }
@@ -233,7 +233,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     [roots, head],
   );
   const [sections, setSections] = useState<StackSection[]>(() => [provisionalHead(location)]);
-  // How many times the main process has answered with the list; none yet means the head shows alone for now.
+  // Each ask for the list is numbered, and `answers` is the newest answered; none yet means the head shows alone for now.
+  const asked = useRef(0);
   const [answers, setAnswers] = useState(0);
   const listed = answers > 0;
   const [loadedCount, setLoadedCount] = useState<number>(STACK_WINDOW.firstLoad);
@@ -268,8 +269,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const entry = useRef<TabEntry | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const planRef = useRef<() => void>(() => undefined);
-  // Asks the main process for the list again at once, as a page just made needs.
-  const relist = useRef<() => void>(() => undefined);
+  // Asks the main process for the list again at once, as a page just made needs, and returns the ask's number.
+  const relist = useRef<() => number>(() => 0);
   // An empty head takes the caret when the stack first opens, unless the stack returns to a saved place.
   const autoFocusHead = useRef<boolean | null>(null);
   if (autoFocusHead.current === null) {
@@ -405,6 +406,31 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     if (frame.current) return;
     frame.current = window.requestAnimationFrame(() => planRef.current());
   }, []);
+
+  // --- The section the sidebar follows ---------------------------------------
+
+  const publishViewed = useCallback(
+    (immediately = false) => {
+      const element = scroller.current;
+      if (!element) return;
+      const path = kind === 'daily' ? sectionAt(element.scrollTop + PROBE_PX) : head;
+      if (!path) return;
+      if (immediately) {
+        viewedPending.current = path;
+        useStackStore.getState().setViewed(tabId, path);
+        return;
+      }
+      if (path === viewedPending.current) return;
+      viewedPending.current = path;
+      if (viewedTimer.current) clearTimeout(viewedTimer.current);
+      // Held for a moment, so a fast fling does not ask for every day it passes.
+      viewedTimer.current = setTimeout(() => {
+        viewedTimer.current = null;
+        useStackStore.getState().setViewed(tabId, path);
+      }, VIEWED_HOLD_MS);
+    },
+    [head, kind, sectionAt, tabId],
+  );
 
   // --- Anchoring and restore -----------------------------------------------
 
@@ -552,7 +578,9 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     restore.current = null;
     revealed.current = 0;
     settle();
-  }, [settle]);
+    // The place may need no scroll, as when a page made above the view lands where the view is, so no scroll event tells the sidebar.
+    publishViewed(true);
+  }, [publishViewed, settle]);
 
   /**
    * Puts the saved place back, each frame until it holds. With a saved line
@@ -648,31 +676,6 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     entry.current = useTabsStore.getState().tabs.find((tab) => tab.id === tabId)?.history[at] ?? known;
   }, [index, rememberPlace, tabId]);
 
-  // --- The section the sidebar follows ---------------------------------------
-
-  const publishViewed = useCallback(
-    (immediately = false) => {
-      const element = scroller.current;
-      if (!element) return;
-      const path = kind === 'daily' ? sectionAt(element.scrollTop + PROBE_PX) : head;
-      if (!path) return;
-      if (immediately) {
-        viewedPending.current = path;
-        useStackStore.getState().setViewed(tabId, path);
-        return;
-      }
-      if (path === viewedPending.current) return;
-      viewedPending.current = path;
-      if (viewedTimer.current) clearTimeout(viewedTimer.current);
-      // Held for a moment, so a fast fling does not ask for every day it passes.
-      viewedTimer.current = setTimeout(() => {
-        viewedTimer.current = null;
-        useStackStore.getState().setViewed(tabId, path);
-      }, VIEWED_HOLD_MS);
-    },
-    [head, kind, sectionAt, tabId],
-  );
-
   // --- Mount and unmount ----------------------------------------------------
 
   useEffect(() => {
@@ -708,16 +711,19 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       return;
     }
     let cancelled = false;
+    let answered = 0;
     let folders: string[] = [];
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const ask = async () => {
+    const answer = async (number: number) => {
       let result: Awaited<ReturnType<typeof window.vaultAPI.stack>> | null = null;
       try {
         result = await window.vaultAPI.stack(root, kind, head);
       } catch {
         result = null;
       }
-      if (cancelled) return;
+      // An answer that comes after the answer to a later ask is out of date.
+      if (cancelled || number <= answered) return;
+      answered = number;
       // Without an answer the head shows alone, as it would opened on its own.
       if (result?.success) {
         folders = result.data.folders;
@@ -726,18 +732,23 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         const keep = (path: string) => latest.current.live.has(path) && isPinned(path);
         setSections((previous) => mergeSections(previous, next.length > 0 ? next : previous, keep));
       }
-      setAnswers((count) => count + 1);
+      setAnswers(number);
     };
-    void ask();
-    relist.current = () => void ask();
+    const ask = () => {
+      const number = (asked.current += 1);
+      void answer(number);
+      return number;
+    };
+    ask();
+    relist.current = ask;
     const off = window.diskAPI.onChanged(({ directories }) => {
       if (!directories.some((directory) => folders.includes(directory))) return;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void ask(), RELIST_AFTER_MS);
+      timer = setTimeout(ask, RELIST_AFTER_MS);
     });
     return () => {
       cancelled = true;
-      relist.current = () => undefined;
+      relist.current = () => 0;
       if (timer) clearTimeout(timer);
       off();
     };
@@ -752,12 +763,30 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
     schedule();
   }, [schedule, live, shown, folds, statuses, propertiesPath, propertiesOpen]);
 
+  /**
+   * With later days above the head, the content is at least the head's top
+   * plus the view tall, so the head can come to the top of the view however
+   * few pages are below it. It never ends above the bottom of the view, which
+   * would move the scroll, so it is set before the hold moves the scroll and
+   * again after.
+   */
+  const fitHead = useCallback(() => {
+    const element = scroller.current;
+    const inner = content.current;
+    if (!element || !inner) return;
+    const top = latest.current.shown[0]?.path === head ? 0 : (topOf(head) ?? 0);
+    const minHeight = top > 0 ? `${Math.max(top, element.scrollTop) + element.clientHeight}px` : '';
+    if (inner.style.minHeight !== minHeight) inner.style.minHeight = minHeight;
+  }, [head]);
+
   // A new list can add or drop sections above what the view holds still, as a
   // page made for a later day comes above today's: the scroll moves with them
   // before paint. On the first render this picks the first hold.
   useLayoutEffect(() => {
+    fitHead();
     keepHold();
-  }, [keepHold, shown]);
+    fitHead();
+  }, [fitHead, keepHold, shown]);
 
   /**
    * Scrolls a section's top to the top of the view, without unfolding it;
@@ -773,17 +802,17 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       restore.current = null;
       scrollTo(top);
       settle();
+      publishViewed(true);
       return;
     }
     const known = state.sections.some((section) => section.path === path);
     const running = restore.current !== null;
     restore.current = {
       view: { anchor: path, offset: 0 }, started: performance.now(), settled: 0,
-      sections: state.sections.length, shown: state.shown.length, answers: state.answers + (known ? 0 : 1),
+      sections: state.sections.length, shown: state.shown.length, answers: known ? state.answers : relist.current(),
     };
-    if (!known) relist.current();
     if (!running) window.requestAnimationFrame(runRestore);
-  }, [runRestore, scrollTo, settle]);
+  }, [publishViewed, runRestore, scrollTo, settle]);
 
   // Daily on a stream already shown scrolls back to today's page, and a page made for a later day scrolls to that page.
   useEffect(() => {
@@ -903,7 +932,9 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         if (body && section) sectionHeights.set(path, { height: body.offsetHeight, width, mtimeMs: section.mtimeMs, size: section.size });
       }
       for (const observed of entries) { const path = (observed.target as HTMLElement).dataset.stackSection; if (!path) continue; const h = Math.round((observed.target as HTMLElement).offsetHeight); const was = lastH.get(path); lastH.set(path, h); if (was !== undefined && was !== h) rec('R', tail(path), h - was, Math.round((observed.target as HTMLElement).offsetTop - element.scrollTop), mounted.has(path) ? (reading.current.has(path) ? 'reading' : 'live') : 'ph'); }
+      fitHead();
       keepHold();
+      fitHead();
       schedule();
     });
     resize.observe(element);
@@ -922,7 +953,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('keydown', stop);
     };
-  }, [keepHold, pickHold, publishViewed, rememberPlace, saveView, schedule, settle, stopRestore]);
+  }, [fitHead, keepHold, pickHold, publishViewed, rememberPlace, saveView, schedule, settle, stopRestore]);
 
   // --- Moving between sections ------------------------------------------------
 

@@ -314,15 +314,86 @@ describe('StackView', () => {
       await waitFor(() => expect(stack).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(scroller().scrollTop).toBe(SECTION_PX));
       expect(order().slice(0, 3)).toEqual([...LATER, HEAD]);
+      await waitFor(() => expect(useStackStore.getState().viewed?.path).toBe(LATER[1]));
     });
+
+    it('has the sidebar follow tomorrow’s page just made at the top, where the view already is', async () => {
+      const stack = installVault();
+      renderStack();
+      await waitFor(() => expect(liveSections()).toEqual(paths.slice(0, 6)));
+      expect(useStackStore.getState().viewed?.path).toBe(HEAD);
+      // Tomorrow's page comes above today's at the top of the view, so the view does not scroll.
+      vi.mocked(stack).mockImplementation(answer([LATER[1]]));
+      act(() => useStackStore.getState().scrollToSection(HEAD, LATER[1]));
+      await waitFor(() => expect(order().slice(0, 2)).toEqual([LATER[1], HEAD]));
+      await waitFor(() => expect(useStackStore.getState().viewed?.path).toBe(LATER[1]));
+      expect(scroller().scrollTop).toBe(0);
+    });
+
+    it.each(['the earlier ask’s answer comes first', 'the later ask’s answer comes first'])(
+      'scrolls to a page just made while an earlier ask for the list is out, when %s',
+      async (when) => {
+        // Each ask waits until the test answers it, with or without the later days.
+        const asks: Array<(above: readonly string[]) => void> = [];
+        installVault(vi.fn((root: string, kind: string, head: string) =>
+          new Promise((resolve) => asks.push((above) => resolve(answer(above)(root, kind, head))))));
+        renderStack();
+        expect(asks).toHaveLength(1);
+        act(() => useStackStore.getState().scrollToSection(HEAD, LATER[1]));
+        expect(asks).toHaveLength(2);
+        const [before, after] = asks;
+        if (when.startsWith('the earlier')) {
+          await act(async () => before([]));
+          await act(async () => after(LATER));
+        } else {
+          await act(async () => after(LATER));
+          await act(async () => before([]));
+        }
+        await waitFor(() => expect(scroller().scrollTop).toBe(SECTION_PX));
+        await frames(4);
+        expect(order().slice(0, 3)).toEqual([...LATER, HEAD]);
+        expect(scroller().scrollTop).toBe(SECTION_PX);
+      },
+    );
 
     it('starts at a later day’s page saved on a new entry', async () => {
       installVault(vi.fn(answer(LATER)));
       useTabsStore.getState().saveView(tabId(0), 0, { stack: { anchor: LATER[1], offset: 0 } });
       renderStack();
       await waitFor(() => expect(scroller().scrollTop).toBe(SECTION_PX), { timeout: 3000 });
+      await waitFor(() => expect(useStackStore.getState().viewed?.path).toBe(LATER[1]));
       // The empty head does not take the caret from a page opened by name.
       expect(viewOf(HEAD)?.hasFocus ?? false).toBe(false);
+    });
+
+    it('opens at today’s page when the saved page is gone, not at the top of the later days', async () => {
+      installVault(vi.fn(answer(LATER)));
+      useTabsStore.getState().saveView(tabId(0), 0, { stack: { anchor: day(-2), offset: 0 } });
+      renderStack();
+      await waitFor(() => expect(order().slice(0, 3)).toEqual([...LATER, HEAD]));
+      await waitFor(() => expect(scroller().scrollTop).toBe(2 * SECTION_PX), { timeout: 3000 });
+    });
+
+    it('brings today’s page to the top of the view with only one earlier page below it', async () => {
+      installVault(vi.fn(async (_root: string, _kind: string, head: string) => ({
+        success: true as const,
+        data: { kind: 'daily' as const, head, sections: [...LATER.map(later), section(HEAD, 0), section(paths[1], 1)], folders: [DAILY] },
+      })));
+      renderStack();
+      // As in the app, the scroll stops where the content ends: its sections and padding, or its minimum height.
+      const element = scroller();
+      const feed = element.firstElementChild as HTMLElement;
+      let top = 0;
+      Object.defineProperty(element, 'scrollTop', {
+        configurable: true,
+        get: () => top,
+        set: (value: number) => {
+          const height = Math.max(order().length * SECTION_PX + 128, parseFloat(feed.style.minHeight) || 0);
+          top = Math.max(0, Math.min(value, height - VIEW_PX));
+        },
+      });
+      await waitFor(() => expect(order()).toEqual([...LATER, HEAD, paths[1]]));
+      await waitFor(() => expect(scroller().scrollTop).toBe(2 * SECTION_PX));
     });
   });
 
