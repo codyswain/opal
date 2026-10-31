@@ -166,6 +166,10 @@ describe('live preview', () => {
     expect(table.querySelector('strong')).toHaveTextContent('b');
     expect(table.querySelector('[data-wiki-target="Robert Xu"]')).not.toBeNull();
     view.focus = vi.fn();
+    // The middle button only follows links: off a link it leaves the table and the caret alone.
+    press(cells()[3], { button: 1 });
+    expect(view.focus).not.toHaveBeenCalled();
+    expect(view.state.selection.main.head).toBe(0);
     press(cells()[3]);
     expect(view.focus).toHaveBeenCalled();
     expect(view.state.selection.main.head).toBe(doc.indexOf('c |'));
@@ -285,6 +289,9 @@ describe('live preview', () => {
     expect(openNote).toHaveBeenCalledTimes(3);
     press(wiki(), { metaKey: true });
     expect(await opened(4)).toEqual([PERSON, true]);
+    // Ctrl+click does the same, as it does in the tree.
+    press(link(), { ctrlKey: true });
+    expect(await opened(5)).toEqual([PERSON, true]);
   });
 
   it('opens a link to a note by its path, relative to the page, in Opal', async () => {
