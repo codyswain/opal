@@ -10,7 +10,7 @@ import { stackLocation, fileLocation } from '@/renderer/features/disk-explorer/n
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
 import { useStackFoldsStore, useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
-import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
+import { tabLocation, useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { readPref } from '@/renderer/shared/prefs/prefs';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import type { StackSection } from '@/types/stack';
@@ -241,6 +241,28 @@ describe('StackView', () => {
     fireEvent.click(within(article(paths[3])).getByRole('button', { name: `Open ${label(paths[3])} on its own` }));
     const tab = useTabsStore.getState().tabs[0];
     expect(tab.history.map((entry) => entry.location)).toEqual([stackLocation('daily', HEAD), fileLocation(paths[3])]);
+  });
+
+  it('scrolls to a page in the stream when its link is followed, and opens a new tab on Cmd+click or middle-click', async () => {
+    const PERSON = '/Vault/People/Robert Xu.md';
+    installMarkdownApi({
+      ...Object.fromEntries(paths.map((path, index) => [path, index === 0 ? `See [[${label(paths[2])}]] and [[Robert Xu]].\n` : `Notes from ${label(path)}.\n`])),
+      [PERSON]: '# Robert\n',
+    });
+    renderStack();
+    await waitFor(() => expect(viewOf(HEAD)).toBeTruthy());
+    const links = () => (viewOf(HEAD) as EditorView).contentDOM.querySelectorAll('.cm-md-wikilink');
+    const tabs = () => useTabsStore.getState().tabs;
+    fireEvent.mouseDown(links()[0], { metaKey: true });
+    // The new tab shows that page, as a Cmd+click in the tree does, and this one stays where it was.
+    await waitFor(() => expect(tabs().map(tabLocation)).toEqual([stackLocation('daily', HEAD), fileLocation(paths[2])]));
+    expect(scroller().scrollTop).toBe(0);
+    fireEvent.mouseDown(links()[1], { button: 1 });
+    await waitFor(() => expect(tabs().map(tabLocation)[2]).toEqual(fileLocation(PERSON)));
+    fireEvent.mouseDown(links()[0]);
+    await waitFor(() => expect(scroller().scrollTop).toBe(2 * SECTION_PX));
+    expect(tabs()).toHaveLength(3);
+    expect(tabs()[0].history).toHaveLength(1);
   });
 
   it('shows the properties block on the section whose footer was clicked, and only there', async () => {

@@ -1041,13 +1041,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       const paths = event.altKey ? state.shown.map((candidate) => candidate.path) : [path];
       useStackFoldsStore.getState().setOpen(paths, open);
     };
-    const openNote = (path: string) => {
-      if (latest.current.sections.some((section) => section.path === path)) {
+    // A link to a file in the stack scrolls to it; a Cmd+click opens a new tab and leaves this one where it was.
+    const openNote = (path: string, newTab: boolean) => {
+      if (!newTab && latest.current.sections.some((section) => section.path === path)) {
         revealSection(path);
         return;
       }
       recordOpened(path);
-      useTabsStore.getState().open(fileLocation(path));
+      useTabsStore.getState().open(fileLocation(path), { newTab });
     };
     return {
       refFor: (path) =>
