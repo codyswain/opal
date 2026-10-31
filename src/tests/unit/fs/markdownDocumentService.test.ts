@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import type { IpcMain } from 'electron';
 vi.mock('@/main/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
-import { MarkdownConflictError, MarkdownDocumentService, MarkdownError } from '@/main/fs/MarkdownDocumentService';
+import { MarkdownConflictError, MarkdownDocumentService, MarkdownError, MarkdownHeldError } from '@/main/fs/MarkdownDocumentService';
 import { PageHistory, parseStatedTime } from '@/main/fs/pageCreated';
 import { LinkIndex } from '@/main/fs/LinkIndex';
 import { MarkdownHandlers } from '@/main/fs/MarkdownHandlers';
@@ -205,6 +205,22 @@ describe('MarkdownDocumentService', () => {
     expect(noteEdited).not.toHaveBeenCalled();
   });
 
+  it('refuses a write while git rewrites the repo, says so on read, and writes once git is done', async () => {
+    await mkdir(path.join(root, '.git'));
+    await writeFile(item('note.md'), '# one\n');
+    const document = await service.read(item('note.md'));
+    expect(document.gitBusy).toBe(false);
+    await writeFile(path.join(root, '.git', 'MERGE_AUTOSTASH'), 'abc\n');
+    expect((await service.read(item('note.md'))).gitBusy).toBe(true);
+    await expect(service.write(item('note.md'), '# mine\n', document.revision)).rejects.toThrow(MarkdownHeldError);
+    expect(await readFile(item('note.md'), 'utf8')).toBe('# one\n');
+    expect((await readdir(root)).some((name) => name.startsWith('.opal-edit-'))).toBe(false);
+    expect(noteEdited).not.toHaveBeenCalled();
+    await rm(path.join(root, '.git', 'MERGE_AUTOSTASH'));
+    await service.write(item('note.md'), '# mine\n', document.revision);
+    expect(await readFile(item('note.md'), 'utf8')).toBe('# mine\n');
+  });
+
   it('refuses paths outside roots, symlinks, non-Markdown, binary text and oversized files', async () => {
     const outside = path.join(tmp, 'outside.md');
     await writeFile(outside, '# out');
@@ -292,5 +308,9 @@ describe('MarkdownHandlers', () => {
     expect(await invoke('markdown:resolve-links', item('note.md'), 'note')).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', item('note.md'), Array(501).fill('x'))).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', path.join(tmp, 'outside.md'), ['note'])).toMatchObject({ success: false, error: /not inside/ });
+    await mkdir(path.join(root, '.git', 'rebase-merge'), { recursive: true });
+    const held = await invoke('markdown:read', item('note.md')) as { success: true; data: { revision: string; gitBusy: boolean } };
+    expect(held.data.gitBusy).toBe(true);
+    expect(await invoke('markdown:write', item('note.md'), '# held\n', held.data.revision)).toEqual({ success: false, error: expect.stringMatching(/Git is changing/), gitBusy: true });
   });
 });

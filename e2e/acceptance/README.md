@@ -20,4 +20,5 @@ Then, from the repository root:
 ```bash
 node e2e/acceptance/editor-acceptance.mjs        # Markdown editing: autosave, external edits, conflicts, new note
 node e2e/acceptance/stack-stress-acceptance.mjs  # The daily stream with 100 daily pages: frame times, memory, editor count, drift, Back and relaunch
+node e2e/acceptance/git-autostash-acceptance.mjs # Autosave during vault-pull.sh's `git merge --autostash`: 30 runs, no saved or typed line lost
 ```

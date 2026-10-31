@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTOSAVE_DELAY_MS,
   AUTOSAVE_MAX_WAIT_MS,
+  GIT_HOLD_RETRY_MS,
   useMarkdownDocument,
   type MarkdownEditorHandle,
 } from '@/renderer/features/disk-explorer/components/editor/useMarkdownDocument';
@@ -221,6 +222,146 @@ describe('useMarkdownDocument', () => {
     // Quit lands inside the autosave delay.
     await act(async () => { await flushPendingSaves(); });
     expect(api.documents.get(NOTE)?.body).toBe('a quick edit');
+  });
+
+  describe('while git rewrites the repo', () => {
+    // vault-pull.sh's `git merge --autostash`: git stashes the saved but
+    // uncommitted line A, resets the file to HEAD, merges, then puts A back
+    // with the same bytes, so the same revision.
+    const SAVED = 'Top\n\nMiddle\n\nA\n';
+    const HEAD = 'Top\n\nMiddle\n\n';
+    const TYPED = 'Top\nB\n\nMiddle\n\nA\n';
+
+    it('holds the save, keeps the page unsaved and checks every 250 ms, then saves over the lines git put back', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      editor.type(TYPED);
+      api.setGitBusy(true);
+      api.externalEdit(NOTE, HEAD);
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS + 10); });
+      expect(api.write).toHaveBeenCalledTimes(1);
+      expect(result.current.saveState).toBe('dirty');
+      const reads = (api.read as ReturnType<typeof vi.fn>).mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS * 4); });
+      expect((api.read as ReturnType<typeof vi.fn>).mock.calls.length - reads).toBe(4);
+      // Nothing merged or saved: the page still has A, and only git changed the file.
+      expect(editor.text).toBe(TYPED);
+      expect(result.current.saveState).toBe('dirty');
+      expect(api.write).toHaveBeenCalledTimes(1);
+      expect(api.documents.get(NOTE)?.body).toBe(HEAD);
+      api.externalEdit(NOTE, SAVED, `rev-${NOTE}-1`);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(api.write).toHaveBeenLastCalledWith(NOTE, TYPED, `rev-${NOTE}-1`);
+      expect(api.documents.get(NOTE)?.body).toBe(TYPED);
+    });
+
+    it('leaves a clean page as it is until git is done, then follows the disk once', async () => {
+      const { api, result, editor } = await openDocument(SAVED);
+      api.setGitBusy(true);
+      api.externalEdit(NOTE, HEAD);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS * 3); });
+      expect(editor.text).toBe(SAVED);
+      api.externalEdit(NOTE, `${SAVED}Upstream\n`);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(editor.text).toBe(`${SAVED}Upstream\n`));
+      expect(result.current.saveState).toBe('clean');
+      expect(api.write).not.toHaveBeenCalled();
+    });
+
+    it('follows the disk once git is done when the page opened while git was busy', async () => {
+      const api = installMarkdownApi({ [NOTE]: HEAD });
+      api.setGitBusy(true);
+      const { result } = renderHook(() => useMarkdownDocument(NOTE));
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      const editor = fakeEditor(result);
+      api.externalEdit(NOTE, SAVED);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(editor.text).toBe(SAVED));
+      expect(api.write).not.toHaveBeenCalled();
+    });
+
+    it('waits for git before the last save of a closed page', async () => {
+      const { api, editor, unmount } = await openDocument('a');
+      api.setGitBusy(true);
+      editor.type('ab');
+      unmount();
+      let settled = false;
+      const flushing = flushPendingSaves().then((unsaved) => { settled = true; return unsaved; });
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS * 2); });
+      expect(settled).toBe(false);
+      api.setGitBusy(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      expect(await act(() => flushing)).toEqual([]);
+      expect(api.documents.get(NOTE)?.body).toBe('ab');
+      expect(api.saveCopy).not.toHaveBeenCalled();
+    });
+
+    it('keeps the text in an unsaved copy when git still holds a closing page after 1.5 s', async () => {
+      const { api, editor, unmount } = await openDocument('a');
+      api.setGitBusy(true);
+      editor.type('ab');
+      unmount();
+      const flushing = flushPendingSaves();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(await act(() => flushing)).toEqual([{ name: 'brief', copy: '/Vault/Notes/brief (unsaved copy).md' }]);
+      expect(api.documents.get(NOTE)?.body).toBe('a');
+    });
+  });
+
+  describe('when a version the page had earlier comes back', () => {
+    const OLD = 'Top\n\nMiddle\n\n';
+    const SAVED = 'Top\n\nMiddle\n\nA\n';
+    const TYPED = 'Top\nB\n\nMiddle\n\nA\n';
+
+    /** Opens OLD, saves A, then types B: a merge of OLD with the page would drop A. */
+    async function savedThenTyped() {
+      const opened = await openDocument(OLD);
+      opened.editor.type(SAVED);
+      await act(async () => { await opened.result.current.flush(); });
+      opened.editor.type(TYPED);
+      return opened;
+    }
+
+    it('does not merge it, reads again in 250 ms, and shows it as a conflict when it stays', async () => {
+      const { api, result, editor } = await savedThenTyped();
+      api.externalEdit(NOTE, OLD, `rev-${NOTE}-1`);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); });
+      expect(editor.text).toBe(TYPED);
+      expect(result.current.saveState).toBe('conflict');
+      expect(result.current.conflict).toEqual({ disk: OLD });
+      expect(api.write).toHaveBeenCalledTimes(1);
+      expect(api.documents.get(NOTE)?.body).toBe(OLD);
+      // Keep mine puts the page's text back over the old version.
+      act(() => { result.current.resolveConflict(); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(api.documents.get(NOTE)?.body).toBe(TYPED);
+    });
+
+    it('carries on as usual when it is gone again by the second read', async () => {
+      const { api, result } = await savedThenTyped();
+      api.externalEdit(NOTE, OLD, `rev-${NOTE}-1`);
+      diskChanged();
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS / 2); });
+      api.externalEdit(NOTE, SAVED, 'rev-2');
+      await act(async () => { await vi.advanceTimersByTimeAsync(GIT_HOLD_RETRY_MS); });
+      await waitFor(() => expect(result.current.saveState).toBe('saved'));
+      expect(result.current.conflict).toBeNull();
+      expect(api.documents.get(NOTE)?.body).toBe(TYPED);
+    });
+
+    it('adopts it without a conflict when the page holds the same text', async () => {
+      const { api, result, editor } = await savedThenTyped();
+      editor.type(OLD);
+      api.externalEdit(NOTE, OLD, `rev-${NOTE}-1`);
+      diskChanged();
+      await waitFor(() => expect(result.current.saveState).toBe('clean'));
+      expect(result.current.conflict).toBeNull();
+    });
   });
 
   it('reports a failed write, retries on flush, and reports a file that cannot be opened', async () => {

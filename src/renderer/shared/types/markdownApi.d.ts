@@ -1,8 +1,8 @@
 import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownProperties, MarkdownWriteResult, UnsavedPage } from '@/types/markdown';
 
 export type MarkdownResult<T> =
-  | { success: true; data: T; error?: undefined; conflict?: undefined }
-  | { success: false; error: string; data?: undefined; conflict?: true };
+  | { success: true; data: T; error?: undefined; conflict?: undefined; gitBusy?: undefined }
+  | { success: false; error: string; data?: undefined; conflict?: true; gitBusy?: true };
 
 export interface MarkdownAPI {
   read: (target: string) => Promise<MarkdownResult<MarkdownDocument>>;

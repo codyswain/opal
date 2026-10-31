@@ -101,6 +101,20 @@ describe("ticking a digest checkbox", () => {
     expect(await readFile(file, "utf8")).toBe(DIGEST.join("\n"));
   });
 
+  it("refuses a tick while git rewrites the vault, and takes it once git is done", async () => {
+    await writeFile(file, DIGEST.join("\n"));
+    const [first] = await items();
+    await mkdir(path.join(root, ".git"));
+    await writeFile(path.join(root, ".git", "index.lock"), "");
+    await expect(service.checkDigestItem(root, file, where(first).line, where(first).raw, true)).rejects.toThrow(
+      "Git is changing files in this folder. Try again in a moment.",
+    );
+    expect(await readFile(file, "utf8")).toBe(DIGEST.join("\n"));
+    await rm(path.join(root, ".git", "index.lock"));
+    await service.checkDigestItem(root, file, where(first).line, where(first).raw, true);
+    expect((await items())[0].checked).toBe(true);
+  });
+
   it("refuses any file but a digest, and any line that is not a checkbox", async () => {
     const daily = path.join(root, "Library/daily/2026-10-29.md");
     await writeFile(daily, "- [ ] A task on Cody's page\n");
