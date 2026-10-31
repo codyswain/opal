@@ -95,6 +95,10 @@ describe('MarkdownEditor', () => {
     expect(view.state.doc.toString()).toBe('- one\n  - ');
     press(view, 'Tab', { shiftKey: true });
     expect(view.state.doc.toString()).toBe('- one\n- ');
+    // Enter on an empty nested item moves it out a level.
+    press(view, 'Tab');
+    press(view, 'Enter');
+    expect(view.state.doc.toString()).toBe('- one\n- ');
     act(() => { view.dispatch({ changes: { from: 8, insert: 'two' }, selection: { anchor: 8, head: 11 } }); });
     press(view, 'b', MOD);
     expect(view.state.doc.toString()).toBe('- one\n- **two**');

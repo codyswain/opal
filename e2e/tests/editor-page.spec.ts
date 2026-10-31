@@ -66,6 +66,33 @@ test("a page stays mounted while other folders refresh, so typing lands", async 
   await expect.poll(() => readFile(person, "utf8")).toBe("# Alec Chen\n word1 word2 word3 word4");
 });
 
+test("Enter on an empty todo moves it out a level, then ends the list, and the file holds what was typed", async ({ userDataDir }) => {
+  const note = path.join(root, "Todo.md");
+  await writeFile(note, "# Today\n\n");
+  const page = await launch(userDataDir);
+  await openNote(page, note);
+  await page.getByTestId("markdown-editor").click();
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("- [ ] Email Tom");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Book flights");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Check dates");
+  // An empty nested task moves out a level; an empty top-level one ends the list.
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Pack");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Done for today.");
+  await page.keyboard.press("Meta+s");
+  await expect.poll(() => readFile(note, "utf8")).toBe(
+    "# Today\n\n- [ ] Email Tom\n- [ ] Book flights\n  - [ ] Check dates\n- [ ] Pack\n\nDone for today.",
+  );
+});
+
 test("list numbers of 10 and up stay on one line, and a click in a table leaves the page where it was", async ({ userDataDir }) => {
   const note = path.join(root, "Lists.md");
   const items = Array.from({ length: 12 }, (_, index) => `${index + 1}. item ${index + 1}`).join("\n");
