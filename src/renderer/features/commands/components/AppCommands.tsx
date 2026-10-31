@@ -9,6 +9,7 @@ import {
 } from "@/renderer/features/disk-explorer/navigation";
 import { toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { isPinned, usePinsStore } from "@/renderer/features/disk-explorer/store/pinsStore";
 import { useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import {
   togglePageProperties,
@@ -42,6 +43,10 @@ export const AppCommands: React.FC = () => {
   const propertiesOpen = usePagePropertiesStore((state) => state.open);
   // Next Section and Previous Section are there only while a stack is shown, so their keys are free elsewhere.
   const stackShown = useStackStore((state) => state.move !== null);
+  // Pin page or Unpin page is there only while a file is open.
+  const openedPath = useTabsStore(selectOpenedPath);
+  const fileOpen = openedPath !== null;
+  const pagePinned = usePinsStore((state) => isPinned(state.byRoot, openedPath));
 
   useEffect(() => {
     const commands: Command[] = [
@@ -262,6 +267,20 @@ export const AppCommands: React.FC = () => {
           } satisfies Command,
         ]
         : []),
+      ...(fileOpen
+        ? [
+          {
+            id: "page.togglePin",
+            name: pagePinned ? "Unpin page" : "Pin page",
+            type: "action",
+            keywords: ["pin", "pinned", "sidebar", "bookmark", "favorite"],
+            perform: () => {
+              const opened = selectOpenedPath(tabs());
+              if (opened) usePinsStore.getState().toggle(opened);
+            },
+          } satisfies Command,
+        ]
+        : []),
       {
         id: COMMAND_IDS.toggleProperties,
         name: propertiesOpen ? "Hide Properties" : "Show Properties",
@@ -284,7 +303,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   useEffect(() => {

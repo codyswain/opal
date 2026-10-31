@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { locationName } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { useDiskSync } from '@/renderer/features/disk-explorer/hooks/useDiskSync';
+import { usePinsSync } from '@/renderer/features/disk-explorer/hooks/usePinsSync';
 import {
   selectCurrentLocation,
   useTabsStore,
@@ -143,6 +144,7 @@ export function AppShell({ children }: AppShellProps) {
   const rightToggleRef = React.useRef<HTMLButtonElement>(null);
 
   useDiskSync();
+  usePinsSync();
 
   // The window menu, Mission Control and Cmd+` name the window by its page.
   React.useEffect(() => {

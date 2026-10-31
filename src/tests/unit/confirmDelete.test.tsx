@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ConfirmDeleteDialog } from '@/renderer/features/disk-explorer/components/dialogs/ConfirmDeleteDialog';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
 import { installDiskApi } from '@/tests/helpers/diskApi';
+import { installPinsApi, setPins } from '@/tests/helpers/pinsApi';
 
 beforeEach(() => {
   installDiskApi();
@@ -40,14 +42,18 @@ describe('ConfirmDeleteDialog', () => {
     expect(screen.getByTestId('confirm-delete-confirm')).toHaveFocus();
   });
 
-  it('trashes on confirm', async () => {
+  it('trashes on confirm, and unpins what went to the Trash', async () => {
     const user = userEvent.setup();
+    installPinsApi();
+    setPins({ '/V': ['/V/note.md', '/V/keep.md'] });
     useDiskStore.setState({ pendingDelete: '/V/note.md' });
     render(<ConfirmDeleteDialog />);
 
     await user.click(screen.getByTestId('confirm-delete-confirm'));
     await waitFor(() => expect(window.diskAPI.trash).toHaveBeenCalledWith('/V/note.md'));
     await waitFor(() => expect(useDiskStore.getState().pendingDelete).toBeNull());
+    expect(usePinsStore.getState().byRoot['/V']).toEqual(['/V/keep.md']);
+    expect(window.pinsAPI.set).toHaveBeenCalledWith('/V', ['/V/keep.md']);
   });
 
   it('does nothing on cancel', async () => {

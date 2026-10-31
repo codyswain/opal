@@ -9,6 +9,7 @@ import { cn } from '@/renderer/shared/utils';
 import { hasProblem, hasUnsavedChanges, useDocumentStatusStore } from '../store/documentStatusStore';
 import { useStackStore } from '../store/stackStore';
 import { useDiskStore } from '../store/diskStore';
+import { isPinned, usePinsStore } from '../store/pinsStore';
 import { tabFile, tabLocation, useTabsStore, type Tab } from '../store/tabsStore';
 import { locationPath } from '../navigation/filesLocation';
 import { tabLabels } from './tabLabels';
@@ -41,6 +42,7 @@ export const TabStrip: React.FC = () => {
   const roots = useDiskStore((state) => state.roots);
   const statuses = useDocumentStatusStore((state) => state.statuses);
   const stackLive = useStackStore((state) => state.live);
+  const pins = usePinsStore((state) => state.byRoot);
   // A stack tab counts every section with a live editor; a page tab its one file.
   const tabStatuses = (tab: Tab) => {
     const file = tabFile(tab);
@@ -255,6 +257,9 @@ export const TabStrip: React.FC = () => {
                   {file ? (
                     <>
                       <ContextMenuSeparator />
+                      <ContextMenuItem onSelect={() => usePinsStore.getState().toggle(file)}>
+                        {isPinned(pins, file) ? 'Unpin' : 'Pin'}
+                      </ContextMenuItem>
                       <ContextMenuItem onSelect={() => void window.diskAPI.reveal(file)}>Reveal in Finder</ContextMenuItem>
                       <ContextMenuItem onSelect={() => void navigator.clipboard?.writeText(file)}>Copy path</ContextMenuItem>
                     </>

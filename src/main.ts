@@ -3,6 +3,8 @@ import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
 import { StackService } from "@/main/vault/StackService";
+import { PinsService } from "@/main/pins/PinsService";
+import { PinsHandlers } from "@/main/pins/PinsHandlers";
 import {
   app,
   BrowserWindow,
@@ -470,6 +472,10 @@ const vaultHandlers = new VaultHandlers({
   days: dayService,
   stacks: stackService,
 });
+const pinsHandlers = new PinsHandlers({
+  ipc: ipcMain,
+  service: new PinsService({ registry: rootRegistry }),
+});
 const fileWriter = new FileWriter({
   registry: rootRegistry,
   metadata: metadataService,
@@ -541,6 +547,7 @@ app.whenReady().then(async () => {
     collectionHandlers.registerAll();
     markdownHandlers.registerAll();
     vaultHandlers.registerAll();
+    pinsHandlers.registerAll();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await windowStateStore.load();

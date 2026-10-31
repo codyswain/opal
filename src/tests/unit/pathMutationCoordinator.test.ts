@@ -149,6 +149,16 @@ describe('path mutation coordination', () => {
     expect(prepare).toHaveBeenCalledWith([NOTES], 'external');
   });
 
+  it('reports a Move to Trash in Opal as a trashed removal', () => {
+    const coordinator = createPathMutationCoordinator();
+    const prepare = vi.fn(() => ({ commit: vi.fn(), rollback: vi.fn() }));
+    coordinator.register({ id: 'listener', preparePathRemoval: prepare });
+    expect(coordinator.applyTrash('relative.md')).toBe(false);
+    expect(coordinator.applyTrash(`${NOTES}/`)).toBe(true);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledWith([NOTES], 'trashed');
+  });
+
   it('atomically remaps disk state and tabs', () => {
     expect(
       pathMutationCoordinator.applyAppMutation({

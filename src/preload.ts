@@ -1,4 +1,5 @@
 import type { VaultAPI } from "./types/vault";
+import type { PinsAPI } from "./types/pins";
 import type { VaultDayChange } from "./types/day";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
@@ -171,3 +172,9 @@ const vaultAPI: VaultAPI = {
   },
 };
 contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);
+
+const pinsAPI: PinsAPI = {
+  list: () => ipcRenderer.invoke("pins:list"),
+  set: (root, paths) => ipcRenderer.invoke("pins:set", root, paths),
+};
+contextBridge.exposeInMainWorld("pinsAPI", pinsAPI);

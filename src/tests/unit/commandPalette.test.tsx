@@ -8,6 +8,8 @@ import { commandRegistry } from '@/renderer/features/commands/services/commandRe
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { usePagePropertiesStore } from '@/renderer/features/disk-explorer/store/pagePropertiesStore';
 import { useStackStore } from '@/renderer/features/disk-explorer/store/stackStore';
+import { usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
+import { installPinsApi, setPins } from '@/tests/helpers/pinsApi';
 import { useSettingsStore } from '@/renderer/features/settings';
 import { ShellProvider } from '@/renderer/features/shell';
 import { ThemeProvider } from '@/renderer/features/theme';
@@ -272,6 +274,23 @@ describe('CommandPalette', () => {
     expect(move).toHaveBeenCalledWith('previous');
     act(() => useStackStore.getState().setMove(null));
     await waitFor(() => expect(ids()).not.toContain(COMMAND_IDS.previousSection));
+  });
+
+  it('offers Pin page for the open file only, and Unpin page once it is pinned', async () => {
+    const api = installPinsApi();
+    setPins({ [ROOT]: [] });
+    renderPalette();
+    const pinCommand = () => ((window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; label: string }[])
+      .find((command) => command.id === 'page.togglePin');
+    expect(pinCommand()).toBeUndefined();
+    act(() => openTabs([PLAN]));
+    await waitFor(() => expect(pinCommand()?.label).toBe('Pin page'));
+    act(() => commandRegistry.executeCommand('page.togglePin'));
+    expect(usePinsStore.getState().byRoot[ROOT]).toEqual([PLAN]);
+    expect(api.set).toHaveBeenLastCalledWith(ROOT, [PLAN]);
+    await waitFor(() => expect(pinCommand()?.label).toBe('Unpin page'));
+    act(() => usePaletteStore.getState().show('>unpin'));
+    expect(await screen.findByTestId('palette-command-page.togglePin')).toHaveTextContent('Unpin page');
   });
 
   it('keeps the tab-position keys out of the palette', async () => {

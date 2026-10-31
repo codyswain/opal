@@ -21,6 +21,7 @@ import {
   pathMutationCoordinator,
 } from '@/renderer/features/disk-explorer/navigation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
+import { isPinned, usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
 import { isTreeExpanded } from '@/renderer/features/disk-explorer/store/treeExpansion';
 import {
   selectOpenedPath,
@@ -564,6 +565,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
 
   const menuNode = menuTarget?.node ?? null;
   const canMutate = menuNode !== null && !menuNode.isRoot;
+  const menuPinned = usePinsStore((state) => isPinned(state.byRoot, menuNode?.path ?? null));
   // Radix runs onSelect while the menu still traps focus, so anything that
   // takes focus (the rename field, a dialog) starts once the menu has closed.
   const afterMenu = (action: () => void) => () => window.setTimeout(action, 0);
@@ -607,6 +609,9 @@ export function FileTree({ onNavigate }: FileTreeProps) {
               <>
                 <ContextMenuItem onSelect={() => openFile(menuNode.path, true)}>
                   Open in new tab
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => usePinsStore.getState().toggle(menuNode.path)}>
+                  {menuPinned ? 'Unpin' : 'Pin'}
                 </ContextMenuItem>
                 <ContextMenuSeparator />
               </>
