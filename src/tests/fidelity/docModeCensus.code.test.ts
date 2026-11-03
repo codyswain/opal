@@ -9,6 +9,7 @@ import { fenceOf, type Fence } from '@/renderer/features/disk-explorer/component
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
 import { diagramKind, setDiagramCode } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+import { objectAt } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { codeContent, codeSpan, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { openedLine, vaultFiles } from './censusHelpers';
 
@@ -189,6 +190,11 @@ describe.skipIf(!ROOT)('code census', () => {
         enter: (ref) => {
           // Cells of a drawn table take the caret only through the table's source (PR 1).
           if (ref.name === 'Table') return false;
+          // A link to a file is one object in a document, with no caret inside its text (PR 6).
+          if (ref.name === 'Link') {
+            const obj = objectAt(ready, ref.from, 1);
+            if (obj && obj.from === ref.from && obj.to === ref.to) return false;
+          }
           if (ref.name !== 'InlineCode' || codeSpans >= 2) return undefined;
           const marks = ref.node.getChildren('CodeMark');
           if (marks.length < 2 || marks[1].from - marks[0].to < 2) return false;
