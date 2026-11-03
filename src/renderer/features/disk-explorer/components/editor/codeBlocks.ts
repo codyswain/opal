@@ -1223,7 +1223,8 @@ function codeDelete(view: EditorView, dir: -1 | 1): boolean {
     if (fence && !showsDiagram(state, fence)) {
       const end = fence.lines.length > 0 ? fence.lines[fence.lines.length - 1].line.to : null;
       if (blankText(line)) {
-        view.dispatch({ changes: { from: fence.close?.to ?? line.from - 1, to: line.to }, selection: { anchor: end ?? fence.open.from }, scrollIntoView: true, userEvent: 'delete.backward' });
+        // A plain "delete": the fence guard lets this one take the line break after the closing fence.
+        view.dispatch({ changes: { from: fence.close?.to ?? line.from - 1, to: line.to }, selection: { anchor: end ?? fence.open.from }, scrollIntoView: true, userEvent: 'delete' });
       } else if (end !== null) {
         view.dispatch({ selection: { anchor: end }, scrollIntoView: true, userEvent: 'select' });
       }
@@ -1236,7 +1237,7 @@ function codeDelete(view: EditorView, dir: -1 | 1): boolean {
     if (fence && !showsDiagram(state, fence)) {
       const start = fence.lines[0]?.from ?? null;
       if (blankText(line)) {
-        view.dispatch({ changes: { from: line.from, to: line.to + 1 }, selection: { anchor: start === null ? line.from : start - (line.length + 1) }, scrollIntoView: true, userEvent: 'delete.forward' });
+        view.dispatch({ changes: { from: line.from, to: line.to + 1 }, selection: { anchor: start === null ? line.from : start - (line.length + 1) }, scrollIntoView: true, userEvent: 'delete' });
       } else if (start !== null) {
         view.dispatch({ selection: { anchor: start }, scrollIntoView: true, userEvent: 'select' });
       }
@@ -1263,8 +1264,9 @@ function keptFenceSpans(state: EditorState, from: number, to: number): TextRange
       const blockFrom = fence.open.from;
       const blockTo = (fence.close ?? lastLine(state.doc, ref.node)).to;
       if (from <= blockFrom && to >= blockTo) return false;
-      spans.push({ from: fence.open.from, to: Math.min(state.doc.length, fence.open.to + 1) });
-      if (fence.close) spans.push({ from: Math.max(0, fence.close.from - 1), to: fence.close.to });
+      // Each fence line with the line breaks around it, so no text joins a fence line.
+      spans.push({ from: Math.max(0, fence.open.from - 1), to: Math.min(state.doc.length, fence.open.to + 1) });
+      if (fence.close) spans.push({ from: Math.max(0, fence.close.from - 1), to: Math.min(state.doc.length, fence.close.to + 1) });
       return false;
     },
   });

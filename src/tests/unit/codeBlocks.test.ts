@@ -212,6 +212,18 @@ describe('a code block in a document', () => {
     expect(caret(view)).toBe(DOC_TEXT.indexOf('2;') + 2);
   });
 
+  it('keeps fence lines whole when a deleted or typed-over selection covers part of a block', async () => {
+    const doc = 'Para one\n```\ncode\n```\nPara two\n';
+    const view = mount(doc);
+    await focusPage(view);
+    select(view, doc.indexOf('one'), doc.indexOf('de'));
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Para \n```\nde\n```\nPara two\n');
+    select(view, text(view).indexOf('e\n```'), text(view).indexOf('two'));
+    act(() => { view.dispatch({ ...view.state.replaceSelection('X'), userEvent: 'input.type' }); });
+    expect(text(view)).toBe('Para \n```\ndX\n```\ntwo\n');
+  });
+
   it('does nothing on Backspace at the start of the code, or Delete at its end', async () => {
     const view = mount(DOC_TEXT, DOC_TEXT.indexOf('const a'));
     await focusPage(view);
