@@ -801,8 +801,11 @@ export function hiddenRanges(state: EditorState, from: number, to: number): Hidd
   for (const target of state.field(linkDefinitions).long) {
     if (target.to >= from && target.from <= to && !reveal.lines(target.line)) found.push({ from: target.from, to: target.to, caretAfter: false, unit: true });
   }
+  // A table holding a cell caret keeps the caret in its cell until a key shows its source.
+  const { cell } = state.field(revealState);
   for (const block of state.field(blockPreview).shown) {
     if (block.to < from || block.from > to) continue;
+    if (cell !== null && block.from <= cell && cell <= block.to) continue;
     found.push({ from: Math.max(0, block.from - 1), to: Math.min(state.doc.length, block.to + 1), caretAfter: false, unit: true });
   }
   return found.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -853,12 +856,18 @@ export function openLink(view: EditorView, href: string, newTab: boolean): void 
   else void openPathLink(view, href, newTab);
 }
 
-/** With a cell caret, Enter and the first typed key show the table's source; a typed character then lands in it. */
+/**
+ * With a cell caret, Enter and the first typed key show the table's source;
+ * a typed character then lands in it. A document opens the table's source
+ * for as long as the caret stays in it.
+ */
 function revealCell(event: KeyboardEvent, view: EditorView): boolean {
-  if (view.state.field(revealState).cell === null || event.metaKey || event.ctrlKey || event.altKey) return false;
+  const { cell } = view.state.field(revealState);
+  if (cell === null || event.metaKey || event.ctrlKey || event.altKey) return false;
   const typing = event.key.length === 1;
   if (!typing && !['Enter', 'Backspace', 'Delete'].includes(event.key)) return false;
-  view.dispatch({ effects: setCellCaret.of(null) });
+  const table = view.state.facet(docMode) ? drawnBlockAt(view.state, cell) : null;
+  view.dispatch({ effects: table ? [setCellCaret.of(null), setOpenBlock.of(table)] : setCellCaret.of(null) });
   if (typing) return false;
   event.preventDefault();
   return true;

@@ -181,20 +181,20 @@ describe('delete handlers', () => {
 
 describe('insert items', () => {
   it('list in the toolbar\'s Insert menu by order, with Image… first', async () => {
-    const insertTable = vi.fn();
+    const insertDrawing = vi.fn();
     installMarkdownApi({ [DOC]: 'Text\n' });
     render(<TooltipProvider><MarkdownEditor path={DOC} extensions={[
       insertItems.of({ id: 'equation', label: 'Equation', icon: Sigma, shortcut: '⇧⌘E', order: 30, run: vi.fn() }),
-      insertItems.of({ id: 'table', label: 'Table', icon: Table, order: 20, run: insertTable }),
+      insertItems.of({ id: 'drawing', label: 'Drawing', icon: Table, order: 25, run: insertDrawing }),
     ]} /></TooltipProvider>);
     const view = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
     view.focus = vi.fn();
     const user = userEvent.setup();
     await user.click(within(screen.getByRole('toolbar', { name: 'Formatting' })).getByRole('button', { name: 'Insert' }));
     const items = await screen.findAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Image…', 'Table', 'Equation⇧⌘E']);
-    await user.click(items[1]);
-    expect(insertTable).toHaveBeenCalledWith(view);
+    expect(items.map((item) => item.textContent)).toEqual(['Image…', 'Table', 'Drawing', 'Equation⇧⌘E']);
+    await user.click(items[2]);
+    expect(insertDrawing).toHaveBeenCalledWith(view);
   });
 });
 

@@ -33,7 +33,9 @@ import { imageFrame } from './imageFrame';
 import { insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
-import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension } from './objectFrame';
+import { objectAt } from './extensionPoints';
+import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension, setFrame } from './objectFrame';
+import { insertTableItem } from './tableInsert';
 import { opensNewTab } from './wikiLinks';
 
 /*
@@ -364,8 +366,10 @@ const focusToolbar: Command = (view) => {
 
 /**
  * A click on a link puts the caret in it and shows its popover; Cmd+click
- * and middle-click still follow it. A click on a drawn table or code block
- * puts the caret after it, and a double-click shows its Markdown to edit.
+ * and middle-click still follow it. A click in a table's cell puts a cell
+ * caret there (livePreview.ts), and a click elsewhere on a table frames it.
+ * A click on a drawn code block puts the caret after it, and a double-click
+ * on either shows its Markdown to edit.
  */
 const docClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
@@ -374,10 +378,14 @@ const docClicks = EditorView.domEventHandlers({
     const blockElement = target.closest<HTMLElement>('.cm-md-block');
     const block = blockElement && drawnBlockAt(view.state, view.posAtDOM(blockElement));
     if (blockElement && block) {
+      const table = blockElement.classList.contains('cm-md-table');
+      if (table && event.detail < 2 && target.closest('td[data-offset], th[data-offset]')) return false;
       event.preventDefault();
+      const after = { anchor: Math.min(block.to + 1, view.state.doc.length) };
+      const framed = table ? objectAt(view.state, block.from, 1) : null;
       view.dispatch(event.detail >= 2
         ? { selection: { anchor: blockPosition(view, blockElement, target, event) }, effects: setOpenBlock.of(block) }
-        : { selection: { anchor: Math.min(block.to + 1, view.state.doc.length) } });
+        : { selection: after, effects: framed ? setFrame.of(framed) : [] });
       view.focus();
       return true;
     }
@@ -432,6 +440,7 @@ export function docModeExtensions(): Extension {
     docMode.of(true),
     objectFrameExtension,
     insertImageItem,
+    insertTableItem,
     autoformatted,
     linkEditor,
     atoms,

@@ -8,6 +8,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { insertTable } from '@/renderer/features/disk-explorer/components/editor/tableInsert';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 
@@ -258,5 +259,62 @@ describe('formatting a selection that covers blocks', () => {
     expect(onAll(doc, setHeading(1))).toBe('> [!tip]- Fold me\n> # body\n');
     const body = EditorState.create({ doc, selection: { anchor: doc.length - 1 }, extensions: markdownEditorExtensions(DOC) });
     expect(formatState(body).headingDisabled).toBe(false);
+  });
+});
+
+describe('tables in a document', () => {
+  it('puts a cell caret in the clicked cell, and the first typed key opens the source with that character in the cell', async () => {
+    const view = mount(`Intro\n\n${TABLE}\n\nEnd\n`);
+    await focusPage(view);
+    const cell = view.contentDOM.querySelector('.cm-md-table td[data-offset]') as HTMLElement;
+    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    const at = text(view).indexOf('1 |');
+    expect(caret(view)).toBe(at);
+    expect(view.contentDOM.querySelector('.cm-md-cell-caret')).not.toBeNull();
+    expect(key(view, 'x')).toBe(false);
+    expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
+    type(view, 'x');
+    expect(text(view)).toBe(`Intro\n\n| a | b |\n|---|---|\n| x1 | 2 |\n\nEnd\n`);
+    // Leaving the table draws it again.
+    act(() => { view.dispatch({ selection: { anchor: 0 } }); });
+    expect(view.contentDOM.querySelector('.cm-md-table')).not.toBeNull();
+  });
+
+  it('opens the source on Enter with a cell caret, and frames the table on a click beside its cells', async () => {
+    const view = mount(`Intro\n\n${TABLE}\n\nEnd\n`);
+    await focusPage(view);
+    const cell = view.contentDOM.querySelector('.cm-md-table th[data-offset]') as HTMLElement;
+    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    expect(key(view, 'Enter')).toBe(true);
+    expect(text(view)).toBe(`Intro\n\n${TABLE}\n\nEnd\n`);
+    expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
+    act(() => { view.dispatch({ selection: { anchor: 0 } }); });
+    const scroll = view.contentDOM.querySelector('.cm-md-table-scroll') as HTMLElement;
+    act(() => { scroll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    expect(frame(view)).toMatchObject({ kind: 'table' });
+  });
+
+  it('inserts a 3 by 3 table in the vault\'s style with blank lines around it, its source open on the first header', async () => {
+    const view = mount('Intro‸\nMore\n');
+    await focusPage(view);
+    act(() => { insertTable(view); });
+    expect(text(view)).toBe('Intro\n\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |\n\nMore\n');
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe('Column 1');
+    expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
+    // It parses as a table: once the caret leaves, it draws.
+    act(() => { view.dispatch({ selection: { anchor: 0 } }); });
+    expect(view.contentDOM.querySelectorAll('.cm-md-table th')).toHaveLength(3);
+    // On an empty line in a callout, it stays in the callout.
+    const callout = mount('> [!note] Title\n> ‸\n');
+    await focusPage(callout);
+    act(() => { insertTable(callout); });
+    expect(text(callout)).toBe('> [!note] Title\n>\n> | Column 1 | Column 2 | Column 3 |\n> |---|---|---|\n> |  |  |  |\n> |  |  |  |\n');
+    // While its source shows, rows typed under it stay in it.
+    const end = mount('‸');
+    await focusPage(end);
+    act(() => { insertTable(end); });
+    act(() => { end.dispatch({ selection: { anchor: text(end).length - 1 } }); });
+    type(end, '\n| a | b | c |');
+    expect(text(end)).toBe('| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |\n| a | b | c |\n');
   });
 });
