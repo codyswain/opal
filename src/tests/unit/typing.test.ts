@@ -227,6 +227,23 @@ describe('typing in a document', () => {
     expect(text(dashes)).toBe('Total\n--- x\n');
   });
 
+  it('writes <!-- as typed inside a wiki link or URL, where a backslash would show', () => {
+    const view = mount('[[Robotics]] and https://x.com/ab\n');
+    at(view, 5);
+    type(view, '<!--');
+    const url = text(view).indexOf('ab') + 1;
+    at(view, url);
+    type(view, '<!--');
+    expect(text(view)).toBe('[[Rob<!--otics]] and https://x.com/a<!--b\n');
+  });
+
+  it('doubles a backslash typed before an HTML comment on its own line', () => {
+    const view = mount('Before\n\n<!--SR:!2024-03-27,3,250-->\n');
+    at(view, text(view).indexOf('<!--'));
+    type(view, '\\');
+    expect(visibleLine(view.state, text(view).indexOf('<!--')).text).toBe('\\<!--SR:!2024-03-27,3,250-->');
+  });
+
   it('escapes a delimiter typed over a selection', () => {
     const view = mount('*nix c\n');
     act(() => { view.dispatch({ selection: { anchor: 4, head: 6 } }); });

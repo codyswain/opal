@@ -27,12 +27,22 @@ export function rawAt(state: EditorState, at: number): boolean {
   const tree = latestTree(state);
   for (const side of [-1, 1] as const) {
     for (let node: SyntaxNode | null = tree.resolveInner(at, side); node; node = node.parent) {
+      // Text typed before an HTML block or comment's first character makes the line a paragraph.
+      if ((node.name === 'HTMLBlock' || node.name === 'CommentBlock') && node.from === at) continue;
       if (RAW_BLOCKS.has(node.name)) return true;
       if (node.name === 'InlineCode') {
         const marks = node.getChildren('CodeMark');
         if (marks.length === 2 && at >= marks[0].to && at <= marks[1].from) return true;
       }
     }
+  }
+  return false;
+}
+
+/** Whether `at` is inside a wiki link or embed, whose text the page shows as written. */
+export function inWikiLink(state: EditorState, at: number): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, 1); node; node = node.parent) {
+    if (node.name === 'WikiLink' || node.name === 'Embed') return node.from < at && at < node.to;
   }
   return false;
 }
@@ -297,9 +307,9 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     return autoformatSpec(at, text.length, [numbered ? mark.to - 1 : mark.from]);
   }
 
-  // "<!--" would hide the rest of the page in Obsidian.
+  // "<!--" would hide the rest of the page in Obsidian. In a wiki link or a URL the backslash would show, and nothing is hidden there.
   if (text === '-' && after.sliceDoc(at - 3, at + 1) === '<!--' && after.sliceDoc(at - 4, at - 3) !== '\\') {
-    return insertBefore(at - 3, '\\');
+    return hidesBackslash(after, at - 3) ? insertBefore(at - 3, '\\') : null;
   }
 
   // A rule or underline typed under a paragraph: a blank line keeps the paragraph a paragraph.
@@ -331,12 +341,22 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   }
   // A backslash before the typed character, or where that does nothing (in a bare URL), before the opener it closes.
   for (const from of [at, openerClosedAt(after, at)]) {
-    if (from === null) continue;
-    const trial = after.update({ changes: { from, insert: '\\' }, filter: false }).state;
-    ensureSyntaxTree(trial, trial.doc.lineAt(at + 1).to, 50);
-    if (visibleLine(trial, at + 1).text === expected) return insertBefore(from, '\\');
+    if (from !== null && visibleLine(withBackslash(after, from), at + 1).text === expected) return insertBefore(from, '\\');
   }
   return null;
+}
+
+/** `state` with a backslash written at `from`, parsed to the end of that line. */
+function withBackslash(state: EditorState, from: number): EditorState {
+  const trial = state.update({ changes: { from, insert: '\\' }, filter: false }).state;
+  ensureSyntaxTree(trial, trial.doc.lineAt(from).to, 50);
+  return trial;
+}
+
+/** Whether a backslash written at `from` hides as an escape, rather than showing as one more character. */
+function hidesBackslash(state: EditorState, from: number): boolean {
+  const trial = visibleLine(withBackslash(state, from), from);
+  return !trial.starts.some((start, index) => start === from && trial.text[index] === '\\');
 }
 
 /** Where the opening mark of the emphasis whose closing mark holds `at` starts, or null. */
@@ -537,7 +557,7 @@ export function keepsVisibleText(tr: Transaction): boolean {
  * as written, and only characters that become Markdown in that spot are
  * escaped: each hidden mark the text would create is written with a
  * backslash. URLs and underscores inside words stay as they are. In code,
- * HTML and protected ranges the text goes in raw.
+ * HTML, wiki links and protected ranges the text goes in raw.
  */
 
 const CELL_PIPE = /(?<!\\)\|/g;
@@ -588,7 +608,7 @@ export function literalText(state: EditorState, from: number, to: number, insert
 export function literalTexts(state: EditorState, edits: readonly LiteralEdit[]): string[] {
   const lines: Written[][] = edits.map((edit) => {
     const written = edit.insert.split('\n').map((text) => ({ text, ours: [...text].map(() => false) }));
-    if (rawAt(state, edit.from)) return written;
+    if (rawAt(state, edit.from) || inWikiLink(state, edit.from)) return written;
     if (edit.table) for (const line of written) escapeAll(line, CELL_PIPE);
     // A backslash just before the text would escape its first character.
     if (PUNCTUATION_IN.test(written[0].text[0] ?? '') && charBefore(state, edit.from) === '\\' && charBefore(state, edit.from - 1) !== '\\') escapeIn(written[0], 0);
@@ -597,7 +617,7 @@ export function literalTexts(state: EditorState, edits: readonly LiteralEdit[]):
   });
   const texts = () => edits.map((edit, index) => join(lines[index].map((line) => line.text), edit.prefix ?? ''));
   // Edits that can still read as Markdown, grouped by the lines they touch, since edits on one line affect each other.
-  const open = edits.map((edit, index) => !rawAt(state, edit.from) && lines[index].some((line) => PUNCTUATION_IN.test(line.text)));
+  const open = edits.map((edit, index) => !rawAt(state, edit.from) && !inWikiLink(state, edit.from) && lines[index].some((line) => PUNCTUATION_IN.test(line.text)));
   const groups: { from: number; to: number; members: number[] }[] = [];
   edits.forEach((edit, index) => {
     const from = state.doc.lineAt(edit.from).from;
@@ -635,10 +655,21 @@ export function literalTexts(state: EditorState, edits: readonly LiteralEdit[]):
           at += line.text.length + 1;
         });
       }
+      // Nothing written is hidden, yet the line shows differently: brackets in the text can unmake a link around it.
+      if (!escaped) {
+        for (const index of group.members) if (open[index]) for (const line of lines[index]) escaped = escapeBrackets(line) || escaped;
+      }
       return escaped;
     });
   }
   return texts();
+}
+
+/** Escapes the brackets of `line` that are not escaped yet; false when there were none. */
+function escapeBrackets(line: Written): boolean {
+  const offsets = [...line.text.matchAll(/[[\]]/g)].map((match) => match.index ?? 0).filter((offset) => line.text[offset - 1] !== '\\');
+  for (const offset of offsets.reverse()) escapeIn(line, offset);
+  return offsets.length > 0;
 }
 
 /**
