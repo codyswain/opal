@@ -100,6 +100,7 @@ await lfs(vault, path.join(files, 'deck.b2c3d4e5.pdf'), pdf('Deck from LFS'));
 const CSV = 'week,boxes,operator minutes per box\n2026-10-05,412,3.9\n2026-10-12,455,3.6\n2026-10-19,501,3.4\n2026-10-26,548,3.1\n';
 await lfs(vault, path.join(files, 'throughput.c3d4e5f6.csv'), Buffer.from(CSV));
 await writeFile(path.join(files, 'deploy.command'), '#!/bin/sh\necho never\n');
+await writeFile(path.join(files, 'diagram.f6a7b8c9.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#888"/><script>parent.postMessage("ran", "*")</script></svg>');
 await writeFile(path.join(vault, 'Plan.mdo'), 'Screenshots from the review:\n');
 
 // A movie written with its index after the media, as cameras save them.
@@ -167,6 +168,15 @@ try {
   }, url(path.join(files, 'page.a1b2c3d4.html')));
   check('HTML from opal-file runs no script', title === 'static', `title: ${title}`);
 
+  // An SVG still draws in <img> under its sandbox policy, as a note's picture.
+  const svgWidth = await page.evaluate(async (target) => {
+    const image = new Image();
+    image.src = target;
+    await image.decode().catch(() => undefined);
+    return image.naturalWidth;
+  }, url(path.join(files, 'diagram.f6a7b8c9.svg')));
+  check('an SVG from the vault still draws in <img>', svgWidth === 120, `${svgWidth} px`);
+
   // The page can't read files or the web with fetch: connect-src has neither.
   const fetched = await page.evaluate(async (targets) => Promise.all(targets.map((target) => fetch(target).then(() => 'read', () => 'blocked'))), [url(path.join(files, 'bytes.bin')), 'https://example.com/']);
   check('the page can fetch neither opal-file: nor https:', fetched.every((answer) => answer === 'blocked'), fetched.join(', '));
@@ -224,6 +234,15 @@ try {
   const drawnWidth = drawn.length > 24 ? drawn.readUInt32BE(16) : 0;
   check('a PDF gets a thumbnail from macOS as a data: URL', thumbnail.success && /^data:image\/png;base64,/.test(thumbnail.data ?? '') && drawnWidth > 0 && drawnWidth <= 256, `${drawnWidth} pixels wide for 128 points, in ${Date.now() - started} ms`);
   if (shotsDir) await writeFile(path.join(shotsDir, 'pdf-thumbnail.png'), drawn);
+  const lfsThumbnail = await page.evaluate((target) => window.filesAPI.thumbnail(target, 64), path.join(files, 'deck.b2c3d4e5.pdf'));
+  check('an LFS PDF gets a thumbnail drawn from its read-only copy', lfsThumbnail.success && /^data:image\/png;base64,/.test(lfsThumbnail.data ?? ''));
+  if (movie) {
+    const still = await page.evaluate((target) => window.filesAPI.thumbnail(target, 128), movie);
+    check('a movie gets a thumbnail', still.success && /^data:image\//.test(still.data ?? ''), still.success ? `${(still.data ?? '').length} characters` : still.error);
+  }
+  await writeFile(path.join(files, 'unknown.zzqq'), 'bytes');
+  const noApp = await page.evaluate((target) => window.filesAPI.appName(target), path.join(files, 'unknown.zzqq'));
+  check('a type no app opens has no app name, and no error', noApp.success && noApp.data === null, JSON.stringify(noApp));
   const htmlThumbnail = await page.evaluate((target) => window.filesAPI.thumbnail(target, 128), path.join(files, 'page.a1b2c3d4.html'));
   check('HTML gets no thumbnail', htmlThumbnail.success && htmlThumbnail.data === null);
 
