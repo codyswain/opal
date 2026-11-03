@@ -1,4 +1,4 @@
-import { syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import {
   ChangeSet,
   EditorSelection,
@@ -44,7 +44,7 @@ import { quoteKeys } from './quoteKeys';
 import { insertTableItem } from './tableInsert';
 import { clipboard } from './clipboard';
 import { typingExtension } from './typing';
-import { hiddenOn } from './visibleText';
+import { hiddenOn, visibleSlice } from './visibleText';
 import { visibleSearch } from './visibleSearch';
 import { fileInsertItems } from './linkPicker';
 import { opensNewTab } from './wikiLinks';
@@ -122,10 +122,14 @@ function settle(state: EditorState, selection: EditorSelection): EditorSelection
  * of formatting that reaches past the range, so no "**" loses its partner.
  * Formatting whose text is all removed goes, marks and all, unless the
  * inserted text lands in it, which is how typing over bold text stays bold.
+ * Formatting that opens inside the range and goes on past it opens again at
+ * its first character after the range, so the new text takes the style of
+ * the first character it replaces, as in Google Docs.
  */
 export function replaceVisible(state: EditorState, from: number, to: number, insert: string): { changes: ChangeSpec[]; caret: number } {
   const spans = inlineSpans(state, from, to).sort((a, b) => (a.to - a.from) - (b.to - b.from));
   const start = from;
+  const end = to;
   for (const span of spans) {
     const emptied = span.textFrom >= from && span.textTo <= to;
     const filled = insert !== '' && span.textFrom <= start && start <= span.textTo;
@@ -134,8 +138,18 @@ export function replaceVisible(state: EditorState, from: number, to: number, ins
       to = Math.max(to, span.to);
     }
   }
+  const reopened = spans.filter((span) => REOPENED.has(span.name) && span.from > start && span.from >= from && span.textFrom <= to && span.to > to);
+  const moves: { at: number; insert: string }[] = [];
+  const extra: { from: number; to: number }[] = [];
+  // Outer formatting first, so its marks go outside those of formatting inside it.
+  for (const span of [...reopened].reverse()) {
+    let at = to;
+    while (at < span.textTo && /\s/.test(state.sliceDoc(at, at + 1))) at += 1;
+    if (at < span.textTo) moves.push({ at, insert: state.sliceDoc(span.from, span.textFrom) });
+    else extra.push({ from: span.textTo, to: span.to });
+  }
   const kept = spans.filter((span) => span.from < from || span.to > to)
-    .flatMap((span) => [[span.from, span.textFrom], [span.textTo, span.to]])
+    .flatMap((span) => (reopened.includes(span) ? [[span.textTo, span.to]] : [[span.from, span.textFrom], [span.textTo, span.to]]))
     .map(([markFrom, markTo]) => [Math.max(markFrom, from), Math.min(markTo, to)])
     .filter(([markFrom, markTo]) => markTo > markFrom)
     .sort((a, b) => a[0] - b[0]);
@@ -147,10 +161,31 @@ export function replaceVisible(state: EditorState, from: number, to: number, ins
   }
   if (to > at) removed.push({ from: at, to });
   const insertAt = removed[0]?.from ?? start;
-  const changes: ChangeSpec[] = removed.map((range, index) => (index === 0 ? { ...range, insert } : range));
+  const rest: ChangeSpec[] = [...moves.map((move) => ({ from: move.at, insert: move.insert })), ...extra];
+  const changes: ChangeSpec[] = [...removed.map((range, index) => (index === 0 ? { ...range, insert } : range)), ...rest];
   if (removed.length === 0) changes.push({ from: insertAt, insert });
-  return { changes, caret: ChangeSet.of(changes, state.doc.length).mapPos(insertAt, 1) };
+  const result = { changes, caret: ChangeSet.of(changes, state.doc.length).mapPos(insertAt, 1) };
+  // Text that ends in punctuation or a space can unmake the closing marks right after it: it then goes after them.
+  const closer = removed[0] && kept.some(([markFrom]) => markFrom === removed[0].to);
+  if (!closer || !/[!-/:-@[-`{-~\s]$/.test(insert)) return result;
+  let after = removed[0].to;
+  for (let mark = kept.find(([markFrom]) => markFrom === after); mark; mark = kept.find(([markFrom]) => markFrom === after)) after = mark[1];
+  const line = { from: state.doc.lineAt(start).from, to: state.doc.lineAt(end).to };
+  const expected = visibleSlice(state, line.from, start) + insert.replace(/\\([!-/:-@[-`{-~])/g, '$1') + visibleSlice(state, end, line.to);
+  const shows = (specs: ChangeSpec[]) => {
+    const set = ChangeSet.of(specs, state.doc.length);
+    const trial = state.update({ changes: set, filter: false }).state;
+    // A line the parser has not reached yet shows nothing certain: the edit stays as first written.
+    if (!ensureSyntaxTree(trial, set.mapPos(line.to, 1), 50)) return false;
+    return visibleSlice(trial, set.mapPos(line.from, -1), set.mapPos(line.to, 1)) === expected;
+  };
+  if (shows(changes)) return result;
+  const moved: ChangeSpec[] = [...removed, { from: after, insert }, ...rest];
+  return shows(moved) ? { changes: moved, caret: ChangeSet.of(moved, state.doc.length).mapPos(after, 1) } : result;
 }
+
+// Formatting whose opening marks can move to the text after a replaced range.
+const REOPENED = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough', 'InlineCode', 'Link']);
 
 // User edits that take text out: typing or pasting over a selection, Backspace, Delete and Cut.
 const REMOVING = ['input.type', 'input.paste', 'delete.backward', 'delete.forward', 'delete.selection', 'delete.cut'];

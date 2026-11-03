@@ -106,7 +106,7 @@ function shortcutMarks(state: EditorState, at: number): { open: { from: number; 
  */
 
 /** The changes that turn the literal marks into formatting, applied right after the typing. */
-const formatAfter = StateEffect.define<readonly { from: number; to: number }[]>();
+const formatAfter = StateEffect.define<readonly { from: number; to: number; insert?: string }[]>();
 
 /**
  * Writes a backslash before each of `positions` (in `tr`'s new text), and
@@ -135,9 +135,9 @@ const justFormatted = StateField.define<boolean>({
 });
 
 /** Turns the literal marks `removals` point at into formatting, as its own history event, when the text is still `doc`. */
-function format(view: EditorView, doc: Text, removals: readonly { from: number; to: number }[]): void {
+function format(view: EditorView, doc: Text, removals: readonly { from: number; to: number; insert?: string }[]): void {
   if (view.state.doc !== doc) return;
-  const changes = ChangeSet.of(removals.map(({ from, to }) => ({ from, to })), doc.length);
+  const changes = ChangeSet.of(removals.map(({ from, to, insert }) => ({ from, to, insert })), doc.length);
   view.dispatch({
     changes,
     selection: { anchor: changes.mapPos(view.state.selection.main.head, 1) },
@@ -146,14 +146,21 @@ function format(view: EditorView, doc: Text, removals: readonly { from: number; 
   });
 }
 
-function formatting(tr: Transaction): readonly { from: number; to: number }[] | undefined {
+function formatting(tr: Transaction): readonly { from: number; to: number; insert?: string }[] | undefined {
   for (const effect of tr.effects) if (effect.is(formatAfter)) return effect.value;
   return undefined;
 }
 
 // Typed text that can finish a shortcut: a closing delimiter, or a space after a line mark.
 const SHORTCUT_KEYS = /^[*_~`]$/;
-const LINE_MARK_BEFORE = /(?:^|[ \t>])(?:[-+*]|\d+[.)]|#{1,6}|\[[ xX]\])$/;
+const LINE_MARK_BEFORE = /(?:^|[ \t>])(?:[-+*]|\d+[.)]|#{1,6}|\[[ xX]?\])$/;
+// A container prefix of quote marks only, with no list marker.
+const QUOTE_ONLY = /^(?:[ \t]*>[ \t]?)*[ \t]*$/;
+
+function inTable(node: SyntaxNode): boolean {
+  for (let at: SyntaxNode | null = node; at; at = at.parent) if (at.name === 'Table') return true;
+  return false;
+}
 
 /** Typed text that finishes a shortcut is written, then formatted, in two dispatches straight away. */
 const typeThenFormat = EditorView.inputHandler.of((view, from, _to, text, insert) => {
@@ -256,6 +263,8 @@ const provisional = StateField.define<{ number: number | null; blank: { from: nu
 
 // A line that is a rule or a heading's underline.
 const RULE_LINE = /^(?:-+|=+)[ \t]*$/;
+// What comes before a line's own text when it carries on a quote or a list item: quote marks and the indent.
+const LINE_LEAD = /^(?:[ \t]*>[ \t]?)*[ \t]*/;
 
 /** The links a typed `]`, `)` or `>` finishes: a Markdown link or image, a wiki link or embed, an autolink. */
 const TYPED_LINKS = new Set(['Link', 'Image', 'WikiLink', 'Embed', 'Autolink']);
@@ -312,7 +321,7 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
 
   // A line under the blank line written above a rule that stops being a rule or underline: the blank line goes again.
   if (blank && blank.to === lineBefore.from) {
-    const quoted = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
+    const quoted = LINE_LEAD.exec(line.text)?.[0] ?? '';
     if (!RULE_LINE.test(line.text.slice(quoted.length))) {
       const length = blank.to - blank.from;
       return { changes: { from: blank.from, to: blank.to }, selection: { anchor: at + text.length - length }, sequential: true };
@@ -330,6 +339,12 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     if (text !== ' ') return null;
   }
 
+  // "[]" or "[ ]" alone on a line, then a space, starts a task, as in Notion: one autoformat step, like the others.
+  if (text === ' ' && /^\[ ?\]$/.test(lead) && !/\S/.test(after.sliceDoc(at + 1, line.to)) && QUOTE_ONLY.test(prefix)) {
+    const from = line.from + prefix.length;
+    return { effects: formatAfter.of([{ from, to: at + 1, insert: '- [ ] ' }]), sequential: true };
+  }
+
   // A space that turns "#", "-", "1." or "[ ]" at the line's text start into formatting is an autoformat.
   if (text === ' ') {
     const mark = latestTree(after).resolveInner(at, -1);
@@ -343,11 +358,12 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     return hidesBackslash(after, at - 3) ? insertBefore(at - 3, '\\') : null;
   }
 
-  // A rule or underline typed under a paragraph: a blank line keeps the paragraph a paragraph.
-  const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
-  if ((text === '-' || text === '=') && /^(?:-+|=+)$/.test(after.sliceDoc(line.from + quote.length, line.to)) && line.number > 1) {
-    const mark = latestTree(after).resolveInner(line.from + quote.length, 1);
+  // A rule or underline typed under a paragraph, or a list item's text: a blank line keeps the paragraph a paragraph.
+  const indent = LINE_LEAD.exec(line.text)?.[0] ?? '';
+  if ((text === '-' || text === '=') && /^(?:-+|=+)$/.test(after.sliceDoc(line.from + indent.length, line.to)) && line.number > 1) {
+    const mark = latestTree(after).resolveInner(line.from + indent.length, 1);
     if (mark.name === 'HeaderMark' && /^SetextHeading/.test(mark.parent?.name ?? '')) {
+      const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
       const insert = `${quote.replace(/[ \t]+$/, '')}\n`;
       return { ...insertBefore(line.from, insert), effects: ruleBlank.of({ from: line.from, to: line.from + insert.length }) };
     }
@@ -363,6 +379,13 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if ((text === ']' || text === ')' || text === '>') && finishesLink(after, at)) return null;
   // A typed "$" that closes a formula draws it.
   if (text === '$' && finishesFormula(after, at)) return null;
+  // An HTML tag or entity shows as typed here, but Obsidian and GitHub would draw it: it is written escaped. A table cell keeps `<br>`, its line break.
+  if (text === '>' || text === ';') {
+    const name = text === '>' ? 'HTMLTag' : 'Entity';
+    let node: SyntaxNode | null = latestTree(after).resolveInner(at + 1, -1);
+    while (node && node.name !== name && node.name !== 'Paragraph') node = node.parent;
+    if (node?.name === name && node.to === at + 1 && !inTable(node) && hidesBackslash(after, node.from)) return insertBefore(node.from, '\\');
+  }
   const shown = visibleLine(before, caret);
   const expected = shown.text.slice(0, visibleOffset(shown, caret)) + text + shown.text.slice(visibleOffset(shown, typed.to));
   if (visibleLine(after, at).text === expected) return null;
@@ -380,6 +403,8 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   for (const from of [at, openerClosedAt(after, at)]) {
     if (from !== null && visibleLine(withBackslash(after, from), at + 1).text === expected) return insertBefore(from, '\\');
   }
+  // A typed backslash right before it escaped it: the backslash is written `\\` and the character escaped too.
+  if (after.sliceDoc(at - 1, at) === '\\' && visibleLine(withBackslash(withBackslash(after, at), at), at + 2).text === expected) return insertBefore(at, '\\\\');
   return null;
 }
 

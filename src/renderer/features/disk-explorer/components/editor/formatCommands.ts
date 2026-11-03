@@ -262,7 +262,8 @@ function ordered(changes: Change[]): Change[] {
 function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] | null {
   const fitted = fitMarks(state, text.from, text.to);
   if (!fitted) return null;
-  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
+  const split = splitAt(state, text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
+  const { from, to } = outOf(text.spans.filter((span) => span.name !== name && !split.spans.includes(span)), fitted.from, fitted.to);
   const touching = text.spans.filter((span) => span.name === name && span.to >= from && span.from <= to);
   const left = touching.filter((span) => span.textFrom < from).sort((a, b) => a.from - b.from)[0];
   const right = touching.filter((span) => span.textTo > to).sort((a, b) => b.to - a.to)[0];
@@ -276,7 +277,37 @@ function addStyle(state: EditorState, text: SelectedText, name: string, marker: 
     if (span !== left) changes.push({ from: span.from, to: span.textFrom, insert: '' });
     if (span !== right) changes.push({ from: span.textTo, to: span.to, insert: '' });
   }
-  return changes;
+  return [...split.changes, ...changes];
+}
+
+/**
+ * Bold, italic and strikethrough that start inside the selection and end
+ * past it, or the other way round, close at the selection's edge and open
+ * again across the spaces there, so new marks never take in words that
+ * were not selected. Only at a word's edge, where both marks parse.
+ */
+function splitAt(state: EditorState, spans: readonly InlineSpan[], from: number, to: number): { spans: InlineSpan[]; changes: Change[] } {
+  const split: InlineSpan[] = [];
+  const changes: Change[] = [];
+  for (const span of spans) {
+    if (!EMPHASIS.has(span.name)) continue;
+    const opens = state.sliceDoc(span.from, span.textFrom);
+    const closes = state.sliceDoc(span.textTo, span.to);
+    if (span.from >= from && to > span.textFrom && to < span.textTo) {
+      let openAt = to;
+      while (openAt < span.textTo && isSpace(state, openAt)) openAt += 1;
+      if (openAt === to || openAt === span.textTo || !closesAt(state, to) || !opensAt(state, openAt)) continue;
+      changes.push({ from: to, to, insert: closes, nesting: -1 }, { from: openAt, to: openAt, insert: opens });
+      split.push(span);
+    } else if (span.to <= to && from > span.textFrom && from < span.textTo) {
+      let closeAt = from;
+      while (closeAt > span.textFrom && isSpace(state, closeAt - 1)) closeAt -= 1;
+      if (closeAt === from || closeAt === span.textFrom || !closesAt(state, closeAt) || !opensAt(state, from)) continue;
+      changes.push({ from: closeAt, to: closeAt, insert: closes }, { from, to: from, insert: opens, nesting: 1 });
+      split.push(span);
+    }
+  }
+  return { spans: split, changes };
 }
 
 /**

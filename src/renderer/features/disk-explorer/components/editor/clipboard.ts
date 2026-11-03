@@ -6,6 +6,7 @@ import { latestTree, outsideProtected } from './extensionPoints';
 import { inlineSpans, linkAt, listItemOf, withoutEdgeMarks, writeLink } from './formatCommands';
 import { docMode } from './livePreview';
 import { literalText, rawAt } from './typing';
+import { webAddress } from './linkSchemes';
 
 /*
  * The clipboard in a document. Copy, cut and drag write balanced Markdown:
@@ -145,6 +146,7 @@ function containedLines(replace: (state: EditorState, from: number, to: number, 
 }
 
 const URL_TEXT = /^(?:https?:\/\/|mailto:|obsidian:\/\/|opal:\/\/)\S+$/i;
+const WWW_TEXT = /^www\.[^\s.]+\.\S+$/i;
 
 /**
  * What a paste of `text` writes in a document, or null to leave it to
@@ -158,14 +160,15 @@ export function pasteSpec(state: EditorState, text: string, literal: boolean): T
   const range = state.selection.main;
   const pasted = text.replace(/\r\n?/g, '\n');
   const url = pasted.trim();
-  // Paste and Match Style pastes a URL as text, so both stay a key away.
-  if (!literal && !range.empty && URL_TEXT.test(url) && !rawAt(state, range.from)) {
+  // Paste and Match Style pastes a URL as text, so both stay a key away. A bare `www.` address links as a web page.
+  if (!literal && !range.empty && (URL_TEXT.test(url) || WWW_TEXT.test(url)) && !rawAt(state, range.from)) {
+    const address = webAddress(url);
     const link = linkAt(state, range.from);
     // Written as a link edit, not a paste, so doc mode's mark keeping leaves the address it replaces alone.
     if (link?.kind === 'link' && range.from >= link.textFrom && range.to <= link.textTo) {
-      return writeLink(state, link, state.sliceDoc(link.textFrom, link.textTo), url, link);
+      return writeLink(state, link, state.sliceDoc(link.textFrom, link.textTo), address, link);
     }
-    return writeLink(state, range, state.sliceDoc(range.from, range.to), url, null);
+    return writeLink(state, range, state.sliceDoc(range.from, range.to), address, null);
   }
   if (!literal) return listIntoItem(state, pasted);
   const prefix = containerPrefix(state, range.from);
@@ -221,12 +224,12 @@ function inTable(state: EditorState, at: number): boolean {
 
 /**
  * Edit > Paste and Match Style, from the menu or ⌘⇧V: the clipboard's text
- * pasted literally into the editor that holds `target`, or as plain text
- * into another field. The menu runs this rather than the system's paste,
- * whose paste event looks the same as ⌘V's.
+ * pasted literally into the page that holds `target`, or as plain text
+ * into another field, such as the Find bar's. The menu runs this rather
+ * than the system's paste, whose paste event looks the same as ⌘V's.
  */
 export async function pasteAndMatchStyle(target: Element | null = document.activeElement): Promise<void> {
-  const host = target?.closest('.cm-editor');
+  const host = target?.closest('.cm-content')?.closest('.cm-editor');
   const view = host instanceof HTMLElement ? EditorView.findFromDOM(host) : null;
   let text = '';
   try {

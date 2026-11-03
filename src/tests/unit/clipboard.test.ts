@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { openSearchPanel } from '@codemirror/search';
 import { balancedText, containerPrefix, pasteAndMatchStyle, pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
@@ -330,5 +331,51 @@ describe('the link form', () => {
     await user.type(field, 'a*b_c`d[[e]');
     await user.type(screen.getByRole('textbox', { name: 'Link' }), 'https://x.com{Enter}');
     expect(text(view)).toBe('See [a\\*b\\_c\\`d\\[e\\]](https://x.com) now\n');
+  });
+});
+
+describe('Paste and Match Style with focus in the Find bar', () => {
+  it('pastes into the focused field and leaves the page alone', async () => {
+    const view = mount('Plan for the week\n');
+    act(() => { openSearchPanel(view); });
+    const field = view.dom.querySelector('.cm-search input[name=search]') as HTMLInputElement;
+    field.focus();
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => 'roadmap' } });
+    const insert = vi.fn(() => true);
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: insert });
+    await act(async () => { await pasteAndMatchStyle(field); });
+    expect(text(view)).toBe('Plan for the week\n');
+    expect(insert).toHaveBeenCalledWith('insertText', false, 'roadmap');
+  });
+});
+
+describe('the link form, typed web addresses', () => {
+  const form = (view: EditorView, from: number, to: number) => render(createElement(TooltipProvider, null,
+    createElement(LinkPopover, { view, editor: { from, to, editing: true } })));
+
+  it('writes a bare domain as a web address, and keeps file paths as they are', async () => {
+    for (const [typed, written] of [['www.example.com', 'https://www.example.com'], ['example.com/step', 'https://example.com/step'], ['example.com', 'https://example.com'], ['report.pdf', 'report.pdf'], ['Plan.mdo', 'Plan.mdo'], ['notes/deck.pptx', 'notes/deck.pptx'], ['alex@example.com', 'mailto:alex@example.com'], ['https://example.com', 'https://example.com']]) {
+      const user = userEvent.setup();
+      const view = mount('Visit the site\n');
+      view.focus = vi.fn();
+      const rendered = form(view, 10, 14);
+      await user.type(screen.getByRole('textbox', { name: 'Link' }), `${typed}{Enter}`);
+      expect(text(view)).toBe(`Visit the [site](${written})\n`);
+      rendered.unmount();
+    }
+  });
+});
+
+describe('pasting a bare web address over a selection', () => {
+  it('links the selection to the https address, and Paste and Match Style keeps it text', () => {
+    const view = mount('Visit the site\n');
+    select(view, 10, 14);
+    const spec = pasteSpec(view.state, 'www.example.com', false);
+    if (!spec) throw new Error('no link');
+    act(() => { view.dispatch(spec); });
+    expect(text(view)).toBe('Visit the [site](https://www.example.com)\n');
+    const literal = mount('Visit the site\n');
+    select(literal, 10, 14);
+    expect(pasteSpec(literal.state, 'www.example.com', true)?.changes).toEqual({ from: 10, to: 14, insert: 'www.example.com' });
   });
 });

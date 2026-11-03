@@ -521,6 +521,8 @@ const blockPreview = StateField.define<BlockPreview>({
 const hidden = Decoration.replace({});
 const hiddenCaretAfter = Decoration.replace({ caretAfter: true });
 const inlineCode = Decoration.mark({ class: 'cm-md-code' });
+// Short code never breaks across lines.
+const shortInlineCode = Decoration.mark({ class: 'cm-md-code cm-md-code-short' });
 const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
@@ -622,7 +624,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           return false;
         }
         case 'InlineCode':
-          out.push(inlineCode.range(ref.from, ref.to));
+          out.push((ref.to - ref.from <= 26 ? shortInlineCode : inlineCode).range(ref.from, ref.to));
           return true;
         case 'Escape':
           if (!reveal.span(ref.from, ref.to)) hide(ref.from, ref.from + 1);
