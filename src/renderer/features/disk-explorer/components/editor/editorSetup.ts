@@ -194,6 +194,8 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     codeBlocks,
     pageProperties,
     search({ top: true }),
+    // The caret's line stays clear of the word-count footer over the page's bottom edge, as when "[[" is typed on the last line.
+    EditorView.scrollMargins.of(() => ({ bottom: 56 })),
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
       { key: 'Backspace', run: deleteMarkupInList },

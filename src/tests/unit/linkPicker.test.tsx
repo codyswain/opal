@@ -156,6 +156,12 @@ describe('the [[ picker in tables, code and odd names', () => {
     expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]] today');
   });
 
+  it('keeps the line typed on clear of the footer at the page\'s bottom edge', () => {
+    const view = mount('See [[big');
+    const bottoms = view.state.facet(EditorView.scrollMargins).map((margin) => margin(view)?.bottom ?? 0);
+    expect(Math.max(...bottoms)).toBeGreaterThanOrEqual(56);
+  });
+
   it('names a stored file as this page already shows it, in the row and in the link', async () => {
     const stored = '[[Library/files/2026-11/q3.a3f9c2e1.pdf|Q3 report.pdf]]';
     const view = mount(`${stored}\nSee [[ today`, stored.length + 7);
