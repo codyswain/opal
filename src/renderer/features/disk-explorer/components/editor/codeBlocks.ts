@@ -519,7 +519,16 @@ export class CodeBlockWidget extends WidgetType {
         if (mark.to > end) break;
       }
       if (end > written) element.append(this.code.slice(written, end));
-      if (!text) element.textContent = '​';
+      if (!text) element.textContent = '\u200b';
+      // An added line's sign is bold.
+      if (diff && element.classList.contains('cm-code-diff-add') && element.firstChild?.textContent?.startsWith('+')) {
+        const first = element.firstChild;
+        const sign = document.createElement('span');
+        sign.className = 'cm-code-diff-sign';
+        sign.textContent = '+';
+        first.textContent = first.textContent.slice(1);
+        element.insertBefore(sign, first);
+      }
       parent.append(element);
       at = end + 1;
     });
@@ -668,6 +677,7 @@ function expandForSelection(tr: Transaction): TransactionSpec | readonly Transac
 // Drawing
 
 const placeholder = Decoration.widget({ widget: new PlaceholderWidget(), side: 1 });
+const diffSign = Decoration.mark({ class: 'cm-code-diff-sign' });
 const openEnd = Decoration.widget({ widget: new OpenEndWidget(), side: 1 });
 
 /** Where a block may sit on the page: lines from `from` to `to` that a caret can never stand inside. */
@@ -719,7 +729,11 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
     if (collapsed && index === COLLAPSE_AFTER - 1) classes.push('cm-code-fade');
     if (last && (after || !close)) classes.push('cm-code-bottom');
     if (last && !close) classes.push('cm-code-unclosed');
-    if (diff) classes.push(diffClass(doc.sliceString(from, line.to)));
+    if (diff) {
+      const kind = diffClass(doc.sliceString(from, line.to));
+      classes.push(kind);
+      if (kind === 'cm-code-diff-add') ctx.out.push(diffSign.range(from, from + 1));
+    }
     ctx.lineClass(line.from, classes.join(' ').trim(), style);
     ctx.hide(line.from, from, true);
     if (lines.length === 1 && from === line.to && close) ctx.out.push(placeholder.range(line.to));

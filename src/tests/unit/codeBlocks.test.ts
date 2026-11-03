@@ -342,6 +342,7 @@ describe('a code block in a document', () => {
   it('draws diff lines', () => {
     const view = mount('```diff\n@@ -1 +1 @@\n-old\n+new\n same\n```\n');
     expect(view.contentDOM.querySelector('.cm-code-diff-add')?.textContent).toBe('+new');
+    expect(view.contentDOM.querySelector('.cm-code-diff-add .cm-code-diff-sign')?.textContent).toBe('+');
     expect(view.contentDOM.querySelector('.cm-code-diff-del')?.textContent).toBe('-old');
     expect(view.contentDOM.querySelector('.cm-code-diff-meta')?.textContent).toBe('@@ -1 +1 @@');
   });

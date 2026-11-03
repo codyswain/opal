@@ -27,8 +27,10 @@ await mkdir(path.join(vaultParent, 'Vault', 'Docs'), { recursive: true });
 const vault = await realpath(path.join(vaultParent, 'Vault'));
 const TYPING = path.join(vault, 'Docs', 'typing.mdo');
 const GALLERY = path.join(vault, 'Docs', 'code.mdo');
+const NOTE = path.join(vault, 'Docs', 'note.md');
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
+await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 await mkdir(outDir, { recursive: true });
 
@@ -175,6 +177,19 @@ try {
     const end = page.locator('.cm-code-open-end');
     if (await end.count()) await shot(`${theme}-state-unclosed`, end, { above: 120, below: 40 });
   }
+  // A note keeps the drawn block, highlighted, scrolling sideways inside the column.
+  await open(NOTE);
+  for (const theme of ['light', 'dark']) {
+    await setTheme(theme);
+    await shot(`${theme}-note-block`, page.locator('.cm-md-codeblock-widget').first(), { above: 80, below: 60 });
+  }
+  const fits = await page.evaluate(() => {
+    const box = document.querySelector('.cm-md-codeblock-box');
+    const content = document.querySelector('.cm-content');
+    if (!box || !content) return null;
+    return { scrolls: box.scrollWidth > box.clientWidth, inside: box.getBoundingClientRect().right <= content.getBoundingClientRect().right + 1, coloured: Boolean(box.querySelector('.cm-code-keyword')) };
+  });
+  check('a note\'s block scrolls sideways inside the column and is highlighted', Boolean(fits?.scrolls && fits.inside && fits.coloured), JSON.stringify(fits));
   check('no page errors', errors.length === 0, errors.join(' | '));
 } catch (error) {
   check('the run finished', false, String(error));
