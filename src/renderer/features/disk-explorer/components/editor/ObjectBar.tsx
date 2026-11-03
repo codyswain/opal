@@ -111,7 +111,7 @@ interface ObjectBarProps {
  */
 export const ObjectBar: React.FC<ObjectBarProps> = ({ view, frame }) => {
   const bar = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+  const [place, setPlace] = useState<{ top: number; left: number; maxWidth: number } | null>(null);
   const [current, setCurrent] = useState(0);
   const kind = objectKind(view.state, frame.kind);
   const actions = kind?.actions(view.state, frame) ?? [];
@@ -131,7 +131,11 @@ export const ObjectBar: React.FC<ObjectBarProps> = ({ view, frame }) => {
       frameRequest = requestAnimationFrame(() => {
         const box = objectBox(view, frame, block);
         const size = bar.current?.getBoundingClientRect();
-        setPlace(box && size ? placeBar(box, { width: size.width, height: size.height || 36 }, visibleArea(view)) : null);
+        // No wider than the page's column, so a narrow split clips nothing: the destination gives way first.
+        const area = visibleArea(view);
+        const maxWidth = Math.max(0, area.right - area.left - 2 * GAP);
+        const at = box && size ? placeBar(box, { width: Math.min(size.width, maxWidth), height: size.height || 36 }, area) : null;
+        setPlace(at ? { ...at, maxWidth } : null);
       });
     };
     measure();
@@ -172,7 +176,7 @@ export const ObjectBar: React.FC<ObjectBarProps> = ({ view, frame }) => {
       aria-label={destination ? `${frame.kind}, ${destination}` : frame.kind}
       data-object-bar={frame.kind}
       className="opal-object-bar"
-      style={place ? { top: place.top, left: place.left } : { top: 0, left: 0, visibility: 'hidden' }}
+      style={place ? { top: place.top, left: place.left, maxWidth: place.maxWidth } : { top: 0, left: 0, visibility: 'hidden' }}
       onKeyDown={onKeyDown}
     >
       {destination ? <span className="opal-object-bar-destination" title={destination}>{destination}</span> : null}
