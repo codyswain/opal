@@ -81,7 +81,8 @@ export const pageContext = Facet.define<PageContext, PageContext>({
   combine: (values) => values[0] ?? { path: '', openNote: () => undefined },
 });
 
-const linksResolved = StateEffect.define<Record<string, string | null>>();
+/** Tells the page where link targets point, such as a file it just stored. */
+export const linksResolved = StateEffect.define<Record<string, string | null>>();
 
 /** Wiki link targets on this page and the files they resolve to; null for a link to nothing yet. */
 export const resolvedLinks = StateField.define<ReadonlyMap<string, string | null>>({

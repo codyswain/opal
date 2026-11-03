@@ -337,9 +337,10 @@ export const AppCommands: React.FC = () => {
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   // Cmd+O is Go to File, a menu accelerator, so it works while the editor has focus.
+  // A key the page already handled is skipped: in a document Cmd+K is a link.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey) return;
       const key = event.key.toLowerCase();
       if (key === "k" && !event.shiftKey) {
         event.preventDefault();

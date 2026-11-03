@@ -2,13 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChunks, unifiedMergeView } from '@codemirror/merge';
 import { Compartment, EditorState, Transaction, type Extension, type Text } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
+import { isDocFile } from '@/common/fileKind';
 import { recordOpened } from '../../activity/recordActivity';
 import { fileLocation } from '../../navigation/filesLocation';
 import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePropertiesStore';
 import { useTabsStore } from '../../store/tabsStore';
 import { isLogPage } from './activityLog';
+import { linkEditor, type LinkEditor } from './docMode';
+import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
+import { formatState, sameFormat, type FormatState } from './formatState';
+import { LinkPopover } from './LinkPopover';
 import { showInlineTitle } from './livePreview';
 import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
@@ -107,8 +112,13 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   path, layout, document, initialBody, autoFocusEmpty = false, openNote = openNoteInTab, propertiesShown, onToggleProperties, onView, extensions,
 }) => {
   const section = layout === 'section';
+  const doc = isDocFile(path);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // A document's toolbar and link popover follow the editor's state.
+  const [docView, setDocView] = useState<EditorView | null>(null);
+  const [format, setFormat] = useState<FormatState | null>(null);
+  const [link, setLink] = useState<LinkEditor | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState(0);
   // The hook's state changes identity across renders; the editor reads the latest.
@@ -142,12 +152,21 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
             // Every conflicting change has a pick once the merge view has no chunks left.
             if (getChunks(update.state)?.chunks.length === 0) actions.current.resolveConflict();
             if (update.focusChanged && !update.view.hasFocus) void actions.current.flush();
+            if (doc && (update.docChanged || update.selectionSet || update.transactions.some((tr) => tr.effects.length > 0))) {
+              const next = formatState(update.state);
+              setFormat((shown) => (sameFormat(shown, next) ? shown : next));
+              setLink(update.state.field(linkEditor));
+            }
           }),
         ],
       }),
     });
     view.current = created;
     setWords(countWords(created.state.doc));
+    if (doc) {
+      setDocView(created);
+      setFormat(formatState(created.state));
+    }
     // A page opens at the top without taking focus; an empty one gets the caret.
     // In a stack only the section that asks for it does, so scrolling never moves the caret.
     if (created.state.doc.length === 0 && (!section || autoFocusEmpty)) created.focus();
@@ -210,7 +229,9 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       data-properties-shown={propertiesOpen ? '' : undefined}
       onKeyDown={closePropertiesOnEscape}
     >
+      {docView && format && !section ? <DocToolbar view={docView} format={format} path={path} /> : null}
       <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
+      {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
       <EditorStatus
         saveState={document.saveState}
         error={document.error}

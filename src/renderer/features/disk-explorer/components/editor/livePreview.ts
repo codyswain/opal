@@ -37,12 +37,20 @@ import { openPathLink, openWikiLink, opensNewTab, pageContext, parseWikiTarget, 
  *
  * Tables and fenced code blocks span lines, so they come from a state field
  * as block widgets. Everything else is drawn per line for the viewport.
+ *
+ * A document (.mdo) never reveals its marks: only a table or code block
+ * opened with a double-click shows its Markdown, until the caret leaves it.
  */
+
+/** On for a document, which always reads as rendered. */
+export const docMode = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
 
 const setFocused = StateEffect.define<boolean>();
 const setPointerDown = StateEffect.define<boolean>();
 /** Puts a cell caret at a position in a table, or with null turns it into the table's source. */
 const setCellCaret = StateEffect.define<number | null>();
+/** In a document, shows the source of the table or code block over these lines, or with null draws it again. */
+export const setOpenBlock = StateEffect.define<{ from: number; to: number } | null>();
 
 interface RevealState {
   focused: boolean;
@@ -51,6 +59,8 @@ interface RevealState {
   revealed: EditorSelection | null;
   /** Where a click in a table put the caret. That table stays drawn until the caret moves or the text changes. */
   cell: number | null;
+  /** A document's table or code block that shows its source, while the caret stays in it. */
+  block: { from: number; to: number } | null;
 }
 
 /**
@@ -60,23 +70,32 @@ interface RevealState {
  * the pointer when the button comes up.
  */
 const revealState = StateField.define<RevealState>({
-  create: () => ({ focused: false, pointerDown: false, revealed: null, cell: null }),
+  create: () => ({ focused: false, pointerDown: false, revealed: null, cell: null, block: null }),
   update(value, tr) {
-    let { focused, pointerDown, cell } = value;
+    let { focused, pointerDown, cell, block } = value;
     let cellSet = false;
+    let blockSet = false;
     for (const effect of tr.effects) {
       if (effect.is(setPointerDown)) pointerDown = effect.value;
       if (effect.is(setCellCaret)) { cell = effect.value; cellSet = true; }
+      if (effect.is(setOpenBlock)) { block = effect.value; blockSet = true; }
       if (effect.is(setFocused)) {
         focused = effect.value;
         if (!focused) { pointerDown = false; cell = null; }
       }
     }
     if (!cellSet && (tr.docChanged || tr.selection)) cell = null;
+    if (block && !blockSet) {
+      // Typing at either end of the open block grows it.
+      if (tr.docChanged) block = { from: tr.changes.mapPos(block.from, -1), to: tr.changes.mapPos(block.to, 1) };
+      const { head } = tr.state.selection.main;
+      if (head < block.from || head > block.to) block = null;
+    }
     const revealed = pointerDown ? value.revealed?.map(tr.changes) ?? null : focused ? tr.state.selection : null;
     const same = revealed === value.revealed || (revealed !== null && value.revealed !== null && revealed.eq(value.revealed));
-    if (focused === value.focused && pointerDown === value.pointerDown && cell === value.cell && same) return value;
-    return { focused, pointerDown, revealed, cell };
+    const sameBlock = block === value.block || (block !== null && value.block !== null && block.from === value.block.from && block.to === value.block.to);
+    if (focused === value.focused && pointerDown === value.pointerDown && cell === value.cell && same && sameBlock) return value;
+    return { focused, pointerDown, revealed, cell, block };
   },
 });
 
@@ -91,8 +110,13 @@ interface Reveal {
 const NOTHING_REVEALED: Reveal = { lines: () => false, span: () => false };
 
 function revealer(state: EditorState): Reveal {
-  const { revealed } = state.field(revealState);
+  const { revealed, block } = state.field(revealState);
   if (!revealed) return NOTHING_REVEALED;
+  if (state.facet(docMode)) {
+    if (!block) return NOTHING_REVEALED;
+    const open = (from: number, to = from) => from <= block.to && to >= block.from;
+    return { lines: open, span: open };
+  }
   // Log pages and the old Activity Log section are read-only in Opal, so they always read as rendered.
   const locked = state.field(activityLogSection, false) ?? null;
   const editable = (from: number) => locked === null || from < locked;
@@ -259,7 +283,7 @@ const shortTargets = EditorView.decorations.compute([linkDefinitions, revealStat
  * plain text without a definition. "[^1]" and "[!note]" are footnotes and
  * callouts, never links.
  */
-function linkTarget(state: EditorState, node: SyntaxNode): string | null {
+export function linkTarget(state: EditorState, node: SyntaxNode): string | null {
   const marks = node.getChildren('LinkMark');
   if (marks.length < 2) return null;
   const url = node.getChild('URL');
@@ -272,7 +296,7 @@ function linkTarget(state: EditorState, node: SyntaxNode): string | null {
 }
 
 /** A bare web or mail address as a link: "www." gets https, an email address mailto. */
-function autolinkHref(written: string): string {
+export function autolinkHref(written: string): string {
   if (/^www\./i.test(written)) return `https://${written}`;
   if (!/^[a-z][a-z0-9+.-]*:/i.test(written) && /^[^\s@/]+@[^\s@/]+$/.test(written)) return `mailto:${written}`;
   return written;
@@ -457,26 +481,32 @@ const blockPreview = StateField.define<BlockPreview>({
   provide: (field) => EditorView.decorations.from(field, (preview) => preview.decorations),
 });
 
+/*
+ * Hidden marks. In a document the caret never stops inside them, and where
+ * several positions show as one place it rests before a mark, so typed text
+ * takes the formatting of the text before it, or after one marked
+ * `caretAfter`: the marks that open a line, and those that close a link or
+ * code, after which typing is plain.
+ */
 const hidden = Decoration.replace({});
+const hiddenCaretAfter = Decoration.replace({ caretAfter: true });
 const inlineCode = Decoration.mark({ class: 'cm-md-code' });
 const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
 const horizontalRule = new HorizontalRuleWidget();
 
-/** Decorations for the lines in view: everything but tables and fenced code. */
-function lineDecorations(view: EditorView): DecorationSet {
-  const { state } = view;
+/** Decorations for the lines from `top` to `bottom`: everything but tables and fenced code. */
+function lineDecorations(state: EditorState, top: number, bottom: number): DecorationSet {
   const { doc } = state;
-  const { from: top, to: bottom } = view.viewport;
   const reveal = revealer(state);
   const page = state.facet(pageContext).path;
   const links = state.field(resolvedLinks);
   const { shown } = state.field(blockPreview);
   const covered = (at: number) => shown.some((block) => block.from <= at && block.to >= at);
   const out: Range<Decoration>[] = [];
-  const hide = (from: number, to: number) => {
-    if (to > from && !doc.sliceString(from, to).includes('\n')) out.push(hidden.range(from, to));
+  const hide = (from: number, to: number, caretAfter = false) => {
+    if (to > from && !doc.sliceString(from, to).includes('\n')) out.push((caretAfter ? hiddenCaretAfter : hidden).range(from, to));
   };
   const lineClass = (at: number, className: string, style?: string) => {
     out.push(Decoration.line({ class: className, attributes: style ? { style } : undefined }).range(doc.lineAt(at).from));
@@ -509,7 +539,7 @@ function lineDecorations(view: EditorView): DecorationSet {
           const indented = ref.name === 'CodeBlock' && !reveal.lines(ref.from, ref.to);
           linesOf(ref.from, lastLine(doc, node).to, (line, first, last) => {
             lineClass(line.from, `${kind}${first ? ` ${kind}-first` : ''}${last ? ` ${kind}-last` : ''}`);
-            if (indented) hide(line.from, line.from + (/^(?: {1,4}|\t)/.exec(line.text)?.[0].length ?? 0));
+            if (indented) hide(line.from, line.from + (/^(?: {1,4}|\t)/.exec(line.text)?.[0].length ?? 0), true);
           });
           return false;
         }
@@ -519,7 +549,8 @@ function lineDecorations(view: EditorView): DecorationSet {
           lineClass(line.from, `cm-md-heading cm-md-h${ref.name.slice(-1)}`);
           if (!reveal.lines(line.from, line.to)) {
             const [open, close] = node.getChildren('HeaderMark');
-            if (open) hide(open.from, skipSpaces(doc, open.to, line.to));
+            // A document shows a "#" just typed until a space makes it a heading.
+            if (open && (open.to < line.to || !state.facet(docMode))) hide(open.from, skipSpaces(doc, open.to, line.to), true);
             if (close) hide(doc.sliceString(line.from, close.from).trimEnd().length + line.from, close.to);
           }
           return true;
@@ -535,7 +566,7 @@ function lineDecorations(view: EditorView): DecorationSet {
         case 'StrikethroughMark':
         case 'CodeMark': {
           const parent = node.parent;
-          if (parent && !reveal.span(parent.from, parent.to)) hide(ref.from, ref.to);
+          if (parent && !reveal.span(parent.from, parent.to)) hide(ref.from, ref.to, ref.name === 'CodeMark' && ref.to === parent.to);
           return false;
         }
         case 'InlineCode':
@@ -554,7 +585,7 @@ function lineDecorations(view: EditorView): DecorationSet {
           }
           if (!reveal.span(ref.from, ref.to)) {
             hide(open.from, open.to);
-            hide(close.from, ref.to);
+            hide(close.from, ref.to, true);
           } else {
             out.push(syntax.range(open.from, open.to), syntax.range(close.from, ref.to));
           }
@@ -563,7 +594,7 @@ function lineDecorations(view: EditorView): DecorationSet {
         case 'Autolink': {
           const shownAsText = !reveal.span(ref.from, ref.to);
           for (const mark of node.getChildren('LinkMark')) {
-            if (shownAsText) hide(mark.from, mark.to);
+            if (shownAsText) hide(mark.from, mark.to, mark.to === ref.to);
             else out.push(syntax.range(mark.from, mark.to));
           }
           return true;
@@ -613,7 +644,7 @@ function lineDecorations(view: EditorView): DecorationSet {
           }
           if (shownAsText) {
             hide(ref.from, textFrom);
-            hide(close.from, ref.to);
+            hide(close.from, ref.to, true);
           }
           return false;
         }
@@ -636,7 +667,7 @@ function lineDecorations(view: EditorView): DecorationSet {
           // The marker shows as written only while the caret is in it.
           if (start <= ref.from && !reveal.span(start, textFrom - 1)) {
             const kind = task ? 'task' : item.parent?.name === 'OrderedList' ? 'number' : 'bullet';
-            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, doc.sliceString(ref.from, ref.to), checked) }).range(start, textFrom));
+            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, doc.sliceString(ref.from, ref.to), checked), caretAfter: true }).range(start, textFrom));
           }
           if (checked && textFrom < line.to) out.push(taskDone.range(textFrom, line.to));
           const last = lastLine(doc, item).number;
@@ -661,8 +692,8 @@ function lineDecorations(view: EditorView): DecorationSet {
           if (callout.title) out.push(calloutTitle.range(callout.titleFrom, head.to));
           if (!reveal.lines(head.from, head.to)) {
             if (callout.type === 'ai') out.push(Decoration.widget({ widget: new CalloutIconWidget(), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
-            if (callout.title) hide(head.from, callout.titleFrom);
-            else out.push(Decoration.replace({ widget: new CalloutTitleWidget(callout.type[0].toUpperCase() + callout.type.slice(1)) }).range(head.from, head.to));
+            if (callout.title) hide(head.from, callout.titleFrom, true);
+            else out.push(Decoration.replace({ widget: new CalloutTitleWidget(callout.type[0].toUpperCase() + callout.type.slice(1)), caretAfter: true }).range(head.from, head.to));
           }
           return true;
         }
@@ -671,7 +702,7 @@ function lineDecorations(view: EditorView): DecorationSet {
           const line = doc.lineAt(ref.from);
           const end = doc.sliceString(ref.to, ref.to + 1) === ' ' ? ref.to + 1 : ref.to;
           if (calloutHeads.has(line.from) || covered(ref.from) || reveal.span(ref.from, end - 1)) return false;
-          hide(ref.from, end);
+          hide(ref.from, end, true);
           return false;
         }
         default:
@@ -686,7 +717,7 @@ function lineDecorations(view: EditorView): DecorationSet {
     lineClass(line.from, 'cm-md-list-cont', `--list-indent: ${indent}em`);
     const start = line.from + (quoted ? quotePrefix(line.text) : 0);
     const textFrom = skipSpaces(doc, start, line.to);
-    if (!reveal.span(start, textFrom - 1)) hide(start, textFrom);
+    if (!reveal.span(start, textFrom - 1)) hide(start, textFrom, true);
   }
   return Decoration.set(out, true);
 }
@@ -695,7 +726,7 @@ const linePreview = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
 
   constructor(view: EditorView) {
-    this.decorations = lineDecorations(view);
+    this.decorations = lineDecorations(view.state, view.viewport.from, view.viewport.to);
   }
 
   update(update: ViewUpdate) {
@@ -705,10 +736,55 @@ const linePreview = ViewPlugin.fromClass(class {
       update.startState.field(revealState) !== update.state.field(revealState) ||
       update.startState.field(resolvedLinks) !== update.state.field(resolvedLinks)
     ) {
-      this.decorations = lineDecorations(update.view);
+      this.decorations = lineDecorations(update.state, update.view.viewport.from, update.view.viewport.to);
     }
   }
 }, { decorations: (plugin) => plugin.decorations });
+
+/** Text the page hides, as a document's caret sees it. */
+export interface HiddenRange {
+  from: number;
+  to: number;
+  /** Where several positions show as one place, the caret rests after this range rather than before it. */
+  caretAfter: boolean;
+  /** It draws something, a picture, a rule or a block, so its two sides are two places. */
+  unit: boolean;
+}
+
+/**
+ * What the page hides on the lines from `from` to `to`, in order. A drawn
+ * table or code block takes the line breaks around it too, so the caret
+ * stops on the lines beside it and never on its own lines, where typed text
+ * would vanish into the hidden source.
+ */
+export function hiddenRanges(state: EditorState, from: number, to: number): HiddenRange[] {
+  // A list item's later lines learn their indent from its first line.
+  let start = state.doc.lineAt(from).from;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(start, 1); node; node = node.parent) {
+    if (node.name === 'ListItem') start = Math.min(start, node.from);
+  }
+  const found: HiddenRange[] = [];
+  lineDecorations(state, start, to).between(from, to, (rangeFrom, rangeTo, decoration) => {
+    if (!decoration.point || rangeTo <= rangeFrom) return;
+    const caretAfter = Boolean(decoration.spec.caretAfter);
+    found.push({ from: rangeFrom, to: rangeTo, caretAfter, unit: Boolean(decoration.spec.widget) && !caretAfter });
+  });
+  const reveal = revealer(state);
+  for (const target of state.field(linkDefinitions).long) {
+    if (target.to >= from && target.from <= to && !reveal.lines(target.line)) found.push({ from: target.from, to: target.to, caretAfter: false, unit: true });
+  }
+  for (const block of state.field(blockPreview).shown) {
+    if (block.to < from || block.from > to) continue;
+    found.push({ from: Math.max(0, block.from - 1), to: Math.min(state.doc.length, block.to + 1), caretAfter: false, unit: true });
+  }
+  return found.sort((a, b) => a.from - b.from || a.to - b.to);
+}
+
+/** The lines of the table or fenced code block drawn over `at`, if one is. */
+export function drawnBlockAt(state: EditorState, at: number): { from: number; to: number } | null {
+  const block = state.field(blockPreview).shown.find((shown) => shown.from <= at && at <= shown.to);
+  return block ? { from: block.from, to: block.to } : null;
+}
 
 /** Writes "[x]" or "[ ]" into the task whose checkbox starts at `at`. */
 function toggleTask(view: EditorView, at: number): void {
@@ -720,7 +796,7 @@ function toggleTask(view: EditorView, at: number): void {
 }
 
 /** Where a click in a table or code block puts the caret: the cell's start, or the spot in the code line. */
-function blockPosition(view: EditorView, block: HTMLElement, target: Element, event: MouseEvent): number {
+export function blockPosition(view: EditorView, block: HTMLElement, target: Element, event: MouseEvent): number {
   const start = view.posAtDOM(block);
   const spot = target.closest<HTMLElement>('[data-offset]');
   if (!spot || !block.contains(spot)) return start;
@@ -744,7 +820,7 @@ function linkRevealed(state: EditorState, at: number): boolean {
 }
 
 /** Opens a Markdown link: one with a scheme in the default app, which the main process allows for web and mail, and a path in Opal. */
-function openLink(view: EditorView, href: string, newTab: boolean): void {
+export function openLink(view: EditorView, href: string, newTab: boolean): void {
   if (/^[a-z][a-z0-9+.-]*:/i.test(href)) window.open(href, '_blank');
   else void openPathLink(view, href, newTab);
 }

@@ -263,6 +263,10 @@ Tokens follow the design brief from Bastion and Linear:
   list markers) hide away from the cursor; bullets, checkboxes, headings,
   links, wiki links, callouts (including `> [!ai] AI`), images, code blocks,
   tables and horizontal rules render. TipTap and its round trip are removed.
+- A document (`.mdo`) is the same editor in doc mode (the .mdo spec,
+  2026-11-02): its Markdown never shows, a formatting toolbar sits in the
+  card above the text, and Docs' shortcuts apply. There Cmd+K edits a link;
+  Cmd+P and Cmd+O still search.
 - Callouts, including `> [!ai] AI`, render as neutral grey boxes (a light
   grey fill or a grey left rule and a bold title), never tinted, whatever the
   vault's Obsidian snippet uses.

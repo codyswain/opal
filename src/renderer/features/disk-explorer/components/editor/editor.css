@@ -149,6 +149,61 @@
 }
 
 /* Headings and the inline title share the serif, bold, larger than the body. */
+/* A document's toolbar: one row of grey icon buttons over the text column,
+   in the interface's sans. It sits outside the page's scroller, so it holds
+   still while the page scrolls. A pressed button takes IconButton's grey. */
+.opal-editor .opal-doc-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  /* Room below for a focus ring, which the row would otherwise cut off. */
+  padding: 8px 2rem 4px;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-editor .opal-doc-toolbar-rule {
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background-color: hsl(var(--border-subtle));
+}
+
+.opal-editor .opal-doc-toolbar-style {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 120px;
+  height: var(--control-height-compact);
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-control);
+  color: hsl(var(--text-secondary));
+  font-size: var(--text-control-size);
+  outline: none;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .opal-doc-toolbar-style:hover,
+.opal-editor .opal-doc-toolbar-style[data-state="open"] {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+  transition-duration: 0s;
+}
+
+.opal-editor .opal-doc-toolbar-style:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
 .opal-editor .cm-editor .cm-md-inline-title,
 .opal-editor .cm-editor .cm-md-heading {
   font-weight: 700;

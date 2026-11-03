@@ -51,6 +51,10 @@ not exist.
   store reads Git LFS placeholders: `opal-file://` serves their bytes from
   git's object store, and Download runs `git lfs fetch` for one file. Opal
   never writes LFS files into the working tree
+- **Documents:** a `.mdo` opens in doc mode (`docMode.ts` in the editor
+  folder): the page editor with its Markdown always hidden, the caret kept
+  out of hidden marks, and a toolbar (`DocToolbar.tsx`). The formatting
+  commands are in `formatCommands.ts`; each writes only the marks it needs
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame;
   `day-sidebar` is the right sidebar, one vault day beside the page)

@@ -249,8 +249,9 @@ describe('live preview', () => {
     installMarkdownApi({ '/Vault/Notes/Plan.mdo': '', '/Vault/Library/Roadmap.mdo': '' });
     const { view, openNote } = mount('See [[Roadmap]].\n', vi.fn(), '/Vault/Notes/Plan.mdo');
     expect(view.contentDOM.querySelector('.cm-md-inline-title')).toHaveTextContent(/^Plan$/);
-    press(view.contentDOM.querySelector('.cm-md-wikilink') as Element);
-    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/Library/Roadmap.mdo', false));
+    // In a document a plain click shows the link's popover; Cmd+click follows it.
+    press(view.contentDOM.querySelector('.cm-md-wikilink') as Element, { metaKey: true });
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/Library/Roadmap.mdo', true));
   });
 
   it('opens web and mail links in the default app on a click, and only on Cmd+click while they show as written', async () => {
