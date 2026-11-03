@@ -496,3 +496,14 @@ describe('wide tables', () => {
     expect((frameAfter.querySelector('.cm-md-table-scroll') as HTMLElement).scrollLeft).toBe(120);
   });
 });
+
+describe('formatting inside a table cell', () => {
+  it('bolds text inside one cell, and never a whole row', () => {
+    const doc = '| a | some words |\n|---|---|\n| 1 | 2 |\n';
+    const state = EditorState.create({ doc, selection: { anchor: doc.indexOf('some'), head: doc.indexOf('some') + 4 }, extensions: markdownEditorExtensions(NOTE) });
+    let out = doc;
+    toggleMarker('**')({ state, dispatch: (tr) => { out = tr.newDoc.toString(); } });
+    expect(out).toBe('| a | **some** words |\n|---|---|\n| 1 | 2 |\n');
+    expect(onAll(doc, toggleMarker('**'), NOTE)).toBe(doc);
+  });
+});

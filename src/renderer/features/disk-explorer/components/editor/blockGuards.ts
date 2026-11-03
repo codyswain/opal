@@ -17,7 +17,13 @@ const INLINE = new Set([
   'Paragraph', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'ATXHeading6', 'SetextHeading1', 'SetextHeading2',
 ]);
 
-/** The lines of each guarded block that touches `from` to `to`, whole. */
+/** Whether `from` to `to` is text on one line with no pipe in it, which in a table is inside one cell. */
+function insideCell(state: EditorState, from: number, to: number): boolean {
+  const line = state.doc.lineAt(from);
+  return to > from && to <= line.to && !state.sliceDoc(from, to).includes('|') && /\|/.test(state.sliceDoc(line.from, from));
+}
+
+/** The lines of each guarded block that touches `from` to `to`, whole, except text inside one table cell. */
 export function guardedBlocks(state: EditorState, from: number, to: number): TextRange[] {
   const { doc } = state;
   const ranges: TextRange[] = [];
@@ -32,6 +38,8 @@ export function guardedBlocks(state: EditorState, from: number, to: number): Tex
         return false;
       }
       if (GUARDED.has(ref.name)) {
+        // Text inside one table cell takes inline formatting like any other text.
+        if (ref.name === 'Table' && insideCell(state, from, to)) return false;
         // A block that ends at a line break ends on the line before it.
         const end = ref.to > ref.from && doc.lineAt(ref.to).from === ref.to ? ref.to - 1 : ref.to;
         ranges.push({ from: doc.lineAt(ref.from).from, to: doc.lineAt(end).to });
