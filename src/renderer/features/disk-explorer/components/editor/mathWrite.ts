@@ -691,7 +691,7 @@ export const insertEquationItem = insertItems.of({
   label: 'Equation',
   icon: Sigma,
   shortcut: '⇧⌘E',
-  order: 30,
+  order: 24,
   run: (view) => {
     // The menu gives focus back to the text as it closes; the popover opens after that, so its field keeps the focus.
     let done = false;

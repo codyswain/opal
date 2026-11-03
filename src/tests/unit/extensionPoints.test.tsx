@@ -191,8 +191,8 @@ describe('insert items', () => {
     const user = userEvent.setup();
     await user.click(within(screen.getByRole('toolbar', { name: 'Formatting' })).getByRole('button', { name: 'Insert' }));
     const items = await screen.findAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Image…', 'Table', 'Code block⌥⌘C', 'Drawing', 'Callout', 'Equation⇧⌘E', 'Horizontal line']);
-    await user.click(items[3]);
+    expect(items.map((item) => item.textContent)).toEqual(['Image…', 'Table', 'Code block⌥⌘C', 'Equation⇧⌘E', 'Drawing', 'Callout', 'Horizontal line']);
+    await user.click(items[4]);
     expect(insertDrawing).toHaveBeenCalledWith(view);
   });
 });
