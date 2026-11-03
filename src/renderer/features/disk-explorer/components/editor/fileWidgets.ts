@@ -212,6 +212,7 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
       default:
         meta.textContent = service ? `${service} video · ${hostOf(ref.url ?? '')}` : metaLine(fileName(ref), ref.kind, info);
     }
+    if (state === 'ready' && service && ref.url) videoStill(view, card, tile, actions, ref.url);
     body.append(title, meta);
     card.append(tile, body);
     if (actions.childElementCount > 0) card.append(actions);
@@ -330,6 +331,46 @@ function thumbnailUrl(path: string, px: number): Promise<string | null> {
     thumbnails.set(key, url);
   }
   return url;
+}
+
+/** Puts a video's still in its card's tile, over the play glyph. */
+function showStill(tile: HTMLElement, url: string): void {
+  if (tile.querySelector('.cm-file-thumb')) return;
+  const image = element('img', 'cm-file-thumb');
+  image.src = url;
+  image.alt = '';
+  image.draggable = false;
+  tile.append(image, iconNode('play', 16, 'cm-file-still-play'));
+  tile.classList.add('cm-file-card-tile-thumb');
+}
+
+/**
+ * A YouTube or Loom card shows the still kept from an earlier Load preview;
+ * otherwise it offers Load preview, which has main fetch it once. The page
+ * itself never fetches it.
+ */
+function videoStill(view: EditorView, card: HTMLElement, tile: HTMLElement, actions: HTMLElement, address: string): void {
+  const load = button('Load preview', () => {
+    load.disabled = true;
+    load.textContent = 'Loading…';
+    void Promise.resolve().then(() => window.filesAPI.videoStill(address)).catch(() => null).then((result) => {
+      if (result?.success && result.data) {
+        showStill(tile, result.data);
+        load.remove();
+        view.requestMeasure();
+        return;
+      }
+      toast.error(result && !result.success ? result.error : 'Could not load the preview.');
+      load.disabled = false;
+      load.textContent = 'Load preview';
+    });
+  });
+  actions.append(load);
+  void Promise.resolve().then(() => window.filesAPI.videoStill(address, { cached: true })).catch(() => null).then((result) => {
+    if (!result?.success || !result.data) return;
+    showStill(tile, result.data);
+    load.remove();
+  });
 }
 
 /**

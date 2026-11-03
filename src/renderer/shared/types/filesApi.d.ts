@@ -52,6 +52,11 @@ export interface FilesAPI {
   copyFile: (target: string) => Promise<FilesResult<void>>;
   /** Puts a picture's pixels on the pasteboard, for pasting into Slack or Gmail. */
   copyImage: (target: string) => Promise<FilesResult<void>>;
+  /**
+   * A YouTube or Loom address's still as a data: URL, fetched by main from the
+   * service once and kept in app data; with `cached`, only what is kept.
+   */
+  videoStill: (address: string, options?: { cached?: boolean }) => Promise<FilesResult<string | null>>;
   /** Saves a copy where the person picks, named `name` when given. `saved` is null when they cancel. */
   saveCopy: (target: string, name?: string) => Promise<FilesResult<{ saved: string | null }>>;
   /** Drags the file itself out of the window. Call from dragstart after preventing its default. */

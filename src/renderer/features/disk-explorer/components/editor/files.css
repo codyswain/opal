@@ -84,6 +84,23 @@
   position: relative;
 }
 
+.opal-editor .cm-editor .cm-file-still-play {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: hsl(var(--surface-raised) / 0.9);
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-file-card[data-file-framed] .cm-file-hover {
+  display: none;
+}
+
 .opal-editor .cm-editor .cm-file-card-tile[data-drag-file] {
   cursor: grab;
 }

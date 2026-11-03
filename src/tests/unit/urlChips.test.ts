@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
@@ -112,8 +112,17 @@ describe('service chips', () => {
     expect(view.state.doc.toString()).toBe('Read [Q3 \\*final\\* \\[draft\\] | notes](https://example.com/a_b) today\n');
   });
 
-  it('draws a YouTube address alone on its line as a card', () => {
+  it('draws a YouTube address alone on its line as a card, whose still main loads once on Load preview', async () => {
+    const still = 'data:image/jpeg;base64,c3RpbGw=';
+    const api = installFilesApi({ videoStill: vi.fn(async (_address: string, options?: { cached?: boolean }) => ({ success: true as const, data: options?.cached ? null : still })) });
     const view = mount('Intro\n\nhttps://www.youtube.com/watch?v=abc\n\nAfter\n');
-    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('YouTube video');
+    const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
+    expect(card).toHaveTextContent('YouTube video');
+    const load = await waitFor(() => [...card.querySelectorAll('button')].find((control) => control.textContent === 'Load preview') as HTMLButtonElement);
+    expect(api.videoStill).toHaveBeenCalledWith('https://www.youtube.com/watch?v=abc', { cached: true });
+    await act(async () => { load.click(); });
+    await waitFor(() => expect(card.querySelector('.cm-file-thumb')).toHaveAttribute('src', still));
+    expect(api.videoStill).toHaveBeenLastCalledWith('https://www.youtube.com/watch?v=abc');
+    expect(card.querySelector('button')).toBeNull();
   });
 });

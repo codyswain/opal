@@ -6,10 +6,13 @@ import { PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { FilesResult, PickedFiles } from '@/types/files';
 import { FilesError, type ImportSource } from './FileStore';
 import type { FilesService } from './FilesService';
+import type { VideoStills } from './videoStills';
 
 export interface FilesHandlerDependencies {
   ipc: Pick<IpcMain, 'handle' | 'on'>;
   service: FilesService;
+  /** Stills for YouTube and Loom cards, fetched only on Load preview. */
+  stills?: VideoStills;
   showOpenDialog: (options: OpenDialogOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
 }
 
@@ -83,6 +86,12 @@ export class FilesHandlers {
       isPath(target) ? this.respond(() => service.copyFile(target), 'Failed to copy the file') : invalid());
     ipc.handle('files:copy-image', (_, target: unknown) =>
       isPath(target) ? this.respond(() => service.copyImage(target), 'Failed to copy the image') : invalid());
+    ipc.handle('files:video-still', (_, address: unknown, options: unknown) => {
+      const cached = options === undefined ? {} : options && typeof options === 'object' && typeof (options as { cached?: unknown }).cached === 'boolean' ? { cached: (options as { cached: boolean }).cached } : null;
+      if (typeof address !== 'string' || address.length > 2048 || !cached || !this.deps.stills) return invalid();
+      const stills = this.deps.stills;
+      return this.respond(() => stills.still(address, cached), 'Failed to load the preview');
+    });
     ipc.handle('files:save-copy', (_, target: unknown, name: unknown) =>
       isPath(target) && isName(name) ? this.respond(() => service.saveCopy(target, name), 'Failed to save a copy') : invalid());
     ipc.handle('files:find-moved', (_, target: unknown) =>

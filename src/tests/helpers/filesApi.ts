@@ -38,6 +38,7 @@ export function installFilesApi(overrides: Partial<FilesAPI> = {}): FilesAPI {
     quickLook: vi.fn(async () => ({ success: true as const, data: { action: 'opened' as const, app: null } })),
     copyFile: vi.fn(async () => ({ success: true as const, data: undefined })),
     copyImage: vi.fn(async () => ({ success: true as const, data: undefined })),
+    videoStill: vi.fn(async () => ({ success: true as const, data: null })),
     saveCopy: vi.fn(async () => ({ success: true as const, data: { saved: null } })),
     startDrag: vi.fn(),
     findMoved: vi.fn(async () => ({ success: true as const, data: null })),
