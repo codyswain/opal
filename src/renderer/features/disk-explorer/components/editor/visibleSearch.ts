@@ -105,6 +105,23 @@ function toMatch(state: EditorState, visible: VisibleLine, match: { from: number
   return { from, to, precise: !keptText(state, from, to), groups: match.groups };
 }
 
+/**
+ * The source of each protected object a line draws as one character, such
+ * as a formula's TeX, as lines a query can read. A match there is found,
+ * frames its object and is never replaced.
+ */
+function objectSources(state: EditorState, visible: VisibleLine): VisibleLine[] {
+  const sources: VisibleLine[] = [];
+  for (let index = visible.text.indexOf(OBJECT); index !== -1; index = visible.text.indexOf(OBJECT, index + 1)) {
+    const from = visible.starts[index];
+    const to = visible.ends[index];
+    if (!protectedIn(state, from, to).some((range) => range.from <= from && range.to >= to)) continue;
+    const starts = Array.from({ length: to - from }, (_, offset) => from + offset);
+    sources.push({ line: visible.line, text: state.sliceDoc(from, to), starts, ends: starts.map((at) => at + 1) });
+  }
+  return sources;
+}
+
 /** The matches on the lines from line number `first` to `last`, in order. */
 function matchesIn(state: EditorState, spec: SearchQuery, first: number, last: number): VisibleMatch[] {
   const { doc } = state;
@@ -112,7 +129,10 @@ function matchesIn(state: EditorState, spec: SearchQuery, first: number, last: n
   for (let number = first; number <= last; number += CHUNK) {
     const end = Math.min(last, number + CHUNK - 1);
     for (const visible of visibleLines(state, doc.line(number).from, doc.line(end).to)) {
-      for (const match of lineMatches(spec, visible)) found.push(toMatch(state, visible, match));
+      const line: VisibleMatch[] = [];
+      for (const match of lineMatches(spec, visible)) line.push(toMatch(state, visible, match));
+      for (const source of objectSources(state, visible)) for (const match of lineMatches(spec, source)) line.push(toMatch(state, source, match));
+      found.push(...line.sort((a, b) => a.from - b.from));
     }
   }
   return found;

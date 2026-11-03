@@ -144,6 +144,23 @@ describe('Find and Replace in a document', () => {
     expect(view.state.selection.main.head).toBe(12);
   });
 
+  it('frames a formula a match is inside, offers Edit formula, and Replace All leaves its TeX', () => {
+    const view = mount('See $\\frac{a}{b}$ and $$\\frac{c}{d}$$ here\n');
+    query(view, 'frac', 'ratio');
+    run(view, findNext);
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'math', from: 4, to: 17 });
+    const frame = view.state.field(objectFrame);
+    if (!frame) throw new Error('no frame');
+    const kind = view.state.facet(objectKinds).find((entry) => entry.kind === frame.kind);
+    expect(kind?.actions(view.state, frame).map((action) => action.label)).toContain('Edit formula');
+    run(view, replaceAll);
+    expect(text(view)).toBe('See $\\frac{a}{b}$ and $$\\frac{c}{d}$$ here\n');
+    const words = mount('a and $a + b$ and a\n');
+    query(words, 'a', 'z');
+    run(words, replaceAll);
+    expect(text(words)).toBe('z znd $a + b$ znd z\n');
+  });
+
   it('opens a drawn table\'s source with the match selected', async () => {
     const view = mount('Intro\n\n| a | b |\n|---|---|\n| needle | x |\n\nEnd\n');
     await focusPage(view);
