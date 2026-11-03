@@ -1,4 +1,4 @@
-import { constants } from 'fs';
+import { constants, rmSync } from 'fs';
 import { chmod, copyFile, lstat, readdir, realpath, stat } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -79,9 +79,14 @@ export class FilesService {
     return this.deps.platform;
   }
 
-  /** Removes read-only copies: the old ones at launch, all of them on quit. */
-  cleanup(options: { all: boolean }): Promise<void> {
-    return sweepCopies(this.copiesDir, options.all ? 0 : COPY_MAX_AGE_MS);
+  /** Removes read-only copies older than a day, as at launch. */
+  cleanup(): Promise<void> {
+    return sweepCopies(this.copiesDir, COPY_MAX_AGE_MS);
+  }
+
+  /** Removes every read-only copy at once, for quit, which does not wait for promises. */
+  removeCopies(): void {
+    rmSync(this.copiesDir, { recursive: true, force: true });
   }
 
   /**

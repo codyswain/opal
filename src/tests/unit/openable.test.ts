@@ -124,6 +124,10 @@ describe('openable', () => {
     expect(await readFile(opened)).toEqual(BYTES);
     expect((await stat(opened)).mode & 0o777).toBe(0o444);
     expect(await readFile(deck, 'utf8')).toBe(POINTER);
+    // Quit removes the copies.
+    service.removeCopies();
+    await expect(stat(opened)).rejects.toThrow();
+    expect(await readFile(object)).toEqual(BYTES);
   });
 
   it('says an LFS file whose bytes are not here must be downloaded, and opens nothing', async () => {

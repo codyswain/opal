@@ -547,7 +547,7 @@ app.whenReady().then(async () => {
     vaultHandlers.registerAll();
     pinsHandlers.registerAll();
     filesHandlers.registerAll();
-    void filesService.cleanup({ all: false });
+    void filesService.cleanup();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await windowStateStore.load();
@@ -565,9 +565,11 @@ app.whenReady().then(async () => {
   }
 });
 
+// Once quitting is certain: read-only copies of LFS files go with the app.
+app.on("will-quit", () => filesService.removeCopies());
+
 app.on("before-quit", async () => {
   try {
-    await filesService.cleanup({ all: true });
     await diskWatcher.closeAll();
   } catch (error) {
     log.error("Error during app shutdown:", error);
