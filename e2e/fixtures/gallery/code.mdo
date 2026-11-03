@@ -72,6 +72,9 @@ const sentence = 'This line is long enough to wrap inside the column, and its la
   ```css
   .box { border-radius: 6px; color: inherit; }
   ```
+- ```sh
+  ls -la Library/files
+  ```
 
 A long block shows its first forty lines:
 

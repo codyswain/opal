@@ -46,9 +46,13 @@
   line-height: 28px;
 }
 
-/* A fence on a list item's line keeps the item's marker, outside the box. */
+/* A fence on a list item's line keeps the item's marker, just outside the box, with the label where code starts. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-md-list {
-  text-indent: calc(-1 * var(--list-indent) / 0.85);
+  text-indent: calc(-1em - var(--list-indent));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-md-list .cm-md-list-marker {
+  margin-right: 1em;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head::before {

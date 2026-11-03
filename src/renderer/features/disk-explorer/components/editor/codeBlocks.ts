@@ -718,7 +718,8 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
 
   if (shown(open)) {
     ctx.lineClass(open.from, 'cm-code-line cm-code-head', style);
-    ctx.hide(open.from, fence.node.from);
+    // A fence on a list item's line keeps the item's marker, which the list draws.
+    if (!/(?:[-+*]|\d+[.)])[ \t]*$/.test(doc.sliceString(open.from, fence.node.from))) ctx.hide(open.from, fence.node.from);
     ctx.out.push(Decoration.replace({ widget: new CodeHeaderWidget(language.label, language.quiet, active, diagramFence(state, fence) !== null) }).range(fence.node.from, open.to));
   }
   const diff = language.language?.id === 'diff';
