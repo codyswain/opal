@@ -182,7 +182,7 @@ export function separated(tr: Transaction): TransactionSpec | null {
   const ending = blockOn(state, line, -1);
   if (ending && from === to && from === line.to) {
     const { prefix, blank: gap } = containerOf(state, ending, line);
-    const insert = `\n${gap}\n${prefix}${text}`;
+    const insert = `\n${gap}\n${prefix}${shownBackslash(text, doc.sliceString(to, Math.min(doc.length, to + 200)))}`;
     return spec(from, to, insert, from + insert.length);
   }
 
@@ -199,12 +199,18 @@ export function separated(tr: Transaction): TransactionSpec | null {
   if (!above && !belowNeeds) return null;
   const head = above ? `${container.blank}\n${container.prefix}` : doc.sliceString(line.from, from);
   const gap = `\n${container.blank}`;
+  const placed = above && !belowNeeds ? shownBackslash(text, doc.sliceString(to, Math.min(doc.length, line.to + 200))) : text;
   const changes = [
     ...(above ? [{ from: line.from, to: from, insert: head }] : []),
-    { from, to, insert: empty && belowNeeds ? text + gap : text },
+    { from, to, insert: empty && belowNeeds ? placed + gap : placed },
     ...(!empty && belowNeeds ? [{ from: line.to, insert: gap }] : []),
   ];
-  return { changes, selection: { anchor: line.from + head.length + text.length }, scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) };
+  return { changes, selection: { anchor: line.from + head.length + placed.length }, scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) };
+}
+
+/** `text` with one more backslash when it ends in a lone one that `after`, a line break and more text, would turn into a hidden hard break. */
+function shownBackslash(text: string, after: string): string {
+  return /(?:^|[^\\])(?:\\\\)*\\$/.test(text) && /^\n[ \t>]*\S/.test(after) ? `${text}\\` : text;
 }
 
 // Blocks that take in a text line next to them: the line would become a row or part of the HTML.

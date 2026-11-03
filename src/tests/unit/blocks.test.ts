@@ -189,6 +189,12 @@ describe('separators next to tables and rules in a document', () => {
     expect(marked(tight)).toBe(`Intro a |‸\n\n${TABLE}\n`);
   });
 
+  it('doubles a lone backslash typed under a table above more text, so it shows rather than hide as a line break', () => {
+    const view = mount(`${TABLE}\n‸\nMore\n`);
+    type(view, '\\');
+    expect(marked(view)).toBe(`${TABLE}\n\n\\\\‸\nMore\n`);
+  });
+
   it('keeps a blank line under text typed right above a --- rule and under a rule', () => {
     const above = mount('Intro\n\n‸\n---\n\nMore\n');
     type(above, 'x');
