@@ -87,4 +87,11 @@ describe('FilesHandlers', () => {
     expect(picked.data.skipped).toEqual(['"huge.pdf" is larger than 100 MB, so it was not added.']);
     expect(showOpenDialog).toHaveBeenLastCalledWith(expect.objectContaining({ properties: ['openFile', 'multiSelections'], filters: [expect.objectContaining({ name: 'Images' })] }));
   });
+
+  it('asks for files of any type for Insert file', async () => {
+    showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await invoke('files:pick-and-import', page, { anyType: true });
+    expect(showOpenDialog).toHaveBeenLastCalledWith({ properties: ['openFile', 'multiSelections'] });
+    expect(await invoke('files:pick-and-import', page, { anyType: 'yes' })).toEqual({ success: false, error: 'Invalid files request.' });
+  });
 });

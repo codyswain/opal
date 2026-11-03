@@ -30,8 +30,8 @@ const invalid = (): FilesResult<never> => ({ success: false, error: 'Invalid fil
 const isPixels = (value: unknown, optional = false): value is number | undefined =>
   (optional && value === undefined) || (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4096);
 
-/** `{ visible?: boolean }` or `{ confirmed?: boolean }`, or nothing. */
-const flags = (value: unknown, key: 'visible' | 'confirmed'): { [name: string]: boolean } | null => {
+/** `{ visible?: boolean }`, `{ confirmed?: boolean }` or `{ anyType?: boolean }`, or nothing. */
+const flags = (value: unknown, key: 'visible' | 'confirmed' | 'anyType'): { [name: string]: boolean } | null => {
   if (value === undefined) return {};
   if (!value || typeof value !== 'object') return null;
   const flag = (value as Record<string, unknown>)[key];
@@ -49,8 +49,10 @@ export class FilesHandlers {
     const { ipc, service } = this.deps;
     ipc.handle('files:import', (_, page: unknown, source: unknown) =>
       isPath(page) && isSource(source) ? this.respond(() => service.import(page, source), 'Failed to add the file') : invalid());
-    ipc.handle('files:pick-and-import', (_, page: unknown) =>
-      isPath(page) ? this.respond(() => this.pickAndImport(page), 'Failed to add the images') : invalid());
+    ipc.handle('files:pick-and-import', (_, page: unknown, options: unknown) => {
+      const anyType = flags(options, 'anyType');
+      return isPath(page) && anyType ? this.respond(() => this.pickAndImport(page, anyType.anyType), 'Failed to add the files') : invalid();
+    });
     ipc.handle('files:status', (_, target: unknown) =>
       isPath(target) ? this.respond(() => service.status(target), 'Failed to check the file') : invalid());
     ipc.handle('files:fetch', (_, target: unknown) =>
@@ -90,11 +92,14 @@ export class FilesHandlers {
     });
   }
 
-  /** Insert image: the open dialog, then each picked image in order. One that fails is skipped with its reason. */
-  private async pickAndImport(page: string): Promise<PickedFiles> {
+  /**
+   * Insert image, or Insert file with `anyType`: the open dialog, then each
+   * picked file in order. One that fails is skipped with its reason.
+   */
+  private async pickAndImport(page: string, anyType = false): Promise<PickedFiles> {
     const picked = await this.deps.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Images', extensions: [...IMAGE_EXTENSIONS] }],
+      ...(anyType ? {} : { filters: [{ name: 'Images', extensions: [...IMAGE_EXTENSIONS] }] }),
     });
     const result: PickedFiles = { files: [], skipped: [] };
     if (picked.canceled) return result;

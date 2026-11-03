@@ -2,46 +2,65 @@ import { createHash, randomUUID } from 'crypto';
 import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { extensionOf } from '@/common/fileKind';
+import { extensionOf, storedExtension } from '@/common/fileKind';
 import { gitBusy } from '@/main/fs/gitActivity';
 import { filesystemMutationQueue } from '@/main/fs/MutationQueue';
 import { isInsideRoot } from '@/main/fs/paths';
 import { inVault } from '@/main/vault/vaultPaths';
 import { FILE_IMPORT_LIMIT, fileTooLarge, type FileStatus } from '@/types/files';
 import { FilesError, runFile, type FileStore, type ImportSource, type StoreDependencies } from './FileStore';
+import { readPlaceholder } from './lfsPlaceholder';
 
 /** Formats Opal's renderer cannot show; they are stored as JPEG. */
 const TO_JPEG = new Set(['heic', 'heif', 'tif', 'tiff']);
 /** Photos whose long edge is over this are scaled down to it. */
 export const LONG_EDGE_LIMIT = 2400;
-const SCALED = new Set(['jpg', 'jpeg', 'png', ...TO_JPEG]);
+/**
+ * Photos only. A PNG is kept as it is: a pasted screenshot has no original
+ * anywhere else, and scaling blurs its text.
+ */
+const SCALED = new Set(['jpg', 'jpeg', ...TO_JPEG]);
 export const SIPS = '/usr/bin/sips';
 const SIPS_TIMEOUT_MS = 60_000;
 /** How often a write held for git looks again, and how long it waits at most. */
 const GIT_RETRY_MS = 250;
 const GIT_WAIT_LIMIT_MS = 30_000;
 
-/** A name's stem as stored: lowercase letters, digits and single hyphens. */
+/** A stem stays within 80 UTF-16 units and 200 bytes, cut between characters, so the whole name fits APFS's 255 bytes. */
+const STEM_UNITS = 80;
+const STEM_BYTES = 200;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * A name's stem as stored: lowercase letters, marks and digits from any
+ * script, in NFC, joined by single hyphens. `Rapport été` (as macOS may
+ * hand it, decomposed) becomes `rapport-été`; `日本語.pdf` keeps its letters.
+ */
 export function fileStem(name: string): string {
-  const extension = extensionOf(name);
-  const stem = extension ? name.slice(0, -extension.length - 1) : name;
-  return stem
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+  const extension = storedExtension(name);
+  const stem = (extension ? name.slice(0, -extension.length - 1) : name)
+    .normalize('NFC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .slice(0, 80)
-    .replace(/^-+|-+$/g, '') || 'file';
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
+    .replace(/^-+/, '');
+  let kept = '';
+  for (const { segment } of graphemes.segment(stem)) {
+    const next = kept + segment;
+    if (next.length > STEM_UNITS || Buffer.byteLength(next) > STEM_BYTES) break;
+    kept = next;
+  }
+  return kept.replace(/-+$/, '') || 'file';
 }
 
 /**
  * `<stem>.<hash>.<ext>`, where the hash is the first 8 hex digits of the
  * bytes' SHA-256. The bytes are the ones given, before any conversion, so
- * the same file dropped again finds its copy before sips runs.
+ * the same file dropped again finds its copy before sips runs. Compound
+ * extensions stay whole: `logs.a1b2c3d4.jsonl.gz`.
  */
 export function storedName(name: string, bytes: Uint8Array): string {
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
-  const extension = extensionOf(name).replace(/[^a-z0-9]/g, '');
+  const extension = storedExtension(name).replace(/[^a-z0-9.]/g, '');
   const stored = TO_JPEG.has(extension) ? 'jpg' : extension;
   return `${fileStem(name)}.${hash}${stored ? `.${stored}` : ''}`;
 }
@@ -57,6 +76,17 @@ export async function untilGitIdle(file: string): Promise<void> {
 }
 
 const isFile = async (file: string) => (await lstat(file).catch(() => null))?.isFile() ?? false;
+
+/** Whether a stored file holds bytes with this SHA-256, itself or through its Git LFS placeholder. */
+async function sameBytes(file: string, digest: string, size: number): Promise<boolean> {
+  const info = await stat(file);
+  if (info.size < 1024) {
+    const placeholder = await readPlaceholder(file).catch(() => null);
+    if (placeholder) return placeholder.oid === digest;
+  }
+  if (info.size !== size) return false;
+  return createHash('sha256').update(await readFile(file)).digest('hex') === digest;
+}
 const MONTH = /^\d{4}-\d{2}$/;
 
 /** Imported files as plain files in a folder of the opened folder. Git, if any, carries them like any file. */
@@ -80,7 +110,7 @@ export class FolderStore implements FileStore {
     }
     const { name, bytes } = await this.read(source);
     const filename = storedName(name, bytes);
-    const copy = await this.copyOf(filename);
+    const copy = await this.copyOf(filename, bytes);
     if (copy) return this.vaultPath(copy);
     const date = now();
     const directory = path.join(this.folder, `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
@@ -120,12 +150,31 @@ export class FolderStore implements FileStore {
     return this.status(target);
   }
 
-  /** A file stored as `filename` in any month, so the same file dropped again is stored once. */
-  private async copyOf(filename: string): Promise<string | null> {
-    const months = await readdir(this.folder).catch(() => []);
-    for (const month of months.filter((entry) => MONTH.test(entry))) {
+  /**
+   * The stored copy of these bytes in any month, so the same file dropped
+   * again, under any name, is stored once. The same name and hash is the
+   * same file. Under another name, a file with the same hash counts when its
+   * bytes, or its LFS placeholder's object id, match in full; a photo that
+   * was converted or scaled can't be compared, so its hash and type decide.
+   */
+  private async copyOf(filename: string, bytes: Buffer): Promise<string | null> {
+    const months = (await readdir(this.folder).catch(() => [] as string[])).filter((entry) => MONTH.test(entry)).sort();
+    for (const month of months) {
       const file = path.join(this.folder, month, filename);
       if (await isFile(file)) return file;
+    }
+    const [, hash, extension = ''] = /^.*?\.([0-9a-f]{8})(?:\.(.+))?$/.exec(filename) ?? [];
+    if (!hash) return null;
+    const suffix = `.${hash}${extension ? `.${extension}` : ''}`;
+    const changed = SCALED.has(extensionOf(filename));
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    for (const month of months) {
+      for (const entry of await readdir(path.join(this.folder, month)).catch(() => [] as string[])) {
+        if (!entry.endsWith(suffix) || entry.startsWith('.')) continue;
+        const file = path.join(this.folder, month, entry);
+        if (!(await isFile(file))) continue;
+        if (changed || (await sameBytes(file, digest, bytes.length))) return file;
+      }
     }
     return null;
   }

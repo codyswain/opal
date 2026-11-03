@@ -1,14 +1,15 @@
 import { constants } from 'fs';
-import { chmod, copyFile, lstat, readdir, realpath } from 'fs/promises';
+import { chmod, copyFile, lstat, readdir, realpath, stat } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { WebContents } from 'electron';
-import { storedExtension, withoutHash } from '@/common/fileKind';
+import { extensionOf, storedExtension, withoutHash } from '@/common/fileKind';
 import { jobQueue, type JobQueue } from '@/main/mapLimited';
 import { isInsideRoot } from '@/main/fs/paths';
 import { PathNotAllowedError, type RootRegistry } from '@/main/fs/RootRegistry';
 import type { FileInfo, FileStatus, ImportedFile, OpenResult, Rendition } from '@/types/files';
-import { FilesError, type FileStore, type ImportSource, type StoreDependencies } from './FileStore';
+import { FilesError, type FileStore, type ImportSource, type RunFile, type StoreDependencies } from './FileStore';
+import { linkInPlace, shortcutUrl } from './importRules';
 import { FileInfoReader } from './fileInfo';
 import { readFilesSettings } from './filesSettings';
 import { FolderStore } from './FolderStore';
@@ -41,6 +42,8 @@ export interface FilesServiceDependencies extends Omit<StoreDependencies, 'root'
   appData?: string;
   /** One queue for Quick Look, sips and mdls: three at a time. */
   limiter?: JobQueue;
+  /** Runs git for import's check-ignore and check-attr; the real one by default. */
+  git?: RunFile;
 }
 
 /** Thumbnails, display copies and mdls share this many places. */
@@ -81,9 +84,23 @@ export class FilesService {
     return sweepCopies(this.copiesDir, options.all ? 0 : COPY_MAX_AGE_MS);
   }
 
-  /** Copies a file into the files folder of the vault that holds `page`. */
+  /**
+   * Adds a file for the vault that holds `page`: a file already in the vault
+   * is linked where it is (unless git ignores it), a `.webloc` or `.url`
+   * becomes its address, and anything else is copied into the files folder.
+   */
   async import(page: string, source: ImportSource): Promise<ImportedFile> {
     const { root, store } = await this.storeFor(await this.deps.registry.assertAllowed(page));
+    if ('path' in source) {
+      const name = path.basename(source.path);
+      if ((await stat(source.path).catch(() => null))?.isDirectory()) throw new FilesError("Folders can't be added yet.");
+      const extension = extensionOf(name);
+      if (extension === 'webloc' || extension === 'url') {
+        return { path: '', vaultPath: '', name: name.slice(0, -extension.length - 1), url: await shortcutUrl(source.path, this.deps.run) };
+      }
+      const linked = await linkInPlace(root, source.path, this.deps.git);
+      if (linked) return { ...linked, name };
+    }
     const vaultPath = await store.import(source);
     return {
       path: path.join(root, ...vaultPath.split('/')),
