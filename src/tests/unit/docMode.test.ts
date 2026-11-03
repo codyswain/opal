@@ -172,16 +172,18 @@ describe('doc mode', () => {
     expect(caret(view)).toBe(1);
   });
 
-  it('removes a picture or a drawn block whole, keeping the lines around a block apart', async () => {
+  it('frames a drawn block on the first Backspace and removes it whole on the second, keeping the lines around it apart; a picture goes whole', async () => {
     const view = mount('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
     await focusPage(view);
     const after = text(view).indexOf('\nMore') + 1;
     select(view, after - 1);
     key(view, 'Backspace');
-    expect(text(view)).toBe('Text\n\n\nMore ![a](https://example.com/a.png) end\n');
+    expect(text(view)).toBe('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Text\n\nMore ![a](https://example.com/a.png) end\n');
     select(view, text(view).indexOf(' end'));
     key(view, 'Backspace');
-    expect(text(view)).toBe('Text\n\n\nMore  end\n');
+    expect(text(view)).toBe('Text\n\nMore  end\n');
   });
 
   it('types at the end of bold or italic inside it, and after a link or code outside it', async () => {

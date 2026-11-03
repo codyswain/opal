@@ -17,7 +17,7 @@ import {
   writeLink,
 } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { hiddenRanges } from '@/renderer/features/disk-explorer/components/editor/livePreview';
-import { expectTyped, openedLine, pendingOwner, vaultFiles } from './censusHelpers';
+import { blockSeparators, expectTyped, openedLine, pendingOwner, vaultFiles } from './censusHelpers';
 
 /**
  * A read-only census of a real vault in doc mode: every Markdown file opens
@@ -107,7 +107,7 @@ describe.skipIf(!ROOT)('doc mode census', () => {
           // One typed character goes in exactly at the caret, and never into hidden text.
           runs += 1;
           const typed = placed.update({ changes: { from: caret, insert: 'x' }, selection: { anchor: caret + 1 }, userEvent: 'input.type' }).state;
-          const problems = expectTyped(placed, typed, 'x', caret);
+          const problems = expectTyped(placed, typed, 'x', caret, { separators: blockSeparators(placed, caret) });
           const owner = problems.length > 0 ? pendingOwner(placed, typed, 'x', caret) : null;
           if (owner) pending.set(owner, [...(pending.get(owner) ?? []), `${where}: ${problems.join('; ')}`]);
           else if (problems.length > 0) failures.push(`${where} typed character: ${problems.join('; ')}`);

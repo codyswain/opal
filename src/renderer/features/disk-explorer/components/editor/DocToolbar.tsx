@@ -208,7 +208,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
           return (
             <Menu key="style">
               <MenuTrigger asChild>
-                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
+                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} disabled={format.headingDisabled} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
                   <span className="truncate">{styleName}</span>
                   <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0" />
                 </button>

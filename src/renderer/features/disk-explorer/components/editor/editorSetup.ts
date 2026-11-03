@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
 import { isDocFile } from '@/common/fileKind';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
+import { blockGuards } from './blockGuards';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
 import { fileInserts } from './imageInsert';
@@ -174,6 +175,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     wikiLinks,
     fileInserts,
     livePreview,
+    blockGuards,
     pageProperties,
     search({ top: true }),
     keymap.of([

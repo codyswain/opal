@@ -237,13 +237,37 @@ export function expectTyped(before: EditorState, after: EditorState, typed: stri
   return problems;
 }
 
-const BLOCKS = new Set(['Table', 'FencedCode', 'HorizontalRule']);
+const SEPARATED = new Set(['Table', 'HorizontalRule']);
+
+/**
+ * What typing at `caret` may add as a separator: a line break, quote marks
+ * and an indent when the caret's line is a table's or rule's line or right
+ * next to one, since typed text starts a paragraph of its own there.
+ */
+export function blockSeparators(state: EditorState, caret: number): string {
+  const { doc } = state;
+  const line = doc.lineAt(caret);
+  const from = doc.line(Math.max(1, line.number - 1)).from;
+  const to = doc.line(Math.min(doc.lines, line.number + 1)).to;
+  let near = false;
+  (ensureSyntaxTree(state, to, 5_000) ?? syntaxTree(state)).iterate({
+    from,
+    to,
+    enter: (ref) => {
+      if (SEPARATED.has(ref.name)) near = true;
+      return !near;
+    },
+  });
+  return near ? '\n> \t' : '';
+}
+
+const BLOCKS = new Set(['FencedCode']);
 const DELIMITERS = '*_~`';
 
 /**
  * The later work that fixes a failed typing check, for the bugs known when
- * `expectTyped` came in: typing beside a table, fence or rule joins or
- * reshapes it (PR 1, PR 3), and a typed character changes how a nearby
+ * `expectTyped` came in: typing beside a fence joins or reshapes it
+ * (PR 3), and a typed character changes how a nearby
  * `*`, `_`, `~` or backtick reads (PR 2), and text typed into a long link
  * definition's target hides with it (Later, step 3). Null for anything
  * else, which is a new failure. Each PR deletes its rule when its fix lands.
@@ -262,7 +286,7 @@ export function pendingOwner(before: EditorState, after: EditorState, typed: str
       return !nearBlock;
     },
   });
-  if (nearBlock) return 'PR 1 and PR 3: typing beside a table, fence or rule';
+  if (nearBlock) return 'PR 3: typing beside a fence';
   if (/^ {0,3}(?:> ?)*\[(?:[^\]\\]|\\.)+\]:/.test(line.text)) return 'Later, step 3: typing in a link definition\'s shortened target';
   const shown = visibleText(before, line.from, line.to);
   const offset = shown.offsetOf(caret);

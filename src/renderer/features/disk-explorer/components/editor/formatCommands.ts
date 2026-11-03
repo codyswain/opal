@@ -13,6 +13,7 @@ import {
   type TransactionSpec,
 } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
+import { calloutMarker } from './blockGuards';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
 import { docMode, linkTarget } from './livePreview';
 import { parseWikiTarget } from './wikiLinks';
@@ -30,12 +31,17 @@ const LINE_MARKS = new Set(['QuoteMark', 'ListMark', 'TaskMarker', 'HeaderMark']
 const BLOCK_MARKS = new Set(['QuoteMark', 'ListMark', 'TaskMarker']);
 const QUOTE_MARK = new Set(['QuoteMark']);
 
-/** Where a line's text starts, past spaces and the `marks` that open it. */
+/** Where a line's text starts, past spaces, the `marks` that open it and a callout's "[!type]". */
 function textStart(state: EditorState, line: Line, marks: ReadonlySet<string> = LINE_MARKS): number {
   const tree = latestTree(state);
+  const callout = calloutMarker(state, line);
   let at = line.from;
   for (;;) {
     while (at < line.to && /[ \t]/.test(state.sliceDoc(at, at + 1))) at += 1;
+    if (callout && at === callout.from) {
+      at = callout.to;
+      continue;
+    }
     const node = tree.resolveInner(at, 1);
     if (node.from !== at || node.to > line.to || !marks.has(node.name)) return at;
     at = node.to;
@@ -60,14 +66,17 @@ export function selectedLines(state: EditorState): Line[] {
 }
 
 /**
- * `text` kept out of protected ranges: its ends move out of one on its line,
- * so formatting goes around a formula, and it is cut short of one that
- * spans lines. Null when nothing is left.
+ * `text` kept out of protected ranges: its ends move out of one inside its
+ * line, so formatting goes around a formula, and it is cut short of one
+ * that spans lines or covers its lines whole, such as a table or a rule.
+ * Null when nothing is left.
  */
 function unprotected(state: EditorState, text: { from: number; to: number }): { from: number; to: number } | null {
   let { from, to } = text;
   for (const range of protectedIn(state, from, to)) {
-    if (state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number) {
+    const first = state.doc.lineAt(range.from);
+    const last = state.doc.lineAt(range.to);
+    if (first.number === last.number && !(range.from === first.from && range.to === last.to)) {
       if (range.from < from && from < range.to) from = range.from;
       if (range.from < to && to < range.to) to = range.to;
     } else {
@@ -416,7 +425,8 @@ export function setHeading(level: number): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     if (!treeFor(state, selectionEnd(state))) return true;
-    const lines = selectedLines(state);
+    // A callout's title line takes no heading.
+    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line));
     const changes = lines.flatMap((line): ChangeSpec[] => {
       const heading = headingOf(state, line);
       if (!heading) {
@@ -482,7 +492,8 @@ export function toggleList(kind: ListKind): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     if (!treeFor(state, selectionEnd(state))) return true;
-    const touched = selectedLines(state);
+    // A callout's title line never becomes a list item.
+    const touched = selectedLines(state).filter((line) => !calloutMarker(state, line));
     const lines = touched.length === 1 ? touched : touched.filter((line) => /[^\s>]/.test(line.text));
     if (lines.length === 0) return false;
     const items = lines.map((line) => listItemOf(state, line));
@@ -496,10 +507,15 @@ export function toggleList(kind: ListKind): StateCommand {
       if (above && inListItem(state, above)) changes.push({ from: above.to, insert: `\n${blankFor(first)}` });
       if (below && listItemOf(state, below)) changes.push({ from: last.to, insert: `\n${blankFor(last)}` });
     } else {
-      const previous = above && listItemOf(state, above);
-      let number = previous?.kind === 'number' ? previous.number + 1 : 1;
+      let number = 1;
       lines.forEach((line, index) => {
         const item = items[index];
+        // Numbers carry on from the item above and over blank lines, and start again at 1 after other text, so a list never starts at 2.
+        const gap = index > 0 ? state.doc.sliceString(lines[index - 1].to, line.from) : null;
+        if (gap === null || /[^\s>]/.test(gap)) {
+          const previous = line.number > 1 ? listItemOf(state, state.doc.line(line.number - 1)) : null;
+          number = previous?.kind === 'number' ? previous.number + 1 : 1;
+        }
         const mark = kind === 'bullet' ? '- ' : kind === 'task' ? '- [ ] ' : `${number++}. `;
         if (item) changes.push({ from: item.markFrom, to: item.textFrom, insert: mark });
         else changes.push({ from: textStart(state, line, QUOTE_MARK), insert: mark });

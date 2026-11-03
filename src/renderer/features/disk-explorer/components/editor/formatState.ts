@@ -1,11 +1,14 @@
 import { redoDepth, undoDepth } from '@codemirror/commands';
 import type { EditorState } from '@codemirror/state';
+import { calloutMarker } from './blockGuards';
 import { allStyled, headingOf, linkAt, listItemOf, selectedLines, selectedText, styledAt, typingStyle, type ListKind, type SelectedText } from './formatCommands';
 
 /** What a document's toolbar shows as on. A style counts only when the whole selection has it. */
 export interface FormatState {
   /** Normal text is 0; null when the selected lines differ. */
   heading: number | null;
+  /** On a callout's title line, which takes no heading. */
+  headingDisabled: boolean;
   bold: boolean;
   italic: boolean;
   strikethrough: boolean;
@@ -40,6 +43,7 @@ export function formatState(state: EditorState): FormatState {
   const link = linkAt(state, main.from);
   return {
     heading: levels.size === 1 ? [...levels][0] : null,
+    headingDisabled: lines.some((line) => calloutMarker(state, line) !== null),
     bold: styled(state, texts, 'StrongEmphasis', '**'),
     italic: styled(state, texts, 'Emphasis', '*'),
     strikethrough: styled(state, texts, 'Strikethrough', '~~'),

@@ -31,6 +31,7 @@ import {
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
 import { insertImageItem } from './imageInsert';
+import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
 import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension } from './objectFrame';
 import { opensNewTab } from './wikiLinks';
@@ -446,6 +447,7 @@ export function docModeExtensions(): Extension {
       const selection = settle(tr.state, tr.newSelection);
       return selection === tr.newSelection ? tr : [tr, { selection, sequential: true }];
     }),
+    blockObjects,
     // The browser types where its own caret is, which can be the other side of a hidden mark.
     EditorView.inputHandler.of((view, from, to, text) => {
       const { selection } = view.state;
