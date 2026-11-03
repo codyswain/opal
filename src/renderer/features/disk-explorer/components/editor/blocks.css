@@ -52,6 +52,17 @@
   max-width: 100%;
 }
 
+/* A framed table: its own rounded edge turns dark and 2px, rather than a
+   ring around the scroll box, which sits off the table's corners. */
+.opal-editor .cm-editor .cm-content > .cm-md-table[data-object-framed] {
+  box-shadow: none;
+}
+
+.opal-editor .cm-editor .cm-md-table[data-object-framed] table {
+  border-color: hsl(var(--foreground));
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground));
+}
+
 /* A document's rule is a line across a box, so a click can land on it. */
 .opal-editor .cm-editor .cm-md-hr[data-object] {
   height: 0.8em;
