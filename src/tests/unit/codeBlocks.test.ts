@@ -599,6 +599,15 @@ describe('edits across fences', () => {
     }
   });
 
+  it('keeps the quote marks on both sides when Enter replaces a selection from quoted code into the quote\'s next line', async () => {
+    const doc = '> ```\n> ab\n> ```\n> para\n';
+    const view = mount(doc, 9);
+    await focusPage(view);
+    select(view, 9, doc.indexOf('ra'));
+    key(view, 'Enter');
+    expect(text(view)).toBe('> ```\n> a\n> \n> ```\n> ra\n');
+  });
+
   it('keeps the quote marks on Shift+Enter in quoted code', async () => {
     const view = mount('> ```\n> ab\n> ```\n\nafter\n', 9);
     await focusPage(view);
@@ -693,6 +702,18 @@ describe('the stops beside a block', () => {
     toggleCodeBlock(view);
     expect(text(view)).toBe('Intro\n\n```\nab\n```\n```\n\n```');
     expect(caret(view)).toBe(text(view).length - 4);
+    const after = mount('Intro\n\n```\nab\n```', 13);
+    await focusPage(after);
+    key(after, 'Escape');
+    key(after, 'b', mod);
+    type(after, 'x');
+    expect(text(after)).toBe('Intro\n\n```\nab\n```\n**x**');
+    const bold = mount('```\nab\n```\n\nafter', 5);
+    await focusPage(bold);
+    select(bold, 0);
+    key(bold, 'b', mod);
+    type(bold, 'x');
+    expect(text(bold)).toBe('**x**\n```\nab\n```\n\nafter');
     const first = mount('```\nab\n```\n\nafter', 5);
     await focusPage(first);
     select(first, 0);
@@ -928,5 +949,6 @@ describe('the header and its menus', () => {
     if (!obj) throw new Error('no code object');
     const language = objectKind(view.state, 'code')?.actions(view.state, obj).find((action) => action.id === 'language');
     expect(language?.items?.map((item) => item.id)).toContain('mermaid');
+    expect(language?.items?.filter((item) => item.checked).map((item) => item.label)).toEqual(['TypeScript']);
   });
 });

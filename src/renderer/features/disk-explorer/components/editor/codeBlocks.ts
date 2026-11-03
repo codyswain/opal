@@ -1,4 +1,4 @@
-import { syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { ChangeSet, EditorSelection, EditorState, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Line, type StateCommand, type Text, type TransactionSpec } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
@@ -263,7 +263,7 @@ class CodeHeaderWidget extends WidgetType {
     head.append(copy);
     // Arrow keys move between the header's buttons; Escape goes back to the code.
     head.addEventListener('keydown', (event) => {
-      const buttons = [...head.querySelectorAll('button')];
+      const buttons = [...head.querySelectorAll('button'), ...showAllOf(view, head)];
       const at = buttons.indexOf(event.target as HTMLButtonElement);
       if (at === -1) return;
       if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
@@ -281,6 +281,20 @@ class CodeHeaderWidget extends WidgetType {
   ignoreEvent(event: Event) {
     return event.target instanceof Element && event.target.closest('button') !== null;
   }
+}
+
+/** The Show all button of the collapsed block whose header is `head`, when it is drawn. */
+function showAllOf(view: EditorView, head: HTMLElement): HTMLButtonElement[] {
+  const fence = fenceAt(view.state, view.posAtDOM(head));
+  const collapsed = fence ? collapsedOf(view.state, fence) : null;
+  if (!collapsed) return [];
+  for (const element of view.contentDOM.querySelectorAll<HTMLElement>('.cm-code-collapsed')) {
+    const at = view.posAtDOM(element);
+    if (at < collapsed.from || at > collapsed.to) continue;
+    const show = element.querySelector<HTMLButtonElement>('.cm-code-show-all');
+    return show ? [show] : [];
+  }
+  return [];
 }
 
 /** The language menu of a block's header: a search field over the list. Searching writes nothing; a pick writes the info string's first word. */
@@ -614,6 +628,13 @@ class ShowAllWidget extends WidgetType {
       const at = view.posAtDOM(frame);
       const fence = fenceAt(view.state, Math.max(0, at - 1));
       if (fence) view.dispatch({ effects: expandCode.of(fence.open.from) });
+      view.focus();
+    });
+    // Reached from the header's buttons with the arrow keys; Escape goes back to the text.
+    show.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      view.focus();
     });
     box.append(show);
     frame.append(box);
@@ -976,11 +997,10 @@ function languageActions(state: EditorState, obj: PageObject): ObjectAction[] {
   const fence = fenceAt(state, obj.to);
   const current = fence ? fenceLanguage(fence.info.text) : null;
   const pick = (id: string) => (view: EditorView, target: PageObject) => setLanguage(view, target.to, id);
-  const mark = (on: boolean, label: string) => (on ? `${label} ✓` : label);
   return [
-    { id: 'text', label: mark(Boolean(current?.quiet), 'Plain text'), run: pick('text') },
-    ...CODE_LANGUAGES.map((language) => ({ id: language.id, label: mark(current?.language?.id === language.id, language.label), run: pick(language.id) })),
-    { id: 'mermaid', label: mark(current?.word.toLowerCase() === 'mermaid', 'Mermaid diagram'), run: pick('mermaid') },
+    { id: 'text', label: 'Plain text', checked: Boolean(current?.quiet), run: pick('text') },
+    ...CODE_LANGUAGES.map((language) => ({ id: language.id, label: language.label, checked: current?.language?.id === language.id, run: pick(language.id) })),
+    { id: 'mermaid', label: 'Mermaid diagram', checked: current?.word.toLowerCase() === 'mermaid', run: pick('mermaid') },
   ];
 }
 
@@ -1155,8 +1175,7 @@ const codeEnter: Command = (view) => {
   const { main } = state.selection;
   const inside = codeAt(state, main.from);
   if (!inside || state.selection.ranges.length > 1) return false;
-  // A selection that leaves the code is Enter's own, which the fence guard keeps whole.
-  if (!main.empty && codeAt(state, main.to)?.fence.node.from !== inside.fence.node.from) return false;
+  // A selection that leaves the code loses its text but not the fence lines, which the fence guard keeps.
   const { line, from } = inside.fence.lines[inside.index];
   const own = /^[ \t]*/.exec(state.sliceDoc(from, line.to))?.[0] ?? '';
   // A blank line may have lost its container's indent; the new line takes the block's.
@@ -1327,7 +1346,8 @@ const codeDeletes = deleteHandlers.of({ priority: 20, run: (view, dir) => codeDe
 /**
  * The fence lines of blocks a range touches but does not hold whole: what a
  * deletion keeps. A line break beside a fence line stays when the text
- * around the deletion would otherwise join that line.
+ * around the deletion would otherwise join that line, and so do the quote
+ * marks of the line after a closing fence.
  */
 function keptFenceSpans(state: EditorState, from: number, to: number): TextRange[] {
   const { doc } = state;
@@ -1346,7 +1366,10 @@ function keptFenceSpans(state: EditorState, from: number, to: number): TextRange
       if (to <= blockFrom && !joinsBefore) return false;
       if (from >= blockTo && !joinsAfter) return false;
       spans.push({ from: joinsBefore ? Math.max(0, fence.open.from - 1) : fence.open.from, to: Math.min(doc.length, fence.open.to + 1) });
-      if (fence.close) spans.push({ from: Math.max(0, fence.close.from - 1), to: joinsAfter ? Math.min(doc.length, fence.close.to + 1) : fence.close.to });
+      if (fence.close) {
+        const next = fence.close.to < doc.length ? doc.lineAt(fence.close.to + 1) : null;
+        spans.push({ from: Math.max(0, fence.close.from - 1), to: joinsAfter && next ? next.from + quotePrefix(next.text) : fence.close.to });
+      }
       return false;
     },
   });
@@ -1468,14 +1491,6 @@ function guardFences(tr: Transaction): TransactionSpec | null {
       return { changes: { from, insert: extra + insert }, selection: { anchor: from + extra.length + insert.length }, scrollIntoView: true, userEvent };
     }
   }
-  // Before a block that starts the page.
-  if (from === 0 && fenceOpeningOn(state, line)) {
-    return { changes: { from: 0, insert: `${insert}\n` }, selection: { anchor: insert.length }, scrollIntoView: true, userEvent };
-  }
-  // After a block that ends the page.
-  if (from === state.doc.length && fenceEndingOn(state, line)) {
-    return { changes: { from, insert: `\n${insert}` }, selection: { anchor: from + 1 + insert.length }, scrollIntoView: true, userEvent };
-  }
   // A third backtick or tilde at a line's start, outside code and HTML.
   if (tr.isUserEvent('input.type') && /^[`~]+$/.test(insert)) {
     const after = tr.newDoc.lineAt(from + insert.length);
@@ -1492,6 +1507,33 @@ function guardFences(tr: Transaction): TransactionSpec | null {
         };
       }
     }
+  }
+  return null;
+}
+
+/**
+ * Text typed before a block that starts the page, or after one that ends
+ * it, brings a line break. This runs after doc mode has written the typing
+ * style's marks around the text, so the marks stay on the text's own line.
+ */
+function guardEdges(tr: Transaction): TransactionSpec | null {
+  if (!tr.docChanged || tr.isUserEvent('input.type.compose') || !['input.type', 'input.paste', 'input.drop'].some((event) => tr.isUserEvent(event))) return null;
+  const state = tr.startState;
+  const edits: Edit[] = [];
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => edits.push({ from: fromA, to: toA, insert: inserted.toString() }));
+  if (edits.length !== 1) return null;
+  const { from, to, insert } = edits[0];
+  if (to > from || !insert || insert.startsWith('\n')) return null;
+  const line = state.doc.lineAt(from);
+  const userEvent = tr.annotation(Transaction.userEvent);
+  const caret = tr.selection?.main.head ?? from + insert.length;
+  // Before a block that starts the page.
+  if (from === 0 && fenceOpeningOn(state, line)) {
+    return { changes: { from: 0, insert: `${insert}\n` }, selection: { anchor: Math.min(caret, insert.length) }, effects: tr.effects, scrollIntoView: true, userEvent };
+  }
+  // After a block that ends the page.
+  if (from === state.doc.length && fenceEndingOn(state, line)) {
+    return { changes: { from, insert: `\n${insert}` }, selection: { anchor: caret + 1 }, effects: tr.effects, scrollIntoView: true, userEvent };
   }
   return null;
 }
@@ -1513,9 +1555,21 @@ function lengthenFences(tr: Transaction): TransactionSpec | readonly Transaction
   if (!tr.docChanged || !['input.type', 'input.paste', 'input.drop', 'move.drop'].some((event) => tr.isUserEvent(event))) return null;
   const state = tr.startState;
   const ranges: TextRange[] = [];
-  tr.changes.iterChangedRanges((fromA, toA) => ranges.push({ from: fromA, to: toA }));
+  let fenceLike = false;
+  tr.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+    ranges.push({ from: fromA, to: toA });
+    for (let at = fromB; at <= toB;) {
+      const line = tr.newDoc.lineAt(at);
+      if (/^[\s>]*(?:(?:[-+*]|\d+[.)])[ \t]+)?(?:`{3,}|~{3,})[ \t]*$/.test(line.text)) fenceLike = true;
+      at = line.to + 1;
+    }
+  });
+  // Most edits make no line of bare fence marks.
+  if (!fenceLike) return null;
   const extra: ChangeSpec[] = [];
-  latestTree(state).iterate({
+  // The block's closing fence may lie past what the editor has parsed so far.
+  const tree = ensureSyntaxTree(state, Math.min(state.doc.length, ranges[ranges.length - 1].to + 200_000), 100) ?? latestTree(state);
+  tree.iterate({
     from: ranges[0].from,
     to: ranges[ranges.length - 1].to,
     enter: (ref) => {
@@ -1715,6 +1769,7 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
     // mode settles the caret, and fences grow after the guard has rewritten an edit.
     Prec.low(EditorState.transactionFilter.of((tr) => lengthenFences(tr) ?? tr)),
     Prec.low(EditorState.transactionFilter.of((tr) => guardFences(tr) ?? expandForSelection(tr) ?? tr)),
+    Prec.highest(EditorState.transactionFilter.of((tr) => guardEdges(tr) ?? tr)),
     Prec.highest(keymap.of([
       { key: 'Enter', run: (view) => makeFence(view) || codeEnter(view), shift: codeEnter },
       { key: 'Backspace', run: (view) => unmakeFence(view) || indentedBackspace(view) },

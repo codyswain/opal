@@ -19,7 +19,9 @@ import { openedLine, vaultFiles } from './censusHelpers';
  * `*`, `_`, a backtick, `1984. `, `<!--`, `---`) go into fences and inline
  * code as typed; a three-line paste into a quoted or listed fence leaves its
  * container parsing the same (PR 2's prefixing, counted as pending until it
- * lands); and select all plus Bold leaves every fence's bytes alone.
+ * lands); a ``` line typed in a fence and Enter over a selection that leaves
+ * one keep the page's blocks as they were; and select all plus Bold leaves
+ * every fence, indented block and inline code span as it was.
  *
  *   OPAL_CENSUS_ROOT=/path/to/vault npx vitest run src/tests/fidelity/docModeCensus.code.test.ts
  */
@@ -53,6 +55,27 @@ function fencesOf(state: EditorState): Fence[] {
 
 const fenceLines = (state: EditorState) => fencesOf(state).map((fence) => `${fence.open.text}\u0000${fence.close?.text ?? ''}`);
 
+/** The page's top-level blocks by name, read to the end. */
+function blocksOf(state: EditorState): string {
+  ensureSyntaxTree(state, state.doc.length, 10_000);
+  const names: string[] = [];
+  for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) names.push(node.name);
+  return names.join(' ');
+}
+
+/** The text of every node named `name`, in order. */
+function textsOf(state: EditorState, name: string): string[] {
+  const texts: string[] = [];
+  syntaxTree(state).iterate({
+    enter: (ref) => {
+      if (ref.name !== name) return undefined;
+      texts.push(state.sliceDoc(ref.from, ref.to));
+      return false;
+    },
+  });
+  return texts;
+}
+
 function within(node: SyntaxNode, name: string): boolean {
   for (let at = node.parent; at; at = at.parent) if (at.name === name) return true;
   return false;
@@ -74,6 +97,8 @@ describe.skipIf(!ROOT)('code census', () => {
     let literals = 0;
     let inline = 0;
     let pastes = 0;
+    let closers = 0;
+    let crossings = 0;
     let bolded = 0;
     for (const file of vault.found) {
       let body: string;
@@ -92,6 +117,7 @@ describe.skipIf(!ROOT)('code census', () => {
       const relative = path.relative(ROOT as string, file);
       const all = fencesOf(ready);
       const before = fenceLines(ready);
+      const blocks = blocksOf(ready);
       if (all.length > 0) fenced += 1;
       fences += all.length;
 
@@ -122,6 +148,26 @@ describe.skipIf(!ROOT)('code census', () => {
           literals += 1;
           const after = typeAt(ready, middle.from, literal);
           if (after.doc.toString() !== body.slice(0, middle.from) + indentFor(middle.from) + literal + body.slice(middle.from)) failures.push(`${relative}@${middle.from} typing ${JSON.stringify(literal)} in a fence wrote other bytes`);
+        }
+        if (fence.close) {
+          // A ``` line typed on a new code line lengthens the block's fences rather than closing it there.
+          closers += 1;
+          // The caret goes to the line first, which shows a collapsed block whole.
+          const placed = ready.update({ selection: { anchor: middle.line.to } }).state;
+          const opened = placed.update({ changes: { from: middle.line.to, insert: `\n${fence.prefix}` }, selection: { anchor: middle.line.to + 1 + fence.prefix.length }, userEvent: 'input' }).state;
+          const typed = typeAt(opened, opened.selection.main.head, fence.marker.replace(/[^`~]/g, ''));
+          if (blocksOf(typed) !== blocks) failures.push(`${relative}@${middle.line.to} a fence line typed in code changed the page's blocks`);
+          // Enter over a selection from the code into the text after the block keeps the fence. The selection ends
+          // in the next line's text, past its quote marks, which a document hides.
+          const next = fence.close.to < ready.doc.length ? ready.doc.lineAt(fence.close.to + 1) : null;
+          const end = next ? Math.min(next.to, next.from + (/^[\s>]*/.exec(next.text)?.[0].length ?? 0) + 2) : fence.close.to;
+          if (next) {
+            crossings += 1;
+            const entered = ready.update({ selection: EditorSelection.range(middle.from, end) }).state;
+            // As Enter in code writes it: a line break with the block's quote marks and indent.
+            const after = entered.update({ ...entered.replaceSelection(`\n${fence.prefix}`), userEvent: 'input' }).state;
+            if (fenceLines(after).join('\n') !== before.join('\n')) failures.push(`${relative}@${middle.from} Enter over a selection that leaves a fence changed a fence line`);
+          }
         }
         const quoted = within(fence.node, 'Blockquote') || within(fence.node, 'ListItem');
         if (quoted) {
@@ -167,17 +213,23 @@ describe.skipIf(!ROOT)('code census', () => {
         },
       });
 
-      if (all.length > 0) {
+      const indented = textsOf(ready, 'CodeBlock');
+      const spans = textsOf(ready, 'InlineCode');
+      if (all.length > 0 || indented.length > 0 || spans.length > 0) {
         bolded += 1;
         let result = ready;
         toggleMarker('**')({ state: ready.update({ selection: EditorSelection.range(0, ready.doc.length) }).state, dispatch: (tr) => { result = tr.state; } });
+        ensureSyntaxTree(result, result.doc.length, 10_000);
         const kept = fencesOf(result).map((fence) => result.sliceDoc(fence.open.from, (fence.close ?? fence.open).to));
         const original = all.map((fence) => ready.sliceDoc(fence.open.from, (fence.close ?? fence.open).to));
         if (kept.join('\u0000') !== original.join('\u0000')) failures.push(`${relative} select all and Bold changed a code block`);
+        if (textsOf(result, 'CodeBlock').join('\u0000') !== indented.join('\u0000')) failures.push(`${relative} select all and Bold changed an indented code block`);
+        const marked = (texts: string[]) => texts.filter((text) => text.includes('**')).length;
+        if (marked(textsOf(result, 'InlineCode')) > marked(spans)) failures.push(`${relative} select all and Bold wrote inside inline code`);
       }
     }
     console.info(openedLine('code census', opened, vault));
-    console.info(`[code census] ${fences} fences in ${fenced} files; ${typing} typed characters in fences, ${literals} literal runs in fences, ${inline} in inline code, ${bolded} pages bolded whole: ${failures.length} failed`);
+    console.info(`[code census] ${fences} fences in ${fenced} files; ${typing} typed characters in fences, ${literals} literal runs in fences, ${inline} in inline code, ${closers} fence lines typed in code, ${crossings} Enters over a fence, ${bolded} pages bolded whole: ${failures.length} failed`);
     console.info(`[code census] pending, PR 2: ${pendingPaste.length} of ${pastes} three-line pastes into quoted or listed fences change the container's shape`);
     const kinds = new Map<string, number>();
     for (const failure of failures) {

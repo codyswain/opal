@@ -182,6 +182,8 @@ export interface ObjectAction {
   icon?: LucideIcon;
   shortcut?: string;
   disabled?: boolean;
+  /** In a menu: the choice that is on now, drawn with a check. */
+  checked?: boolean;
   /** Runs the action. Each should be one undo step. */
   run?: (view: EditorView, obj: PageObject) => void;
   /** A menu of more actions in place of `run`, such as Show as, Size or More. */

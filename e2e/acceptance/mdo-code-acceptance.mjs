@@ -106,9 +106,17 @@ const selectText = (from, to) => page.evaluate(([anchor, head]) => {
 
 /** Saves the part of the page around `locator` as `name`, light or dark. */
 async function shot(name, locator, { above = 60, below = 80 } = {}) {
-  await locator.scrollIntoViewIfNeeded();
+  // The editor draws only what is near the view, so an element can be redrawn while it scrolls in.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await locator.scrollIntoViewIfNeeded({ timeout: 3_000 });
+      break;
+    } catch {
+      await page.waitForTimeout(300);
+    }
+  }
   await page.waitForTimeout(150);
-  const box = await locator.boundingBox();
+  const box = await locator.boundingBox().catch(() => null);
   const editor = await page.locator('.opal-editor').first().boundingBox();
   if (!box || !editor) return;
   const clip = { x: editor.x, y: Math.max(editor.y, box.y - above), width: editor.width, height: Math.min(900, box.height + above + below) };
@@ -331,11 +339,14 @@ try {
     const diff = await scrollTo('.cm-code-diff-add');
     if (await diff.count()) await shot(`${theme}-state-diff`, diff, { above: 80, below: 80 });
   }
-  // Show all on a long block shows its lines and writes nothing.
-  for (let step = 0; step < 20 && (await page.locator('.cm-code-show-all').count()) === 0; step += 1) {
-    await page.locator('.cm-scroller').first().evaluate((element) => { element.scrollTop += element.clientHeight / 2; });
-    await page.waitForTimeout(200);
-  }
+  // Show all on a long block is one of its header's buttons, and shows its lines writing nothing.
+  await scrollTo('.cm-code-show-all');
+  await page.locator('.cm-code-line', { hasText: '"line5"' }).first().click();
+  await page.keyboard.press('Alt+F10');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  check('the header\'s arrow keys reach a collapsed block\'s Show all', await page.evaluate(() => document.activeElement?.classList.contains('cm-code-show-all') ?? false));
+  await page.keyboard.press('Escape');
   if (await page.locator('.cm-code-show-all').count()) {
     await page.locator('.cm-code-show-all').first().click();
     await page.waitForTimeout(200);
