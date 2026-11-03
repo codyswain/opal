@@ -137,18 +137,22 @@ type InsertEvent = 'input' | 'input.drop' | 'input.paste';
  * file stays.
  */
 async function putFile(view: EditorView, id: number, file: ImportedFile, userEvent: InsertEvent): Promise<void> {
-  const image = classifyFile(file.path) === 'image';
+  if (file.warning) toast(file.warning);
+  const image = !file.url && classifyFile(file.path) === 'image';
   const width = image ? await widthFor(view, file.path) : null;
   const place = view.dom.isConnected ? view.state.field(places).get(id) : undefined;
   if (!place) return;
-  const embed = image ? `![[${file.vaultPath}${width ? `|${width}` : ''}]]` : `[[${file.vaultPath}|${file.name.replace(/[[\]|]/g, '')}]]`;
+  // A dropped .webloc or .url stored nothing: it links to the address it holds.
+  const embed = file.url
+    ? `[${file.name.replace(/[\\[\]*|]/g, '\\$&')}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`
+    : image ? `![[${file.vaultPath}${width ? `|${width}` : ''}]]` : `[[${file.vaultPath}|${file.name.replace(/[[\]|]/g, '')}]]`;
   const { from, insert } = placeEmbed(view.state, place.at, embed);
   const end = from + insert.length;
   const follow = view.state.selection.main.head === place.caret;
   view.dispatch({
     changes: { from, insert },
     selection: follow ? { anchor: end } : undefined,
-    effects: [linksResolved.of({ [file.vaultPath]: file.path }), setPlace.of({ id, place: { at: end, caret: follow ? end : null } })],
+    effects: [...(file.url ? [] : [linksResolved.of({ [file.vaultPath]: file.path })]), setPlace.of({ id, place: { at: end, caret: follow ? end : null } })],
     annotations: isolateHistory.of('full'),
     scrollIntoView: true,
     userEvent,

@@ -60,6 +60,18 @@ describe('FileViewer', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No app can open it');
   });
 
+  it('says when it opened a read-only copy, or showed a script in Finder instead', async () => {
+    const user = userEvent.setup();
+    render(<FileViewer entry={AUDIO} />);
+    vi.mocked(window.diskAPI.openExternal).mockResolvedValueOnce({ success: true, data: { action: 'opened', app: null, notice: "Opened a read-only copy. Changes won't reach the vault." } });
+    await user.click(screen.getByRole('button', { name: 'Open in default app' }));
+    expect(await screen.findByRole('status')).toHaveTextContent("Opened a read-only copy. Changes won't reach the vault.");
+    vi.mocked(window.diskAPI.openExternal).mockResolvedValueOnce({ success: true, data: { action: 'revealed', reason: 'Opal shows apps and scripts in Finder instead of opening them.' } });
+    await user.click(screen.getByRole('button', { name: 'Open in default app' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Opal shows apps and scripts in Finder instead of opening them.');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('offers the default app when a text file cannot be read', async () => {
     window.diskAPI.readTextFile = vi.fn(async () => ({ success: false as const, error: 'Permission denied' }));
     render(<FileViewer entry={TEXT} />);

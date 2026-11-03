@@ -68,9 +68,13 @@ const TextViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
 
 const OpenInDefaultApp: React.FC<{ entry: DiskEntry; message: string }> = ({ entry, message }) => {
   const [error, setError] = useState<string | null>(null);
+  // What Open did instead of a plain open: a read-only copy of an LFS file, or Finder for a script.
+  const [note, setNote] = useState<string | null>(null);
   const open = async () => {
     const result = await window.diskAPI.openExternal(entry.path);
     setError(result.success ? null : result.error);
+    const done = result.success ? result.data : undefined;
+    setNote(done?.action === 'opened' ? done.notice ?? null : done?.action === 'revealed' ? done.reason : null);
   };
   return (
     <div
@@ -82,6 +86,7 @@ const OpenInDefaultApp: React.FC<{ entry: DiskEntry; message: string }> = ({ ent
         Open in default app
       </Button>
       {error ? <p role="alert" className="text-ui text-foreground">{error}</p> : null}
+      {note ? <p role="status" className="text-ui text-foreground-tertiary">{note}</p> : null}
     </div>
   );
 };
