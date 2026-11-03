@@ -1,8 +1,10 @@
+import { syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import { classifyFile, extensionOf, storedExtension, withoutHash, type FileKind } from '@/common/fileKind';
 import { basenameFsPath, normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import type { FileInfo } from '@/types/files';
+import { protectedIn } from './extensionPoints';
 import { linkTarget } from './livePreview';
 import { namesFile, parseWikiTarget } from './wikiLinks';
 
@@ -96,6 +98,24 @@ export function readAddress(written: string, page: string): { path: string; frag
   }).join('/').normalize('NFC');
   const path = decoded.startsWith('/') ? normalizeFsPath(decoded) : normalizeFsPath(`${parentFsPath(page) ?? ''}/${decoded}`);
   return { path, fragment };
+}
+
+const CODE = new Set(['FencedCode', 'CodeBlock', 'InlineCode', 'CodeText', 'HTMLBlock', 'CommentBlock']);
+
+/** Whether `at` is in code, HTML or a protected range such as a formula, where a link or chip would be text. */
+export function inCode(state: EditorState, at: number): boolean {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, -1); node; node = node.parent) {
+    if (CODE.has(node.name)) return true;
+  }
+  return protectedIn(state, at, at).some((range) => range.from < at && at < range.to);
+}
+
+/** Whether `at` is in a table row, where a link's "|" must be written "\|". */
+export function inTableAt(state: EditorState, at: number): boolean {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, -1); node; node = node.parent) {
+    if (node.name === 'Table' || node.name === 'TableRow' || node.name === 'TableHeader' || node.name === 'TableCell') return true;
+  }
+  return false;
 }
 
 /** The line holds this node and nothing else but quote marks and spaces, outside lists and tables. */

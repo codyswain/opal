@@ -64,7 +64,7 @@ export function refAt(state: EditorState, obj: Pick<PageObject, 'from' | 'to'>):
 }
 
 // Names that can't go inside a wiki link: its target can't hold these, nor its alias brackets.
-const WIKI_UNSAFE = /[#|[\]^]/;
+export const WIKI_UNSAFE = /[#|[\]^]/;
 
 /** Text for a Markdown link's brackets: backslashes, brackets, stars and underscores escaped, and a pipe inside a table. */
 export function escapeLinkText(text: string, inTable = false): string {

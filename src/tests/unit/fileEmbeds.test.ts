@@ -437,6 +437,18 @@ describe('putting files in', () => {
     ].join('\n')));
   });
 
+  it('puts a pasted file after a code block, and escapes its alias pipe in a table cell', async () => {
+    const code = await mount('```sh\nls -la here\n```\n');
+    act(() => { code.dispatch({ selection: { anchor: text(code).indexOf('here') } }); });
+    paste(code, [file('Gob deck.pptx')]);
+    await waitFor(() => expect(text(code)).toContain(`\`\`\`sh\nls -la here\n\`\`\`\n[[${stored('Gob deck.pptx')}|Gob deck.pptx]]`));
+    // A note: a document draws the table, so its caret is never in a cell.
+    const table = await mount('| Item | Owner |\n| --- | --- |\n| Q3  | Cody |\n', '/Vault/Notes/Plan.md');
+    act(() => { table.dispatch({ selection: { anchor: text(table).indexOf('Q3 ') + 3 } }); });
+    paste(table, [file('Gob deck.pptx')]);
+    await waitFor(() => expect(text(table)).toBe(`| Item | Owner |\n| --- | --- |\n| Q3 [[${stored('Gob deck.pptx')}\\|Gob deck.pptx]] | Cody |\n`));
+  });
+
   it('puts ten dropped PDFs in as cards, not previews', async () => {
     const view = await mount('Intro\n');
     const names = Array.from({ length: 10 }, (_, index) => `Report ${index + 1}.pdf`);

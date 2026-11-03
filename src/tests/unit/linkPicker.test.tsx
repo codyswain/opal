@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react';
 import { CompletionContext, completionStatus, currentCompletions } from '@codemirror/autocomplete';
 import { undo } from '@codemirror/commands';
+import { syntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
@@ -73,7 +74,7 @@ describe('the [[ picker', () => {
     const view = mount('See [[');
     const result = await linkCompletions(new CompletionContext(view.state, view.state.doc.length, true));
     expect(result?.options.map((option) => [option.label, option.detail])).toEqual([
-      ['q3.a3f9c2e1.pdf', 'Library/files/2026-11'],
+      ['q3.pdf', 'Library/files/2026-11'],
       ['Roadmap', 'Projects'],
       ['Gob deck.pptx', 'Decks'],
     ]);
@@ -88,7 +89,7 @@ describe('the [[ picker', () => {
   it('puts a file in mid-sentence as a chip and a note as a link, each one undo step', async () => {
     const view = mount('See [[ today', 6);
     await pick(view, 0);
-    expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.a3f9c2e1.pdf]] today');
+    expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]] today');
     act(() => { undo(view); });
     expect(text(view)).toBe('See [[ today');
     await pick(view, 1);
@@ -98,15 +99,15 @@ describe('the [[ picker', () => {
   it('puts a file in on an empty line in its type\'s look, and swallows a closing ]] typed ahead', async () => {
     const view = mount('Intro\n[[]]\n', 8);
     await pick(view, 0);
-    expect(text(view)).toBe('Intro\n![[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.a3f9c2e1.pdf]]\n');
+    expect(text(view)).toBe('Intro\n![[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]]\n');
     const deck = mount('[[');
     await pick(deck, 2);
     expect(text(deck)).toBe('[[Decks/Gob deck.pptx|Gob deck.pptx]]');
   });
 
   it('writes a plain link with Option+Enter, even on an empty line', () => {
-    expect(pickedText(ROWS[0].entry, DOC, true, true).text).toBe('[[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.a3f9c2e1.pdf]]');
-    expect(pickedText(ROWS[0].entry, DOC, true, false).text).toBe('![[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.a3f9c2e1.pdf]]');
+    expect(pickedText(ROWS[0].entry, DOC, true, true).text).toBe('[[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]]');
+    expect(pickedText(ROWS[0].entry, DOC, true, false).text).toBe('![[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]]');
   });
 
   it('opens on typing [[ in a page and takes Option+Enter as a link', async () => {
@@ -117,7 +118,46 @@ describe('the [[ picker', () => {
     // The picker takes keys once it has shown for a moment, so a fast Enter still types.
     await act(() => new Promise((resolve) => setTimeout(resolve, 120)));
     act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter', altKey: true }), 'editor'); });
-    expect(text(view)).toBe('Intro\n[[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.a3f9c2e1.pdf]]');
+    expect(text(view)).toBe('Intro\n[[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]]');
+  });
+});
+
+describe('the [[ picker in tables, code and odd names', () => {
+  const cells = (view: EditorView) => {
+    const counts: number[] = [];
+    syntaxTree(view.state).iterate({ enter: (node) => { if (node.name === 'TableRow' || node.name === 'TableHeader') counts.push(node.node.getChildren('TableCell').length); } });
+    return counts;
+  };
+
+  it('writes the alias pipe as \\| in a table cell, for a note and for a file', async () => {
+    const doc = '| Doc | Owner |\n| --- | --- |\n| [[ | Cody |\n';
+    const note = mount(doc, doc.indexOf('[[') + 2);
+    await pick(note, 1);
+    expect(text(note)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Projects/Roadmap.mdo\\|Roadmap]] | Cody |\n');
+    expect(cells(note)).toEqual([2, 2]);
+    const file = mount(doc, doc.indexOf('[[') + 2);
+    await pick(file, 2);
+    expect(text(file)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Decks/Gob deck.pptx\\|Gob deck.pptx]] | Cody |\n');
+    expect(cells(file)).toEqual([2, 2]);
+  });
+
+  it('stays closed inside a code block and inline code', async () => {
+    for (const doc of ['```python\nrows = [[\n```\n', '    rows = [[\n', 'See `a[[` here\n', '```sh\nif [[ -f x\n```\n']) {
+      const view = mount(doc, doc.indexOf('[[') + 2);
+      expect(await linkCompletions(new CompletionContext(view.state, view.state.selection.main.head, true))).toBeNull();
+    }
+  });
+
+  it('writes a stored file\'s name without its hash, in the row and in the link', async () => {
+    const view = mount('See [[ today', 6);
+    const result = await pick(view, 0);
+    expect(result.options[0].label).toBe('q3.pdf');
+    expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]] today');
+  });
+
+  it('writes a note whose name holds # as a Markdown link', () => {
+    const entry = { path: '/Vault/Projects/PR #12 notes.md', name: 'PR #12 notes.md' };
+    expect(pickedText(entry, DOC, false, false).text).toBe('[PR #12 notes](<../Projects/PR %2312 notes.md>)');
   });
 });
 

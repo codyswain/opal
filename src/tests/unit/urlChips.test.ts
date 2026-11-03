@@ -4,6 +4,8 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { urlChip } from '@/renderer/features/disk-explorer/components/editor/urlChips';
+import { objectAt } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
@@ -24,8 +26,8 @@ afterEach(() => {
   views = [];
 });
 
-function mount(doc: string) {
-  const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdownEditorExtensions(DOC) }) });
+function mount(doc: string, page = DOC) {
+  const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdownEditorExtensions(page) }) });
   view.focus = vi.fn();
   views.push(view);
   return view;
@@ -110,6 +112,63 @@ describe('service chips', () => {
     Object.defineProperty(event, 'dataTransfer', { value: { types: Object.keys(data), getData: (type: string) => data[type] ?? '' } });
     act(() => { view.contentDOM.dispatchEvent(event); });
     expect(view.state.doc.toString()).toBe('Read [Q3 \\*final\\* \\[draft\\] | notes](https://example.com/a_b) today\n');
+  });
+
+  it('takes one character on Backspace while an address being typed still shows as text, and on Delete at its start', () => {
+    const url = 'https://github.com/codyswain/opal/pull/13x';
+    const view = mount('See \n');
+    const type = (char: string, at: number) => act(() => { view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: 'input.type' }); });
+    for (const [index, char] of [...url].entries()) type(char, 4 + index);
+    expect(view.contentDOM.querySelector('.cm-url-chip')).toBeNull();
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
+    expect(view.state.doc.toString()).toBe('See https://github.com/codyswain/opal/pull/13\n');
+    const start = mount('See https://github.com/codyswain/opal/pull/13 now\n');
+    act(() => { start.dispatch({ selection: { anchor: 4 } }); });
+    act(() => { runScopeHandlers(start, new KeyboardEvent('keydown', { key: 'Delete' }), 'editor'); });
+    expect(start.state.doc.toString()).toBe('See ttps://github.com/codyswain/opal/pull/13 now\n');
+  });
+
+  it('keeps a YouTube address alone on its line a card object, framed on the first Backspace', () => {
+    const doc = 'Intro\n\nhttps://www.youtube.com/watch?v=abc\n\nAfter\n';
+    const end = doc.indexOf('\n\nAfter');
+    const view = mount(doc);
+    act(() => { view.dispatch({ selection: { anchor: end } }); });
+    expect(objectAt(view.state, end, -1)?.kind).toBe('file');
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.field(objectFrame)).not.toBeNull();
+  });
+
+  it('draws no card for a YouTube address while it is typed alone on its line', () => {
+    const url = 'https://youtu.be/abc';
+    const view = mount('Intro\n\n\nAfter\n');
+    for (const [index, char] of [...url].entries()) {
+      act(() => { view.dispatch({ changes: { from: 7 + index, insert: char }, selection: { anchor: 8 + index }, userEvent: 'input.type' }); });
+    }
+    expect(view.contentDOM.querySelector('.cm-file-card')).toBeNull();
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
+    expect(view.state.doc.toString()).toBe('Intro\n\nhttps://youtu.be/ab\nAfter\n');
+  });
+
+  it('escapes a dropped link\'s pipe in a table cell, and drops a bare address into code', () => {
+    const data: Record<string, string> = {
+      'text/uri-list': 'https://example.com/plan',
+      'text/html': '<a href="https://example.com/plan">Plan | Notion</a>',
+    };
+    const dropAt = (view: EditorView, at: number) => {
+      vi.spyOn(view, 'posAtCoords').mockReturnValue(at);
+      const event = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: Object.keys(data), getData: (type: string) => data[type] ?? '' } });
+      act(() => { view.contentDOM.dispatchEvent(event); });
+    };
+    const tableDoc = '| a | b |\n| --- | --- |\n| x |  |\n';
+    const table = mount(tableDoc, '/Vault/Notes/Plan.md');
+    dropAt(table, tableDoc.lastIndexOf('|  |') + 2);
+    expect(table.state.doc.toString()).toBe('| a | b |\n| --- | --- |\n| x | [Plan \\| Notion](https://example.com/plan) |\n');
+    const codeDoc = '```sh\ncurl \n```\n';
+    const code = mount(codeDoc, '/Vault/Notes/Plan.md');
+    dropAt(code, codeDoc.indexOf('curl ') + 5);
+    expect(code.state.doc.toString()).toBe('```sh\ncurl https://example.com/plan\n```\n');
   });
 
   it('draws a YouTube address alone on its line as a card, whose still main loads once on Load preview', async () => {

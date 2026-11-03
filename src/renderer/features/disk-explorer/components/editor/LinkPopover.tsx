@@ -10,7 +10,7 @@ import { autolinkHref, docMode, drawnBlockAt, openLink } from './livePreview';
 import { visibleSlice } from './visibleText';
 import { openWikiLink, pageContext, parseWikiTarget } from './wikiLinks';
 import { relativePath } from './fileActions';
-import { findLinkTargets, folderOf, pickedText } from './linkPicker';
+import { findLinkTargets, folderOf, pickedText, rowLabel } from './linkPicker';
 
 /** Where the link sits on screen, from its first character on its first line. */
 function linkRect(view: EditorView, from: number, to: number): DOMRect {
@@ -97,7 +97,7 @@ const AddressMatches: React.FC<{ view: EditorView; typed: string; wiki: boolean;
             onClick={() => onPick(addressOf(view, entry, wiki))}
             className="flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-ui text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
-            <span className="min-w-0 truncate">{fileTreeLabel(entry.name, entry.kind)}</span>
+            <span className="min-w-0 truncate">{rowLabel(entry)}</span>
             <span className="ml-auto min-w-0 truncate pl-2 text-metadata text-foreground-tertiary">{folderOf(entry.path)}</span>
           </button>
         </li>

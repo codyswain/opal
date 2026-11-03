@@ -6,8 +6,8 @@ import { toast } from 'sonner';
 import { nodeDecorators, objectKinds, type DecorateContext } from './extensionPoints';
 import { escapeLinkText } from './fileActions';
 import { fileIcon, type FileIconName } from './fileIcons';
-import { videoService } from './fileEmbeds';
-import { autolinkHref, openLink } from './livePreview';
+import { fileRefOf, inCode, inTableAt, videoService } from './fileEmbeds';
+import { autolinkHref, docMode, openLink } from './livePreview';
 
 /*
  * Bare addresses of the services Cody works in, drawn as chips with a grey
@@ -131,15 +131,30 @@ export function caretAtStart(state: EditorState, from: number): boolean {
   return state.selection.ranges.some((range) => range.empty && range.head === from);
 }
 
-function drawUrl(ctx: DecorateContext, node: SyntaxNode): boolean {
-  const found = bareAddress(ctx.state, node);
-  if (!found || ctx.covered(node.from) || ctx.reveal.span(node.from, node.to)) return false;
-  if (ctx.state.field(typingAddress, false) === node.to) return false;
+/** Whether the address ending at `to` is still being typed, so it shows as written. */
+export function typingAt(state: EditorState, to: number): boolean {
+  return state.field(typingAddress, false) === to;
+}
+
+/**
+ * Whether a bare address of a known service draws as a chip: not while it is
+ * typed, only at a word's start, and in a document not while the caret is at
+ * its start. The chip and its object follow the same rule.
+ */
+function chipShown(state: EditorState, node: SyntaxNode): { href: string; chip: UrlChip } | null {
+  const found = bareAddress(state, node);
+  if (!found || typingAt(state, node.to)) return null;
   // Only an address that starts a word: "https://www.x.com" with a letter typed before it reads "www.x.com" as one.
-  if (!/^$|[\s(*_~<>"']$/.test(ctx.state.sliceDoc(node.from - 1, node.from))) return false;
+  if (!/^$|[\s(*_~<>"']$/.test(state.sliceDoc(node.from - 1, node.from))) return null;
   // A letter typed right before an address joins it, and Markdown then reads neither as a link, so in a document
   // the address shows as written while the caret is at its start.
-  if (ctx.docMode && caretAtStart(ctx.state, node.from)) return false;
+  if (state.facet(docMode) && caretAtStart(state, node.from)) return null;
+  return found;
+}
+
+function drawUrl(ctx: DecorateContext, node: SyntaxNode): boolean {
+  const found = chipShown(ctx.state, node);
+  if (!found || ctx.covered(node.from) || ctx.reveal.span(node.from, node.to)) return false;
   ctx.out.push(Decoration.replace({ widget: new UrlChipWidget(found.href, found.chip) }).range(node.from, node.to));
   return true;
 }
@@ -153,12 +168,16 @@ async function copy(text: string, done: string): Promise<void> {
   }
 }
 
-/** In a document, a service chip is one object: one Backspace takes it, and its bar opens or copies the address. */
+/**
+ * In a document, a drawn service chip is one object: one Backspace takes it,
+ * and its bar opens or copies the address. A video address alone on its line
+ * is a card instead (fileWidgets.ts).
+ */
 const urlObject = objectKinds.of({
   kind: 'url',
   nodes: ['URL'],
   block: false,
-  test: (state, node) => bareAddress(state, node) !== null,
+  test: (state, node) => chipShown(state, node) !== null && fileRefOf(state, node, new Map(), '') === null,
   open: (view, obj) => openLink(view, autolinkHref(view.state.sliceDoc(obj.from, obj.to)), false),
   destination: (state, obj) => {
     try {
@@ -191,8 +210,9 @@ export function droppedLink(data: Pick<DataTransfer, 'getData' | 'types'>): { te
 
 /**
  * A link dragged from a browser goes in as `[Anchor](url)` where it drops,
- * its text escaped so it stays the link's text. Text dragged within the
- * page is left to CodeMirror.
+ * its text escaped so it stays the link's text, with `\|` in a table. Into
+ * code it goes in as the bare address. Text dragged within the page is left
+ * to CodeMirror.
  */
 const browserLinkDrops = EditorView.domEventHandlers({
   drop(event, view) {
@@ -201,7 +221,7 @@ const browserLinkDrops = EditorView.domEventHandlers({
     const link = droppedLink(data);
     if (!link) return false;
     const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
-    const insert = `[${escapeLinkText(link.text)}](${/[\s()<>]/.test(link.url) ? `<${link.url}>` : link.url})`;
+    const insert = inCode(view.state, at) ? link.url : `[${escapeLinkText(link.text, inTableAt(view.state, at))}](${/[\s()<>]/.test(link.url) ? `<${link.url}>` : link.url})`;
     event.preventDefault();
     view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length }, annotations: isolateHistory.of('full'), userEvent: 'input.drop' });
     view.focus();

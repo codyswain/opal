@@ -3,16 +3,16 @@ import { isolateHistory } from '@codemirror/commands';
 import { Prec, type Extension } from '@codemirror/state';
 import { keymap, type EditorView } from '@codemirror/view';
 import { Link2 } from 'lucide-react';
-import { classifyFile, fileTreeLabel, pageName } from '@/common/fileKind';
+import { classifyFile, fileTreeLabel, pageName, withoutHash } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import type { CollectionQuery, CollectionRow } from '@/types/collectionQuery';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../../store/diskStore';
 import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
-import { iconFor } from './fileEmbeds';
+import { iconFor, inCode, inTableAt } from './fileEmbeds';
 import { fileIcon } from './fileIcons';
-import { wikiAlias } from './fileActions';
+import { WIKI_UNSAFE, linkFor, wikiAlias } from './fileActions';
 import { insertFileItem, insertedText } from './imageInsert';
 import { linksResolved, pageContext } from './wikiLinks';
 
@@ -56,19 +56,27 @@ export function folderOf(path: string): string {
   return parentFsPath(relative) ?? '';
 }
 
+/** A row's name: a note without ".md", a stored file without its hash. */
+export function rowLabel(entry: Pick<DiskEntry, 'name' | 'kind'>): string {
+  return entry.kind === 'markdown' ? fileTreeLabel(entry.name, entry.kind) : withoutHash(entry.name);
+}
+
 /**
  * What a pick writes. A note: `[[Library/x/Plan|Plan]]`, a document keeping
  * ".mdo". A file: a chip in text, or on an empty line its type's look; with
- * `asLink` always a link, `[[path|Name]]`.
+ * `asLink` always a link, `[[path|Name]]`. In a table the alias pipe is
+ * `\|`, and a name a wiki link can't hold is written `[name](<path>)`.
  */
-export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string, onEmptyLine: boolean, asLink: boolean): { text: string; target: string } {
+export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string, onEmptyLine: boolean, asLink: boolean, inTable = false): { text: string; target: string } {
   const relative = vaultPath(entry.path);
   if (classifyFile(entry.path) === 'markdown') {
     const target = relative.endsWith('.md') ? relative.slice(0, -3) : relative;
-    return { text: `[[${target}|${wikiAlias(pageName(basenameFsPath(entry.path)))}]]`, target };
+    const name = pageName(basenameFsPath(entry.path));
+    if (WIKI_UNSAFE.test(target)) return { text: linkFor({ vaultPath: relative, path: entry.path, page, embed: false, slot: name, inTable }), target };
+    return { text: `[[${target}${inTable ? '\\|' : '|'}${wikiAlias(name, inTable)}]]`, target };
   }
-  const file = { path: entry.path, vaultPath: relative, name: entry.name };
-  return { text: insertedText(file, page, asLink || !onEmptyLine ? 'chip' : 'default', null), target: relative };
+  const file = { path: entry.path, vaultPath: relative, name: withoutHash(entry.name) };
+  return { text: insertedText(file, page, asLink || !onEmptyLine ? 'chip' : 'default', null, inTable), target: relative };
 }
 
 // Option+Enter accepts the pick as a plain link.
@@ -82,7 +90,7 @@ function applyPick(entry: DiskEntry) {
     const end = state.sliceDoc(to, to + 2) === ']]' ? to + 2 : to;
     const rest = line.text.slice(0, from - line.from) + line.text.slice(end - line.from);
     const onEmptyLine = !/[^\s>]/.test(rest);
-    const { text, target } = pickedText(entry, state.facet(pageContext).path, onEmptyLine, asLink);
+    const { text, target } = pickedText(entry, state.facet(pageContext).path, onEmptyLine, asLink, inTableAt(state, from));
     asLink = false;
     view.dispatch({
       changes: { from, to: end, insert: text },
@@ -98,7 +106,7 @@ function applyPick(entry: DiskEntry) {
 /** The completion source: "[[" and what follows it on the line, up to a "|" or "]". */
 export async function linkCompletions(context: CompletionContext): Promise<CompletionResult | null> {
   const typed = context.matchBefore(/\[\[[^[\]|\n]*$/);
-  if (!typed) return null;
+  if (!typed || inCode(context.state, typed.from + 1)) return null;
   const { from } = typed;
   const query = typed.text.slice(2);
   const entries = await findLinkTargets(query);
@@ -107,7 +115,7 @@ export async function linkCompletions(context: CompletionContext): Promise<Compl
     from,
     filter: false,
     options: entries.map((entry, index) => ({
-      label: fileTreeLabel(entry.name, entry.kind),
+      label: rowLabel(entry),
       detail: folderOf(entry.path),
       type: entry.kind,
       boost: -index,

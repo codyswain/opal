@@ -35,7 +35,8 @@ import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt,
 import { objectFrame } from './objectFrame';
 import { ImageWidget, fileChanged } from './previewWidgets';
 import { linkPicker } from './linkPicker';
-import { caretAtStart, urlChips } from './urlChips';
+import { docMode } from './livePreview';
+import { caretAtStart, typingAt, urlChips } from './urlChips';
 import { opensNewTab, pageContext, resolvedLinks, wikiNames } from './wikiLinks';
 import './files.css';
 
@@ -831,8 +832,7 @@ function drawFile(ctx: DecorateContext, node: SyntaxNode): boolean {
   if (!ref) return false;
   if (ref.to > ctx.state.doc.lineAt(ref.from).to) return false;
   if (ctx.covered(ref.from)) return true;
-  // A bare video address alone on its line shows as written while a document's caret is at its start (urlChips.ts).
-  if (node.name === 'URL' && ctx.docMode && caretAtStart(ctx.state, ref.from)) return false;
+  if (node.name === 'URL' && !urlCardShown(ctx.state, ref)) return false;
   const look = lookOf(ref);
   // A preview waits until its wiki target is found; the link shows as text meanwhile, one place for the caret in a document.
   if (look === 'preview' && ref.path === undefined) {
@@ -851,6 +851,14 @@ function drawFile(ctx: DecorateContext, node: SyntaxNode): boolean {
   return true;
 }
 
+/**
+ * A bare video address alone on its line shows as written while it is typed,
+ * and while a document's caret is at its start (urlChips.ts).
+ */
+function urlCardShown(state: EditorState, ref: FileRef): boolean {
+  return !typingAt(state, ref.to) && !(state.facet(docMode) && caretAtStart(state, ref.from));
+}
+
 /** The file link a syntax node is, read with the page's links. */
 export function refOfNode(state: EditorState, node: SyntaxNode): FileRef | null {
   const links = state.field(resolvedLinks, false) ?? new Map<string, string | null>();
@@ -864,7 +872,7 @@ function kindFor(block: boolean): ObjectKind {
     block,
     test: (state, node) => {
       const ref = refOfNode(state, node);
-      return ref !== null && ref.alone === block;
+      return ref !== null && ref.alone === block && (node.name !== 'URL' || urlCardShown(state, ref));
     },
     open: (view, obj) => { const ref = refAt(view.state, obj); if (ref) void openFile(view, ref, 'main'); },
     actions: (state, obj) => fileActions(state, obj),

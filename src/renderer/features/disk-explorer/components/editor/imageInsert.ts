@@ -5,14 +5,15 @@ import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view
 import type { SyntaxNode } from '@lezer/common';
 import { ImagePlus, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
-import { classifyFile, pageName } from '@/common/fileKind';
+import { classifyFile, pageName, withoutHash } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
 import type { FilesResult, ImportedFile } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
 import { draggedTreeFile } from '../dragMoveState';
 import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
-import { escapeLinkText, linkFor, wikiAlias } from './fileActions';
+import { WIKI_UNSAFE, escapeLinkText, linkFor, wikiAlias } from './fileActions';
+import { inCode, inTableAt } from './fileEmbeds';
 import { embedWidth } from './imageSize';
 import { linksResolved, pageContext } from './wikiLinks';
 
@@ -144,15 +145,15 @@ export type InsertLook = 'chip' | 'default' | 'card';
  * card are a link with the file's name. A dropped `.webloc` or `.url` is a
  * link to its address.
  */
-export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null): string {
+export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
   // A dropped .webloc or .url stored nothing: it links to the address it holds.
-  if (file.url) return `[${escapeLinkText(file.name.replace(/\.(webloc|url)$/i, ''))}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`;
+  if (file.url) return `[${escapeLinkText(file.name.replace(/\.(webloc|url)$/i, ''), inTable)}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`;
   const kind = classifyFile(file.path);
   const sized = kind === 'image' || kind === 'video';
   if (look === 'default' && (sized || kind === 'pdf' || kind === 'audio')) {
-    return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: true, slot: sized ? (width ? String(width) : null) : file.name });
+    return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: true, slot: sized ? (width ? String(width) : null) : file.name, inTable });
   }
-  return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: false, slot: file.name });
+  return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: false, slot: file.name, inTable });
 }
 
 /** A chip at `at` inside text, with a space between it and a word it would touch. */
@@ -176,7 +177,7 @@ async function putFile(view: EditorView, id: number, file: ImportedFile, userEve
   if (!place) return;
   const page = view.state.facet(pageContext).path;
   const inline = place.inline !== null && look === 'chip';
-  const text = insertedText(file, page, inline ? 'chip' : look, width);
+  const text = insertedText(file, page, inline ? 'chip' : look, width, inline && place.inline !== null && inTableAt(view.state, place.inline));
   const { from, insert } = inline && place.inline !== null ? chipAt(view.state, place.inline, text) : placeEmbed(view.state, place.at, text);
   const end = from + insert.length;
   const follow = view.state.selection.main.head === place.caret;
@@ -348,10 +349,13 @@ export async function addFiles(view: EditorView, files: readonly File[], at: num
   letGo(view, id);
 }
 
-/** Where a caret at `head` puts one file: inside text, a chip there; on an empty line, null for the line's own look. */
-function caretInText(state: EditorState, head: number): number | null {
+/**
+ * Where a caret at `head` puts one file: inside text, a chip there; on an
+ * empty line, or in code or a formula, null, for a line of its own after it.
+ */
+export function caretInText(state: EditorState, head: number): number | null {
   const line = state.doc.lineAt(head);
-  return hasText(line.text) ? head : null;
+  return hasText(line.text) && !inCode(state, head) ? head : null;
 }
 
 /** Insert > Image… and Insert > File…: the files picked in the open dialog, at the caret. */
@@ -392,11 +396,14 @@ async function linkFile(view: EditorView, path: string, at: number): Promise<voi
   if (kind === 'markdown') {
     // A note goes by its name, as [[Name]] does; a document keeps ".mdo".
     target = relative.endsWith('.md') ? relative.slice(0, -3) : relative;
-    text = `[[${target}|${wikiAlias(pageName(basenameFsPath(path)))}]]`;
+    const name = pageName(basenameFsPath(path));
+    text = WIKI_UNSAFE.test(target)
+      ? linkFor({ vaultPath: relative, path, page: view.state.facet(pageContext).path, embed: false, slot: name })
+      : `[[${target}|${wikiAlias(name)}]]`;
   } else {
     const sized = kind === 'image' || kind === 'video';
     const width = sized ? await widthFor(view, path) : null;
-    text = insertedText({ path, vaultPath: relative, name: basenameFsPath(path) }, view.state.facet(pageContext).path, 'default', width);
+    text = insertedText({ path, vaultPath: relative, name: withoutHash(basenameFsPath(path)) }, view.state.facet(pageContext).path, 'default', width);
   }
   if (!view.dom.isConnected) return;
   const { from, insert } = placeEmbed(view.state, Math.min(at, view.state.doc.length), text);
