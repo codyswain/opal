@@ -743,9 +743,11 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           const callout = calloutOf(doc, node);
           const kind = callout ? 'cm-md-callout' : 'cm-md-quote';
           linesOf(ref.from, lastLine(doc, node).to, (line, first, last) => {
+            // A nested quote draws one rule per level.
+            const depth = callout ? 1 : (/^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0].match(/>/g)?.length ?? 1);
             out.push(Decoration.line({
               class: `${kind}${first ? ` ${kind}-first` : ''}${last ? ` ${kind}-last` : ''}`,
-              attributes: callout ? { 'data-callout': callout.type } : undefined,
+              attributes: callout ? { 'data-callout': callout.type } : depth > 1 ? { style: `--quote-depth: ${depth}` } : undefined,
             }).range(line.from));
           });
           if (!callout) return true;

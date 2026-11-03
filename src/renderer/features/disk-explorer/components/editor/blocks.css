@@ -56,6 +56,15 @@
   color: hsl(var(--text-tertiary));
 }
 
+/* A nested quote: one 2px rule per level, 1em apart. */
+.opal-editor .cm-editor .cm-md-quote[style*="--quote-depth"] {
+  --quote-indent: calc(var(--quote-depth) * 1em);
+  border-left: none;
+  background-image: repeating-linear-gradient(to right, hsl(var(--border-default)) 0 2px, transparent 2px 1em);
+  background-repeat: no-repeat;
+  background-size: calc((var(--quote-depth) - 1) * 1em + 2px) 100%;
+}
+
 /* The style menu on a callout's title, which takes no heading. */
 .opal-editor .opal-doc-toolbar-style:disabled {
   pointer-events: none;

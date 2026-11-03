@@ -8,7 +8,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { linkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
-import { objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { insertItems, objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { insertTable } from '@/renderer/features/disk-explorer/components/editor/tableInsert';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -435,5 +435,49 @@ describe('what a drawn table shows', () => {
     expect(view.contentDOM.querySelector('.cm-md-table')).not.toBeNull();
     click(view.contentDOM.querySelector('.cm-md-table [data-href]') as Element, { metaKey: true });
     expect(open).toHaveBeenCalledWith('https://example.com', '_blank');
+  });
+});
+
+describe('quotes and callouts in a document', () => {
+  const press = (marked: string, name: string) => {
+    const view = mount(marked);
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: name }), 'editor'); });
+    return marked_(view);
+  };
+  const marked_ = (view: EditorView) => `${text(view).slice(0, caret(view))}‸${text(view).slice(caret(view))}`;
+
+  it('leaves the quote on Enter on an empty quote line, one level at a time', () => {
+    expect(press('> a\n> ‸', 'Enter')).toBe('> a\n\n‸');
+    expect(press('> > a\n> > ‸', 'Enter')).toBe('> > a\n>\n> ‸');
+    expect(press('> a\n> b‸', 'Enter')).toBe('> a\n> b\n> ‸');
+  });
+
+  it('takes off only "[!type]" on Backspace at the start of a callout\'s title', () => {
+    expect(press('> [!note] ‸Title\n> body\n', 'Backspace')).toBe('> ‸Title\n> body\n');
+    expect(press('> [!TIP]- ‸Folded\n> body\n', 'Backspace')).toBe('> ‸Folded\n> body\n');
+  });
+
+  it('puts a space between "[!type]" and a title typed into an empty callout', () => {
+    const view = mount('> [!note]‸\n> body\n');
+    type(view, 'T');
+    expect(marked(view)).toBe('> [!note] T‸\n> body\n');
+    type(view, 'o');
+    expect(text(view)).toBe('> [!note] To\n> body\n');
+  });
+
+  it('draws one rule per level for nested quotes', () => {
+    const view = mount('> a\n> > b\n> > > c\n');
+    const depths = [...view.contentDOM.querySelectorAll('.cm-md-quote')].map((line) => (line as HTMLElement).style.getPropertyValue('--quote-depth'));
+    expect(depths).toEqual(['', '2', '3']);
+  });
+
+  it('inserts a callout and a horizontal line on lines of their own', () => {
+    const view = mount('Text‸\nMore\n');
+    const items = view.state.facet(insertItems);
+    act(() => { void items.find((item) => item.id === 'callout')?.run(view); });
+    expect(marked(view)).toBe('Text\n\n> [!note] Note\n> ‸\n\nMore\n');
+    const rule = mount('Text‸\n');
+    act(() => { void rule.state.facet(insertItems).find((item) => item.id === 'rule')?.run(rule); });
+    expect(marked(rule)).toBe('Text\n\n***\n‸\n');
   });
 });

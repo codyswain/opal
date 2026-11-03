@@ -38,6 +38,7 @@ import { objectAt } from './extensionPoints';
 import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension, setFrame } from './objectFrame';
 import { headingKeys } from './headingKeys';
 import { docListKeys } from './listKeys';
+import { quoteKeys } from './quoteKeys';
 import { insertTableItem } from './tableInsert';
 import { opensNewTab } from './wikiLinks';
 
@@ -469,6 +470,7 @@ export function docModeExtensions(): Extension {
     insertTableItem,
     docListKeys,
     headingKeys,
+    quoteKeys,
     autoformatted,
     linkEditor,
     atoms,
