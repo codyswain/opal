@@ -457,6 +457,25 @@ describe('undo right after an autoformat', () => {
     });
   }
 
+  it('never shows italic on the way to bold typed as **x**, and undo after bold has no italic step', () => {
+    const view = mount('\n');
+    at(view, 0);
+    type(view, 'see **x*');
+    expect(visibleLine(view.state, 0).text).toBe('see **x*');
+    type(view, '*');
+    expect(text(view)).toBe('see **x**\n');
+    expect(visibleLine(view.state, 0).text).toBe('see x');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('see \\*\\*x\\*\\*\n');
+    // The typing is one undo step with no italic formatting inside it.
+    act(() => { undo(view); });
+    expect(text(view)).toBe('\n');
+    const literal = mount('\n');
+    at(literal, 0);
+    type(literal, 'a **x* b');
+    expect(visibleLine(literal.state, 0).text).toBe('a **x* b');
+  });
+
   it('keeps bold typed as **x** bold, and its first undo shows the stars', () => {
     const view = mount('\n');
     at(view, 0);

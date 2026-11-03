@@ -108,14 +108,22 @@ function shortcutMarks(state: EditorState, at: number): { open: { from: number; 
 /** The changes that turn the literal marks into formatting, applied right after the typing. */
 const formatAfter = StateEffect.define<readonly { from: number; to: number }[]>();
 
-/** Writes a backslash before each of `positions` (in `tr`'s new text), and asks for them to go again as formatting. */
-function autoformatSpec(at: number, length: number, positions: readonly number[]): TransactionSpec {
+/**
+ * Writes a backslash before each of `positions` (in `tr`'s new text), and
+ * asks for them to go again as formatting, with the backslashes already
+ * written at `written`.
+ */
+function autoformatSpec(at: number, length: number, positions: readonly number[], written: readonly number[] = []): TransactionSpec {
   const sorted = [...new Set(positions)].sort((a, b) => a - b);
   const before = sorted.filter((position) => position <= at).length;
+  const removals = [
+    ...sorted.map((from, index) => from + index),
+    ...written.map((from) => from + sorted.filter((position) => position <= from).length),
+  ].sort((a, b) => a - b);
   return {
     changes: sorted.map((from) => ({ from, insert: '\\' })),
     selection: { anchor: at + length + before },
-    effects: formatAfter.of(sorted.map((from, index) => ({ from: from + index, to: from + index + 1 }))),
+    effects: formatAfter.of(removals.map((from) => ({ from, to: from + 1 }))),
     sequential: true,
   };
 }
@@ -221,13 +229,16 @@ function typedCharacter(tr: Transaction): { at: number; text: string; from: numb
 const numberEscape = StateEffect.define<number | null>();
 /** The blank line written above `---` or `===` under a paragraph, taken out again when the line stops being one. */
 const ruleBlank = StateEffect.define<{ from: number; to: number }>();
+/** The backslash written before the third star of `**x*`, which the next star turns into bold. */
+const starEscape = StateEffect.define<number | null>();
 
-const provisional = StateField.define<{ number: number | null; blank: { from: number; to: number } | null }>({
-  create: () => ({ number: null, blank: null }),
+const provisional = StateField.define<{ number: number | null; blank: { from: number; to: number } | null; star: number | null }>({
+  create: () => ({ number: null, blank: null, star: null }),
   update(value, tr) {
-    let { number, blank } = value;
+    let { number, blank, star } = value;
     if (tr.docChanged) {
       number = number === null ? null : tr.changes.mapPos(number, 1, MapMode.TrackDel);
+      star = star === null ? null : tr.changes.mapPos(star, 1, MapMode.TrackDel);
       if (blank) {
         const from = tr.changes.mapPos(blank.from, 1, MapMode.TrackDel);
         const to = tr.changes.mapPos(blank.to, -1, MapMode.TrackDel);
@@ -237,8 +248,9 @@ const provisional = StateField.define<{ number: number | null; blank: { from: nu
     for (const effect of tr.effects) {
       if (effect.is(numberEscape)) number = effect.value;
       if (effect.is(ruleBlank)) blank = effect.value;
+      if (effect.is(starEscape)) star = effect.value;
     }
-    return number === value.number && blank === value.blank ? value : { number, blank };
+    return number === value.number && blank === value.blank && star === value.star ? value : { number, blank, star };
   },
 });
 
@@ -272,7 +284,18 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   const lineBefore = before.doc.lineAt(caret);
   const prefix = CONTAINER.exec(before.sliceDoc(lineBefore.from, caret))?.[0] ?? '';
   const lead = after.sliceDoc(line.from + prefix.length, at);
-  const { number, blank } = before.field(provisional, false) ?? { number: null, blank: null };
+  const { number, blank, star } = before.field(provisional, false) ?? { number: null, blank: null, star: null };
+
+  // The star after a held `**x\*` finishes bold: every mark is written escaped, then formatted, as one shortcut.
+  if (star !== null && caret === star + 2 && caret === typed.to && text === before.sliceDoc(star + 1, star + 2)) {
+    const bold = shortcutMarks(after.update({ changes: { from: star, to: star + 1 }, filter: false }).state, at - 1);
+    if (bold && bold.open.to - bold.open.from === 2) {
+      const positions: number[] = [];
+      for (const range of [bold.open, bold.close]) for (let index = range.from; index < range.to; index += 1) positions.push(index < star ? index : index + 1);
+      const spec = autoformatSpec(at, text.length, positions.filter((position) => position !== star + 1), [star]);
+      return { ...spec, effects: [spec.effects as StateEffect<unknown>, starEscape.of(null)] };
+    }
+  }
 
   // "3\." followed by anything but a space never reads as a list item: the backslash goes again.
   if (number !== null && caret === number + 2 && caret === typed.to && text !== ' ' && before.sliceDoc(number, number + 1) === '\\') {
@@ -335,6 +358,10 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if (visibleLine(after, at).text === expected) return null;
   const marks = shortcutMarks(after, at);
   if (marks) {
+    // The third star of `**x*` is held as typed: the next star shows whether it closes bold, so italic never flashes.
+    const held = marks.open.to - marks.open.from === 1 && after.sliceDoc(marks.open.from - 1, marks.open.from) === text
+      && (after.field(typedMarks, false) ?? []).includes(marks.open.from - 1);
+    if (held) return { ...insertBefore(at, '\\'), effects: starEscape.of(at) };
     const positions: number[] = [];
     for (const range of [marks.open, marks.close]) for (let index = range.from; index < range.to; index += 1) positions.push(index);
     return autoformatSpec(at, text.length, positions);
