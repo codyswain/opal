@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { EditorState, type Extension, type StateCommand, type Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, runScopeHandlers } from '@codemirror/view';
-import { Sigma, Table } from 'lucide-react';
+import { Table } from 'lucide-react';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import {
   blockRenderers,
@@ -184,7 +184,6 @@ describe('insert items', () => {
     const insertDrawing = vi.fn();
     installMarkdownApi({ [DOC]: 'Text\n' });
     render(<TooltipProvider><MarkdownEditor path={DOC} extensions={[
-      insertItems.of({ id: 'equation', label: 'Equation', icon: Sigma, shortcut: '⇧⌘E', order: 30, run: vi.fn() }),
       insertItems.of({ id: 'drawing', label: 'Drawing', icon: Table, order: 25, run: insertDrawing }),
     ]} /></TooltipProvider>);
     const view = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
