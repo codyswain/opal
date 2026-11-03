@@ -17,11 +17,11 @@ const INLINE = new Set([
   'Paragraph', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'ATXHeading6', 'SetextHeading1', 'SetextHeading2',
 ]);
 
-/** Whether `from` to `to` is text on one line with no pipe in it, which in a table is inside one cell. Never in the delimiter row. */
+/** Whether `from` to `to` is a point or text on one line with no pipe in it, which in a table is inside one cell. Never in the delimiter row. */
 function insideCell(state: EditorState, from: number, to: number): boolean {
   const line = state.doc.lineAt(from);
   if (/^[\s>|:-]*$/.test(line.text)) return false;
-  return to > from && to <= line.to && !state.sliceDoc(from, to).includes('|') && /\|/.test(state.sliceDoc(line.from, from));
+  return to >= from && to <= line.to && !state.sliceDoc(from, to).includes('|') && /\|/.test(state.sliceDoc(line.from, from));
 }
 
 /** The lines of each guarded block that touches `from` to `to`, whole, except text inside one table cell. */
