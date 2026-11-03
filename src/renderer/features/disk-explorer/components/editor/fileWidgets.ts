@@ -653,8 +653,11 @@ function drawFile(ctx: DecorateContext, node: SyntaxNode): boolean {
   if (ref.to > ctx.state.doc.lineAt(ref.from).to) return false;
   if (ctx.covered(ref.from)) return true;
   const look = lookOf(ref);
-  // A preview waits until its wiki target is found; the link shows as text meanwhile.
-  if (look === 'preview' && ref.path === undefined) return false;
+  // A preview waits until its wiki target is found; the link shows as text meanwhile, one place for the caret in a document.
+  if (look === 'preview' && ref.path === undefined) {
+    if (ctx.docMode) ctx.unit(ref.from, ref.to);
+    return false;
+  }
   const widget = widgetFor(ctx, ref, look);
   if (ctx.reveal.span(ref.from, ref.to)) {
     // A note shows the link as written while the caret is in it, with its preview after it.
