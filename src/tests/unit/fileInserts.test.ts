@@ -313,7 +313,7 @@ describe('dropping files', () => {
     const view = mount('Notes\n');
     pointAt(view, 0, 5);
     drag(view, 'drop', [new File(['x'], 'Opal PR.webloc'), new File(['x'], 'clip.mov')], { clientY: 30 });
-    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n[[Library/clip.mov|clip.mov]]\n'));
+    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n![[Library/clip.mov]]\n'));
     expect(toastPlain).toHaveBeenCalledWith('"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.');
   });
 

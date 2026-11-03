@@ -101,7 +101,7 @@ describe('FileViewer', () => {
 
   it('says when it opened a read-only copy, or showed a script in Finder instead', async () => {
     const user = userEvent.setup();
-    render(<FileViewer entry={AUDIO} />);
+    render(<FileViewer entry={DECK} />);
     vi.mocked(window.diskAPI.openExternal).mockResolvedValueOnce({ success: true, data: { action: 'opened', app: null, notice: "Opened a read-only copy. Changes won't reach the vault." } });
     await user.click(screen.getByRole('button', { name: 'Open in default app' }));
     expect(await screen.findByRole('status')).toHaveTextContent("Opened a read-only copy. Changes won't reach the vault.");

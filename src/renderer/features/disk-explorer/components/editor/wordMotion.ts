@@ -2,7 +2,7 @@ import { EditorSelection, EditorState, Prec, type ChangeSpec, type EditorSelecti
 import { keymap, type Command } from '@codemirror/view';
 import { EMPHASIS, inlineSpans } from './formatCommands';
 import { docMode } from './livePreview';
-import { rawAfter, rawRange, visibleLine, visibleOffset, visibleSlice } from './visibleText';
+import { OBJECT, rawAfter, rawRange, visibleLine, visibleOffset, visibleSlice } from './visibleText';
 
 /*
  * Word and line keys in a document, by the text the page shows. Option+Arrow
@@ -15,11 +15,11 @@ import { rawAfter, rawRange, visibleLine, visibleOffset, visibleSlice } from './
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 
-/** The words of `text` as offsets: where each starts and ends. */
+/** The words of `text` as offsets: where each starts and ends. An object, such as a file chip, is one word. */
 function words(text: string): { from: number; to: number }[] {
   const found: { from: number; to: number }[] = [];
   for (const segment of segmenter.segment(text)) {
-    if (segment.isWordLike) found.push({ from: segment.index, to: segment.index + segment.segment.length });
+    if (segment.isWordLike || segment.segment === OBJECT) found.push({ from: segment.index, to: segment.index + segment.segment.length });
   }
   return found;
 }

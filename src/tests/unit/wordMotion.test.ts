@@ -70,13 +70,14 @@ describe('Option+Arrow in a document', () => {
       key(view, 'ArrowRight', { altKey: true });
       stops.push(shownBefore(view));
     }
-    expect(stops).toEqual(['one', 'one two', 'one two three', 'one two three four', 'one two three four Five', 'one two three four Five six']);
+    // An unaliased wiki link is one object in a document, and one stop.
+    expect(stops).toEqual(['one', 'one two', 'one two three', 'one two three four', 'one two three four ￼', 'one two three four ￼ six']);
     const back: string[] = [];
     for (let press = 0; press < 6; press += 1) {
       key(view, 'ArrowLeft', { altKey: true });
       back.push(shownBefore(view));
     }
-    expect(back).toEqual(['one two three four Five ', 'one two three four ', 'one two three ', 'one two ', 'one ', '']);
+    expect(back).toEqual(['one two three four ￼ ', 'one two three four ', 'one two three ', 'one two ', 'one ', '']);
   });
 
   it('extends the selection by words with Shift', () => {
