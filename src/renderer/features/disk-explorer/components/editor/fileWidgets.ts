@@ -646,7 +646,10 @@ export class VideoWidget extends WidgetType {
     const wrap = element('span', 'cm-file-figure');
     const box = element('span', 'cm-file-preview cm-file-video');
     const width = slotWidth(ref.slot);
-    if (width) box.style.width = `${width}px`;
+    if (width) {
+      box.style.width = `${width}px`;
+      wrap.classList.add('cm-file-figure-sized');
+    }
     const known = ref.path ? knownInfo(ref.path) : undefined;
     box.style.aspectRatio = known?.width && known.height ? `${known.width} / ${known.height}` : '16 / 9';
     const handle = element('span', 'cm-file-handle');

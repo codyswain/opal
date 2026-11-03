@@ -181,12 +181,21 @@
   vertical-align: top;
 }
 
-/* An image drawn as a file takes the line the same way. */
-.opal-editor .cm-editor .cm-md-image[data-object] {
+/* An image drawn as a file takes the line the same way, as wide as the image, so its caption centres under it. */
+.opal-editor .cm-editor .cm-md-image[data-object],
+.opal-editor .cm-editor .cm-file-figure-sized {
   display: inline-block;
   box-sizing: border-box;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   vertical-align: top;
+}
+
+/* A caption takes its picture's width and wraps there, never widening it. */
+.opal-editor .cm-editor .cm-md-image[data-object] > .cm-file-caption,
+.opal-editor .cm-editor .cm-file-figure-sized > .cm-file-caption {
+  width: 0;
+  min-width: 100%;
 }
 
 .opal-editor .cm-editor .cm-file-caption {
