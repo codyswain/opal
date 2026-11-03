@@ -1,5 +1,5 @@
 import { EditorState, Prec, Transaction, type ChangeSpec, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { Decoration, EditorView, keymap, type Command } from '@codemirror/view';
 import { ensureSyntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, Trash2 } from 'lucide-react';
@@ -435,8 +435,25 @@ const compositionSeparators = EditorView.domEventObservers({
   },
 });
 
+/**
+ * Cmd+Down or Cmd+End in a document that ends with a drawn table, rule or
+ * other block object: the page has no line under it to hold the caret, so
+ * the caret goes to the page's end and the block frames. A letter typed
+ * then starts a paragraph under it, as at any framed block.
+ */
+const toEndBlock: Command = (view) => {
+  const { state } = view;
+  if (!state.facet(docMode) || state.doc.length === 0) return false;
+  const last = state.doc.line(state.doc.lines);
+  const obj = objectAt(state, last.to, -1);
+  if (!obj || !objectKind(state, obj.kind)?.block || state.doc.lineAt(obj.to).number !== last.number || (obj.kind === 'table' && !drawnBlockAt(state, obj.from))) return false;
+  view.dispatch({ selection: { anchor: state.doc.length }, effects: setFrame.of(obj), scrollIntoView: true, userEvent: 'select' });
+  return true;
+};
+
 /** The block objects, their separators and the Backspace rule under a table. Documents only. */
 export const blockObjects: Extension = [
+  Prec.high(keymap.of([{ key: 'Mod-End', run: toEndBlock }, { mac: 'Cmd-ArrowDown', run: toEndBlock }])),
   ruleFrame,
   compositionSeparators,
   objectKinds.of(tableKind),

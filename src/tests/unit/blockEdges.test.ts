@@ -12,6 +12,7 @@ import { refoldCallout } from '@/renderer/features/disk-explorer/components/edit
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { insertItems } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { setOpenBlock } from '@/renderer/features/disk-explorer/components/editor/livePreview';
+import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { setHeading, toggleList } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { mathNodes, mathSpan } from '@/renderer/features/disk-explorer/components/editor/math';
@@ -145,6 +146,10 @@ describe('headings and lists on headings and tasks', () => {
     expect(after(doc, at, at, toggleList('bullet'))).toBe('Log:\n- raw_log: x\n');
     const item = '- Item\n        more text\n';
     expect(after(item, item.indexOf('more'), item.indexOf('more'), toggleList('number'))).toBe('- Item\n1. more text\n');
+    // A heading stays in the item, so the item's later blocks stay in it too.
+    const numbered = '12. Split it.\n    Evidence here.\n\n    | a | b |\n    |---|---|\n    | 1 | 2 |\n';
+    const evidence = numbered.indexOf('Evidence');
+    expect(after(numbered, evidence, evidence, setHeading(1))).toBe('12. Split it.\n    # Evidence here.\n\n    | a | b |\n    |---|---|\n    | 1 | 2 |\n');
     const star = 'Notes\n\t* understand this\n';
     expect(after(star, star.indexOf('under'), star.indexOf('under'), toggleList('bullet'))).toBe('Notes\n- \\* understand this\n');
   });
@@ -311,6 +316,17 @@ describe('typing after a table that ends the file', () => {
     type(view, 'A');
     type(view, 'fter');
     expect(text(view)).toBe(`${doc}\n\nAfter`);
+  });
+
+  it('frames the table on Cmd+Down, and a letter typed then starts a paragraph under it', async () => {
+    const doc = 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |';
+    const view = mount(`‸${doc}`);
+    await focusPage(view);
+    press(view, 'End', /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'table' });
+    expect(caret(view)).toBe(doc.length);
+    type(view, 'A');
+    expect(text(view)).toBe(`${doc}\n\nA`);
   });
 });
 

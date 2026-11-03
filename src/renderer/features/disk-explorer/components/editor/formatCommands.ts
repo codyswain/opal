@@ -534,11 +534,12 @@ function splitSpans(state: EditorState, line: Line, at: number, below: boolean):
 
 /**
  * The indent a paragraph's later line gets when it becomes a heading or a
- * list item: that of the item it is in, so it becomes the item's sibling,
- * or none. A deep indent, which a paragraph's line never shows, would keep
- * the marks from reading as a heading or a list.
+ * list item, or none outside a list: a heading stays in the item it is in,
+ * at the item's content column, and an item becomes that item's sibling. A
+ * deep indent, which a paragraph's line never shows, would keep the marks
+ * from reading as a heading or a list.
  */
-function leadOf(state: EditorState, line: Line): { from: number; to: number; insert: string } | null {
+function leadOf(state: EditorState, line: Line, sibling: boolean): { from: number; to: number; insert: string } | null {
   if (!continuesParagraph(state, line)) return null;
   const from = line.from + quoteOf(line).length;
   const to = skipSpaces(state, from, line.to);
@@ -547,7 +548,7 @@ function leadOf(state: EditorState, line: Line): { from: number; to: number; ins
     if (node.name !== 'ListItem') continue;
     const first = state.doc.lineAt(node.from);
     const item = listItemOf(state, first);
-    if (item) indent = first.text.slice(quoteOf(first).length, item.markFrom - first.from);
+    if (item) indent = sibling ? first.text.slice(quoteOf(first).length, item.markFrom - first.from) : first.text.slice(quoteOf(first).length, item.contentFrom - first.from).replace(/[^\t]/g, ' ');
     break;
   }
   return state.sliceDoc(from, to) === indent ? null : { from, to, insert: indent };
@@ -571,7 +572,7 @@ export function setHeading(level: number): StateCommand {
         const blank = !/[^\s>]/.test(line.text);
         if (level === 0 || (blank && lines.length > 1)) return [];
         const at = textStart(state, line, BLOCK_MARKS);
-        const lead = leadOf(state, line);
+        const lead = leadOf(state, line, false);
         const selected = (other: number) => lines.some((each) => each.number === other);
         return [...(lead ? [lead] : []), { from: at, insert: `${'#'.repeat(level)} ` }, ...splitSpans(state, line, at, !selected(line.number + 1))];
       }
@@ -701,7 +702,7 @@ export function toggleList(kind: ListKind): StateCommand {
         const heading = kind === 'task' ? headingOf(state, line) : null;
         const open = heading?.node.name.startsWith('ATX') ? heading.node.getChild('HeaderMark') : null;
         const from = textStart(state, line, QUOTE_MARK);
-        const lead = leadOf(state, line);
+        const lead = leadOf(state, line, true);
         if (lead) changes.push(lead);
         // Text that starts like a list marker stays text inside the new item.
         const literal = !open && /^(?:[-+*]|\d{1,9}[.)])(?=[ \t]|$)/.exec(state.sliceDoc(from, line.to));

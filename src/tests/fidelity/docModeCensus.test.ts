@@ -57,6 +57,8 @@ const COMMANDS: [string, StateCommand, Span][] = [
   ],
 ];
 
+const SPLIT = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough']);
+
 /** The part of the text a command run on `state` may change: the selected lines, and for inline formatting the lines of the spans it touches. */
 function expectedSpan(state: EditorState, span: Span): [number, number] {
   const { from, to } = state.selection.main;
@@ -71,6 +73,12 @@ function expectedSpan(state: EditorState, span: Span): [number, number] {
   } else {
     // A setext heading changing level takes its underline with it.
     syntaxTree(state).iterate({ from, to, enter: (ref) => { if (ref.name.startsWith('SetextHeading')) end = Math.max(end, ref.to); } });
+    // Bold or italic that runs over a selected line's edge from its paragraph closes on the line before and opens again on the line after.
+    for (const inline of inlineSpans(state, state.doc.lineAt(from).from, state.doc.lineAt(to).to)) {
+      if (!SPLIT.has(inline.name)) continue;
+      start = Math.min(start, inline.from);
+      end = Math.max(end, inline.to);
+    }
   }
   return [state.doc.lineAt(start).from, state.doc.lineAt(end).to];
 }
