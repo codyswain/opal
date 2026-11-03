@@ -33,7 +33,7 @@ import {
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
 import { firstLine } from './firstLine';
-import { insertFileItem, insertImageItem } from './imageInsert';
+import { insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setCellCaret, setOpenBlock, type HiddenRange } from './livePreview';
 import { objectAt } from './extensionPoints';
@@ -46,7 +46,7 @@ import { clipboard } from './clipboard';
 import { typingExtension } from './typing';
 import { hiddenOn } from './visibleText';
 import { visibleSearch } from './visibleSearch';
-import { insertLinkItem } from './linkPicker';
+import { fileInsertItems } from './linkPicker';
 import { opensNewTab } from './wikiLinks';
 import { wordMotion } from './wordMotion';
 
@@ -476,8 +476,7 @@ export function docModeExtensions(): Extension {
     objectFrameExtension,
     codeDocExtension({ toggleInline: toggleInlineCode, editLink }),
     insertImageItem,
-    insertFileItem,
-    insertLinkItem,
+    fileInsertItems,
     insertTableItem,
     docListKeys,
     headingKeys,

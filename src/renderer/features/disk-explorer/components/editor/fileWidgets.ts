@@ -32,7 +32,8 @@ import { fileIcon, type FileIconName } from './fileIcons';
 import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt, removeRef, updateMovedLink } from './fileActions';
 import { objectFrame } from './objectFrame';
 import { ImageWidget, fileChanged } from './previewWidgets';
-import { opensNewTab, pageContext, resolvedLinks } from './wikiLinks';
+import { linkPicker } from './linkPicker';
+import { opensNewTab, pageContext, resolvedLinks, wikiNames } from './wikiLinks';
 import './files.css';
 
 /*
@@ -744,4 +745,6 @@ export const fileObjects: Extension = [
   objectKinds.of(kindFor(false)),
   noteClicks,
   framedFiles,
+  wikiNames,
+  linkPicker,
 ];

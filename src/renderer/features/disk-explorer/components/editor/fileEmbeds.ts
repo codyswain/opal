@@ -4,7 +4,7 @@ import { classifyFile, extensionOf, storedExtension, withoutHash, type FileKind 
 import { basenameFsPath, normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import type { FileInfo } from '@/types/files';
 import { linkTarget } from './livePreview';
-import { parseWikiTarget } from './wikiLinks';
+import { namesFile, parseWikiTarget } from './wikiLinks';
 
 /*
  * Files on a page, read from the four ways Markdown points at one: a wiki
@@ -65,23 +65,7 @@ export function slotWidth(slot: string | null | undefined): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/**
- * Types a missing link names as a file, not a note: everything Opal shows or
- * stores, Office and iWork, CAD, archives, Excalidraw and Obsidian's canvas
- * and base. A link to one of these that points at nothing creates nothing.
- */
-export const KNOWN_BINARY = new Set([
-  'pptx', 'ppt', 'docx', 'doc', 'xlsx', 'xls', 'key', 'pages', 'numbers', 'stl', '3mf', 'step', 'stp', 'obj', 'iges', 'igs', 'f3d',
-  'zip', 'gz', 'tgz', 'tar', 'bz2', 'xz', '7z', 'rar', 'dmg', 'excalidraw', 'canvas', 'base', 'gcode', 'sketch', 'fig',
-]);
-
-/** Whether a link target names a file rather than a note, by its extension alone. */
-export function namesFile(target: string): boolean {
-  const kind = classifyFile(target);
-  if (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio' || kind === 'text') return true;
-  const extension = storedExtension(basenameFsPath(target));
-  return KNOWN_BINARY.has(extension) || KNOWN_BINARY.has(extension.split('.').pop() ?? '');
-}
+export { KNOWN_BINARY, namesFile } from './wikiLinks';
 
 const WEB = /^https?:\/\//i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;

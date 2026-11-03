@@ -13,7 +13,7 @@ import { insertItems } from './extensionPoints';
 import { iconFor } from './fileEmbeds';
 import { fileIcon } from './fileIcons';
 import { wikiAlias } from './fileActions';
-import { insertedText } from './imageInsert';
+import { insertFileItem, insertedText } from './imageInsert';
 import { linksResolved, pageContext } from './wikiLinks';
 
 /*
@@ -151,6 +151,9 @@ export const insertLinkItem = insertItems.of({
   order: 2,
   run: startLinkPicker,
 });
+
+/** Insert > File… and Insert > Link to note or file…, for documents. */
+export const fileInsertItems: Extension = [insertFileItem, insertLinkItem];
 
 /** The picker on every page. */
 export const linkPicker: Extension = [
