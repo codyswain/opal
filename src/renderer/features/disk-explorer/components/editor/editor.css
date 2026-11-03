@@ -330,6 +330,11 @@
   font-size: 0.85em;
 }
 
+/* Code of 24 characters or fewer stays on one line rather than leaving a boxed space at a line's end. */
+.opal-editor .cm-editor .cm-md-code-short {
+  white-space: nowrap;
+}
+
 /* Lists: the marker sits in a box as wide as the indent, so wrapped lines
    hang under the item's text. --list-indent comes from the line. A number
    wider than the box, such as "10.", runs out to its left, as browsers draw

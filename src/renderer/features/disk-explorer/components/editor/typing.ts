@@ -106,7 +106,7 @@ function shortcutMarks(state: EditorState, at: number): { open: { from: number; 
  */
 
 /** The changes that turn the literal marks into formatting, applied right after the typing. */
-const formatAfter = StateEffect.define<readonly { from: number; to: number }[]>();
+const formatAfter = StateEffect.define<readonly { from: number; to: number; insert?: string }[]>();
 
 /**
  * Writes a backslash before each of `positions` (in `tr`'s new text), and
@@ -135,9 +135,9 @@ const justFormatted = StateField.define<boolean>({
 });
 
 /** Turns the literal marks `removals` point at into formatting, as its own history event, when the text is still `doc`. */
-function format(view: EditorView, doc: Text, removals: readonly { from: number; to: number }[]): void {
+function format(view: EditorView, doc: Text, removals: readonly { from: number; to: number; insert?: string }[]): void {
   if (view.state.doc !== doc) return;
-  const changes = ChangeSet.of(removals.map(({ from, to }) => ({ from, to })), doc.length);
+  const changes = ChangeSet.of(removals.map(({ from, to, insert }) => ({ from, to, insert })), doc.length);
   view.dispatch({
     changes,
     selection: { anchor: changes.mapPos(view.state.selection.main.head, 1) },
@@ -146,14 +146,21 @@ function format(view: EditorView, doc: Text, removals: readonly { from: number; 
   });
 }
 
-function formatting(tr: Transaction): readonly { from: number; to: number }[] | undefined {
+function formatting(tr: Transaction): readonly { from: number; to: number; insert?: string }[] | undefined {
   for (const effect of tr.effects) if (effect.is(formatAfter)) return effect.value;
   return undefined;
 }
 
 // Typed text that can finish a shortcut: a closing delimiter, or a space after a line mark.
 const SHORTCUT_KEYS = /^[*_~`]$/;
-const LINE_MARK_BEFORE = /(?:^|[ \t>])(?:[-+*]|\d+[.)]|#{1,6}|\[[ xX]\])$/;
+const LINE_MARK_BEFORE = /(?:^|[ \t>])(?:[-+*]|\d+[.)]|#{1,6}|\[[ xX]?\])$/;
+// A container prefix of quote marks only, with no list marker.
+const QUOTE_ONLY = /^(?:[ \t]*>[ \t]?)*[ \t]*$/;
+
+function inTable(node: SyntaxNode): boolean {
+  for (let at: SyntaxNode | null = node; at; at = at.parent) if (at.name === 'Table') return true;
+  return false;
+}
 
 /** Typed text that finishes a shortcut is written, then formatted, in two dispatches straight away. */
 const typeThenFormat = EditorView.inputHandler.of((view, from, _to, text, insert) => {
@@ -332,6 +339,12 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     if (text !== ' ') return null;
   }
 
+  // "[]" or "[ ]" alone on a line, then a space, starts a task, as in Notion: one autoformat step, like the others.
+  if (text === ' ' && /^\[ ?\]$/.test(lead) && !/\S/.test(after.sliceDoc(at + 1, line.to)) && QUOTE_ONLY.test(prefix)) {
+    const from = line.from + prefix.length;
+    return { effects: formatAfter.of([{ from, to: at + 1, insert: '- [ ] ' }]), sequential: true };
+  }
+
   // A space that turns "#", "-", "1." or "[ ]" at the line's text start into formatting is an autoformat.
   if (text === ' ') {
     const mark = latestTree(after).resolveInner(at, -1);
@@ -366,6 +379,13 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if ((text === ']' || text === ')' || text === '>') && finishesLink(after, at)) return null;
   // A typed "$" that closes a formula draws it.
   if (text === '$' && finishesFormula(after, at)) return null;
+  // An HTML tag or entity shows as typed here, but Obsidian and GitHub would draw it: it is written escaped. A table cell keeps `<br>`, its line break.
+  if (text === '>' || text === ';') {
+    const name = text === '>' ? 'HTMLTag' : 'Entity';
+    let node: SyntaxNode | null = latestTree(after).resolveInner(at + 1, -1);
+    while (node && node.name !== name && node.name !== 'Paragraph') node = node.parent;
+    if (node?.name === name && node.to === at + 1 && !inTable(node) && hidesBackslash(after, node.from)) return insertBefore(node.from, '\\');
+  }
   const shown = visibleLine(before, caret);
   const expected = shown.text.slice(0, visibleOffset(shown, caret)) + text + shown.text.slice(visibleOffset(shown, typed.to));
   if (visibleLine(after, at).text === expected) return null;

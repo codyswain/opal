@@ -542,4 +542,40 @@ describe('typing edge cases, second pass', () => {
     expect(visible(deleted)).toBe('Intro  words, more.');
     expect(text(deleted)).toBe('Intro **words**, more.\n'.replace('Intro ', 'Intro  '));
   });
+  it('writes a typed HTML tag or entity escaped, so other apps show it as typed too', () => {
+    const view = mount('\n');
+    at(view, 0);
+    type(view, 'a <br> tag, &amp; ok');
+    expect(text(view)).toBe('a \\<br> tag, \\&amp; ok\n');
+    expect(visible(view)).toBe('a <br> tag, &amp; ok');
+  });
+
+  it('starts a task from [] or [ ] and a space on an empty line, undone in two steps', async () => {
+    for (const typed of ['[] ', '[ ] ']) {
+      const view = mount('\n');
+      at(view, 0);
+      type(view, typed);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      type(view, 'call');
+      expect(text(view)).toBe('- [ ] call\n');
+      act(() => { undo(view); });
+      act(() => { undo(view); });
+      expect(text(view)).toBe(`${typed}\n`);
+    }
+    const quoted = mount('> \n');
+    at(quoted, 2);
+    type(quoted, '[] ');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(text(quoted)).toBe('> - [ ] \n');
+    const midLine = mount('see [] \n');
+    at(midLine, 6);
+    type(midLine, ' x');
+    expect(text(midLine)).toBe('see [] x \n');
+  });
+
+  it('keeps short inline code on one line', () => {
+    const view = mount('Run `npm test` or `npm run build && npm test -- --watch` now\n');
+    const codes = [...view.contentDOM.querySelectorAll('.cm-md-code')];
+    expect(codes.map((code) => code.classList.contains('cm-md-code-short'))).toEqual([true, false]);
+  });
 });
