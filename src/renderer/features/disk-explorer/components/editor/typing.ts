@@ -133,12 +133,15 @@ function formatting(tr: Transaction): readonly { from: number; to: number }[] | 
   return undefined;
 }
 
-// Typed text that can finish a shortcut: a space after a line mark, or a closing delimiter.
-const SHORTCUT_KEYS = /^[ *_~`]$/;
+// Typed text that can finish a shortcut: a closing delimiter, or a space after a line mark.
+const SHORTCUT_KEYS = /^[*_~`]$/;
+const LINE_MARK_BEFORE = /(?:^|[ \t>])(?:[-+*]|\d+[.)]|#{1,6}|\[[ xX]\])$/;
 
 /** Typed text that finishes a shortcut is written, then formatted, in two dispatches straight away. */
-const typeThenFormat = EditorView.inputHandler.of((view, _from, _to, text, insert) => {
-  if (!SHORTCUT_KEYS.test(text) || view.composing || !view.state.facet(docMode)) return false;
+const typeThenFormat = EditorView.inputHandler.of((view, from, _to, text, insert) => {
+  if (view.composing || !view.state.facet(docMode)) return false;
+  const spaceAfterMark = text === ' ' && LINE_MARK_BEFORE.test(view.state.sliceDoc(view.state.doc.lineAt(from).from, from));
+  if (!spaceAfterMark && !SHORTCUT_KEYS.test(text)) return false;
   const tr = insert();
   const removals = formatting(tr);
   if (!removals) return false;
