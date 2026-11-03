@@ -52,9 +52,10 @@
 }
 
 /*
- * A file on its own line: a row 28rem wide, 64px tall. Inline, so the line
- * holds it with no empty line box above or below; 4px above and below, so
- * cards on lines in a row sit 8px apart.
+ * A file on its own line: a row 28rem wide, 64px tall with its edge, the
+ * 48px tile 7px in from it. Inline, so the line holds it with no empty line
+ * box above or below; 4px above and below, so cards on lines in a row sit
+ * 8px apart. It is a container, so a narrow card puts its buttons under it.
  */
 .opal-editor .cm-editor .cm-file-card {
   display: inline-flex;
@@ -64,7 +65,8 @@
   width: min(100%, 28rem);
   height: 64px;
   margin: 4px 0;
-  padding: 8px 12px 8px 8px;
+  padding: 7px 12px 7px 8px;
+  container-type: inline-size;
   border: 1px solid hsl(var(--border-subtle));
   border-radius: var(--radius-card);
   background-color: hsl(var(--canvas));
@@ -84,8 +86,8 @@
   border-style: dashed;
 }
 
-/* A card that says what went wrong keeps its message whole: in a narrow column the buttons go under it. */
-.opal-editor .cm-editor .cm-file-card:is([data-state="remote"], [data-state="missing"], [data-state="moved"], [data-state="unplayable"], [data-state="unreadable"], [data-state="failed"]) {
+/* A card with buttons (what went wrong, Load preview) stays one 64px row while they fit beside the name. */
+.opal-editor .cm-editor .cm-file-card:has(> .cm-file-card-actions) {
   flex-wrap: wrap;
   row-gap: 6px;
   height: auto;
@@ -100,7 +102,7 @@
   white-space: normal;
 }
 
-.opal-editor .cm-editor .cm-file-card:is([data-state="remote"], [data-state="missing"], [data-state="moved"], [data-state="unplayable"], [data-state="unreadable"], [data-state="failed"]) .cm-file-card-actions {
+.opal-editor .cm-editor .cm-file-card > .cm-file-card-actions {
   margin-left: auto;
 }
 
@@ -210,6 +212,21 @@
 
 .opal-editor .cm-editor .cm-file-button:hover:not(:disabled) {
   background-color: hsl(var(--surface-hover));
+}
+
+/* In a narrow card the buttons go on a row of their own under the name, lined up with it, and compact. */
+@container (max-width: 400px) {
+  .opal-editor .cm-editor .cm-file-card > .cm-file-card-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    margin-left: 0;
+    padding-left: 60px;
+  }
+
+  .opal-editor .cm-editor .cm-file-card .cm-file-button {
+    height: 24px;
+  }
 }
 
 .opal-editor .cm-editor .cm-file-button:focus-visible {
@@ -427,7 +444,7 @@
   box-sizing: border-box;
   align-items: center;
   gap: 12px;
-  width: 100%;
+  width: min(100%, 28rem);
   min-height: 56px;
   padding: 8px 8px 8px 12px;
   border: 1px solid hsl(var(--border-subtle));
@@ -448,7 +465,7 @@
 }
 
 .opal-editor .cm-editor .cm-file-audio audio {
-  flex: 0 0 300px;
+  flex: 0 0 240px;
   min-width: 0;
   max-width: 100%;
   height: 40px;
@@ -468,9 +485,10 @@
   background-color: hsl(0 0% 96%);
 }
 
-/* A failed image is a card in the image's place. */
-.opal-editor .cm-editor .cm-file-image-failed {
-  padding: 0.35em 0;
+/* A failed image is a card in the image's place. A preview turned card keeps only the card's own 4px, so every card sits the same distance apart. */
+.opal-editor .cm-editor .cm-file-image-failed,
+.opal-editor .cm-editor .cm-file-figure:has(> .cm-file-card) {
+  padding: 0;
 }
 
 /* Framed on a document's page: the ring follows the card's, preview's or image's own radius. */
