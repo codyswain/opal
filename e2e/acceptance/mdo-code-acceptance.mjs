@@ -18,7 +18,7 @@ const outDir = path.resolve(outFlag !== -1 ? args[outFlag + 1] : path.join('e2e'
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? `: ${detail}` : ''}`);
 };
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-code-userdata-'));

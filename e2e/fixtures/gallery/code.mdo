@@ -27,7 +27,7 @@ SELECT owner, COUNT(*) AS boxes FROM episodes WHERE site = 'SF' GROUP BY owner;
 ```
 
 ```yaml
-written_by: ai
+written_by: cody
 status: draft
 tags:
   - opal
