@@ -1,5 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { Annotation, ChangeSet, EditorSelection, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type EditorState, type Extension } from '@codemirror/state';
+import { Annotation, ChangeSet, EditorSelection, EditorState, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension } from '@codemirror/state';
 import { EditorView, keymap, type Command } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Sigma } from 'lucide-react';
@@ -478,6 +478,25 @@ const backspaceTypedDollar = deleteHandlers.of({
   },
 });
 
+/**
+ * A digit typed right after a `$…$` formula would make its closing `$` no
+ * closer, and the formula would turn back into its source. In a document a
+ * space goes in before the digit, as the popover's writes do, unless that
+ * `$` was just typed.
+ */
+const digitAfterFormula = EditorState.transactionFilter.of((tr) => {
+  if (!tr.isUserEvent('input.type') || !tr.startState.facet(docMode)) return tr;
+  const inserts: { from: number; text: string }[] = [];
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => { inserts.push({ from: toA === fromA ? fromA : -1, text: inserted.toString() }); });
+  if (inserts.length !== 1 || inserts[0].from < 1 || !/^\d/.test(inserts[0].text)) return tr;
+  const { from, text } = inserts[0];
+  // A "$" just typed and then a digit is money being typed: "$5,$6" stays text.
+  if (tr.startState.field(closedByDollar, false) === from) return tr;
+  const node = mathNodeAt(syntaxTree(tr.startState), from, -1);
+  if (!node || node.to !== from || node.name !== 'InlineMath' || tr.startState.sliceDoc(from - 1, from) !== '$') return tr;
+  return { changes: { from, insert: ` ${text}` }, selection: { anchor: from + 1 + text.length }, userEvent: 'input.type', scrollIntoView: true };
+});
+
 /** The line's container prefix: quote marks and a list item's indent. */
 function linePrefix(text: string): string {
   return (/^[ \t>]*(?:(?:[-+*]|\d+[.)])[ \t]+)?/.exec(text)?.[0] ?? '').replace(/(?:[-+*]|\d+[.)])(?=[ \t])/g, (marker) => ' '.repeat(marker.length));
@@ -641,6 +660,7 @@ const mathClicks = EditorView.domEventHandlers({
 export const mathEditing: Extension = [
   mathEditor,
   closedByDollar,
+  digitAfterFormula,
   mathObjects,
   backspaceTypedDollar,
   Prec.highest(mathClicks),

@@ -134,6 +134,18 @@ describe('formulas as objects in a document', () => {
     expect(text(view)).toBe('Area $\\pi r^2');
   });
 
+  it('puts a space before a digit typed right after a formula, so it stays one', () => {
+    const view = mount('Area $\\pi r^2$');
+    act(() => { view.dispatch({ selection: { anchor: text(view).length } }); });
+    type(view, '5');
+    expect(text(view)).toBe('Area $\\pi r^2$ 5');
+    expect(mathNodes(syntaxTree(view.state), 0, text(view).length)).toHaveLength(1);
+    const note = mount('Area $x$', NOTE);
+    act(() => { note.dispatch({ selection: { anchor: 8 } }); });
+    type(note, '5');
+    expect(text(note)).toBe('Area $x$5');
+  });
+
   it('keeps money as text while it is typed', () => {
     const view = mount('Costs ');
     act(() => { view.dispatch({ selection: { anchor: 6 } }); });
