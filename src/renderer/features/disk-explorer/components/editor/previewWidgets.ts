@@ -216,6 +216,7 @@ export class ImageWidget extends WidgetType {
     box.append(image);
     frame.append(box);
     if (this.extras.object) frame.dataset.object = 'file';
+    if (this.extras.file) frame.dataset.filePath = this.extras.file;
     if (this.extras.caption) {
       const caption = document.createElement('span');
       caption.className = 'cm-file-caption';

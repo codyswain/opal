@@ -242,6 +242,20 @@ try {
   }
   await page.keyboard.press('Escape');
 
+  // A framed picture lets the browser start a drag of its file.
+  await reach('.cm-md-image img[src*="diagram"]');
+  const picture2 = page.locator('.cm-md-image img[src*="diagram"]').first();
+  await picture2.click();
+  await page.waitForTimeout(300);
+  const box2 = await picture2.boundingBox();
+  if (box2) {
+    await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+    await page.mouse.down();
+    const draggable = await picture2.evaluate((node) => node.draggable);
+    await page.mouse.up();
+    check('a framed picture can be dragged out as its file', draggable === true);
+  }
+
   // A drop of a PDF, a short movie and a deck onto an empty document.
   await open(path.join(gallery, 'Drop.mdo'));
   const movieBytes = made.movie ? [...await readFile(path.join(made.files, 'night-shift.a3f9c2e1.mp4'))] : [...Buffer.from('not a movie')];

@@ -77,6 +77,18 @@ describe('a selected image', () => {
     await waitFor(() => expect(view.contentDOM.querySelector('[data-file-framed]')).toBeNull());
   });
 
+  it('drags its file out of the window once framed', async () => {
+    const view = await mount(`Intro\n${EMBED}\nAfter\n`);
+    mouse(image(view), 'mousedown');
+    await waitFor(() => expect(view.contentDOM.querySelector('[data-file-framed]')).not.toBeNull());
+    // The browser's own drag starts from a framed picture (the acceptance run checks the mousedown in Chromium).
+    const drag = new Event('dragstart', { bubbles: true, cancelable: true });
+    act(() => { image(view).dispatchEvent(drag); });
+    expect(drag.defaultPrevented).toBe(true);
+    expect(window.filesAPI.startDrag).toHaveBeenCalledWith(FILE);
+    expect(text(view)).toBe(`Intro\n${EMBED}\nAfter\n`);
+  });
+
   it('is stepped over whole by the arrow keys', async () => {
     const view = await mount(`Intro\n${EMBED}\nAfter\n`);
     act(() => { view.dispatch({ selection: { anchor: 6 } }); });

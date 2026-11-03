@@ -100,22 +100,44 @@ function resize(view: EditorView, frame: HTMLElement, corner: string, start: Mou
 }
 
 /**
- * A drag on a framed image's corner resizes it. The listener sits on the
- * whole editor and runs first, ahead of the frame's own click, which frames
- * an image on a plain click (objectFrame.ts).
+ * A drag on a framed image's corner resizes it, and a drag on the framed
+ * image itself takes its file out of the window, to Finder, Slack or Gmail.
+ * The listeners sit on the whole editor and run first, ahead of the frame's
+ * own click, which frames an image on a plain click (objectFrame.ts).
  */
 const cornerDrags = ViewPlugin.define((view) => {
   const down = (event: MouseEvent) => {
     if (event.button !== 0 || !(event.target instanceof Element)) return;
     const corner = event.target.closest<HTMLElement>('.cm-md-image-handle')?.dataset.corner;
     const frame = corner ? event.target.closest<HTMLElement>('.cm-md-image') : null;
-    if (!corner || !frame || !imageNode(view.state, view.posAtDOM(frame), 1)) return;
+    if (corner && frame && imageNode(view.state, view.posAtDOM(frame), 1)) {
+      event.preventDefault();
+      event.stopPropagation();
+      resize(view, frame, corner, event);
+      return;
+    }
+    // A framed picture drags its file out of the window: the browser's own drag starts, which the page would stop.
+    const image = event.target.closest<HTMLImageElement>('.cm-md-image[data-file-framed][data-file-path] img');
+    if (!image || event.metaKey || event.ctrlKey || event.detail > 1) return;
+    image.draggable = true;
+    event.stopPropagation();
+    window.addEventListener('mouseup', () => { image.draggable = false; }, { once: true });
+  };
+  const dragOut = (event: DragEvent) => {
+    const frame = event.target instanceof Element ? event.target.closest<HTMLElement>('.cm-md-image[data-file-framed][data-file-path]') : null;
+    if (!frame?.dataset.filePath) return;
     event.preventDefault();
     event.stopPropagation();
-    resize(view, frame, corner, event);
+    window.filesAPI.startDrag(frame.dataset.filePath);
   };
   view.dom.addEventListener('mousedown', down, true);
-  return { destroy: () => view.dom.removeEventListener('mousedown', down, true) };
+  view.dom.addEventListener('dragstart', dragOut, true);
+  return {
+    destroy: () => {
+      view.dom.removeEventListener('mousedown', down, true);
+      view.dom.removeEventListener('dragstart', dragOut, true);
+    },
+  };
 });
 
 export const imageFrame: Extension = [cornerDrags];
