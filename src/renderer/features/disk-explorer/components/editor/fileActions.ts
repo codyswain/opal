@@ -8,6 +8,7 @@ import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPath
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { FileInfo } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
+import { openPdfAtPage } from '../FileViewer';
 import { vaultRelativePath } from '../tabLabels';
 import { setLinkEditor } from './docMode';
 import { objectAt, type ObjectAction, type PageObject } from './extensionPoints';
@@ -20,6 +21,7 @@ import {
   fileRefOf,
   forgetInfo,
   formatBytes,
+  fragmentValue,
   isSize,
   kindLabel,
   knownApp,
@@ -360,6 +362,8 @@ export async function openFile(view: EditorView, ref: FileRef, how: 'main' | 'ap
     return;
   }
   if (how === 'main' && opensInOpal(ref)) {
+    const page = ref.kind === 'pdf' ? fragmentValue(ref, 'page') : null;
+    if (page) openPdfAtPage(ref.path, page);
     view.state.facet(pageContext).openNote(ref.path, newTab);
     return;
   }

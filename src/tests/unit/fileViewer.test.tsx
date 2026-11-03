@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { FileViewer } from '@/renderer/features/disk-explorer/components/FileViewer';
+import { FileViewer, openPdfAtPage } from '@/renderer/features/disk-explorer/components/FileViewer';
 import { installDiskApi, entry } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
 
@@ -33,6 +33,15 @@ describe('FileViewer', () => {
     render(<FileViewer entry={PDF} />);
     expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('type', 'application/pdf');
     expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('src', expect.stringMatching(/^opal-file:\/\/.*#navpanes=0$/));
+  });
+
+  it('opens a PDF at the page a link asked for, once', () => {
+    openPdfAtPage('/V/brief.pdf', 3);
+    const { unmount } = render(<FileViewer entry={PDF} />);
+    expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('src', expect.stringMatching(/#page=3&navpanes=0$/));
+    unmount();
+    render(<FileViewer entry={PDF} />);
+    expect(screen.getByTestId('pdf-viewer')).toHaveAttribute('src', expect.stringMatching(/#navpanes=0$/));
   });
 
   it('shows text verbatim and says when only the start of a file is shown', async () => {

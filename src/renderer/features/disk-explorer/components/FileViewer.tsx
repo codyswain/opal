@@ -5,6 +5,14 @@ import type { FileInfoStatus } from '@/types/files';
 import { Button } from '@/renderer/shared/ui';
 import { useTextFile } from '../hooks/useTextFile';
 
+/** Pages a PDF should open at, by path, set by a link with `#page=` just before it opens. */
+const pdfPages = new Map<string, number>();
+
+/** Opens the next tab of `path` at `page`, as `![[q3.pdf#page=3]]` asks. */
+export function openPdfAtPage(path: string, page: number): void {
+  pdfPages.set(path, page);
+}
+
 /**
  * The page for a file that is not Markdown: images inline, PDFs in
  * Chromium's own viewer, video and audio in native players, text as plain
@@ -45,16 +53,7 @@ const Shown: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
         </div>
       );
     case 'pdf':
-      return (
-        <embed
-          key={entry.path}
-          // Chromium's viewer opens without its thumbnail rail.
-          src={`${toOpalFileUrl(entry.path)}#navpanes=0`}
-          type="application/pdf"
-          data-testid="pdf-viewer"
-          className="h-full w-full"
-        />
-      );
+      return <PdfViewer entry={entry} />;
     case 'video':
       return <MediaViewer entry={entry} kind="video" />;
     case 'audio':
@@ -64,6 +63,24 @@ const Shown: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
     default:
       return <OpenInDefaultApp entry={entry} message="Opal can't show this file." />;
   }
+};
+
+/** Chromium's viewer, without its thumbnail rail, at the page a link asked for. */
+const PdfViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
+  const [page] = useState(() => {
+    const asked = pdfPages.get(entry.path) ?? null;
+    pdfPages.delete(entry.path);
+    return asked;
+  });
+  return (
+    <embed
+      key={entry.path}
+      src={`${toOpalFileUrl(entry.path)}#${page ? `page=${page}&` : ''}navpanes=0`}
+      type="application/pdf"
+      data-testid="pdf-viewer"
+      className="h-full w-full"
+    />
+  );
 };
 
 /** A movie or a recording in the browser's own player; one Opal can't play offers its app instead. */
