@@ -37,7 +37,7 @@ import {
 import { toggleCodeBlock } from './codeBlocks';
 import { editLink } from './docMode';
 import { insertItems } from './extensionPoints';
-import { clearFormatting, indentList, setHeading, toggleInlineCode, toggleList, toggleMarker } from './formatCommands';
+import { clearFormattingAndCode, indentList, setHeading, toggleInlineCode, toggleList, toggleMarker } from './formatCommands';
 import type { FormatState } from './formatState';
 
 const STYLES = ['Normal text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'];
@@ -133,7 +133,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     { id: 'outdent', label: 'Decrease indent', icon: IndentDecrease, shortcut: '⇧Tab', disabled: !format.inList, run: command(indentList(false)) },
     { id: 'indent', label: 'Increase indent', icon: IndentIncrease, shortcut: 'Tab', disabled: !format.inList, run: command(indentList(true)) },
     'separator',
-    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, disabled: inCode, run: command(clearFormatting) },
+    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, disabled: inCode, run: command(clearFormattingAndCode) },
   ];
   const count = fitting(items, width);
   const shown = items.slice(0, count);

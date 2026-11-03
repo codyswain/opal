@@ -144,6 +144,15 @@ try {
     await page.waitForTimeout(150);
     await shot(`${theme}-state-framed`, heads.first(), { above: 20, below: 260 });
     await page.keyboard.press('Escape');
+    // The language menu, searching.
+    await heads.first().hover();
+    await heads.first().locator('.cm-code-label').click();
+    await page.keyboard.type('py');
+    await page.waitForTimeout(150);
+    await shot(`${theme}-state-language-menu`, heads.first(), { above: 20, below: 320 });
+    await page.keyboard.press('Escape');
+    const showAll = page.locator('.cm-code-show-all').first();
+    if (await showAll.count()) await shot(`${theme}-state-collapsed`, showAll, { above: 260, below: 40 });
     const end = page.locator('.cm-code-open-end');
     if (await end.count()) await shot(`${theme}-state-unclosed`, end, { above: 120, below: 40 });
   }

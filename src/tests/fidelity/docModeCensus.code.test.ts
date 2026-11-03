@@ -8,7 +8,7 @@ import { MarkdownError, parseMarkdown } from '@/main/fs/MarkdownDocumentService'
 import { fenceOf, type Fence } from '@/renderer/features/disk-explorer/components/editor/codeBlocks';
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
-import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { codeContent, codeSpan, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { openedLine, vaultFiles } from './censusHelpers';
 
 /**
@@ -145,6 +145,16 @@ describe.skipIf(!ROOT)('code census', () => {
           for (const literal of LITERALS) {
             inline += 1;
             const after = typeAt(ready, at, literal);
+            if (literal === '`') {
+              // A backtick stays literal: the span's delimiters grow and it stays one span holding the backtick.
+              const raw = body.slice(marks[0].to, marks[1].from);
+              const padded = codeContent(raw) !== raw;
+              const content = codeContent(raw);
+              const offset = at - marks[0].to - (padded ? 1 : 0);
+              const written = codeSpan(content.slice(0, offset) + '`' + content.slice(offset));
+              if (after.doc.toString() !== body.slice(0, ref.from) + written + body.slice(ref.to)) failures.push(`${relative}@${at} typing a backtick in inline code did not keep the span whole`);
+              continue;
+            }
             if (after.doc.toString() !== body.slice(0, at) + literal + body.slice(at)) failures.push(`${relative}@${at} typing ${JSON.stringify(literal)} in inline code wrote other bytes`);
           }
           return false;

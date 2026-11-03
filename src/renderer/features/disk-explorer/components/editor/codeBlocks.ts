@@ -20,6 +20,7 @@ import {
   type PageObject,
   type TextRange,
 } from './extensionPoints';
+import { inlineCode, inlineCodeDoc } from './inlineCode';
 import { docMode, drawnBlockAt } from './livePreview';
 import { objectFrame, removeObject } from './objectFrame';
 import { blockFrame, type BlockContext } from './previewWidgets';
@@ -1417,7 +1418,7 @@ const insertCodeBlock = insertItems.of({ id: 'code-block', label: 'Code block', 
 // Extensions
 
 /** Code in every page: drawing, colours and protection. */
-export const codeBlocks: Extension = [codeDecorator, codeRenderer, codeRanges, highlightPlugin, copyEvents];
+export const codeBlocks: Extension = [codeDecorator, codeRenderer, codeRanges, highlightPlugin, copyEvents, inlineCode];
 
 /** Cmd+K on inline code: the link goes around the whole span, so the selection takes it in first. */
 function linkAroundCode(view: EditorView): boolean {
@@ -1439,6 +1440,7 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
     framedLines,
     hoverHeader,
     collapsedCode,
+    inlineCodeDoc,
     // Filters run lowest precedence first, so these run before doc mode settles the caret.
     Prec.low(EditorState.transactionFilter.of((tr) => guardFences(tr) ?? expandForSelection(tr) ?? tr)),
     Prec.highest(keymap.of([

@@ -895,3 +895,25 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
   dispatch(state.update({ changes, selection, scrollIntoView: true, userEvent: 'input' }));
   return true;
 };
+
+/**
+ * Clear formatting, taking inline code off as well, with its text written
+ * so it reads as it showed: padding gone, and backticks and marks that
+ * would now pair escaped.
+ */
+export const clearFormattingAndCode: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  if (!treeFor(state, selectionEnd(state))) return true;
+  const spans = state.selection.ranges.flatMap((range) => selectedText(state, range))
+    .flatMap((text) => text.spans.filter((span) => span.name === 'InlineCode' && span.from >= text.from && span.to <= text.to));
+  if (spans.length === 0) return clearFormatting({ state, dispatch });
+  const unwrapped = state.update({
+    changes: spans.map((span) => ({ from: span.from, to: span.to, insert: literalText(codeContent(state.sliceDoc(span.textFrom, span.textTo))) })),
+    filter: false,
+  });
+  let cleared: ChangeSet | null = null;
+  clearFormatting({ state: unwrapped.state, dispatch: (tr) => { cleared = tr.changes; } });
+  const changes = cleared ? unwrapped.changes.compose(cleared) : unwrapped.changes;
+  dispatch(state.update({ changes, selection: state.selection.map(changes), scrollIntoView: true, userEvent: 'input' }));
+  return true;
+};
