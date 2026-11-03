@@ -4,6 +4,7 @@ import { StateField, type EditorState, type Extension, type Text } from '@codemi
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { blockRenderers, latestTree, nodeDecorators, protectedRanges, type BlockLayout, type TextRange } from './extensionPoints';
+import { cellMath } from './previewWidgets';
 import { docMode } from './livePreview';
 import { mathNodes, mathReparse, mathSpan, type MathSpan } from './math';
 import { insertEquationItem, mathEditing, mathEditor } from './mathWrite';
@@ -56,7 +57,7 @@ const MHCHEM = /\\(?:ce|pu)\b/;
 /** KaTeX's own parse errors give the TeX again after "at position"; the message is enough. */
 function message(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
-  return text.replace(/^KaTeX parse error: /, '').replace(/ at position \d+:[\s\S]*$/, '').trim();
+  return text.replace(/^KaTeX parse error: /, '').replace(/ at (?:position \d+|end of input):[\s\S]*$/, '').trim();
 }
 
 let mhchem: 'absent' | 'loading' | 'loaded' = 'absent';
@@ -235,7 +236,7 @@ export class MathWidget extends WidgetType {
     root.className = this.display ? 'cm-math cm-math-display' : 'cm-math cm-math-inline';
     root.setAttribute('role', 'math');
     root.setAttribute('aria-label', this.tex);
-    if (this.doc) root.dataset.object = 'math';
+    if (this.doc) root.dataset.formula = '';
     fill(root, renderTex(this.tex, this.display, this.page), this.source);
     upgradeLater(view, root, this.tex, this.display, this.page, this.source);
     return root;
@@ -266,7 +267,7 @@ export class MathBlockWidget extends WidgetType {
     root.className = 'cm-math cm-math-display';
     root.setAttribute('role', 'math');
     root.setAttribute('aria-label', this.tex);
-    if (this.doc) root.dataset.object = 'math-block';
+    if (this.doc) root.dataset.formula = '';
     fill(root, renderTex(this.tex, true, this.page), this.source);
     upgradeLater(view, root, this.tex, true, this.page, this.source);
     frame.append(root);
@@ -340,5 +341,16 @@ export function mathRanges(state: EditorState, from: number, to: number): TextRa
 
 const protectedMath = protectedRanges.of(mathRanges);
 
+/** A formula in a table cell. */
+const tableMath = cellMath.of((tex, display, source) => {
+  const root = document.createElement('span');
+  root.className = display ? 'cm-math cm-math-display' : 'cm-math cm-math-inline';
+  root.setAttribute('role', 'math');
+  root.setAttribute('aria-label', tex);
+  root.dataset.cell = '';
+  fill(root, renderTex(tex, display), source);
+  return root;
+});
+
 /** Math in the page editor: the parser's reparse guard, drawing, the page's macros and, in documents, editing. */
-export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, mathEditing, insertEquationItem];
+export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, mathEditing, insertEquationItem];

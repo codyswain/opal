@@ -69,13 +69,13 @@
   font-size: 0.9em;
 }
 
-/* Documents: a formula takes the hover fill and a pointer, and opens its popover on a click. */
-.opal-editor .cm-editor .cm-math[data-object] {
+/* Documents: a formula takes the hover fill and a pointer, and opens its popover on a click. Not data-object, since a click on one in link text belongs to the link. */
+.opal-editor .cm-editor .cm-math[data-formula] {
   cursor: pointer;
   transition: background-color var(--duration-hover) var(--ease-standard);
 }
 
-.opal-editor .cm-editor .cm-math[data-object]:hover {
+.opal-editor .cm-editor .cm-math[data-formula]:hover {
   background-color: hsl(var(--surface-hover));
 }
 
@@ -151,6 +151,7 @@
 
 .opal-math-problem-caret {
   display: block;
+  padding-left: 9px;
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1;

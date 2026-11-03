@@ -6,6 +6,7 @@ import { mathNodeAt } from './math';
 import { pageMacros, renderTex } from './mathWidget';
 import {
   applyTyped,
+  clickedFormula,
   closeMathEditor,
   editorFor,
   mathEditor,
@@ -70,7 +71,10 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   const rendered = useMemo(() => (field.trim() ? renderTex(field.trim(), display, macros) : null), [field, display, macros]);
   // Fixed where it opened, so the popover never jumps while the formula's size changes.
   const anchorRect = useRef<DOMRect | null>(null);
-  if (!anchorRect.current) anchorRect.current = formulaRect(view, editor);
+  if (!anchorRect.current) {
+    anchorRect.current = clickedFormula.get(view) ?? formulaRect(view, editor);
+    clickedFormula.delete(view);
+  }
   const anchor = useRef({ getBoundingClientRect: () => anchorRect.current ?? new DOMRect(), contextElement: view.contentDOM });
 
   // An edit from elsewhere to the formula shows its new TeX.

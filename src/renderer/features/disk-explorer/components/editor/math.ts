@@ -8,9 +8,10 @@ import { Line as BlockLine, type BlockContext, type Element, type InlineContext,
  * Math in Markdown, as Pandoc and Obsidian read it.
  *
  * Inline: `$…$` by Pandoc's rule (the opening `$` has no space after it, the
- * closing one no space before it and no digit after it), plus a money
- * guard: a span that starts with a digit, holds a space and has none of
- * `\ ^ _ { } =` is text, so "$5 and $10" never renders. `$$…$$` inside a
+ * closing one no space before it and no digit after it), plus two money
+ * guards: the first bare `$` after an opener must close it, since TeX holds
+ * none, and a span that starts with a digit, holds a space and has none of
+ * `\ ^ _ { } =` is text. So "$5 and $10" never renders. `$$…$$` inside a
  * line is display math. `\(…\)` is inline math. Nothing inline crosses a
  * line break, `\$` is never a delimiter, and code or autolinks that start
  * first win. Everything between the delimiters is TeX: no Markdown inside.
@@ -55,12 +56,8 @@ function closerAt(cx: InlineContext, from: number, closer: 'paren' | 'single' | 
       if (cx.char(at + 1) === DOLLAR) return at;
       continue;
     }
-    // "$$" inside a single-dollar span is two characters of TeX, never a closer.
-    if (cx.char(at + 1) === DOLLAR) {
-      at += 1;
-      continue;
-    }
-    if (!isSpace(cx.char(at - 1)) && !isDigit(cx.char(at + 1))) return at;
+    // TeX holds no bare "$", so the first one closes the span or there is no formula: "$5 and $10 … $\pi r^2$" draws only the last.
+    return cx.char(at + 1) !== DOLLAR && !isSpace(cx.char(at - 1)) && !isDigit(cx.char(at + 1)) ? at : -1;
   }
   return -1;
 }

@@ -1,4 +1,4 @@
-import { StateEffect, StateField } from '@codemirror/state';
+import { Facet, StateEffect, StateField } from '@codemirror/state';
 import { WidgetType, type EditorView } from '@codemirror/view';
 import { toast } from 'sonner';
 import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
@@ -278,7 +278,13 @@ export type InlinePiece =
   | { kind: 'code'; text: string }
   | { kind: 'link'; children: InlinePiece[]; href: string | null }
   | { kind: 'wiki'; text: string; target: string }
-  | { kind: 'break' };
+  | { kind: 'break' }
+  | { kind: 'math'; tex: string; display: boolean; source: string };
+
+/** Draws a formula in a table cell; the math extension provides it, and without it the cell shows the formula's source. */
+export const cellMath = Facet.define<(tex: string, display: boolean, source: string) => HTMLElement, ((tex: string, display: boolean, source: string) => HTMLElement) | null>({
+  combine: (values) => values[0] ?? null,
+});
 
 export interface TableCell {
   /** Where the cell's text starts, from the start of the table. */
@@ -292,12 +298,15 @@ export interface TableModel {
   rows: TableCell[][];
 }
 
-function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
+function renderInline(pieces: InlinePiece[], parent: HTMLElement, math: EditorView | null = null) {
   for (const piece of pieces) {
     if (piece.kind === 'break') {
       parent.append(document.createElement('br'));
     } else if (piece.kind === 'text') {
       parent.append(piece.text);
+    } else if (piece.kind === 'math') {
+      const draw = math?.state.facet(cellMath);
+      parent.append(draw ? draw(piece.tex, piece.display, piece.source) : piece.source);
     } else if (piece.kind === 'code') {
       const code = document.createElement('code');
       code.className = 'cm-md-code';
@@ -313,11 +322,11 @@ function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
       const link = document.createElement('span');
       link.className = 'cm-md-link';
       if (piece.href) link.dataset.href = piece.href;
-      renderInline(piece.children, link);
+      renderInline(piece.children, link, math);
       parent.append(link);
     } else {
       const element = document.createElement(piece.kind === 'strong' ? 'strong' : piece.kind === 'em' ? 'em' : 's');
-      renderInline(piece.children, element);
+      renderInline(piece.children, element, math);
       parent.append(element);
     }
   }
@@ -356,7 +365,7 @@ export class TableWidget extends WidgetType {
     return other.source === this.source && other.context === this.context && other.indent === this.indent && other.cellCaret === this.cellCaret;
   }
 
-  toDOM() {
+  toDOM(view: EditorView) {
     const frame = blockFrame('cm-md-table', this.context, this.indent);
     const scroller = document.createElement('div');
     scroller.className = 'cm-md-table-scroll';
@@ -377,7 +386,7 @@ export class TableWidget extends WidgetType {
           // The cell's text sits in a box no wider than 24em, which a table cell cannot cap by itself.
           const text = document.createElement('div');
           text.className = 'cm-md-cell';
-          renderInline(source.content, text);
+          renderInline(source.content, text, view);
           cell.append(text);
         }
         tr.append(cell);

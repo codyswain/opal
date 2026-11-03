@@ -334,3 +334,51 @@ describe('formula write rules', () => {
     expect(view.state.field(mathEditor)).toBeNull();
   });
 });
+
+describe('formulas in tables, headings, links, lists and callouts', () => {
+  it('draws formulas in table cells and keeps money there as text', () => {
+    const view = mount('| Quantity | Formula | Cost |\n|---|---|---|\n| Area | $\\pi r^2$ | $5M |\n');
+    const cells = [...view.contentDOM.querySelectorAll('td')];
+    expect(cells[1].querySelector('.cm-math')?.getAttribute('aria-label')).toBe('\\pi r^2');
+    expect(cells[2].textContent).toBe('$5M');
+  });
+
+  it('opens the popover from a formula in a table cell, and a click elsewhere in the cell gives the cell caret', () => {
+    const source = '| Quantity | Formula |\n|---|---|\n| Area | $\\pi r^2$ |\n';
+    const view = mount(source);
+    view.focus = vi.fn();
+    const formula = view.contentDOM.querySelector('td .cm-math');
+    if (!formula) throw new Error('no formula in the table');
+    act(() => { formula.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(view.state.field(mathEditor)).toMatchObject({ from: source.indexOf('$\\pi'), table: true, tex: '\\pi r^2' });
+    act(() => { closeMathEditor(view, null, false); });
+    const cell = view.contentDOM.querySelectorAll('td')[0];
+    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(view.state.field(mathEditor)).toBeNull();
+  });
+
+  it('draws a formula in a heading at the heading\'s size, on its line', () => {
+    const view = mount('## Energy $E=mc^2$\n');
+    const line = view.contentDOM.querySelector('.cm-md-h2');
+    expect(line?.querySelector('.cm-math')?.getAttribute('aria-label')).toBe('E=mc^2');
+  });
+
+  it('leaves a click on a formula in link text to the link', async () => {
+    const { linkEditor } = await import('@/renderer/features/disk-explorer/components/editor/docMode');
+    const view = mount('See [the $O(n)$ bound](https://example.com) here.\n');
+    view.focus = vi.fn();
+    const formula = view.contentDOM.querySelector('.cm-math');
+    expect(formula?.closest('[data-href]')).not.toBeNull();
+    act(() => { formula?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 1, clientY: 1 })); });
+    expect(view.state.field(mathEditor)).toBeNull();
+    expect(view.state.field(linkEditor)).not.toBeNull();
+  });
+
+  it('lines a display block up with a list item\'s text, and sets it on a callout\'s ground', () => {
+    const listed = mount('- item\n\n  $$\n  x^2\n  $$\n');
+    const inList = listed.contentDOM.querySelector<HTMLElement>('.cm-math-block');
+    expect(inList?.style.getPropertyValue('--list-indent')).toMatch(/em$/);
+    const callout = mount('> [!note] Title\n> $$\n> x^2\n> $$\n');
+    expect(callout.contentDOM.querySelector('.cm-math-block')?.classList.contains('cm-md-in-callout')).toBe(true);
+  });
+});

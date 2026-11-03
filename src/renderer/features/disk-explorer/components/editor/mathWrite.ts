@@ -264,7 +264,8 @@ export interface TexWrite {
  * read it as text. Empty TeX is written as no formula at all.
  */
 export function texWrite(state: EditorState, editor: MathEditor, input: string): TexWrite {
-  const tex = editor.kind === 'inline' ? input.trim() : input.replace(/\s+$/, '').replace(/^\n+/, '');
+  // TeX between single dollars is trimmed, since "$ x$" is no formula; other marks keep its spaces, so typing and deleting a character gives back the same bytes.
+  const tex = editor.open === '$' ? input.trim() : input;
   if (!tex.trim()) return { tex: editor.tex, changes: [], from: editor.from, to: editor.to, problem: null };
   const endsInBackslash = /(^|[^\\])(\\\\)*\\$/.test(tex);
   const tries = endsInBackslash ? [`${tex} {}`] : [tex, `${tex}{}`];
@@ -548,7 +549,32 @@ export function restoreDollars(view: EditorView): void {
 /** Insert > Equation. */
 export const insertEquationItem = insertItems.of({ id: 'equation', label: 'Equation', icon: Sigma, shortcut: '⇧⌘E', order: 30, run: (view) => { editFormula(view); } });
 
-/** A click on a drawn formula in a document opens its popover; in a note it puts the caret in its TeX. Cmd+click follows a link in it. */
+/** Where a click opened the popover, so it sits by the formula that was clicked, which may be drawn in a table. */
+export const clickedFormula = new WeakMap<EditorView, DOMRect>();
+
+/** The formula a drawn element shows: by position, or in a table by its order among the table's formulas. */
+function clickedNode(view: EditorView, element: Element): SyntaxNode | null {
+  const tree = syntaxTree(view.state);
+  const table = element.closest('.cm-md-block');
+  if (table && view.contentDOM.contains(table)) {
+    let at: number;
+    try { at = view.posAtDOM(table); } catch { return null; }
+    let node: SyntaxNode | null = tree.resolveInner(Math.min(at + 1, view.state.doc.length), 1);
+    while (node && node.name !== 'Table') node = node.parent;
+    if (!node) return null;
+    const index = [...table.querySelectorAll('.cm-math')].indexOf(element);
+    return mathNodes(tree, node.from, node.to)[index] ?? null;
+  }
+  let at: number;
+  try { at = view.posAtDOM(element); } catch { return null; }
+  return mathNodeAt(tree, at, 1) ?? mathNodeAt(tree, at, 0);
+}
+
+/**
+ * A click on a drawn formula in a document opens its popover; in a note it
+ * puts the caret in its TeX. A formula in link text leaves the click to the
+ * link, and Cmd+click follows a link drawn in a formula.
+ */
 const mathClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
     if (event.button !== 0 || !(event.target instanceof Element)) return false;
@@ -560,17 +586,18 @@ const mathClicks = EditorView.domEventHandlers({
       window.open(link.href, '_blank');
       return true;
     }
-    const tree = syntaxTree(view.state);
-    let at: number;
-    try { at = view.posAtDOM(element); } catch { return false; }
-    const node = mathNodeAt(tree, at, 1) ?? mathNodeAt(tree, at, 0);
+    if (element.closest('[data-href], [data-wiki-target]')) return false;
+    const doc = view.state.facet(docMode);
+    // In a note a click in a table marks the cell, as anywhere else in it.
+    if (!doc && element.closest('.cm-md-block')) return false;
+    const node = clickedNode(view, element);
     if (!node) return false;
     event.preventDefault();
-    if (view.state.facet(docMode)) {
+    if (doc) {
+      clickedFormula.set(view, element.getBoundingClientRect());
       openMathEditor(view, node);
     } else {
-      const span = mathSpan(view.state.doc, node);
-      view.dispatch({ selection: EditorSelection.cursor(span.texFrom) });
+      view.dispatch({ selection: EditorSelection.cursor(mathSpan(view.state.doc, node).texFrom) });
       view.focus();
     }
     return true;

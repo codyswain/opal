@@ -57,6 +57,8 @@ describe('math parsing', () => {
     ['I can pay 20$ after $500', []],
     ['costs $5 and $10', []],
     ['$5 and $x$', ['InlineMath:$x$']],
+    ['$5 and $10, $5M-$10M. Area $\\pi r^2$', ['InlineMath:$\\pi r^2$']],
+    ['$a $b$', ['InlineMath:$b$']],
     ['\\$x\\$ and \\$5', []],
     ['$a\\$b$', ['InlineMath:$a\\$b$']],
     ['\\(g=9.8\\)', ['InlineMath:\\(g=9.8\\)']],
