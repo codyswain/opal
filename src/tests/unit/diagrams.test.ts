@@ -73,7 +73,7 @@ describe('diagrams', () => {
 
   it('pass Mermaid\'s own parser', async () => {
     const mermaid = (await import('mermaid')).default;
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', logLevel: 'fatal' });
     for (const source of [MERMAID, 'sequenceDiagram\n  Opal->>Disk: write\n  Disk-->>Opal: saved', 'graph LR\n  a --> b']) {
       await expect(mermaid.parse(stripColours(source))).resolves.toBeTruthy();
     }
@@ -90,7 +90,7 @@ describe('diagrams', () => {
 
   it.skipIf(!ROOT)('parse every Mermaid fence in the vault and lay out every Pocket flowchart', async () => {
     const mermaid = (await import('mermaid')).default;
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', logLevel: 'fatal' });
     const sources = await vaultFences('mermaid', [
       'Library/parametric/mini-bit/research-1to3/electronics.md',
       'Library/parametric/bastion-desktop/camera-service-research.md',

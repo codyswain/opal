@@ -316,6 +316,19 @@
   font-size: 0.85em;
 }
 
+/* The pieces either side of a join read as one span. */
+.opal-editor .cm-editor .cm-md-code:has(+ .cm-code-join) {
+  padding-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.opal-editor .cm-editor .cm-code-join + .cm-md-code {
+  padding-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 /* An empty block's one line. */
 .opal-editor .cm-editor .cm-code-placeholder {
   color: hsl(var(--text-tertiary));

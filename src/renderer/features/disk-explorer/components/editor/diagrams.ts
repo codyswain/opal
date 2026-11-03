@@ -195,6 +195,7 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
     const mermaid = await loadMermaid();
     mermaid.initialize({
       startOnLoad: false,
+      logLevel: 'fatal',
       theme: 'base',
       securityLevel: 'strict',
       htmlLabels: false,
