@@ -1,4 +1,5 @@
 import { isolateHistory, undo } from '@codemirror/commands';
+import { syntaxTree } from '@codemirror/language';
 import { ChangeSet, EditorState, MapMode, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Text, type TransactionSpec } from '@codemirror/state';
 import { EditorView, ViewPlugin, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
@@ -207,9 +208,11 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if (!typed) return null;
   const { startState: before, state: after } = tr;
   const caret = tr.changes.invertedDesc.mapPos(typed.at);
-  if (rawAt(before, caret)) return null;
   const { text, at } = typed;
   const line = after.doc.lineAt(at);
+  // While the parser has not reached the line, what the page shows there is not known: nothing is escaped.
+  if (syntaxTree(before).length < before.doc.lineAt(caret).to || syntaxTree(after).length < line.to) return null;
+  if (rawAt(before, caret)) return null;
   // An extra insertion before the typed character, with the caret after that character again.
   const insertBefore = (from: number, insert: string): TransactionSpec => ({ changes: { from, insert }, selection: { anchor: at + text.length + insert.length }, sequential: true });
   // The container is read before the typing, which may have turned "1984." into a marker.
