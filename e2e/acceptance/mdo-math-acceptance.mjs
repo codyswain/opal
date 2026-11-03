@@ -240,6 +240,36 @@ try {
   await waitForFile((written) => written === ORIGINAL, 3_000);
   check('undo after inserting goes back to the original bytes', (await readFile(DOC, 'utf8')) === ORIGINAL);
 
+  // An edit from elsewhere to the open formula shows in the field; the popover follows it.
+  await formula('E=mc^2').click();
+  await popover.waitFor({ timeout: 5_000 });
+  await writeFile(DOC, ORIGINAL.replace('$E=mc^2$', '$E=mc^3$'));
+  await page.waitForFunction(() => document.querySelector('[data-testid="math-popover"] textarea')?.value === 'E=mc^3', null, { timeout: 8_000 }).catch(() => undefined);
+  check('an edit from elsewhere shows in the open popover', (await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).inputValue()) === 'E=mc^3');
+  await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).press('Escape');
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  await writeFile(DOC, ORIGINAL);
+  await page.waitForFunction(() => document.querySelector('.cm-math')?.getAttribute('aria-label') === 'E=mc^2', null, { timeout: 8_000 }).catch(() => undefined);
+  check('the page follows the file back', (await page.evaluate(() => document.querySelector('.cm-math')?.getAttribute('aria-label'))) === 'E=mc^2');
+
+  // $$ then Enter starts a block and opens its popover; Backspace in the empty field puts the $$ back.
+  await page.locator('.cm-line', { hasText: 'Broken' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('$$');
+  await page.keyboard.press('Enter');
+  await popover.waitFor({ timeout: 5_000 });
+  const opened = await waitForFile((written) => written.includes('shows its source.\n\n$$\n\n$$'));
+  check('$$ then Enter writes $$, an empty line and $$, and opens the popover', opened.includes('shows its source.\n\n$$\n\n$$'), JSON.stringify(opened.slice(opened.indexOf('Broken'), opened.indexOf('Broken') + 60)));
+  await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).press('Backspace');
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  const restored = await waitForFile((written) => written.includes('shows its source.\n\n$$\n') && !written.includes('$$\n\n$$'));
+  check('Backspace right after puts $$ back as text', restored.includes('shows its source.\n\n$$\n'), JSON.stringify(restored.slice(restored.indexOf('Broken'), restored.indexOf('Broken') + 60)));
+  for (let index = 0; index < 4; index += 1) await page.keyboard.press('Meta+z');
+  await waitForFile((written) => written === ORIGINAL, 3_000);
+  check('undo goes back to the original bytes after the $$ block', (await readFile(DOC, 'utf8')) === ORIGINAL);
+
   // Typing a formula in a document: it renders on the closing $, and Backspace then takes only that $.
   await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
   await page.keyboard.press('End');
