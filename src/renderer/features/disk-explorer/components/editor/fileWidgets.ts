@@ -2,8 +2,8 @@ import type { EditorState, Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
-import type { FileKind } from '@/common/fileKind';
-import { isFsPathAtOrBelow } from '@/common/fsPaths';
+import { storedExtension, type FileKind } from '@/common/fileKind';
+import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { FileInfo } from '@/types/files';
 import { nodeDecorators, objectKinds, type DecorateContext, type ObjectKind } from './extensionPoints';
@@ -121,7 +121,7 @@ export class FileChipWidget extends WidgetType {
     chip.dataset.object = 'file';
     chip.setAttribute('role', 'link');
     chip.setAttribute('aria-label', `${ref.url ? 'Video' : kindLabel(fileName(ref), ref.kind)}, ${name}`);
-    if (ref.path === null) chip.classList.add('cm-file-unresolved');
+    if (ref.path === null && !ref.url) chip.classList.add('cm-file-unresolved');
     chip.append(iconNode(ref.url ? 'play' : iconFor(fileName(ref), ref.kind), 16, 'cm-file-chip-icon'), element('span', 'cm-file-chip-name', name));
     if (ref.path) {
       void fileInfo(ref.path).then((info) => {
@@ -215,7 +215,7 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
     card.append(tile, body);
     if (actions.childElementCount > 0) card.append(actions);
     card.setAttribute('aria-label', `${service ? `${service} video` : kindLabel(fileName(ref), ref.kind)}, ${name}`);
-    if (state === 'ready' && ref.path && !service) void thumbnailInto(view, tile, ref.path);
+    if (state === 'ready' && ref.path && !service && hasPicture(ref)) void thumbnailInto(view, tile, ref.path);
   };
   if (forced) {
     draw(forced, ref.path ? knownInfo(ref.path) : null);
@@ -254,6 +254,15 @@ function storedPathOf(view: EditorView, ref: FileRef): string | null {
   const page = view.state.facet(pageContext).path;
   const root = useDiskStore.getState().roots.filter((candidate) => isFsPathAtOrBelow(candidate, page)).sort((a, b) => b.length - a.length)[0];
   return root ? `${root}/${ref.target}` : null;
+}
+
+// Types whose thumbnail shows their content; for the rest macOS would draw the app's icon, which the page never shows.
+const PICTURED = new Set(['pptx', 'ppt', 'docx', 'doc', 'xlsx', 'xls', 'key', 'pages', 'numbers', '3mf', 'gcode.3mf', 'stl', 'obj']);
+
+/** Whether a card's tile shows the file's own picture rather than its type's icon. */
+function hasPicture(ref: FileRef): boolean {
+  if (ref.kind === 'image' || ref.kind === 'pdf' || ref.kind === 'video') return true;
+  return PICTURED.has(storedExtension(basenameFsPath(ref.path ?? ref.target)));
 }
 
 const hostOf = (url: string) => {
@@ -312,7 +321,8 @@ async function thumbnailInto(view: EditorView, tile: HTMLElement, path: string, 
   image.src = url;
   image.alt = '';
   image.draggable = false;
-  tile.replaceChildren(image);
+  // Over the type's icon, which shows through a thumbnail with a transparent ground.
+  tile.append(image);
   tile.classList.add('cm-file-card-tile-thumb');
   view.requestMeasure();
 }
@@ -627,7 +637,8 @@ function widgetFor(ctx: DecorateContext, ref: FileRef, look: FileLook): WidgetTy
   const drawn = { ref, name: shownName(ref), version: ref.path ? ctx.versions.get(toOpalFileUrl(ref.path)) ?? 0 : 0 };
   if (look === 'chip') return new FileChipWidget(drawn);
   if (look === 'card') return new FileCardWidget(drawn);
-  if (ref.path === null) return new FileCardWidget(drawn, 'missing');
+  // A preview whose file is gone is a card that says so, or that it moved.
+  if (ref.path === null) return new FileCardWidget(drawn);
   if (ref.kind === 'pdf') return new PdfPreviewWidget(drawn);
   if (ref.kind === 'video') return new VideoWidget(drawn);
   if (ref.kind === 'audio') return new AudioWidget(drawn);
