@@ -52,6 +52,6 @@ export async function sweepCopies(copiesDir: string, maxAgeMs: number, now = Dat
   await Promise.all(entries.map(async (entry) => {
     const folder = path.join(copiesDir, entry);
     const info = await stat(folder).catch(() => null);
-    if (info && now - info.mtimeMs >= maxAgeMs) await rm(folder, { recursive: true, force: true }).catch(() => undefined);
+    if (info && (maxAgeMs <= 0 || now - info.mtimeMs >= maxAgeMs)) await rm(folder, { recursive: true, force: true }).catch(() => undefined);
   }));
 }

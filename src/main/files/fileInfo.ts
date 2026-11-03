@@ -65,6 +65,8 @@ export class FileInfoReader {
       if (wanted.some((field) => result[field] === undefined)) Object.assign(result, await this.spotlight(resolved, result));
     }
 
+    // A download brings the object without touching the placeholder, so a missing object is asked about again.
+    if (result.status === 'lfs-missing') return result;
     if (this.cache.size >= CACHE_LIMIT) this.cache.delete(this.cache.keys().next().value as string);
     this.cache.set(key, result);
     return result;

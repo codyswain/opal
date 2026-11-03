@@ -6,9 +6,10 @@ import { imageSize } from '@/common/imageSize';
 import type { JobQueue } from '@/main/mapLimited';
 import type { FileInfo, Rendition } from '@/types/files';
 import { runFile, type RunFile } from './FileStore';
+import { SIPS } from './FolderStore';
 import { DiskCache } from './thumbnails';
 
-export const SIPS = '/usr/bin/sips';
+export { SIPS };
 const RENDITION_TIMEOUT_MS = 20_000;
 /** Formats Chromium can't draw; they show through a JPEG copy. */
 const CONVERTED = new Set(['heic', 'heif', 'tif', 'tiff']);
