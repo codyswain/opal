@@ -2,7 +2,8 @@
 // ranges and headers, HTML that never runs, a movie whose index is at its end
 // seeking to the end, image widths over IPC, opening an LFS file from a
 // read-only copy, launchers shown in Finder, thumbnails and a HEIC display
-// copy, and the text viewer reading an LFS file's bytes. Own userData and
+// copy, Copy file handing over a writable copy named without the hash, and
+// the text viewer reading an LFS file's bytes. Own userData and
 // temp vault; shell.openPath, showItemInFolder and the clipboard are stubbed
 // in the main process, so nothing opens and the pasteboard is untouched.
 // Run from the repository root after the Vite bundles are built:
@@ -16,6 +17,7 @@ import { createHash } from 'crypto';
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 import { deflateSync, crc32 } from 'zlib';
 
@@ -142,7 +144,7 @@ try {
     globalThis.__revealed = [];
     shell.openPath = async (file) => { globalThis.__opened.push(file); return ''; };
     shell.showItemInFolder = (file) => { globalThis.__revealed.push(file); };
-    clipboard.writeBuffer = () => undefined;
+    clipboard.writeBuffer = (type, buffer) => { globalThis.__pasteboard = { type, url: buffer.toString() }; };
   });
 
   const ranged = await request(url(path.join(files, 'bytes.bin')), { Range: 'bytes=10-19' });
@@ -210,9 +212,18 @@ try {
   const openedPath = (await app.evaluate(() => globalThis.__opened))[0];
   const copyMode = openedPath ? (await stat(openedPath)).mode & 0o777 : 0;
   const copyBytes = openedPath ? await readFile(openedPath) : Buffer.alloc(0);
-  check('Open on an LFS file opens a read-only copy of the real file and says so',
-    opened.success && opened.data.notice === "Opened a read-only copy. Changes won't reach the vault." && openedPath?.startsWith(userData) && copyMode === 0o444 && copyBytes.subarray(0, 8).toString() === '%PDF-1.4',
+  check('Open on an LFS file opens a read-only copy of the real file, named without the hash, and says so',
+    opened.success && opened.data.notice === "Opened a read-only copy. Changes won't reach the vault." && openedPath?.startsWith(userData) && path.basename(openedPath) === 'deck.pdf' && copyMode === 0o444 && copyBytes.subarray(0, 8).toString() === '%PDF-1.4',
     `${openedPath} ${copyMode.toString(8)}`);
+
+  // Copy file: Slack and Finder get a writable file named as the page shows it, which outlives quitting.
+  const copied = await page.evaluate((target) => window.filesAPI.copyFile(target), path.join(files, 'deck.b2c3d4e5.pdf'));
+  const pasteboard = await app.evaluate(() => globalThis.__pasteboard ?? null);
+  const pasted = pasteboard?.url?.startsWith('file:') ? fileURLToPath(pasteboard.url) : '';
+  const pastedMode = pasted ? (await stat(pasted)).mode & 0o777 : 0;
+  check('Copy file puts a writable copy named without the hash on the pasteboard, outside the copies removed on quit',
+    copied.success && pasteboard?.type === 'public.file-url' && path.basename(pasted) === 'deck.pdf' && pastedMode === 0o644 && pasted.startsWith(userData) && !pasted.includes('open-copies'),
+    `${pasted} ${pastedMode.toString(8)}`);
   const appUsed = opened.success ? opened.data.app : null;
   check('Open names the app it uses', typeof appUsed === 'string' && appUsed.length > 0, String(appUsed));
 
