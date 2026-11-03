@@ -137,12 +137,17 @@ export function visibleLines(state: EditorState, from: number, to: number): Visi
   const last = state.doc.lineAt(to);
   const lines: VisibleLine[] = [];
   let hidden: HiddenRange[] | null = null;
+  // The ranges that reach the current line, kept as the lines go down, so a whole page reads each range once.
+  let next = 0;
+  let active: HiddenRange[] = [];
   for (let number = first.number; number <= last.number; number += 1) {
     const line = state.doc.line(number);
     let visible = map.get(line.from);
     if (!visible) {
       hidden ??= hiddenRanges(state, first.from, last.to);
-      visible = buildLine(state, line, hidden.filter((range) => range.to >= line.from && range.from <= line.to));
+      active = active.filter((range) => range.to >= line.from);
+      for (; next < hidden.length && hidden[next].from <= line.to; next += 1) if (hidden[next].to >= line.from) active.push(hidden[next]);
+      visible = buildLine(state, line, active.filter((range) => range.from <= line.to));
       map.set(line.from, visible);
     }
     lines.push(visible);

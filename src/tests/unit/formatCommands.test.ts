@@ -90,6 +90,11 @@ describe('clear formatting', () => {
     expect(run('~~**a‹b›c**~~', clearFormatting)).toBe('~~**a**~~‹b›~~**c**~~');
     expect(run('*a **‹b›** c*', clearFormatting)).toBe('*a* ‹b› *c*');
   });
+
+  it('unwraps code that holds Markdown characters in a note, and keeps it code in a document', () => {
+    expect(run('‹x `a*b` y›', clearFormatting, NOTE)).toBe('‹x a*b y›');
+    expect(run('‹x `a*b` y›', clearFormatting)).toBe('‹x `a*b` y›');
+  });
 });
 
 describe('headings', () => {

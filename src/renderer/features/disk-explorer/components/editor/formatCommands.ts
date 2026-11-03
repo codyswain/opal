@@ -414,14 +414,14 @@ const MARKDOWN_IN_CODE = /[*_~`[\]<\\]/;
 
 /**
  * Takes bold, italic, strikethrough and code off the selection: only marks
- * the syntax tree reads as formatting. Code whose text would turn into
- * Markdown stays code, and a document refuses a change that would show a mark.
+ * the syntax tree reads as formatting. In a document, code whose text would
+ * turn into Markdown stays code, and a change that would show a mark is refused.
  */
 export const clearFormatting: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
   if (!treeFor(state, selectionEnd(state))) return true;
   const changes = state.selection.ranges.flatMap((range) => selectedText(state, range))
-    .map((text) => ({ ...text, spans: text.spans.filter((span) => span.name !== 'InlineCode' || !MARKDOWN_IN_CODE.test(state.sliceDoc(span.textFrom, span.textTo))) }))
+    .map((text) => ({ ...text, spans: text.spans.filter((span) => span.name !== 'InlineCode' || !state.facet(docMode) || !MARKDOWN_IN_CODE.test(state.sliceDoc(span.textFrom, span.textTo))) }))
     .flatMap((text) => CLEARED.flatMap((name) => removeStyle(state, text, name, CLEARED)));
   if (changes.length === 0) return true;
   const tr = state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' });

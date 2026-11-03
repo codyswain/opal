@@ -31,12 +31,32 @@ export function countWords(text: string): number {
   return count;
 }
 
-/** The words the page shows, and those in the selection when there is one. */
-export function pageWords(state: EditorState): { words: number; selected: number | null } {
-  const words = countWords(visibleSlice(state, 0, state.doc.length));
+/** Words in a note's written text: runs with a letter or digit, so list markers, `#` and `|` do not count. */
+const writtenWords = (text: string) => text.match(/\S*[\p{L}\p{N}]\S*/gu)?.length ?? 0;
+
+/**
+ * The words of `from` to `to`: in a document, the text the page shows; in
+ * a note, the written text, since the caret's line shows its Markdown and
+ * the count would change as the caret moves.
+ */
+function wordsIn(state: EditorState, from: number, to: number): number {
+  return state.facet(docMode) ? countWords(visibleSlice(state, from, to)) : writtenWords(state.sliceDoc(from, to));
+}
+
+/** The words on the page. */
+export function pageWordCount(state: EditorState): number {
+  return wordsIn(state, 0, state.doc.length);
+}
+
+/** The words in the selection, or null when nothing is selected. */
+export function selectedWordCount(state: EditorState): number | null {
   const ranges = state.selection.ranges.filter((range) => !range.empty);
-  const selected = ranges.length > 0 ? ranges.reduce((sum, range) => sum + countWords(visibleSlice(state, range.from, range.to)), 0) : null;
-  return { words, selected };
+  return ranges.length > 0 ? ranges.reduce((sum, range) => sum + wordsIn(state, range.from, range.to), 0) : null;
+}
+
+/** The words on the page, and those in the selection when there is one. */
+export function pageWords(state: EditorState): { words: number; selected: number | null } {
+  return { words: pageWordCount(state), selected: selectedWordCount(state) };
 }
 
 /** The offset Option+Right reaches from `offset`: the end of the word at or after it, else the line's end. */

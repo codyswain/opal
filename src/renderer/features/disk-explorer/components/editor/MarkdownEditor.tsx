@@ -12,7 +12,7 @@ import { linkEditor, type LinkEditor } from './docMode';
 import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
-import { pageWords } from './wordMotion';
+import { pageWordCount, pageWords, selectedWordCount } from './wordMotion';
 import type { PageObject } from './extensionPoints';
 import { setFileProperties } from './firstLine';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
@@ -127,6 +127,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState<{ words: number; selected: number | null }>({ words: 0, selected: null });
   const counting = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The page's total is read again only after the text changed; a caret move counts the selection alone.
+  const recount = useRef(false);
   // The hook's state changes identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
@@ -150,8 +152,19 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
           conflict.of([]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged || update.selectionSet) {
+              if (update.docChanged) recount.current = true;
               if (counting.current) clearTimeout(counting.current);
-              counting.current = setTimeout(() => { counting.current = null; setWords(pageWords(created.state)); }, COUNT_DELAY_MS);
+              counting.current = setTimeout(() => {
+                counting.current = null;
+                const whole = recount.current;
+                recount.current = false;
+                const total = whole ? pageWordCount(created.state) : null;
+                const selected = selectedWordCount(created.state);
+                setWords((shown) => {
+                  const words = total ?? shown.words;
+                  return words === shown.words && selected === shown.selected ? shown : { words, selected };
+                });
+              }, COUNT_DELAY_MS);
             }
             if (update.docChanged) {
               if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(Transaction.remote))) {
