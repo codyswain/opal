@@ -244,6 +244,11 @@ describe('importing files', () => {
     await expect(service.import(page, { path: path.join(root, 'Library') })).rejects.toThrow("Folders can't be added yet.");
     await mkdir(path.join(outside, 'Gob deck.key/Data'), { recursive: true });
     await expect(service.import(page, { path: path.join(outside, 'Gob deck.key') })).rejects.toThrow('"Gob deck.key" is saved as a folder. Zip it first.');
+    // An app is linked where it is inside the vault, and named as an app outside it.
+    await mkdir(path.join(outside, 'Demo.app/Contents'), { recursive: true });
+    await expect(service.import(page, { path: path.join(outside, 'Demo.app') })).rejects.toThrow('"Demo.app" is an app. Opal links apps only from inside the vault.');
+    await mkdir(path.join(root, 'Tools/Demo.app/Contents'), { recursive: true });
+    expect(await service.import(page, { path: path.join(root, 'Tools/Demo.app') })).toMatchObject({ vaultPath: 'Tools/Demo.app', name: 'Demo.app' });
     // git's config can hold a remote address with a token in it.
     await writeFile(path.join(root, '.git/config'), '[remote "origin"]\n\turl = https://token@github.com/codyswain/vault\n', { flag: 'a' });
     await expect(service.import(page, { path: path.join(root, '.git/config') })).rejects.toThrow("Files inside .git can't be added.");
