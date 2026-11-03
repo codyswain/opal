@@ -25,7 +25,8 @@ export type DaySection = (typeof DAY_SECTIONS)[number];
 
 export const DAY_SECTION_TITLES: Record<DaySection, string> = {
   activity: 'Activity log',
-  documents: 'Documents',
+  // The Files card keeps its old key, so saved preferences still apply to it.
+  documents: 'Files',
   chats: 'Chats',
   recordings: 'Recordings',
   people: 'People',

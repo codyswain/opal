@@ -4,7 +4,7 @@ import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import type { MarkdownConfig } from '@lezer/markdown';
 import { toast } from 'sonner';
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, isDocFile, pageName } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import { LINK_TARGET_LIMIT } from '@/types/markdown';
 
@@ -81,7 +81,8 @@ export const pageContext = Facet.define<PageContext, PageContext>({
   combine: (values) => values[0] ?? { path: '', openNote: () => undefined },
 });
 
-const linksResolved = StateEffect.define<Record<string, string | null>>();
+/** Tells the page where link targets point, such as a file it just stored. */
+export const linksResolved = StateEffect.define<Record<string, string | null>>();
 
 /** Wiki link targets on this page and the files they resolve to; null for a link to nothing yet. */
 export const resolvedLinks = StateField.define<ReadonlyMap<string, string | null>>({
@@ -163,7 +164,8 @@ export async function openWikiLink(view: EditorView, target: string, newTab = fa
     toast.error(`Could not find ${target}.`);
     return;
   }
-  const created = await window.markdownAPI.create(folder, basenameFsPath(target).replace(/\.md$/i, ''));
+  // A note, unless the link names a document.
+  const created = await window.markdownAPI.create(folder, pageName(basenameFsPath(target)), isDocFile(target) ? 'mdo' : 'md');
   if (!created.success) {
     toast.error(created.error);
     return;

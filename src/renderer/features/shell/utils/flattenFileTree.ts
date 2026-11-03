@@ -12,7 +12,7 @@ import type { DiskEntry, FileKind } from '@/types/disk';
 export interface FileTreeNode {
   path: string;
   name: string;
-  /** What the row shows. Markdown files drop `.md`, as in Obsidian. */
+  /** What the row shows. Markdown files drop `.md` or `.mdo`, as in Obsidian. */
   label: string;
   kind: FileKind;
   isDirectory: boolean;

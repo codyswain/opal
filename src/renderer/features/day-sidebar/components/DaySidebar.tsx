@@ -173,11 +173,11 @@ function ActivityCard({ day, more, onMore }: CardProps) {
 interface FilesCardProps extends CardProps {
   section: 'documents' | 'people';
   files: DayFile[];
-  /** "document", "documents" */
+  /** "file", "files" */
   noun: [string, string];
 }
 
-/** Documents and People: one row per file, the latest touched first. */
+/** Files and People: one row per file, the latest touched first. */
 function FilesCard({ files, more, noun, onMore, section }: FilesCardProps) {
   const collapsed = useDaySidebarStore((state) => state.collapsed[section]);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
@@ -207,7 +207,7 @@ function FilesCard({ files, more, noun, onMore, section }: FilesCardProps) {
 }
 
 const DocumentsCard = (props: CardProps) => (
-  <FilesCard {...props} section="documents" files={props.day.documents} noun={['document', 'documents']} />
+  <FilesCard {...props} section="documents" files={props.day.documents} noun={['file', 'files']} />
 );
 
 const PeopleCard = (props: CardProps) => (
@@ -455,7 +455,7 @@ interface DaySidebarProps {
 /**
  * The right sidebar: one day of the vault beside the page. Its header holds
  * the day, previous and next day, the options menu and the toggle. A column
- * of cards below shows the day's digest, documents, chats, recordings,
+ * of cards below shows the day's digest, files, chats, recordings,
  * people and activity log, and reads again when any of them change on disk.
  */
 export function DaySidebar({ width }: DaySidebarProps) {

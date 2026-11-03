@@ -3,7 +3,7 @@ import { constants } from 'fs';
 import { appendFile, lstat, mkdir, open, rename, stat, unlink, writeFile, type FileHandle } from 'fs/promises';
 import path from 'path';
 import { isMap, isNode, parseDocument, type Document } from 'yaml';
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, isDocFile, pageName } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import type { ActivityRecorder } from '@/main/activity/ActivityService';
 import type { RootRegistry } from './RootRegistry';
@@ -19,6 +19,7 @@ import {
   type MarkdownDocument,
   type MarkdownProperties,
   type MarkdownWriteResult,
+  type PageExtension,
   type PageProperty,
 } from '@/types/markdown';
 
@@ -189,13 +190,13 @@ export class MarkdownDocumentService {
     return { revision: revisionOf(next) };
   }
 
-  create(parentDir: string, baseName = 'Untitled'): Promise<{ path: string }> {
+  create(parentDir: string, baseName = 'Untitled', extension: PageExtension = 'md'): Promise<{ path: string }> {
     return this.queue.run(async () => {
       const name = validName(baseName);
       const parent = await assertNoSymlinks(this.deps.registry, parentDir);
       const info = await stat(parent);
       if (!info.isDirectory()) throw new MarkdownError('Notes can only be created inside a folder.');
-      const created = await writeNewNote(parent, name, '');
+      const created = await writeNewNote(parent, name, '', extension);
       this.deps.metadata?.invalidate();
       return { path: created };
     });
@@ -204,21 +205,23 @@ export class MarkdownDocumentService {
   /**
    * Keeps text a page could not save to its note: writes it to a new
    * "<name> (<label>).md" next to the note, or in the recovery folder when
-   * that folder is gone, outside the opened roots or not writable.
+   * that folder is gone, outside the opened roots or not writable. A
+   * document's copy is a document.
    */
   saveCopy(target: string, body: string, label: MarkdownCopyLabel): Promise<{ path: string }> {
     return this.queue.run(async () => {
       if (typeof body !== 'string') throw new MarkdownError('Body must be text.');
-      const name = validName(`${path.basename(target).replace(/\.md$/i, '')} (${label})`);
+      const name = validName(`${pageName(target)} (${label})`);
+      const extension = isDocFile(target) ? 'mdo' : 'md';
       try {
         const parent = await assertNoSymlinks(this.deps.registry, path.dirname(target));
-        const copy = await writeNewNote(parent, name, body);
+        const copy = await writeNewNote(parent, name, body, extension);
         this.deps.metadata?.invalidate();
         return { path: copy };
       } catch (error) {
         if (!this.deps.recoveryDir) throw error;
         await mkdir(this.deps.recoveryDir, { recursive: true });
-        return { path: await writeNewNote(this.deps.recoveryDir, name, body) };
+        return { path: await writeNewNote(this.deps.recoveryDir, name, body, extension) };
       }
     });
   }
@@ -266,10 +269,10 @@ function validName(baseName: string): string {
   return name;
 }
 
-/** Writes `body` to a new "<name>.md" in `folder`, or "<name> 2.md" and on while a name is taken. */
-async function writeNewNote(folder: string, name: string, body: string): Promise<string> {
+/** Writes `body` to a new "<name>.<extension>" in `folder`, or "<name> 2.<extension>" and on while a name is taken. */
+async function writeNewNote(folder: string, name: string, body: string, extension: PageExtension): Promise<string> {
   for (let attempt = 1; attempt <= 500; attempt += 1) {
-    const candidate = normalizePath(path.join(folder, attempt === 1 ? `${name}.md` : `${name} ${attempt}.md`));
+    const candidate = normalizePath(path.join(folder, attempt === 1 ? `${name}.${extension}` : `${name} ${attempt}.${extension}`));
     try {
       await writeFile(candidate, body, { encoding: 'utf8', flag: 'wx' });
       return candidate;

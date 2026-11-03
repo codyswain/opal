@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, fileTreeLabel, isDocFile, pageName } from '@/common/fileKind';
 
 describe('classifyFile', () => {
   it('classifies common image extensions', () => {
@@ -14,6 +14,7 @@ describe('classifyFile', () => {
 
   it('classifies markdown separately from other text', () => {
     expect(classifyFile('note.md')).toBe('markdown');
+    expect(classifyFile('Plan.mdo')).toBe('markdown');
     expect(classifyFile('README.markdown')).toBe('markdown');
     expect(classifyFile('data.txt')).toBe('text');
     expect(classifyFile('config.json')).toBe('text');
@@ -46,5 +47,29 @@ describe('classifyFile', () => {
 
   it('never returns directory', () => {
     expect(classifyFile('some-folder')).not.toBe('directory');
+  });
+});
+
+describe('page names', () => {
+  it('drops .md or .mdo from a path or a name, and nothing else', () => {
+    expect(pageName('/Vault/Library/x/Plan.mdo')).toBe('Plan');
+    expect(pageName('/Vault/Notes/brief.MD')).toBe('brief');
+    expect(pageName('v1.2 notes.md')).toBe('v1.2 notes');
+    expect(pageName('README.markdown')).toBe('README.markdown');
+    expect(pageName('/Vault/old.mdo.bak')).toBe('old.mdo.bak');
+  });
+
+  it('tells a document from a note by its extension', () => {
+    expect(isDocFile('/Vault/Plan.mdo')).toBe(true);
+    expect(isDocFile('/Vault/Plan.MDO')).toBe(true);
+    expect(isDocFile('/Vault/Plan.md')).toBe(false);
+    expect(isDocFile('/Vault/notes.mdo/Plan.md')).toBe(false);
+    expect(isDocFile('/Vault/.mdo')).toBe(false);
+  });
+
+  it('labels pages without their extension in the tree and lists', () => {
+    expect(fileTreeLabel('Plan.mdo', 'markdown')).toBe('Plan');
+    expect(fileTreeLabel('brief.md', 'markdown')).toBe('brief');
+    expect(fileTreeLabel('photo.mdo.png', 'image')).toBe('photo.mdo.png');
   });
 });

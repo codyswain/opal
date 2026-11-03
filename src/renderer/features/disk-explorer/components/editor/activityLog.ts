@@ -1,4 +1,4 @@
-import { EditorState, Facet, StateField, type Text } from '@codemirror/state';
+import { EditorState, Facet, StateField, Transaction, type Text } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 import { readOnlyRule } from '@/common/stackModel';
 
@@ -52,10 +52,10 @@ const sectionDecorations = EditorView.decorations.compute(['doc', activityLogSec
   return Decoration.set(lines);
 });
 
-// Typing in the read-only part is dropped. Disk changes pass with `filter: false`.
+// Typing in the read-only part is dropped. Disk changes, marked remote, pass.
 const dropLockedChanges = EditorState.changeFilter.of((tr) => {
   const start = tr.startState.field(activityLogSection);
-  if (start === null) return true;
+  if (start === null || tr.annotation(Transaction.remote)) return true;
   let allowed = true;
   tr.changes.iterChangedRanges((_from, to) => {
     if (to >= start) allowed = false;

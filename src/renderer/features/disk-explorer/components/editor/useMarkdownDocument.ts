@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useDocumentStatusStore } from '../../store/documentStatusStore';
-import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import { pageName } from '@/common/fileKind';
+import { parentFsPath } from '@/common/fsPaths';
 import type { MarkdownCopyLabel, UnsavedPage } from '@/types/markdown';
 import { mergeText, type MergeResult } from './mergeText';
 import { registerPageFlush, trackPendingWrite } from './pendingSaves';
@@ -54,11 +55,9 @@ const INITIAL: MarkdownDocumentState = {
 type ReadResponse = Awaited<ReturnType<typeof window.markdownAPI.read>>;
 type WriteResponse = Awaited<ReturnType<typeof window.markdownAPI.write>>;
 
-const noteName = (path: string) => basenameFsPath(path).replace(/\.md$/i, '');
-
 /** A copy next to the note goes by its name; one in the recovery folder by its full path. */
 function copyLocation(note: string, copy: string): string {
-  return parentFsPath(copy) === parentFsPath(note) ? noteName(copy) : copy;
+  return parentFsPath(copy) === parentFsPath(note) ? pageName(copy) : copy;
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -180,7 +179,7 @@ class MarkdownDocumentSession {
    * text is not in its file.
    */
   private async settle(): Promise<UnsavedPage | null> {
-    const name = noteName(this.path);
+    const name = pageName(this.path);
     try {
       this.cancelTimer();
       await this.serial(() => this.write());
@@ -417,7 +416,7 @@ class MarkdownDocumentSession {
   private async keepBoth(): Promise<void> {
     const conflict = this.conflict;
     if (!conflict) return;
-    const name = noteName(this.path);
+    const name = pageName(this.path);
     const copy = await this.saveCopy(this.latest, 'conflicted copy');
     if (!copy) {
       toast.error(this.live

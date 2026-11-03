@@ -11,6 +11,7 @@ import {
 export { OPAL_FILE_SCHEME };
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
+import { localObject, readPlaceholder } from '@/main/files/lfsPlaceholder';
 import logger from '@/main/logger';
 
 /**
@@ -69,13 +70,26 @@ export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): vo
         return new Response('Not a file', { status: 400, headers: CORS_HEADERS });
       }
 
-      const body = Readable.toWeb(createReadStream(resolved)) as ReadableStream;
+      // A Git LFS placeholder shows its bytes from git's object store once
+      // they are on this Mac. Until then it is not found, and the page asks
+      // the file store whether it can be downloaded.
+      let source = resolved;
+      let size = info.size;
+      const placeholder = await readPlaceholder(resolved);
+      if (placeholder) {
+        const object = await localObject(resolved, placeholder);
+        if (!object) return new Response('Not downloaded', { status: 404, headers: CORS_HEADERS });
+        source = object;
+        size = placeholder.size;
+      }
+
+      const body = Readable.toWeb(createReadStream(source)) as ReadableStream;
 
       return new Response(body, {
         status: 200,
         headers: {
           'Content-Type': contentTypeFor(resolved),
-          'Content-Length': String(info.size),
+          'Content-Length': String(size),
           // Bytes are addressed by path, and the path's contents can change,
           // so revalidate rather than cache indefinitely.
           'Cache-Control': 'no-cache',

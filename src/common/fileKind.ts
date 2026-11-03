@@ -18,7 +18,8 @@ export const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'heif', 'avif', 'svg', 'ico',
 ]);
 
-export const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set(['md', 'markdown', 'mdx']);
+/** `mdo` is a document: plain Markdown that opens in the document editor. */
+export const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set(['md', 'markdown', 'mdx', 'mdo']);
 
 export const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   'txt', 'json', 'yaml', 'yml', 'toml', 'csv', 'tsv', 'log',
@@ -45,9 +46,21 @@ export function extensionOf(name: string): string {
   return name.slice(lastDot + 1).toLowerCase();
 }
 
-/** The name the tree, tabs and lists show: Markdown without `.md`, anything else in full. */
+const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+
+/** A page's name: the file's name without `.md` or `.mdo`. */
+export function pageName(path: string): string {
+  return baseName(path).replace(/\.mdo?$/i, '');
+}
+
+/** Whether the file is a document (`.mdo`) rather than a note (`.md`). */
+export function isDocFile(path: string): boolean {
+  return extensionOf(baseName(path)) === 'mdo';
+}
+
+/** The name the tree, tabs and lists show: a page without `.md` or `.mdo`, anything else in full. */
 export function fileTreeLabel(name: string, kind: FileKind): string {
-  return kind === 'markdown' ? name.replace(/\.md$/i, '') : name;
+  return kind === 'markdown' ? pageName(name) : name;
 }
 
 export function classifyFile(name: string): FileKind {

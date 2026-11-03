@@ -1,4 +1,9 @@
+import { StateEffect, StateField } from '@codemirror/state';
 import { WidgetType, type EditorView } from '@codemirror/view';
+import { toast } from 'sonner';
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import { OPAL_FILE_SCHEME, opalFileUrlToPath } from '@/common/opalFileUrl';
+import type { FileStatus } from '@/types/files';
 
 /** Where a block sits: inside a callout or quote it takes the box's ground. */
 export type BlockContext = 'callout' | 'callout-last' | 'quote' | null;
@@ -111,33 +116,152 @@ export class EllipsisWidget extends WidgetType {
   }
 }
 
-/** An image, from the vault through opal-file:// or from the web. Its height lands after it loads. */
+/** Says a picture's file changed, such as one just downloaded, by the URL the page loads it from. */
+export const fileChanged = StateEffect.define<string>();
+
+/** How often each picture's file has changed while the page is open, so the picture loads it again. */
+export const fileVersions = StateField.define<ReadonlyMap<string, number>>({
+  create: () => new Map(),
+  update(versions, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(fileChanged)) versions = new Map(versions).set(effect.value, (versions.get(effect.value) ?? 0) + 1);
+    }
+    return versions;
+  },
+});
+
+async function fileStatus(file: string): Promise<FileStatus | null> {
+  try {
+    const result = await window.filesAPI.status(file);
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+const CORNERS = ['nw', 'ne', 'sw', 'se'];
+
+/** Stops watching the folder of a picture that waits for its bytes, once its frame is gone. */
+const unwatch = new WeakMap<HTMLElement, () => void>();
+
+/**
+ * An image, from the vault through opal-file:// or from the web. Its height
+ * lands after it loads. `version` counts changes to a vault file, which then
+ * loads again under a new URL, since the browser keeps what it loaded.
+ * Selected in a document, it draws a frame with a square at each corner to
+ * resize it by (imageFrame.ts). A vault file whose bytes are not on this Mac
+ * yet shows "Not downloaded yet" and a Download button, and loads once the
+ * bytes arrive, from Download or from the vault's sync.
+ */
 export class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string, readonly width: number | null) { super(); }
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+    readonly width: number | null,
+    readonly version = 0,
+    readonly selected = false,
+  ) { super(); }
 
   eq(other: ImageWidget) {
-    return other.src === this.src && other.alt === this.alt && other.width === this.width;
+    return other.src === this.src && other.alt === this.alt && other.width === this.width && other.version === this.version && other.selected === this.selected;
   }
+
+  private get url() { return this.version ? `${this.src}?v=${this.version}` : this.src; }
 
   toDOM(view: EditorView) {
     const frame = document.createElement('span');
     frame.className = 'cm-md-image';
+    // The box hugs the image, so the frame and its corners sit on the image's edges.
+    const box = document.createElement('span');
+    box.className = 'cm-md-image-box';
     const image = document.createElement('img');
-    image.src = this.src;
+    image.src = this.url;
     image.alt = this.alt;
     image.draggable = false;
-    if (this.width) image.style.width = `${this.width}px`;
     image.addEventListener('load', () => view.requestMeasure());
-    image.addEventListener('error', () => {
-      frame.classList.add('cm-md-image-missing');
-      frame.textContent = this.alt || 'Image not found';
-      view.requestMeasure();
-    });
-    frame.append(image);
+    image.addEventListener('error', () => { void this.explainMissing(view, frame); });
+    box.append(image);
+    frame.append(box);
+    this.dress(frame);
     return frame;
   }
 
-  ignoreEvent() { return false; }
+  /** A new width or selection keeps the loaded image. */
+  updateDOM(frame: HTMLElement) {
+    const image = frame.querySelector('img');
+    if (!image || image.getAttribute('src') !== this.url || image.alt !== this.alt) return false;
+    this.dress(frame);
+    return true;
+  }
+
+  private dress(frame: HTMLElement) {
+    const box = frame.querySelector('.cm-md-image-box');
+    const image = box?.querySelector('img');
+    if (!box || !image) return;
+    image.style.width = this.width ? `${this.width}px` : '';
+    frame.classList.toggle('cm-md-image-selected', this.selected);
+    for (const handle of box.querySelectorAll('.cm-md-image-handle')) handle.remove();
+    if (!this.selected) return;
+    box.append(...CORNERS.map((corner) => {
+      const handle = document.createElement('span');
+      handle.className = 'cm-md-image-handle';
+      handle.dataset.corner = corner;
+      return handle;
+    }));
+  }
+
+  /** A vault file still on the file store offers Download; anything else shows its alt text, as a missing file always has. */
+  private async explainMissing(view: EditorView, frame: HTMLElement) {
+    frame.replaceChildren();
+    const file = this.src.startsWith(`${OPAL_FILE_SCHEME}:`) ? opalFileUrlToPath(this.src) : null;
+    if (file && (await fileStatus(file)) === 'remote') {
+      this.offerDownload(view, frame, file);
+    } else {
+      frame.classList.add('cm-md-image-missing');
+      frame.textContent = this.alt || 'Image not found';
+    }
+    view.requestMeasure();
+  }
+
+  private offerDownload(view: EditorView, frame: HTMLElement, file: string) {
+    frame.classList.add('cm-md-image-remote');
+    const note = document.createElement('span');
+    note.textContent = 'Not downloaded yet';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cm-md-image-download';
+    button.textContent = 'Download';
+    const reload = () => {
+      if (view.dom.isConnected) view.dispatch({ effects: fileChanged.of(this.src) });
+    };
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.textContent = 'Downloading…';
+      const result = await window.filesAPI.fetch(file).catch(() => null);
+      if (result?.success && result.data === 'here') {
+        reload();
+        return;
+      }
+      toast.error(result && !result.success ? result.error : `Could not download ${basenameFsPath(file)}.`);
+      button.disabled = false;
+      button.textContent = 'Download';
+    });
+    frame.append(note, button);
+    // The vault's sync may bring the bytes first.
+    const folder = parentFsPath(file);
+    unwatch.set(frame, window.diskAPI.onChanged(({ directories }) => {
+      if (folder && directories.includes(folder)) reload();
+    }));
+  }
+
+  destroy(frame: HTMLElement) {
+    unwatch.get(frame)?.();
+  }
+
+  // The Download button takes its own clicks.
+  ignoreEvent(event: Event) {
+    return event.target instanceof Element && event.target.closest('.cm-md-image-download') !== null;
+  }
 }
 
 /** Inline content of a table cell, already stripped of its Markdown marks. */

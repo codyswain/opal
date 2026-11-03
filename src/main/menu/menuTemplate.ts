@@ -104,7 +104,7 @@ export function buildMenuTemplate(
       label: "File",
       submenu: [
         ...item(COMMAND_IDS.newTab),
-        ...item(COMMAND_IDS.newNote),
+        ...item(COMMAND_IDS.newDocument),
         // Cmd+O is the file switcher, as in Obsidian; another folder opens from Settings.
         ...item(COMMAND_IDS.goToFile),
         SEPARATOR,

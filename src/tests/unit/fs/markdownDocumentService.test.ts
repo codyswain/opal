@@ -245,6 +245,17 @@ describe('MarkdownDocumentService', () => {
     await expect(service.create(path.join(tmp, 'elsewhere'))).rejects.toThrow(/not inside/i);
   });
 
+  it('creates a document as .mdo, edits it like a note, and keeps .mdo on its copies', async () => {
+    const created = await service.create(root, undefined, 'mdo');
+    const again = await service.create(root, 'Untitled', 'mdo');
+    expect([created.path, again.path].map((p) => path.basename(p))).toEqual(['Untitled.mdo', 'Untitled 2.mdo']);
+    const document = await service.read(created.path);
+    await service.write(created.path, '# Plan\n', document.revision);
+    expect(await readFile(created.path, 'utf8')).toBe('# Plan\n');
+    const copy = await service.saveCopy(created.path, 'mine', 'conflicted copy');
+    expect(copy.path).toBe(item('Untitled (conflicted copy).mdo'));
+  });
+
   it('saves a copy next to the note, or in the recovery folder when the note\'s folder cannot take it', async () => {
     await writeFile(item('note.md'), '# note\n');
     const first = await service.saveCopy(item('note.md'), 'mine', 'unsaved copy');
@@ -302,6 +313,8 @@ describe('MarkdownHandlers', () => {
     expect(await invoke('markdown:write', item('note.md'), '# mine\n', read.data.revision)).toEqual({ success: false, error: expect.stringMatching(/changed on disk/), conflict: true });
     expect(await invoke('markdown:create', root)).toMatchObject({ success: true, data: { path: item('Untitled.md') } });
     expect(await invoke('markdown:create', root, 7)).toMatchObject({ success: false });
+    expect(await invoke('markdown:create', root, 'Plan', 'mdo')).toMatchObject({ success: true, data: { path: item('Plan.mdo') } });
+    expect(await invoke('markdown:create', root, 'Plan', 'txt')).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:save-copy', item('note.md'), 'mine', 'unsaved copy')).toMatchObject({ success: true, data: { path: item('note (unsaved copy).md') } });
     expect(await invoke('markdown:save-copy', item('note.md'), 'mine', '../escape')).toMatchObject({ success: false, error: /Invalid/ });
     expect(await invoke('markdown:resolve-links', item('note.md'), ['NOTE', 'missing'])).toEqual({ success: true, data: { NOTE: item('note.md'), missing: null } });

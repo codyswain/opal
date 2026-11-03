@@ -93,7 +93,7 @@ function oct28(): VaultDay {
     documents: [
       { path: `${ROOT}/Library/parametric/fedex.md`, label: 'FedEx dataset note', last: '22:54' },
       ...['21:30', '20:30', '19:30', '18:30', '17:30', '16:30', '15:30'].map((last, index) => ({
-        path: `${ROOT}/Library/notes/note-${index}.md`,
+        path: `${ROOT}/Library/notes/note-${index}.${index === 0 ? 'mdo' : 'md'}`,
         label: `Note ${index + 1}`,
         last,
       })),
@@ -382,7 +382,7 @@ describe('DaySidebar', () => {
     // The digest first, then what the day touched, its chats, recordings and people, and the activity log last.
     expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
       'Digest',
-      'Documents',
+      'Files',
       'Chats',
       'Recordings',
       'People',
@@ -393,13 +393,13 @@ describe('DaySidebar', () => {
     expect(within(people).getByRole('button', { name: /^People/ })).toHaveTextContent('People2');
     expect(within(people).getByRole('button', { name: /Lucas Czajka/ })).toHaveTextContent('11:15Lucas Czajka');
 
-    const documents = card('Documents');
-    expect(within(documents).getByRole('button', { name: /^Documents/ })).toHaveTextContent('Documents9');
-    expect(within(documents).getByText('FedEx dataset note')).toBeInTheDocument();
+    const files = card('Files');
+    expect(within(files).getByRole('button', { name: /^Files/ })).toHaveTextContent('Files9');
+    expect(within(files).getByText('FedEx dataset note')).toBeInTheDocument();
     // Eight at rest, the latest touched first.
-    expect(within(documents).getByText('Note 7')).toBeInTheDocument();
-    expect(within(documents).queryByText('Gob deck')).toBeNull();
-    expect(within(documents).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+    expect(within(files).getByText('Note 7')).toBeInTheDocument();
+    expect(within(files).queryByText('Gob deck')).toBeNull();
+    expect(within(files).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
 
     const chats = card('Chats');
     expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent('1 new · 10');
@@ -463,17 +463,19 @@ describe('DaySidebar', () => {
     expect(openedPath()).toBe(DIGEST);
   });
 
-  it('opens a document in this tab, and names a file that is not Markdown by its extension', async () => {
+  it('opens a file in this tab, and names a file that is not a page by its extension', async () => {
     const user = userEvent.setup();
     openTabs([DAILY]);
     renderSidebar();
-    const documents = await screen.findByRole('region', { name: 'Documents' });
-    await user.click(within(documents).getByRole('button', { name: 'Show 1 more' }));
-    const deck = within(documents).getByRole('button', { name: /Gob deck/ });
+    const files = await screen.findByRole('region', { name: 'Files' });
+    await user.click(within(files).getByRole('button', { name: 'Show 1 more' }));
+    const deck = within(files).getByRole('button', { name: /Gob deck/ });
     expect(deck).toHaveTextContent('09:10Gob deckpptx');
-    expect(within(documents).getByRole('button', { name: /FedEx dataset note/ })).not.toHaveTextContent('md');
+    expect(within(files).getByRole('button', { name: /FedEx dataset note/ })).not.toHaveTextContent('md');
+    // A document opens in the editor too, so it shows no extension.
+    expect(within(files).getByRole('button', { name: /Note 1/ })).toHaveTextContent(/Note 1$/);
 
-    await user.click(within(documents).getByText('FedEx dataset note'));
+    await user.click(within(files).getByText('FedEx dataset note'));
     expect(openedPath()).toBe(`${ROOT}/Library/parametric/fedex.md`);
   });
 
@@ -662,6 +664,13 @@ describe('DaySidebar', () => {
     expect(within(card('Activity log')).getByRole('button', { name: /^22:05/ })).toHaveAttribute('aria-expanded', 'true');
     act(() => changed?.({ root: ROOT, date: '2026-10-01' }));
     expect(api.day).toHaveBeenCalledTimes(2);
+  });
+
+  it('says No files when the day links to no file', async () => {
+    days['2026-10-28'] = { ...oct28(), documents: [] };
+    openTabs([DAILY]);
+    renderSidebar();
+    expect(within(await screen.findByRole('region', { name: 'Files' })).getByText('No files')).toBeInTheDocument();
   });
 
   it('drops the weekday when narrow, and says so when no folder is a vault', async () => {

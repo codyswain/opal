@@ -1,12 +1,12 @@
 import * as React from 'react';
-import { extensionOf } from '@/common/fileKind';
+import { MARKDOWN_EXTENSIONS, extensionOf } from '@/common/fileKind';
 import type { DayFile } from '@/types/day';
 import { openTitle } from '../dayLinks';
 import { RowTime, rowStyles } from './DayCard';
 import { useDaySidebarContext, vaultRelative } from './daySidebarContext';
 
 /**
- * A document or a person the day touched, at its latest mention. A file that
+ * A file or a person the day touched, at its latest mention. A file that
  * is not Markdown shows its extension, since it opens outside the editor.
  */
 export function FileRow({ file }: { file: DayFile }) {
@@ -22,7 +22,7 @@ export function FileRow({ file }: { file: DayFile }) {
     >
       <RowTime>{file.last}</RowTime>
       <span className="min-w-0 flex-1 truncate">{file.label}</span>
-      {extension && extension !== 'md' ? (
+      {extension && !MARKDOWN_EXTENSIONS.has(extension) ? (
         <span className="flex-none text-2xs text-foreground-tertiary">{extension}</span>
       ) : null}
     </button>

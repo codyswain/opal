@@ -92,10 +92,11 @@ first: a file tree on the left and one clean page.
   (Daily, Recent, search, a link), its folders expand and it scrolls into view.
 - Expanded folders persist across launches.
 - File actions live on the tree now that the folder view is gone: a right-click
-  menu on rows (New note, New folder, Rename, Move to…, Reveal in Finder, Copy
-  path, Move to Trash with confirmation), inline rename, drag a row onto a
-  folder to move it, and Cmd+N for a new note in the active file's folder
-  (the vault root when nothing is open).
+  menu on rows (New document, New folder, Rename, Move to…, Reveal in Finder,
+  Copy path, Move to Trash with confirmation), inline rename, drag a row onto a
+  folder to move it, and Cmd+N for a new document (`.mdo`) in the active file's
+  folder (the vault root when nothing is open). New Markdown Note in the
+  palette makes a `.md` note there (2026-11-02, the .mdo spec).
 - Footer: Settings only (no theme toggle; theme lives in Settings).
 - Default width about 260px, resizable from 216px, which keeps the top row
   whole.
@@ -262,6 +263,18 @@ Tokens follow the design brief from Bastion and Linear:
   list markers) hide away from the cursor; bullets, checkboxes, headings,
   links, wiki links, callouts (including `> [!ai] AI`), images, code blocks,
   tables and horizontal rules render. TipTap and its round trip are removed.
+- A document (`.mdo`) is the same editor in doc mode (the .mdo spec,
+  2026-11-02): its Markdown never shows, a formatting toolbar sits in the
+  card above the text, and Docs' shortcuts apply. There Cmd+K edits a link;
+  Cmd+P and Cmd+O still search. Cmd+B with nothing selected bolds the word
+  the caret is in, or else the text typed next, and never writes an empty
+  `****`. A space or Enter at the end of bold goes after its closing marks.
+- Files dropped or pasted on any page, a note or a document, are copied into
+  the vault's files folder and go in on a line of their own: an image as an
+  embed sized to fit one screen, any other file as a link. A line shows
+  where a drop will land. A tree row dropped on a page is linked, not
+  copied. In a document a click selects an image, its corners resize it,
+  and Delete removes it from the page.
 - Callouts, including `> [!ai] AI`, render as neutral grey boxes (a light
   grey fill or a grey left rule and a bold title), never tinted, whatever the
   vault's Obsidian snippet uses.

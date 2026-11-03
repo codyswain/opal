@@ -148,6 +148,61 @@
   text-decoration: line-through;
 }
 
+/* A document's toolbar: one row of grey icon buttons over the text column,
+   in the interface's sans. It sits outside the page's scroller, so it holds
+   still while the page scrolls. A pressed button takes IconButton's grey. */
+.opal-editor .opal-doc-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  /* Room below for a focus ring, which the row would otherwise cut off. */
+  padding: 8px 2rem 4px;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-editor .opal-doc-toolbar-rule {
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background-color: hsl(var(--border-subtle));
+}
+
+.opal-editor .opal-doc-toolbar-style {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 120px;
+  height: var(--control-height-compact);
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-control);
+  color: hsl(var(--text-secondary));
+  font-size: var(--text-control-size);
+  outline: none;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .opal-doc-toolbar-style:hover,
+.opal-editor .opal-doc-toolbar-style[data-state="open"] {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+  transition-duration: 0s;
+}
+
+.opal-editor .opal-doc-toolbar-style:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
 /* Headings and the inline title share the serif, bold, larger than the body. */
 .opal-editor .cm-editor .cm-md-inline-title,
 .opal-editor .cm-editor .cm-md-heading {
@@ -415,6 +470,86 @@
   padding: 0;
   color: var(--editor-muted);
   font-style: italic;
+}
+
+/* The box hugs the image, so a selected image's frame and corners sit on
+   its edges. The frame is the text's color with a thin ring of the page's
+   ground inside it, so it shows on a dark image and on a light one. */
+.opal-editor .cm-editor .cm-md-image-box {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.opal-editor .cm-editor .cm-md-image-selected img {
+  box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
+}
+
+/* The frame shows the selection, so the browser's selection color would
+   only tint the picture. */
+.opal-editor .cm-editor .cm-md-image-selected ::selection {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-md-image-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 1px solid hsl(var(--canvas));
+  background-color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-md-image-handle[data-corner="nw"] { top: -5px; left: -5px; cursor: nwse-resize; }
+.opal-editor .cm-editor .cm-md-image-handle[data-corner="ne"] { top: -5px; right: -5px; cursor: nesw-resize; }
+.opal-editor .cm-editor .cm-md-image-handle[data-corner="sw"] { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.opal-editor .cm-editor .cm-md-image-handle[data-corner="se"] { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+/* A vault image whose bytes are not on this Mac yet. */
+.opal-editor .cm-editor .cm-md-image-remote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--editor-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-control-size);
+}
+
+.opal-editor .cm-editor .cm-md-image-download {
+  height: var(--control-height-compact);
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-control);
+  color: hsl(var(--foreground));
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-image-download:hover:not(:disabled) {
+  background-color: hsl(var(--surface-hover));
+  transition-duration: 0s;
+}
+
+.opal-editor .cm-editor .cm-md-image-download:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+/* Where dropped files will go: a line in the text's color between blocks. */
+.opal-editor .cm-editor .cm-md-drop-line {
+  position: relative;
+  height: 0;
+}
+
+.opal-editor .cm-editor .cm-md-drop-line::after {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  background-color: hsl(var(--foreground));
+  content: "";
 }
 
 /* Tables and fenced code: drawn as blocks while no selection is in them,

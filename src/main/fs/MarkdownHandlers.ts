@@ -8,6 +8,7 @@ import {
   type MarkdownLinks,
   type MarkdownProperties,
   type MarkdownWriteResult,
+  type PageExtension,
 } from '@/types/markdown';
 import { PathNotAllowedError } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
@@ -28,6 +29,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isCopyLabel(value: unknown): value is MarkdownCopyLabel {
   return value === 'conflicted copy' || value === 'unsaved copy';
+}
+
+function isPageExtension(value: unknown): value is PageExtension | undefined {
+  return value === undefined || value === 'md' || value === 'mdo';
 }
 
 /** One page's link targets: at most a few hundred short names. */
@@ -53,9 +58,9 @@ export class MarkdownHandlers {
       if (!isNonEmptyString(target) || typeof body !== 'string' || !isNonEmptyString(expectedRevision)) return invalid();
       return this.respond(() => service.write(target, body, expectedRevision), 'Failed to save the note');
     });
-    ipc.handle('markdown:create', async (_, parentDir: unknown, baseName: unknown): Promise<MarkdownResponse<{ path: string }>> => {
-      if (!isNonEmptyString(parentDir) || (baseName !== undefined && typeof baseName !== 'string')) return invalid();
-      return this.respond(() => service.create(parentDir, baseName as string | undefined), 'Failed to create the note');
+    ipc.handle('markdown:create', async (_, parentDir: unknown, baseName: unknown, extension: unknown): Promise<MarkdownResponse<{ path: string }>> => {
+      if (!isNonEmptyString(parentDir) || (baseName !== undefined && typeof baseName !== 'string') || !isPageExtension(extension)) return invalid();
+      return this.respond(() => service.create(parentDir, baseName as string | undefined, extension), 'Failed to create the note');
     });
     ipc.handle('markdown:save-copy', async (_, target: unknown, body: unknown, label: unknown): Promise<MarkdownResponse<{ path: string }>> => {
       if (!isNonEmptyString(target) || typeof body !== 'string' || !isCopyLabel(label)) return invalid();
