@@ -80,6 +80,18 @@ describe('service chips', () => {
     expect(view.state.doc.toString()).toBe('See \n');
   });
 
+  it('shows the address as written while a document\'s caret is at its start, where a typed letter would join it', () => {
+    const url = 'https://github.com/codyswain/opal/pull/13';
+    const shown = mount(`Watch: ${url}\n`);
+    expect(shown.contentDOM.querySelector('.cm-url-chip')).not.toBeNull();
+    act(() => { shown.dispatch({ selection: { anchor: 7 } }); });
+    // Lines redraw when the page has focus; a fresh view reads the caret at once.
+    const fresh = new EditorView({ parent: document.body, state: shown.state });
+    views.push(fresh);
+    expect(fresh.contentDOM.querySelector('.cm-url-chip')).toBeNull();
+    expect(fresh.contentDOM.textContent).toContain(url);
+  });
+
   it('leaves written links with their own text and unknown addresses alone, and loads nothing', () => {
     const view = mount('[the PR](https://github.com/codyswain/opal/pull/13) and https://example.com/x \n');
     expect(view.contentDOM.querySelector('.cm-url-chip')).toBeNull();

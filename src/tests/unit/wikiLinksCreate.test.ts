@@ -94,6 +94,19 @@ describe('wiki links to notes', () => {
     expect(view.contentDOM.querySelector('[data-wiki-name]')).toHaveAttribute('data-wiki-target', '#Next steps');
   });
 
+  it('open another page at the heading a link names', async () => {
+    installMarkdownApi({ [DOC]: '', '/Vault/Plan.md': '' }, {
+      resolveLinks: vi.fn(async (_from: string, targets: string[]) => ({ success: true as const, data: Object.fromEntries(targets.map((target) => [target, target === 'Plan' ? '/Vault/Plan.md' : null])) })),
+    });
+    const openNote = vi.fn();
+    const view = mount('See [[Plan#Goals]].\n', DOC, openNote);
+    expect(view.contentDOM.querySelector('[data-wiki-name]')).toHaveAttribute('data-wiki-target', 'Plan#Goals');
+    await openWikiLink(view, 'Plan#Goals', true);
+    expect(openNote).toHaveBeenCalledWith('/Vault/Plan.md', true);
+    const plan = mount('# Plan\n\nIntro\n\n## Goals\n\nShip it.\n', '/Vault/Plan.md');
+    await waitFor(() => expect(plan.state.doc.lineAt(plan.state.selection.main.head).text).toBe('## Goals'));
+  });
+
   it('go whole on one Backspace in a document, keep typing outside the brackets, and leave an alias editable', async () => {
     installMarkdownApi({ [DOC]: '' });
     const view = mount('See [[Plan]] now\n');

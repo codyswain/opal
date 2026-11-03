@@ -35,7 +35,7 @@ import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt,
 import { objectFrame } from './objectFrame';
 import { ImageWidget, fileChanged } from './previewWidgets';
 import { linkPicker } from './linkPicker';
-import { urlChips } from './urlChips';
+import { caretAtStart, urlChips } from './urlChips';
 import { opensNewTab, pageContext, resolvedLinks, wikiNames } from './wikiLinks';
 import './files.css';
 
@@ -783,6 +783,8 @@ function drawFile(ctx: DecorateContext, node: SyntaxNode): boolean {
   if (!ref) return false;
   if (ref.to > ctx.state.doc.lineAt(ref.from).to) return false;
   if (ctx.covered(ref.from)) return true;
+  // A bare video address alone on its line shows as written while a document's caret is at its start (urlChips.ts).
+  if (node.name === 'URL' && ctx.docMode && caretAtStart(ctx.state, ref.from)) return false;
   const look = lookOf(ref);
   // A preview waits until its wiki target is found; the link shows as text meanwhile, one place for the caret in a document.
   if (look === 'preview' && ref.path === undefined) {

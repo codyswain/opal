@@ -182,19 +182,23 @@ export function noteToCreate(target: string): { name: string; extension: 'md' | 
  * the top of the opened folder, the way Obsidian does, and opens it; a link
  * to a missing file says so and creates nothing.
  */
-export async function openWikiLink(view: EditorView, target: string, newTab = false): Promise<void> {
+export async function openWikiLink(view: EditorView, written: string, newTab = false): Promise<void> {
   const { path, openNote } = view.state.facet(pageContext);
+  const hash = written.indexOf('#');
+  const target = hash === -1 ? written : written.slice(0, hash);
+  const heading = hash === -1 ? null : written.slice(hash + 1);
   // A heading on this page: scroll to it.
-  if (target.startsWith('#')) {
-    const heading = headingLine(view.state, target.slice(1));
-    if (heading !== null) view.dispatch({ selection: { anchor: heading }, scrollIntoView: true });
-    else toast.error(`Could not find the heading ${target.slice(1)}.`);
+  if (!target && heading) {
+    const at = headingLine(view.state, heading);
+    if (at !== null) view.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+    else toast.error(`Could not find the heading ${heading}.`);
     return;
   }
   const wanted = target.normalize('NFC');
   const response = await window.markdownAPI.resolveLinks(path, [wanted]).catch(() => null);
   const resolved = response?.success ? response.data[wanted] : null;
   if (resolved) {
+    if (heading) pendingHeadings.set(resolved, heading);
     openNote(resolved, newTab);
     return;
   }
@@ -214,6 +218,23 @@ export async function openWikiLink(view: EditorView, target: string, newTab = fa
   view.dispatch({ effects: linksResolved.of({ [target]: created.data.path }) });
   openNote(created.data.path, newTab);
 }
+
+/** Headings a followed link asked for, by page, until that page's editor opens and scrolls there. */
+const pendingHeadings = new Map<string, string>();
+
+/** A page opened from `[[Plan#Goals]]` scrolls to Goals once its text is read. */
+const headingOnOpen = ViewPlugin.define((view) => {
+  const page = view.state.facet(pageContext).path;
+  const heading = pendingHeadings.get(page);
+  if (heading) {
+    pendingHeadings.delete(page);
+    setTimeout(() => {
+      const at = view.dom.isConnected ? headingLine(view.state, heading) : null;
+      if (at !== null) view.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+    }, 0);
+  }
+  return {};
+});
 
 /** Where the heading named `name` starts on the page, matching as Obsidian does: case and spacing aside. */
 export function headingLine(state: EditorState, name: string): number | null {
@@ -270,8 +291,8 @@ function drawWikiName(ctx: DecorateContext, node: SyntaxNode): boolean {
   if (found.link.target && (ctx.links.get(found.link.target) ? classifyFile(ctx.links.get(found.link.target) ?? '') !== 'markdown' : namesFile(found.link.target))) return false;
   if (ctx.state.doc.lineAt(node.from).to < node.to) return false;
   const missing = Boolean(found.link.target) && ctx.links.get(found.link.target) === null;
-  // A heading on this page is followed by "#heading", which scrolls there.
-  const follow = found.link.target || `#${found.link.heading ?? ''}`;
+  // A heading is followed as "Plan#Goals", or "#Goals" on this page, which scrolls there.
+  const follow = `${found.link.target}${found.link.heading ? `#${found.link.heading}` : ''}`;
   ctx.out.push(Decoration.replace({ widget: new WikiNameWidget(wikiDisplay(found.link), follow, missing) }).range(node.from, node.to));
   return true;
 }
@@ -300,7 +321,7 @@ const wikiObject = objectKinds.of({
   },
   open: (view, obj) => {
     const link = parseWikiTarget(view.state.sliceDoc(obj.from + 2, obj.to - 2));
-    if (link.target) void openWikiLink(view, link.target);
+    if (link.target || link.heading) void openWikiLink(view, `${link.target}${link.heading ? `#${link.heading}` : ''}`);
   },
   destination: (state, obj) => {
     const inner = state.sliceDoc(obj.from + 2, obj.to - 2);
@@ -341,6 +362,7 @@ export const wikiNames: Extension = [
   nodeDecorators.of({ nodes: ['WikiLink'], decorate: drawWikiName }),
   wikiObject,
   Prec.highest(wikiNameClicks),
+  headingOnOpen,
 ];
 
 /**

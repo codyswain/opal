@@ -126,10 +126,20 @@ function bareAddress(state: EditorState, node: SyntaxNode): { href: string; chip
   return chip ? { href, chip } : null;
 }
 
+/** In a document, the caret at an address's start shows it as written. */
+export function caretAtStart(state: EditorState, from: number): boolean {
+  return state.selection.ranges.some((range) => range.empty && range.head === from);
+}
+
 function drawUrl(ctx: DecorateContext, node: SyntaxNode): boolean {
   const found = bareAddress(ctx.state, node);
   if (!found || ctx.covered(node.from) || ctx.reveal.span(node.from, node.to)) return false;
   if (ctx.state.field(typingAddress, false) === node.to) return false;
+  // Only an address that starts a word: "https://www.x.com" with a letter typed before it reads "www.x.com" as one.
+  if (!/^$|[\s(*_~<>"']$/.test(ctx.state.sliceDoc(node.from - 1, node.from))) return false;
+  // A letter typed right before an address joins it, and Markdown then reads neither as a link, so in a document
+  // the address shows as written while the caret is at its start.
+  if (ctx.docMode && caretAtStart(ctx.state, node.from)) return false;
   ctx.out.push(Decoration.replace({ widget: new UrlChipWidget(found.href, found.chip) }).range(node.from, node.to));
   return true;
 }
