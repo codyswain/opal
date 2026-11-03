@@ -255,12 +255,12 @@ describe('callouts in a document', () => {
     expect(container.querySelector('[data-callout-menu]')).toBeNull();
   });
 
-  it('opens the type menu from the keyboard on a callout\'s title', () => {
-    const view = mount('> [!note] Ti‸tle\n> Body\n');
+  it('offers the fold choices in the type menu', () => {
+    const view = mount('> [!note] Title\n> Body\n');
     render(createElement(CalloutTypeMenu, { view }));
-    press(view, 'F10', { altKey: true });
-    expect(document.querySelector('[data-callout-menu]')).not.toBeNull();
-    expect(document.body.textContent).toContain('Foldable, folded');
+    const icon = view.contentDOM.querySelector('[data-callout-icon]');
+    act(() => { icon?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(document.querySelector('[data-callout-menu]')?.textContent).toContain('Foldable, folded');
   });
 });
 

@@ -3,7 +3,7 @@ import type { Text } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { Bot, Bug, Check, CircleCheck, CircleHelp, ClipboardList, Flame, Info, List, Pencil, Quote, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react';
 import { Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from '@/renderer/shared/ui';
-import { CALLOUT_FAMILIES, CALLOUT_MENU_EVENT, calloutFamily, calloutHeadAt, foldSignAt, refoldCallout, retypeCallout, type FoldSign } from './callouts';
+import { CALLOUT_FAMILIES, calloutFamily, calloutHeadAt, foldSignAt, refoldCallout, retypeCallout, type FoldSign } from './callouts';
 
 const ICONS: Record<string, LucideIcon> = {
   pencil: Pencil,
@@ -33,8 +33,8 @@ const FOLDS: { value: string; sign: FoldSign; label: string }[] = [
 ];
 
 /**
- * A click on a callout's icon in a document, or Option+F10 on its title: a
- * menu of Obsidian's callout types and whether it folds. Picking a type
+ * A click on a callout's icon in a document: a menu of Obsidian's callout
+ * types and whether it folds. Picking a type
  * rewrites only the type word, in its case; picking a fold writes only the
  * sign after "[!type]". The menu closes when the page changes under it.
  */
@@ -42,9 +42,9 @@ export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
   const [menu, setMenu] = useState<{ x: number; y: number; head: number; doc: Text } | null>(null);
 
   useEffect(() => {
-    const open = (head: number, icon: Element | null) => {
-      const rect = icon?.getBoundingClientRect() ?? view.coordsAtPos(head);
-      if (rect) setMenu({ x: rect.left, y: rect.bottom + 4, head, doc: view.state.doc });
+    const open = (head: number, icon: Element) => {
+      const rect = icon.getBoundingClientRect();
+      setMenu({ x: rect.left, y: rect.bottom + 4, head, doc: view.state.doc });
     };
     const onMouseDown = (event: MouseEvent) => {
       const icon = event.button === 0 && event.target instanceof Element ? event.target.closest('[data-callout-icon]') : null;
@@ -55,17 +55,8 @@ export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
       event.stopPropagation();
       open(head, icon);
     };
-    const onKey = (event: Event) => {
-      const head = (event as CustomEvent<number>).detail;
-      const icon = [...view.contentDOM.querySelectorAll('[data-callout-icon]')].find((each) => calloutHeadAt(view.state, view.posAtDOM(each)) === head) ?? null;
-      open(head, icon);
-    };
     view.contentDOM.addEventListener('mousedown', onMouseDown, true);
-    view.dom.addEventListener(CALLOUT_MENU_EVENT, onKey);
-    return () => {
-      view.contentDOM.removeEventListener('mousedown', onMouseDown, true);
-      view.dom.removeEventListener(CALLOUT_MENU_EVENT, onKey);
-    };
+    return () => view.contentDOM.removeEventListener('mousedown', onMouseDown, true);
   }, [view]);
 
   // An edit since the menu opened, such as an agent's merge, may have moved or removed the callout.

@@ -248,22 +248,4 @@ export function refoldCallout(state: EditorState, head: number, sign: FoldSign):
   return { from, to: from + match[3].length, insert: sign };
 }
 
-/** The DOM event that asks the type menu to open on the callout starting at `detail`. */
-export const CALLOUT_MENU_EVENT = 'opal-callout-menu';
-
-/** Option+F10 or ⌃⌥T on a callout's title line in a document: opens its type menu, as a click on its icon does. */
-const openTypeMenu: Command = (view) => {
-  const { state } = view;
-  if (!isDocument(state)) return false;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const head = calloutHeadAt(state, line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0));
-  if (head !== line.from || !CALLOUT_HEAD.test(line.text)) return false;
-  view.dom.dispatchEvent(new CustomEvent(CALLOUT_MENU_EVENT, { detail: head }));
-  return true;
-};
-
-export const callouts: Extension = [calloutFolds, keymap.of([
-  { key: 'Mod-Enter', run: toggleFoldHere },
-  { key: 'Alt-F10', run: openTypeMenu },
-  { key: 'Ctrl-Alt-t', run: openTypeMenu },
-])];
+export const callouts: Extension = [calloutFolds, keymap.of([{ key: 'Mod-Enter', run: toggleFoldHere }])];

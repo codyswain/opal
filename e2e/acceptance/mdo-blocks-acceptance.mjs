@@ -5,7 +5,9 @@
 // line under it frames it, a cell click types into the cell, Tab nests a list
 // item, Enter in a numbered list adds one line, a numbered task keeps its
 // box, a quote in a callout draws its rule, and the framed table and rule are
-// screenshotted light and dark. Own userData and temp vault; run from the
+// screenshotted light and dark. A second document that ends with a table
+// takes text typed after Cmd+Down outside the table, and a callout from
+// Insert ignores Cmd+Enter and takes its fold sign from its type menu. Own userData and temp vault; run from the
 // repository root after the Vite bundles are built (see README.md here):
 //
 //   node e2e/acceptance/mdo-blocks-acceptance.mjs [--out dir]
@@ -225,6 +227,58 @@ try {
   await page.waitForTimeout(300);
   await shoot('page');
   check('the editor still holds the file', (await editorText()) === null || (await editorText()) === (await readDoc()));
+
+  // A second document that ends with a table and no line break, with the real keyboard.
+  const END = path.join(vault, 'Docs', 'Ends.mdo');
+  const ENDS = 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |';
+  await writeFile(END, ENDS);
+  const readEnd = () => readFile(END, 'utf8');
+  const waitForEnd = async (predicate, timeout = 10_000) => {
+    const start = Date.now();
+    let text = await readEnd();
+    while (!predicate(text) && Date.now() - start < timeout) {
+      await page.waitForTimeout(100);
+      text = await readEnd();
+    }
+    return text;
+  };
+  await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, END);
+  await page.locator('.cm-line', { hasText: /^Intro$/ }).first().waitFor({ timeout: 10_000 });
+  await page.locator('.cm-line', { hasText: /^Intro$/ }).first().click();
+  await page.keyboard.press('Meta+ArrowDown');
+  await page.keyboard.type('After');
+  let ended = await waitForEnd((text) => text.includes('After'));
+  // The caret cannot rest under a drawn table that ends the file yet, so Cmd+Down stops above it; the text never joins the table.
+  check('typing after Cmd+Down in a file that ends with a table never writes into the table', ended.endsWith('\n\n| a | b |\n|---|---|\n| 1 | 2 |') && !/\| *After|After *\|/.test(ended), JSON.stringify(ended.slice(0, 40)));
+
+  // Insert > Callout, then typing into it.
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Insert' }).click();
+  await page.getByRole('menuitem', { name: 'Callout' }).click();
+  // Keys typed while the menu closes go to the menu: wait for it to go.
+  await page.waitForSelector('[role="menu"]', { state: 'detached', timeout: 3_000 }).catch(() => undefined);
+  await page.waitForFunction(() => Boolean(document.activeElement?.closest('.cm-content')), null, { timeout: 3_000 }).catch(() => undefined);
+  await page.keyboard.type('Remember the demo.');
+  ended = await waitForEnd((text) => text.includes('demo.'));
+  check('text typed once the Insert menu has closed lands in the new callout', ended.includes('> Remember the demo.'), JSON.stringify(ended.slice(-50)));
+
+  // Cmd+Enter on a callout that cannot fold changes nothing.
+  const beforeFold = await readEnd();
+  await page.locator('.cm-line', { hasText: 'Remember the demo.' }).first().click();
+  await page.keyboard.press('Meta+Enter');
+  await page.waitForTimeout(600);
+  check('Cmd+Enter in a callout that cannot fold changes nothing', (await readEnd()) === beforeFold);
+
+  // The type menu and its fold choice.
+  await page.locator('[data-callout-icon]').first().click();
+  const menu = await page.waitForSelector('[data-callout-menu]', { timeout: 3_000 }).then(() => true, () => false);
+  check('a click on a callout\'s icon opens its type menu', menu);
+  await shoot('callout-menu');
+  if (menu) {
+    await page.getByRole('menuitemradio', { name: 'Foldable, folded' }).click();
+    ended = await waitForEnd((text) => text.includes('[!note]-'));
+    check('the menu\'s fold choice writes only the sign', ended.includes('> [!note]- Note\n> Remember the demo.'), JSON.stringify(ended.slice(-50)));
+  }
 } catch (error) {
   check('the run finished', false, String(error));
 } finally {
