@@ -34,7 +34,37 @@ export const CODE_LANGUAGES: readonly CodeLanguage[] = [
   { id: 'yaml', label: 'YAML', names: ['yaml', 'yml'], load: async () => (await import('@codemirror/lang-yaml')).yamlLanguage.parser },
   { id: 'sh', label: 'Shell', names: ['sh', 'bash', 'shell', 'zsh', 'shellscript'], load: async () => stream((await import('@codemirror/legacy-modes/mode/shell')).shell) },
   { id: 'diff', label: 'Diff', names: ['diff', 'patch'], load: async () => stream((await import('@codemirror/legacy-modes/mode/diff')).diff) },
+  { id: 'c', label: 'C', names: ['c', 'h'], load: async () => stream((await import('@codemirror/legacy-modes/mode/clike')).c) },
+  { id: 'cpp', label: 'C++', names: ['cpp', 'c++', 'cc', 'cxx', 'hpp'], load: async () => stream((await import('@codemirror/legacy-modes/mode/clike')).cpp) },
+  { id: 'csharp', label: 'C#', names: ['csharp', 'cs', 'c#'], load: async () => stream((await import('@codemirror/legacy-modes/mode/clike')).csharp) },
+  { id: 'java', label: 'Java', names: ['java'], load: async () => stream((await import('@codemirror/legacy-modes/mode/clike')).java) },
+  { id: 'kotlin', label: 'Kotlin', names: ['kotlin', 'kt', 'kts'], load: async () => stream((await import('@codemirror/legacy-modes/mode/clike')).kotlin) },
+  { id: 'go', label: 'Go', names: ['go', 'golang'], load: async () => stream((await import('@codemirror/legacy-modes/mode/go')).go) },
+  { id: 'rust', label: 'Rust', names: ['rust', 'rs'], load: async () => stream((await import('@codemirror/legacy-modes/mode/rust')).rust) },
+  { id: 'swift', label: 'Swift', names: ['swift'], load: async () => stream((await import('@codemirror/legacy-modes/mode/swift')).swift) },
+  { id: 'ruby', label: 'Ruby', names: ['ruby', 'rb'], load: async () => stream((await import('@codemirror/legacy-modes/mode/ruby')).ruby) },
+  { id: 'lua', label: 'Lua', names: ['lua'], load: async () => stream((await import('@codemirror/legacy-modes/mode/lua')).lua) },
+  { id: 'toml', label: 'TOML', names: ['toml'], load: async () => stream((await import('@codemirror/legacy-modes/mode/toml')).toml) },
+  { id: 'xml', label: 'XML', names: ['xml', 'svg', 'plist'], load: async () => stream((await import('@codemirror/legacy-modes/mode/xml')).xml) },
+  { id: 'dockerfile', label: 'Dockerfile', names: ['dockerfile', 'docker'], load: async () => stream((await import('@codemirror/legacy-modes/mode/dockerfile')).dockerFile) },
 ];
+
+/**
+ * The options a language search shows, best first: an exact name or label,
+ * then a name or label that starts with the query, then a label that holds
+ * it. So "c" picks C and "java" picks Java before JavaScript.
+ */
+export function matchLanguages<T extends { label: string; names: readonly string[] }>(options: readonly T[], query: string): T[] {
+  const wanted = query.trim().toLowerCase();
+  if (!wanted) return [...options];
+  const rank = (option: T) => {
+    const words = [option.label.toLowerCase(), ...option.names];
+    if (words.includes(wanted)) return 0;
+    if (words.some((word) => word.startsWith(wanted))) return 1;
+    return option.label.toLowerCase().includes(wanted) ? 2 : 3;
+  };
+  return options.map((option) => ({ option, rank: rank(option) })).filter(({ rank: at }) => at < 3).sort((a, b) => a.rank - b.rank).map(({ option }) => option);
+}
 
 // Words that mean "no language": the first ones read as Plain text, the rest keep a label.
 const QUIET = new Set(['', 'text', 'txt', 'plaintext', 'plain']);

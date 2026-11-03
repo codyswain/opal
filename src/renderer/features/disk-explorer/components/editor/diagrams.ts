@@ -215,7 +215,8 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
     });
     const id = `opal-diagram-${renders += 1}`;
     try {
-      const { svg } = await mermaid.render(id, stripColours(source));
+      // Without trailing blank lines, so an error's line number names a line that exists.
+      const { svg } = await mermaid.render(id, stripColours(source).replace(/\s+$/, ''));
       const result = sized(svg);
       return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`, width: result.width, height: result.height };
     } catch (error) {
@@ -258,8 +259,20 @@ function watchTheme(): void {
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 }
 
+/** What an empty diagram, or one with no diagram type, says under its code. */
+const START = { mermaid: 'Start with a diagram type, such as graph TD', pocket: 'Write one step per line, such as A -> B' } as const;
+
 /** Fills `canvas` with the diagram, or the code and Mermaid's message when it does not parse. */
 function drawInto(canvas: HTMLElement, kind: DiagramKind, source: string, showSourceOnError: boolean): void {
+  if (source.trim() === '') {
+    canvas.textContent = '';
+    delete canvas.dataset.state;
+    const hint = document.createElement('div');
+    hint.className = 'cm-diagram-hint';
+    hint.textContent = START[kind];
+    canvas.append(hint);
+    return;
+  }
   if (kind === 'pocket') {
     const steps = pocketSteps(source);
     canvas.textContent = '';
@@ -305,7 +318,7 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
   // The first line says where; the parser's list of expected tokens goes in the tooltip. Mermaid's size limits get a plain line of their own.
   const line = document.createElement('div');
   line.className = 'cm-diagram-error';
-  const limit = sizeLimit(message);
+  const limit = sizeLimit(message) ?? (/no diagram type detected/i.test(message) ? START.mermaid : null);
   line.textContent = limit ?? (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
   if (!limit) line.title = message;
   canvas.append(line);
@@ -314,8 +327,12 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
 // ---------------------------------------------------------------------------
 // Diagram and Code
 
-/** Shows a document's diagram as Code (true) or as the diagram (false), by where its fence starts. */
-export const setDiagramCode = StateEffect.define<{ at: number; code: boolean }>();
+/**
+ * Shows a document's diagram as Code (true) or as the diagram (false), by
+ * where its fence starts. `draft` marks a diagram just made: it shows as
+ * Code until the caret leaves it, then draws.
+ */
+export const setDiagramCode = StateEffect.define<{ at: number; code: boolean; draft?: boolean }>();
 
 const SEGMENT = (label: string, pressed: boolean) => {
   const segment = document.createElement('button');
@@ -481,6 +498,8 @@ class DiagramPreviewWidget extends WidgetType {
 interface Diagrams {
   /** Where the fences shown as Code start. */
   code: readonly number[];
+  /** Those of them just made, which draw once the caret leaves them. */
+  drafts: readonly number[];
   decorations: DecorationSet;
 }
 
@@ -517,8 +536,11 @@ export function showsDiagram(state: EditorState, fence: Fence): boolean {
   return Boolean(value) && !value?.code.includes(fence.open.from);
 }
 
-function build(state: EditorState, code: readonly number[]): Diagrams {
+function build(state: EditorState, shown: readonly number[], made: readonly number[]): Diagrams {
   const decorations: Range<Decoration>[] = [];
+  let code = shown;
+  let drafts = made;
+  const { head } = state.selection.main;
   syntaxTree(state).iterate({
     enter: (ref) => {
       if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
@@ -531,7 +553,13 @@ function build(state: EditorState, code: readonly number[]): Diagrams {
       const source = codeText(state, fence);
       const context = contextOf(state, ref.node);
       const indent = listIndentOf(ref.node);
-      if (code.includes(fence.open.from)) {
+      const at = fence.open.from;
+      if (drafts.includes(at) && (head < at || head > fence.close.to)) {
+        drafts = drafts.filter((draft) => draft !== at);
+        code = code.filter((open) => open !== at);
+      }
+      // An empty diagram shows its code, with a line under it saying how to start.
+      if (code.includes(at) || source.trim() === '') {
         decorations.push(Decoration.widget({ widget: new DiagramPreviewWidget(source, kind, context, indent), block: true, side: 1 }).range(fence.close.to));
       } else {
         const widget = new DiagramWidget(source, kind, kind === 'mermaid' ? 'Mermaid' : 'Flowchart', context, indent, true);
@@ -540,21 +568,25 @@ function build(state: EditorState, code: readonly number[]): Diagrams {
       return false;
     },
   });
-  return { code, decorations: Decoration.set(decorations, true) };
+  return { code, drafts, decorations: Decoration.set(decorations, true) };
 }
 
 /** A document's diagrams: drawn over their fences, or under them while shown as Code. */
 export const diagramField = StateField.define<Diagrams>({
-  create: (state) => build(state, []),
+  create: (state) => build(state, [], []),
   update(value, tr) {
-    let code = tr.docChanged ? value.code.map((at) => tr.changes.mapPos(at)) : value.code;
-    let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state);
+    // Mapped forward, so a line typed before a diagram that starts the page keeps its choice.
+    let code = tr.docChanged ? value.code.map((at) => tr.changes.mapPos(at, 1)) : value.code;
+    let drafts = tr.docChanged ? value.drafts.map((at) => tr.changes.mapPos(at, 1)) : value.drafts;
+    let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state) || (drafts.length > 0 && tr.selection !== undefined);
     for (const effect of tr.effects) {
       if (!effect.is(setDiagramCode)) continue;
-      code = effect.value.code ? [...code.filter((at) => at !== effect.value.at), effect.value.at] : code.filter((at) => at !== effect.value.at);
+      const { at } = effect.value;
+      code = effect.value.code ? [...code.filter((open) => open !== at), at] : code.filter((open) => open !== at);
+      drafts = effect.value.code && effect.value.draft ? [...drafts.filter((open) => open !== at), at] : drafts.filter((open) => open !== at);
       changed = true;
     }
-    return changed ? build(tr.state, code) : value;
+    return changed ? build(tr.state, code, drafts) : value;
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });

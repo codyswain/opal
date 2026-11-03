@@ -4,7 +4,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type Command, t
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, SquareCode, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { CODE_LANGUAGES, fenceLanguage, onLanguageLoaded, type FenceLanguage } from './codeLanguages';
+import { CODE_LANGUAGES, fenceLanguage, matchLanguages, onLanguageLoaded, type FenceLanguage } from './codeLanguages';
 import { firstMarkAfter, highlightMarks, onHighlightReady } from './codeHighlight';
 import {
   blockRenderers,
@@ -21,7 +21,8 @@ import {
   type ProtectedRange,
   type TextRange,
 } from './extensionPoints';
-import { DiagramWidget, diagramDocExtension, diagramFence, modeControl, showsDiagram } from './diagrams';
+import { setHeading, toggleList } from './formatCommands';
+import { DiagramWidget, diagramDocExtension, diagramFence, diagramKind, modeControl, setDiagramCode, showsDiagram } from './diagrams';
 import { inlineCode, inlineCodeDoc } from './inlineCode';
 import { docMode, drawnBlockAt } from './livePreview';
 import { objectFrame, removeObject } from './objectFrame';
@@ -297,6 +298,9 @@ function showAllOf(view: EditorView, head: HTMLElement): HTMLButtonElement[] {
   return [];
 }
 
+/** The languages as the menus list them, by name. */
+const MENU_LANGUAGES = [...CODE_LANGUAGES].sort((a, b) => a.label.localeCompare(b.label, 'en'));
+
 /** The language menu of a block's header: a search field over the list. Searching writes nothing; a pick writes the info string's first word. */
 let openMenu: { close: () => void } | null = null;
 
@@ -307,7 +311,7 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
   const current = fenceLanguage(fence.info.text);
   const options = [
     { id: 'text', label: 'Plain text', names: ['text', 'plain'], on: current.quiet },
-    ...CODE_LANGUAGES.map((language) => ({ id: language.id, label: language.label, names: language.names, on: current.language?.id === language.id })),
+    ...MENU_LANGUAGES.map((language) => ({ id: language.id, label: language.label, names: language.names, on: current.language?.id === language.id })),
     { id: 'mermaid', label: 'Mermaid diagram', names: ['mermaid', 'diagram'], on: current.word.toLowerCase() === 'mermaid' },
   ];
   const menu = document.createElement('div');
@@ -370,8 +374,8 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
     current?.scrollIntoView?.({ block: 'nearest' });
   };
   search.addEventListener('input', () => {
-    const query = search.value.trim().toLowerCase();
-    shown = options.filter((option) => !query || option.label.toLowerCase().includes(query) || option.names.some((name) => name.startsWith(query)));
+    const query = search.value;
+    shown = matchLanguages(options, query);
     active = 0;
     render();
   });
@@ -687,7 +691,8 @@ const LEAF = new Set(['Paragraph', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 
 const collapsedCode = StateField.define<Collapse>({
   create: (state) => collapseBlocks(state, []),
   update(value, tr) {
-    let expanded = tr.docChanged ? value.expanded.map((at) => tr.changes.mapPos(at)) : value.expanded;
+    // Mapped forward, so a line typed before a block that starts the page keeps its choice.
+    let expanded = tr.docChanged ? value.expanded.map((at) => tr.changes.mapPos(at, 1)) : value.expanded;
     let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state);
     for (const effect of tr.effects) {
       if (effect.is(expandCode)) {
@@ -989,13 +994,18 @@ const codeRanges = protectedRanges.of((state, from, to) => {
 export function setLanguage(view: EditorView, at: number, id: string): void {
   const fence = fenceAt(view.state, at);
   if (!fence) return;
-  const word = fenceLanguage(fence.info.text).word;
+  const current = fenceLanguage(fence.info.text);
+  // The language the block already has: nothing to write.
+  if ((id === 'text' && current.quiet) || current.language?.id === id || current.word.toLowerCase() === id) return;
+  const { word } = current;
   const start = fence.info.text.length > 0 ? fence.info.from + fence.info.text.indexOf(word) : fence.info.from;
   const from = word ? start : fence.info.from;
   const to = word ? start + word.length : fence.info.from;
   const insert = word || fence.info.text.length === 0 ? id : `${id} `;
   if (view.state.sliceDoc(from, to) === insert) return;
-  view.dispatch({ changes: { from, to, insert }, userEvent: 'input' });
+  // A block that becomes a diagram stays as code while the caret is in it.
+  const effects: StateEffect<unknown>[] = diagramKind(id) ? [setDiagramCode.of({ at: fence.open.from, code: true, draft: true })] : [];
+  view.dispatch({ changes: { from, to, insert }, effects, userEvent: 'input' });
 }
 
 function languageActions(state: EditorState, obj: PageObject): ObjectAction[] {
@@ -1004,7 +1014,7 @@ function languageActions(state: EditorState, obj: PageObject): ObjectAction[] {
   const pick = (id: string) => (view: EditorView, target: PageObject) => setLanguage(view, target.to, id);
   return [
     { id: 'text', label: 'Plain text', checked: Boolean(current?.quiet), run: pick('text') },
-    ...CODE_LANGUAGES.map((language) => ({ id: language.id, label: language.label, checked: current?.language?.id === language.id, run: pick(language.id) })),
+    ...MENU_LANGUAGES.map((language) => ({ id: language.id, label: language.label, checked: current?.language?.id === language.id, run: pick(language.id) })),
     { id: 'mermaid', label: 'Mermaid diagram', checked: current?.word.toLowerCase() === 'mermaid', run: pick('mermaid') },
   ];
 }
@@ -1093,10 +1103,13 @@ const makeFence: Command = (view) => {
   const blank = container.replace(/(?:[-+*]|\d+[.)])[ \t]+$/, (mark) => ' '.repeat(mark.length));
   const text = `${container}${marker}${match[3].trimEnd()}\n${blank}\n${blank}${marker}`;
   const caret = line.from + container.length + marker.length + match[3].trimEnd().length + 1 + blank.length;
+  const effects: StateEffect<unknown>[] = [setMadeFence.of({ from: line.from, to: line.from + text.length, caret, text: line.text })];
+  // A new diagram shows as code while the caret is in it, and draws once it leaves.
+  if (diagramKind(match[3])) effects.push(setDiagramCode.of({ at: line.from, code: true, draft: true }));
   view.dispatch({
     changes: { from: line.from, to: line.to, insert: text },
     selection: { anchor: caret },
-    effects: setMadeFence.of({ from: line.from, to: line.from + text.length, caret, text: line.text }),
+    effects,
     scrollIntoView: true,
     userEvent: 'input',
   });
@@ -1182,7 +1195,8 @@ const codeEnter: Command = (view) => {
   if (!inside || state.selection.ranges.length > 1) return false;
   // A selection that leaves the code loses its text but not the fence lines, which the fence guard keeps.
   const { line, from } = inside.fence.lines[inside.index];
-  const own = /^[ \t]*/.exec(state.sliceDoc(from, line.to))?.[0] ?? '';
+  // The line's own indent, up to the caret: Enter inside the indent leaves the rest of it on the line below.
+  const own = /^[ \t]*/.exec(state.sliceDoc(from, Math.max(from, main.from)))?.[0] ?? '';
   // A blank line may have lost its container's indent; the new line takes the block's.
   const container = state.sliceDoc(line.from, from);
   const insert = `\n${container.length >= inside.fence.prefix.length ? container : inside.fence.prefix}${own}`;
@@ -1246,17 +1260,29 @@ const selectCode: Command = (view) => {
   return true;
 };
 
-/** Backspace at the start of indented code: a later line joins the line above, and the first line stays. */
+/**
+ * Backspace at the start of indented code: a later line joins the line
+ * above, a blank code line above goes, and the first line stays. On a
+ * paragraph right under the block the caret moves to the end of the code,
+ * as under a fence, so text never joins the code.
+ */
 const indentedBackspace: Command = (view) => {
   const { state } = view;
   const { main } = state.selection;
   if (!main.empty) return false;
-  const block = indentedAt(state, main.head);
-  if (!block) return false;
   const line = state.doc.lineAt(main.head);
   if (!/^[ \t]*$/.test(state.sliceDoc(line.from, main.head))) return false;
+  const block = indentedAt(state, main.head);
+  if (!block) {
+    const above = line.number > 1 ? state.doc.line(line.number - 1) : null;
+    if (!above || !indentedAt(state, above.to)) return false;
+    view.dispatch({ selection: { anchor: above.to }, scrollIntoView: true, userEvent: 'select' });
+    return true;
+  }
   if (state.doc.lineAt(block.from).number === line.number) return true;
-  view.dispatch({ changes: { from: line.from - 1, to: main.head }, scrollIntoView: true, userEvent: 'delete.backward' });
+  const above = state.doc.line(line.number - 1);
+  const changes = /^[ \t]*$/.test(above.text) ? { from: above.from, to: line.from } : { from: line.from - 1, to: main.head };
+  view.dispatch({ changes, scrollIntoView: true, userEvent: 'delete.backward' });
   return true;
 };
 
@@ -1266,17 +1292,25 @@ const inCode: Command = (view) => inCodeBlock(view.state);
 /**
  * A list or heading key at the stop after a block that ends the page, or
  * before one that starts it: the line it formats is written first, as the
- * first typed character's would be. False, so the key's own command runs.
+ * first typed character's would be, in the same step as the key's command,
+ * so one undo takes both back. False elsewhere, so the key's own command runs.
  */
-const lineAtStop: Command = (view) => {
-  const { state } = view;
-  const { main } = state.selection;
-  if (!main.empty || state.selection.ranges.length > 1) return false;
-  const line = state.doc.lineAt(main.head);
-  if (main.head === state.doc.length && fenceEndingOn(state, line)) view.dispatch({ changes: { from: main.head, insert: '\n' }, selection: { anchor: main.head + 1 }, userEvent: 'input' });
-  else if (main.head === 0 && fenceOpeningOn(state, line)) view.dispatch({ changes: { from: 0, insert: '\n' }, selection: { anchor: 0 }, userEvent: 'input' });
-  return false;
-};
+function lineAtStop(command: StateCommand): Command {
+  return (view) => {
+    const { state } = view;
+    const { main } = state.selection;
+    if (!main.empty || state.selection.ranges.length > 1) return false;
+    const line = state.doc.lineAt(main.head);
+    const after = main.head === state.doc.length && fenceEndingOn(state, line) !== null;
+    if (!after && !(main.head === 0 && fenceOpeningOn(state, line))) return false;
+    const first = state.update(after ? { changes: { from: main.head, insert: '\n' }, selection: { anchor: main.head + 1 } } : { changes: { from: 0, insert: '\n' }, selection: { anchor: 0 } });
+    let second: Transaction | null = null;
+    if (!command({ state: first.state, dispatch: (tr) => { second = tr; } }) || !second) return false;
+    const done: Transaction = second;
+    view.dispatch({ changes: first.changes.compose(done.changes), selection: done.selection ?? first.selection, scrollIntoView: true, userEvent: 'input' });
+    return true;
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Backspace and Delete next to code
@@ -1701,15 +1735,13 @@ export const toggleCodeBlock: Command = (view) => {
   if (state.readOnly) return false;
   const { main } = state.selection;
   const inside = codeAt(state, main.from)?.fence;
-  if (inside && inside.close) {
+  if (inside) {
     const { open, close, lines } = inside;
     // Unwrap: the fences go and the code lines stay as they are. A fence on a list item's line leaves the marker, and the first code line takes its place.
+    // An unclosed block loses its opening fence only.
     const marked = LIST_MARK_END.test(state.sliceDoc(open.from, inside.node.from));
-    const changes: ChangeSpec[] = [
-      marked ? { from: inside.node.from, to: lines[0]?.from ?? open.to } : { from: open.from, to: Math.min(state.doc.length, open.to + 1) },
-      { from: Math.max(0, close.from - 1), to: close.to },
-    ];
-    if (lines.length === 0 && !marked) changes.splice(1, 1, { from: close.from, to: close.to });
+    const changes: ChangeSpec[] = [marked ? { from: inside.node.from, to: lines[0]?.from ?? open.to } : { from: open.from, to: Math.min(state.doc.length, open.to + 1) }];
+    if (close) changes.push(lines.length === 0 && !marked ? { from: close.from, to: close.to } : { from: Math.max(0, close.from - 1), to: close.to });
     view.dispatch({ changes, scrollIntoView: true, userEvent: 'input' });
     return true;
   }
@@ -1806,8 +1838,8 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
       { key: 'Alt-F10', run: focusHeader },
       { key: 'Ctrl-Alt-t', run: focusHeader },
       ...['Mod-b', 'Mod-i', 'Mod-Shift-x'].map((key) => ({ key, run: inCode })),
-      ...['Mod-Shift-7', 'Mod-Shift-8', 'Mod-Shift-9', ...[0, 1, 2, 3, 4, 5, 6].map((level) => `Mod-Alt-${level}`)]
-        .map((key) => ({ key, run: (view: EditorView) => inCode(view) || lineAtStop(view) })),
+      ...([['Mod-Shift-7', toggleList('number')], ['Mod-Shift-8', toggleList('bullet')], ['Mod-Shift-9', toggleList('task')], ...[0, 1, 2, 3, 4, 5, 6].map((level) => [`Mod-Alt-${level}`, setHeading(level)])] as [string, StateCommand][])
+        .map(([key, command]) => ({ key, run: (view: EditorView) => inCode(view) || lineAtStop(command)(view) })),
     ])),
   ];
 }
