@@ -275,6 +275,12 @@ describe('file widgets', () => {
     expect(card.querySelector('.cm-file-hover')).toBeNull();
   });
 
+  it('gives a picture its height before it loads, from files:info', async () => {
+    installFilesApi();
+    const view = await mount(`![[${SHOT}|300]]\n`);
+    await waitFor(() => expect((view.contentDOM.querySelector('.cm-md-image img') as HTMLImageElement).style.aspectRatio).toMatch(/^1\.6( \/ 1)?$/));
+  });
+
   it('drags the file itself out of the window from a card\'s tile', async () => {
     const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('[data-drag-file]')).not.toBeNull());

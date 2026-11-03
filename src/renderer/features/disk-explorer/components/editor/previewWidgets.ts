@@ -158,6 +158,8 @@ export interface ImageExtras {
   object?: boolean;
   /** Width over height, known before it loads. */
   ratio?: number | null;
+  /** Reads width over height when it was not known yet, so the box has its height before the bytes arrive. */
+  measure?: (file: string) => Promise<number | null>;
   /** Draws a file that is gone, not downloaded, or unreadable in place of the image. */
   fail?: (view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable') => void;
 }
@@ -188,7 +190,7 @@ export class ImageWidget extends WidgetType {
     const a = this.extras;
     const b = other.extras;
     return other.src === this.src && other.alt === this.alt && other.width === this.width && other.version === this.version && other.selected === this.selected &&
-      a.caption === b.caption && a.file === b.file && a.object === b.object && a.ratio === b.ratio && a.fail === b.fail;
+      a.caption === b.caption && a.file === b.file && a.object === b.object && a.ratio === b.ratio && a.fail === b.fail && a.measure === b.measure;
   }
 
   private get url() { return this.version ? `${this.src}?v=${this.version}` : this.src; }
@@ -204,6 +206,11 @@ export class ImageWidget extends WidgetType {
     image.alt = this.alt;
     image.draggable = false;
     if (this.extras.ratio) image.style.aspectRatio = String(this.extras.ratio);
+    else if (this.extras.file && this.extras.measure) {
+      void this.extras.measure(this.extras.file).then((ratio) => {
+        if (ratio) image.style.aspectRatio = String(ratio);
+      });
+    }
     image.addEventListener('load', () => view.requestMeasure());
     image.addEventListener('error', () => { void this.explainMissing(view, frame, image); });
     box.append(image);

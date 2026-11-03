@@ -758,7 +758,6 @@ function widgetFor(ctx: DecorateContext, ref: FileRef, look: FileLook): WidgetTy
   if (ref.kind === 'audio') return new AudioWidget(drawn);
   const src = ref.path ? toOpalFileUrl(ref.path) : toOpalFileUrl(ref.target);
   const info = ref.path ? knownInfo(ref.path) : undefined;
-  if (ref.path && info === undefined) void fileInfo(ref.path);
   const ratio = info?.width && info.height ? info.width / info.height : null;
   return new ImageWidget(src, ref.form === 'image' ? ref.text ?? '' : fileName(ref), slotWidth(ref.slot), ctx.versions.get(src), false, {
     caption: captionOf(ref),
@@ -766,7 +765,14 @@ function widgetFor(ctx: DecorateContext, ref: FileRef, look: FileLook): WidgetTy
     object: true,
     ratio,
     fail: imageFailure,
+    measure: pictureRatio,
   });
+}
+
+/** A picture's width over height from files:info. */
+async function pictureRatio(file: string): Promise<number | null> {
+  const info = await fileInfo(file);
+  return info?.width && info.height ? info.width / info.height : null;
 }
 
 const syntax = Decoration.mark({ class: 'cm-md-syntax' });
