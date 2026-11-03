@@ -19,6 +19,7 @@ import {
 } from '@/renderer/features/disk-explorer/components/editor/fileEmbeds';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { metaLine } from '@/renderer/features/disk-explorer/components/editor/fileWidgets';
 import { linksResolved, resolvedLinks } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
@@ -257,6 +258,47 @@ describe('file widgets', () => {
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card button')).toHaveTextContent('Open in Keynote'));
   });
 
+  it('makes no player for a preview taken off the page before its file was read', async () => {
+    const observed: Element[] = [];
+    vi.stubGlobal('IntersectionObserver', class { observe(el: Element): void { observed.push(el); } unobserve(): void { observed.length += 0; } disconnect(): void { observed.length += 0; } });
+    let answer: (value: { success: true; data: FileInfo }) => void = () => undefined;
+    installFilesApi({ info: vi.fn(() => new Promise<{ success: true; data: FileInfo }>((resolve) => { answer = resolve; })) });
+    const other = `Library/files/2026-11/other-clip.a3f9c2e1.mp4`;
+    const view = new EditorView({ parent: document.body, state: EditorState.create({ doc: `![[${other}|640]]\n`, extensions: markdownEditorExtensions('/Vault/Notes/A.mdo') }) });
+    act(() => { view.dispatch({ effects: linksResolved.of({ [other]: `/Vault/${other}` }) }); });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(view.contentDOM.querySelector('.cm-file-video')).not.toBeNull();
+    view.destroy();
+    answer({ success: true, data: { ...info(`/Vault/${other}`), kind: 'video' } });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(observed.filter((el) => el instanceof HTMLMediaElement && el.getAttribute('src'))).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('turns a card into File not found when its file is deleted while the page is open, and leaves the rest alone', async () => {
+    let changed: (payload: { directories: string[] }) => void = () => undefined;
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => undefined; }),
+    });
+    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n\n![[${PDF}|Q3.pdf]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf')).not.toBeNull());
+    const pdf = view.contentDOM.querySelector('.cm-file-pdf');
+    statuses[`/Vault/${DECK}`] = 'missing';
+    act(() => { changed({ directories: ['/Vault/Library/files/2026-11'] }); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('File not found'));
+    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('data-state', 'missing');
+    // The PDF beside it, unchanged, keeps its element.
+    expect(view.contentDOM.querySelector('.cm-file-pdf')).toBe(pdf);
+  });
+
+  it('gives an empty file its size and a notebook its kind', () => {
+    const base = { path: '/Vault/x', mtimeMs: 0, kind: 'text' as const, status: 'local' as const };
+    expect(metaLine('empty.txt', 'text', { ...base, name: 'empty.txt', size: 0 })).toBe('Text · 0 B');
+    expect(metaLine('Analysis.ipynb', 'other', { ...base, name: 'Analysis.ipynb', size: 25, kind: 'other' })).toBe('Jupyter notebook · 25 B');
+  });
+
   it('keeps a player across a redraw of its line', async () => {
     const view = await mount(`![[${CLIP}|640]]\n\ntext\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('video')).not.toBeNull());
@@ -289,6 +331,33 @@ describe('file widgets', () => {
     act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).toBeNull();
     expect(text(view)).toBe(`![[${PDF}|Q3.pdf]]\n\n![[${PDF}#page=3|Q3 again.pdf]]\n`);
+  });
+
+  it('keeps Read here on its own page: another page or a second embed of the same PDF leaves it there', async () => {
+    const doc = `![[${PDF}|Q3.pdf]]\n`;
+    const first = await mount(doc, '/Vault/Notes/A.mdo');
+    await waitFor(() => expect(first.contentDOM.querySelector('.cm-file-pdf-read')).not.toBeNull());
+    act(() => { (first.contentDOM.querySelector('.cm-file-pdf-read') as HTMLButtonElement).click(); });
+    const viewer = first.contentDOM.querySelector('.cm-file-pdf-viewer');
+    expect(viewer).not.toBeNull();
+    const second = await mount(`${doc}\n${doc}`, '/Vault/Notes/B.mdo');
+    await waitFor(() => expect(second.contentDOM.querySelectorAll('.cm-file-pdf')).toHaveLength(2));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(second.contentDOM.querySelector('.cm-file-pdf-viewer')).toBeNull();
+    expect(first.contentDOM.querySelector('.cm-file-pdf-viewer')).toBe(viewer);
+    // Read here on one of two embeds of one file on a page opens that one alone.
+    const reads = second.contentDOM.querySelectorAll<HTMLButtonElement>('.cm-file-pdf-read');
+    act(() => { reads[1].click(); });
+    expect(second.contentDOM.querySelectorAll('.cm-file-pdf-viewer')).toHaveLength(1);
+    expect(second.contentDOM.querySelectorAll('.cm-file-pdf-reading')).toHaveLength(1);
+    expect(first.contentDOM.querySelector('.cm-file-pdf-reading')).toBeNull();
+    // A page opened again starts with its first page, not the reader it had.
+    second.destroy();
+    views = views.filter((candidate) => candidate !== second);
+    const again = await mount(doc, '/Vault/Notes/B.mdo');
+    await waitFor(() => expect(again.contentDOM.querySelector('.cm-file-pdf')).not.toBeNull());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(again.contentDOM.querySelector('.cm-file-pdf-viewer')).toBeNull();
   });
 
   it('forgets a reader once its page is gone, so Escape in another page goes through', async () => {

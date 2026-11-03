@@ -110,6 +110,12 @@ export class FilesService {
       const name = path.basename(source.path);
       const extension = extensionOf(name);
       if ((await stat(source.path).catch(() => null))?.isDirectory()) {
+        // An app is a folder too: linked where it is inside the vault, where it reveals in Finder only.
+        if (extension === 'app') {
+          const app = await linkInPlace(root, source.path, this.deps.git, { app: true });
+          if (app) return { ...app, name };
+          throw new FilesError(`"${name}" is an app. Opal links apps only from inside the vault.`);
+        }
         throw new FilesError(SAVED_AS_FOLDER.has(extension) ? `"${name}" is saved as a folder. Zip it first.` : "Folders can't be added yet.");
       }
       if (extension === 'webloc' || extension === 'url') {

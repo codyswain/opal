@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, waitFor } from '@testing-library/react';
 import { undo } from '@codemirror/commands';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
-import { dropAfter, placeEmbed } from '@/renderer/features/disk-explorer/components/editor/imageInsert';
+import { dropAfter, insertedText, placeEmbed } from '@/renderer/features/disk-explorer/components/editor/imageInsert';
 import { embedWidth, imageSize } from '@/renderer/features/disk-explorer/components/editor/imageSize';
 import { setActiveDragSourcePath, clearActiveDragSourcePath } from '@/renderer/features/disk-explorer/components/dragMoveState';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -136,10 +137,19 @@ describe('where a file goes', () => {
     const { from, insert } = placeEmbed(state(doc), at, '![[f.png]]');
     return doc.slice(0, from) + insert + doc.slice(from);
   };
+  const rows = (doc: string) => {
+    const parsed = state(doc);
+    ensureSyntaxTree(parsed, parsed.doc.length, 5000);
+    let count = 0;
+    syntaxTree(parsed).iterate({ enter: (node) => { if (node.name === 'TableRow') count += 1; } });
+    return count;
+  };
 
   it('goes on a line of its own after the line, or takes an empty line', () => {
     expect(place('One line\nNext\n', 3)).toBe('One line\n![[f.png]]\nNext\n');
     expect(place('Above\n\nBelow\n', 6)).toBe('Above\n![[f.png]]\nBelow\n');
+    // An empty line in a quote keeps a space after its mark.
+    expect(place('> Quoted\n>\n> More\n', 9)).toBe('> Quoted\n> ![[f.png]]\n> More\n');
   });
 
   it('lines up under a list item\'s text and keeps a quote\'s or callout\'s marks', () => {
@@ -152,12 +162,26 @@ describe('where a file goes', () => {
   it('goes after a table, with a blank line, or after a code block', () => {
     const table = '| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter\n';
     expect(place(table, 2)).toBe('| a | b |\n| - | - |\n| 1 | 2 |\n\n![[f.png]]\n\nAfter\n');
+    // On the blank line under the table, the blank line stays, so the file and the text below are no rows.
+    expect(place(table, table.indexOf('\n\n') + 1)).toBe('| a | b |\n| - | - |\n| 1 | 2 |\n\n![[f.png]]\nAfter\n');
+    expect(place('> | a |\n> | - |\n> | 1 |\n>\n', 24)).toBe('> | a |\n> | - |\n> | 1 |\n>\n> ![[f.png]]\n');
+    expect(rows(place(table, table.indexOf('\n\n') + 1))).toBe(1);
     expect(place('> | a |\n> | - |\n> | 1 |\n', 2)).toBe('> | a |\n> | - |\n> | 1 |\n>\n> ![[f.png]]\n');
     expect(place('```\ncode\n```\nAfter\n', 5)).toBe('```\ncode\n```\n![[f.png]]\nAfter\n');
     // An indented code block's indent is not the embed's: it lines up with the list item holding the block, or the left edge.
     expect(place('Text\n\n    code line\n    more code\n\nAfter\n', 10)).toBe('Text\n\n    code line\n    more code\n![[f.png]]\n\nAfter\n');
     expect(place('- item\n\n      code\n      more\n', 15)).toBe('- item\n\n      code\n      more\n  ![[f.png]]\n');
     expect(place('> text\n>\n>     code\n', 13)).toBe('> text\n>\n>     code\n> ![[f.png]]\n');
+  });
+
+  it('keeps brackets in a shown name, as escaped link text, and writes accented names in NFC', () => {
+    const file = (name: string, stem: string) => ({ path: `/Vault/Library/files/2026-11/${stem}`, vaultPath: `Library/files/2026-11/${stem}`, name });
+    expect(insertedText(file('Q3 #1 50% [draft].txt', 'q3-1-50-draft.80a3ef2f.txt'), DOC, 'card', null))
+      .toBe('[Q3 #1 50% \\[draft\\].txt](<../Library/files/2026-11/q3-1-50-draft.80a3ef2f.txt>)');
+    const accented = 'Cafe\u0301 re\u0301sume\u0301.pdf';
+    const written = insertedText(file(accented, 'café-résumé.993a86b6.pdf'), DOC, 'default', null);
+    expect(written).toBe('![[Library/files/2026-11/café-résumé.993a86b6.pdf|Café résumé.pdf]]'.normalize('NFC'));
+    expect(written.normalize('NFC')).toBe(written);
   });
 
   it('drops after the nearer edge of the block under the pointer, past blank lines', () => {
@@ -228,6 +252,22 @@ describe('pasting files', () => {
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
     await waitFor(() => expect(text(view)).toBe('[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]] Start\n'));
+  });
+
+  it('puts a chip after a link the caret is inside, never inside its text', async () => {
+    installFilesApi({ hasPath: vi.fn(() => true) });
+    const report = () => new File(['%PDF'], 'report.pdf', { type: 'application/pdf' });
+    const chip = '[[Library/files/2026-11/report.a3f9c2e1.pdf|report.pdf]]';
+    for (const [doc, inside, expected] of [
+      ['See [[Plan|My plan]] today\n', 'plan]]', `See [[Plan|My plan]] ${chip} today\n`],
+      ['See [the plan](https://example.com) today\n', 'plan]', `See [the plan](https://example.com) ${chip} today\n`],
+      ['See ![[Library/files/2026-11/a.a3f9c2e1.png|a.png]] here\n', 'a.png]]', `See ![[Library/files/2026-11/a.a3f9c2e1.png|a.png]] ${chip} here\n`],
+    ] as const) {
+      const view = mount(doc);
+      act(() => { view.dispatch({ selection: { anchor: doc.indexOf(inside) } }); });
+      paste(view, [report()], 'report.pdf');
+      await waitFor(() => expect(text(view)).toBe(expected));
+    }
   });
 
   it('leaves a paste without files to CodeMirror', () => {

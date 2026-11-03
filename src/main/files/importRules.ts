@@ -27,15 +27,16 @@ export interface LinkedInPlace {
  * (`.env`) is linked where it is, since a copy would land where git tracks
  * it. git's own files are refused. A file over 100 MB that git will not
  * send to LFS gets a warning, since GitHub refuses blobs that large.
+ * With `app`, an app's folder is linked like a file.
  */
-export async function linkInPlace(root: string, file: string, git: RunFile = runFile): Promise<LinkedInPlace | null> {
+export async function linkInPlace(root: string, file: string, git: RunFile = runFile, options: { app?: boolean } = {}): Promise<LinkedInPlace | null> {
   const real = await realpath(file).catch(() => null);
   if (!real || real === root || !isInsideRoot(root, real)) return null;
   const segments = path.relative(root, real).split(path.sep);
   // .git/config can hold a remote address with a token in it.
   if (segments.includes('.git')) throw new FilesError("Files inside .git can't be added.");
   const info = await lstat(real);
-  if (!info.isFile()) return null;
+  if (!info.isFile() && !(options.app && info.isDirectory())) return null;
   const folder = path.dirname(real);
   const repo = await repoOf(folder);
   if (repo && folder !== repo.top && (await askGit(git, repo.top, ['check-ignore', '-q', '--', folder])) === 0) return null;

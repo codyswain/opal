@@ -1,6 +1,6 @@
 import { isolateHistory } from '@codemirror/commands';
 import { syntaxTree } from '@codemirror/language';
-import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
+import { StateEffect, StateField, type EditorState, type Extension, type Line } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { ImagePlus, Paperclip } from 'lucide-react';
@@ -31,13 +31,22 @@ const hasText = (text: string) => /[^\s>]/.test(text);
 // The quote marks that open a line, with the space after each.
 const QUOTE = /^(?:[ \t]*>[ \t]?)*/;
 
+/** Whether `line` is a table's row, which would read text on the line right under it as another row. */
+function tableRow(state: EditorState, line: Line): boolean {
+  const lead = /^[\s>]*/.exec(line.text)?.[0].length ?? 0;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from + lead, 1); node; node = node.parent) {
+    if (node.name === 'Table') return true;
+  }
+  return false;
+}
+
 /**
  * Where `embed` goes to sit on a line of its own after the line holding
  * `at`, and the text that puts it there. In a quote the line keeps its ">",
  * and under a list item it lines up with the item's text. In a table or
- * code block it goes after the block, and after a table a blank line first,
- * since a line right under a table is one of its rows. An empty line takes
- * the embed itself.
+ * code block it goes after the block, and after a table a blank line
+ * first, since a line right under a table is one of its rows. An empty line
+ * takes the embed itself, unless it is the blank line under a table.
  */
 export function placeEmbed(state: EditorState, at: number, embed: string): { from: number; insert: string } {
   const { doc } = state;
@@ -60,8 +69,13 @@ export function placeEmbed(state: EditorState, at: number, embed: string): { fro
       break;
     }
   }
-  if (!hasText(line.text)) return { from: line.to, insert: embed };
   const quote = QUOTE.exec(line.text)?.[0] ?? '';
+  if (!hasText(line.text)) {
+    // After the quote's marks with a space, and under a table on a line of its own, keeping the blank line.
+    const lead = quote && !quote.endsWith(' ') ? ' ' : '';
+    const underTable = line.number > 1 && tableRow(state, doc.line(line.number - 1));
+    return { from: line.to, insert: `${underTable ? `\n${quote}` : ''}${lead}${embed}` };
+  }
   const rest = under.slice(QUOTE.exec(under)?.[0].length ?? 0);
   const item = table ? undefined : /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(rest)?.[0];
   const indent = item ? ' '.repeat(item.length) : /^[ \t]*/.exec(rest)?.[0] ?? '';
@@ -150,7 +164,9 @@ export type InsertLook = 'chip' | 'default' | 'card';
  * card are a link with the file's name. A dropped `.webloc` or `.url` is a
  * link to its address.
  */
-export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
+export function insertedText(stored: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
+  // Finder hands names over decomposed; the page writes them composed, as the stored path is, so Find and grep match.
+  const file = { ...stored, name: stored.name.normalize('NFC') };
   // A dropped .webloc or .url stored nothing: it links to the address it holds.
   if (file.url) return `[${escapeLinkText(file.name.replace(/\.(webloc|url)$/i, ''), inTable)}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`;
   const kind = classifyFile(file.path);
@@ -257,6 +273,7 @@ const pendingFiles = StateField.define<ReadonlyMap<number, Pending>>({
 });
 
 const CARD_HEIGHT = 64;
+const AUDIO_WIDTH = 448;
 // A video's width before it is stored, when the column can't be read.
 const VIDEO_WIDTH = 640;
 
@@ -271,9 +288,10 @@ export async function pendingSize(view: EditorView, file: File, look: InsertLook
   const card: PendingSize = { preview: false, width: null, height: CARD_HEIGHT };
   if (look !== 'default') return card;
   if (kind === 'pdf') return { preview: true, width: null, height: 401 };
-  if (kind === 'audio') return { preview: true, width: null, height: 56 };
-  if (kind !== 'image' && kind !== 'video') return card;
+  if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return card;
   const room = roomOf(view);
+  // Audio's row is a card's width, 28rem.
+  if (kind === 'audio') return { preview: true, width: room.width > 0 ? Math.min(AUDIO_WIDTH, room.width) : null, height: 94 };
   if (kind === 'video') {
     const width = room.width > 0 ? room.width : VIDEO_WIDTH;
     return { preview: true, width, height: Math.round((width * 9) / 16) };
@@ -398,13 +416,22 @@ export async function addFiles(view: EditorView, files: readonly File[], at: num
   letGo(view, id);
 }
 
+// Links whose text the caret can be in; a chip goes after them, since a link inside a link breaks both.
+const LINKS = new Set(['Link', 'Image', 'WikiLink', 'Embed', 'Autolink', 'URL']);
+
 /**
- * Where a caret at `head` puts one file: inside text, a chip there; on an
- * empty line, or in code or a formula, null, for a line of its own after it.
+ * Where a caret at `head` puts one file: inside text, a chip there, or after
+ * the link the caret is in; on an empty line, or in code or a formula, null,
+ * for a line of its own after it.
  */
 export function caretInText(state: EditorState, head: number): number | null {
   const line = state.doc.lineAt(head);
-  return hasText(line.text) && !inCode(state, head) ? head : null;
+  if (!hasText(line.text) || inCode(state, head)) return null;
+  let at = head;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(head, 1); node; node = node.parent) {
+    if (LINKS.has(node.name) && node.from < head && head < node.to) at = node.to;
+  }
+  return at;
 }
 
 /** Insert > Image… and Insert > File…: the files picked in the open dialog, at the caret. */
