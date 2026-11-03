@@ -59,7 +59,8 @@ export function pocketSteps(source: string): string[] | null {
 
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
-const ARROW = '<svg viewBox="0 0 12 20" width="12" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v17"/><path d="m2 14 4 4 4-4"/></svg>';
+// A line and a filled head, as Mermaid draws its arrows, so both kinds of diagram match.
+const ARROW = '<svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true"><path d="M6 1v12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M2.5 12.5h7L6 19z" fill="currentColor"/></svg>';
 
 function drawPocket(steps: readonly string[], parent: HTMLElement): void {
   const chain = document.createElement('div');
