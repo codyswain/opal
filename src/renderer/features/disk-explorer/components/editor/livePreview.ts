@@ -536,6 +536,7 @@ const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
 const horizontalRule = new HorizontalRuleWidget();
+const horizontalRuleObject = new HorizontalRuleWidget(true);
 
 /**
  * Decorations for the lines from `top` to `bottom`: everything but tables and
@@ -711,7 +712,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           return false;
         }
         case 'HorizontalRule':
-          if (!reveal.lines(ref.from, ref.to)) out.push(Decoration.replace({ widget: horizontalRule }).range(ref.from, ref.to));
+          if (!reveal.lines(ref.from, ref.to)) out.push(Decoration.replace({ widget: state.facet(docMode) ? horizontalRuleObject : horizontalRule }).range(ref.from, ref.to));
           return false;
         case 'ListMark': {
           const item = node.parent;

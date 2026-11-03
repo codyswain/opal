@@ -96,14 +96,20 @@ export class CalloutTitleWidget extends WidgetType {
   }
 }
 
+/** A rule. In a document it is an object: a click frames it and shows its bar. */
 export class HorizontalRuleWidget extends WidgetType {
-  eq() { return true; }
+  constructor(readonly object = false) { super(); }
+
+  eq(other: HorizontalRuleWidget) { return other.object === this.object; }
 
   toDOM() {
     const rule = document.createElement('span');
     rule.className = 'cm-md-hr';
+    if (this.object) rule.dataset.object = 'horizontal rule';
     return rule;
   }
+
+  ignoreEvent() { return !this.object; }
 }
 
 /** Stands in for the hidden end of a long link target. */

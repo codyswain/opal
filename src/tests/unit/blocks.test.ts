@@ -551,3 +551,16 @@ describe('Tab with a cell caret in a drawn table', () => {
     expect(text(view)).toBe(`Intro\n\n| a | xb |\n|---|---|\n| 1 | 2 |\n\nEnd\n`);
   });
 });
+
+describe('a click on a rule in a document', () => {
+  it('frames it with the caret after it', async () => {
+    const view = mount('Text\n\n***\n\nMore‸\n');
+    await focusPage(view);
+    const rule = view.contentDOM.querySelector('.cm-md-hr[data-object]') as HTMLElement;
+    act(() => { rule.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    expect(frame(view)).toMatchObject({ kind: 'horizontal rule' });
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Text\n\nMore\n');
+    expect(mount('***\n', NOTE).contentDOM.querySelector('.cm-md-hr[data-object]')).toBeNull();
+  });
+});

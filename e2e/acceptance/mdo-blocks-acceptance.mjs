@@ -120,6 +120,19 @@ try {
   await shoot('framed-rule');
   await page.keyboard.press('Escape');
 
+  // A click on a rule frames it; Backspace then removes only the rule, and Cmd+Z brings it back.
+  {
+    const before = await readDoc();
+    const box = await page.locator('.cm-md-hr').first().boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    check('a click on a rule frames it', await page.locator('[data-object-bar="horizontal rule"]').count() === 1);
+    await page.keyboard.press('Backspace');
+    const removed = await waitForFile((text) => !text.includes('***'));
+    check('Backspace on a clicked rule removes only the rule', removed === before.replace('***\n\n', ''), JSON.stringify(removed.slice(0, 80)));
+    await page.keyboard.press('Meta+z');
+    check('Cmd+Z restores the rule', (await waitForFile((text) => text.includes('***'))) === before);
+  }
+
   // A click in a cell, then a key, types into that cell.
   const cell = page.locator('.cm-md-table td').first();
   await cell.click();
