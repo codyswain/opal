@@ -223,8 +223,9 @@ describe('typing in a document', () => {
     expect(text(view)).toBe('Total\n= 5 + 3\n');
     const dashes = mount('Total\n');
     act(() => { dashes.dispatch({ changes: { from: 5, insert: '\n' }, selection: { anchor: 6 }, userEvent: 'input' }); });
-    type(dashes, '--- x');
-    expect(text(dashes)).toBe('Total\n--- x\n');
+    // Three dashes draw a rule, and text typed after a rule starts its own paragraph, so two stay text.
+    type(dashes, '-- x');
+    expect(text(dashes)).toBe('Total\n-- x\n');
   });
 
   it('writes <!-- as typed inside a wiki link or URL, where a backslash would show', () => {

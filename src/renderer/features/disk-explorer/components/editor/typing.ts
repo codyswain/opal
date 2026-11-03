@@ -337,7 +337,7 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
 
   // A rule or underline typed under a paragraph: a blank line keeps the paragraph a paragraph.
   const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
-  if ((text === '-' || text === '=') && /^(?:-{3,}|=+)$/.test(after.sliceDoc(line.from + quote.length, line.to)) && line.number > 1) {
+  if ((text === '-' || text === '=') && /^(?:-+|=+)$/.test(after.sliceDoc(line.from + quote.length, line.to)) && line.number > 1) {
     const mark = latestTree(after).resolveInner(line.from + quote.length, 1);
     if (mark.name === 'HeaderMark' && /^SetextHeading/.test(mark.parent?.name ?? '')) {
       const insert = `${quote.replace(/[ \t]+$/, '')}\n`;
