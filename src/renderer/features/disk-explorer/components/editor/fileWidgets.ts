@@ -216,6 +216,7 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
     card.append(tile, body);
     if (actions.childElementCount > 0) card.append(actions);
     card.setAttribute('aria-label', `${service ? `${service} video` : kindLabel(fileName(ref), ref.kind)}, ${name}`);
+    if (state === 'ready' && ref.path && !service) dragOut(tile, ref.path);
     if (state === 'ready' && ref.path && !service && hasPicture(ref)) {
       void thumbnailInto(view, tile, ref.path);
       hoverPreview(card, ref.path);
@@ -329,6 +330,21 @@ function thumbnailUrl(path: string, px: number): Promise<string | null> {
     thumbnails.set(key, url);
   }
   return url;
+}
+
+/**
+ * The tile is a handle that drags the file itself out of the window, to
+ * Finder, Slack or Gmail. The page ignores its clicks, so the browser's own
+ * drag starts; the rest of the card frames it.
+ */
+function dragOut(tile: HTMLElement, path: string): void {
+  tile.draggable = true;
+  tile.dataset.dragFile = path;
+  tile.title = 'Drag to Finder, Slack or Gmail';
+  tile.addEventListener('dragstart', (event) => {
+    event.preventDefault();
+    window.filesAPI.startDrag(path);
+  });
 }
 
 const HOVER_MS = 400;
@@ -479,7 +495,7 @@ export class PdfPreviewWidget extends WidgetType {
   }
 
   ignoreEvent(event: Event) {
-    return event.target instanceof Element && event.target.closest('button, embed') !== null;
+    return event.target instanceof Element && event.target.closest('button, embed, [data-drag-file]') !== null;
   }
 }
 
@@ -637,7 +653,7 @@ export class VideoWidget extends WidgetType {
   ignoreEvent(event: Event) {
     if (!(event.target instanceof Element)) return true;
     if (event.target.closest('.cm-file-handle')) return false;
-    return event.target.closest('.cm-file-card') === null || event.target.closest('button') !== null;
+    return event.target.closest('.cm-file-card') === null || event.target.closest('button, [data-drag-file]') !== null;
   }
 }
 
@@ -699,7 +715,7 @@ export class AudioWidget extends WidgetType {
 
   ignoreEvent(event: Event) {
     if (!(event.target instanceof Element)) return true;
-    return event.target.closest('audio, button') !== null;
+    return event.target.closest('audio, button, [data-drag-file]') !== null;
   }
 }
 

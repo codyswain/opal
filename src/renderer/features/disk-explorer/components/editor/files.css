@@ -84,6 +84,10 @@
   position: relative;
 }
 
+.opal-editor .cm-editor .cm-file-card-tile[data-drag-file] {
+  cursor: grab;
+}
+
 .opal-editor .cm-editor .cm-file-thumb {
   position: absolute;
   inset: 0;

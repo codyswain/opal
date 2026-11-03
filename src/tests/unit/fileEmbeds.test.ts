@@ -275,6 +275,17 @@ describe('file widgets', () => {
     expect(card.querySelector('.cm-file-hover')).toBeNull();
   });
 
+  it('drags the file itself out of the window from a card\'s tile', async () => {
+    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('[data-drag-file]')).not.toBeNull());
+    const tile = view.contentDOM.querySelector('[data-drag-file]') as HTMLElement;
+    expect(tile.draggable).toBe(true);
+    const drag = new Event('dragstart', { bubbles: true, cancelable: true });
+    act(() => { tile.dispatchEvent(drag); });
+    expect(drag.defaultPrevented).toBe(true);
+    expect(window.filesAPI.startDrag).toHaveBeenCalledWith(`/Vault/${DECK}`);
+  });
+
   it('plays one video at a time in the window', async () => {
     const view = await mount(`![[${CLIP}|300]]\n\n![[${CLIP}|400]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelectorAll('video')).toHaveLength(2));
