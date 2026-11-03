@@ -207,12 +207,12 @@ describe('pasting files', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('stores a file copied in Finder, not its name, and links a file that is no image', async () => {
+  it('stores a file copied in Finder, not its name, and puts a file that is no image in as a chip at a caret in text', async () => {
     installFilesApi({ hasPath: vi.fn(() => true) });
     const view = mount('Start\n', NOTE);
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
-    await waitFor(() => expect(text(view)).toBe('Start\n[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]]\n'));
+    await waitFor(() => expect(text(view)).toBe('[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]] Start\n'));
   });
 
   it('leaves a paste without files to CodeMirror', () => {

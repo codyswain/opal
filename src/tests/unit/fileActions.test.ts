@@ -85,7 +85,7 @@ function action(view: EditorView, needle: string, path: string): ObjectAction {
   const ref = refAt(view.state, { from: at, to: at });
   if (!ref) throw new Error(`no file at ${needle}`);
   const obj = { kind: ref.alone ? 'file' : 'file-inline', from: ref.alone ? line.from : ref.from, to: ref.alone ? line.to : ref.to, node: '' };
-  let actions = fileActions(view.state, obj);
+  let actions: readonly ObjectAction[] = fileActions(view.state, obj);
   let found: ObjectAction | undefined;
   for (const id of path.split('/')) {
     found = actions.find((candidate) => candidate.id === id);

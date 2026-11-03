@@ -303,3 +303,83 @@ describe('file objects in a document', () => {
     await waitFor(() => expect(window.filesAPI.open).toHaveBeenCalledWith(`/Vault/${DECK}`, { confirmed: undefined }));
   });
 });
+
+describe('putting files in', () => {
+  const stored = (name: string) => {
+    const dot = name.lastIndexOf('.');
+    const stem = name.slice(0, dot).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `Library/files/2026-11/${stem}.a3f9c2e1${name.slice(dot).toLowerCase()}`;
+  };
+  function paste(view: EditorView, files: File[]) {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: { files, getData: () => '' } });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+  }
+  function drop(view: EditorView, files: File[]) {
+    vi.spyOn(view, 'lineBlockAtHeight').mockReturnValue({ from: 0, to: 5, top: 0, bottom: 40 } as ReturnType<EditorView['lineBlockAtHeight']>);
+    const event = new MouseEvent('drop', { bubbles: true, cancelable: true, clientY: 30 });
+    Object.defineProperty(event, 'dataTransfer', { value: { files, types: ['Files'], getData: () => '' } });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+  }
+  const file = (name: string) => new File(['x'], name);
+
+  it('puts a file in mid-sentence as a chip, and on an empty line in its type\'s look', async () => {
+    const view = await mount('See  today\n\n');
+    act(() => { view.dispatch({ selection: { anchor: 4 } }); });
+    paste(view, [file('Gob deck.pptx')]);
+    await waitFor(() => expect(text(view)).toBe(`See [[${stored('Gob deck.pptx')}|Gob deck.pptx]] today\n\n`));
+    act(() => { view.dispatch({ selection: { anchor: text(view).length - 1 } }); });
+    paste(view, [file('Q3 report.pdf')]);
+    await waitFor(() => expect(text(view)).toContain(`![[${stored('Q3 report.pdf')}|Q3 report.pdf]]`));
+  });
+
+  it('drops a PDF, a video and a deck one per line, as previews and a card', async () => {
+    const view = await mount('Intro\n');
+    drop(view, [file('Q3 report.pdf'), file('clip.mp4'), file('Gob deck.pptx')]);
+    await waitFor(() => expect(text(view)).toBe([
+      'Intro',
+      `![[${stored('Q3 report.pdf')}|Q3 report.pdf]]`,
+      // The video's width from its header; in the app the column caps it.
+      `![[${stored('clip.mp4')}|1920]]`,
+      `[[${stored('Gob deck.pptx')}|Gob deck.pptx]]`,
+      '',
+    ].join('\n')));
+  });
+
+  it('puts ten dropped PDFs in as cards, not previews', async () => {
+    const view = await mount('Intro\n');
+    const names = Array.from({ length: 10 }, (_, index) => `Report ${index + 1}.pdf`);
+    drop(view, names.map(file));
+    await waitFor(() => expect(text(view).split('\n')).toHaveLength(12));
+    expect(text(view)).toBe(['Intro', ...names.map((name) => `[[${stored(name)}|${name}]]`), ''].join('\n'));
+  });
+
+  it('shows a placeholder while a file is stored, then an error card with Retry and Remove when it fails, writing nothing', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const results = [
+      new Promise((resolve) => { finish = resolve; }),
+      Promise.resolve({ success: true, data: { path: `/Vault/${stored('clip.mov')}`, vaultPath: stored('clip.mov'), name: 'clip.mov' } }),
+    ];
+    installFilesApi({ import: vi.fn(() => results.shift() as never) });
+    const view = await mount('Intro\n');
+    drop(view, [file('clip.mov')]);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending')).toHaveTextContent('Adding clip.mov…'));
+    expect((view.contentDOM.querySelector('.cm-file-pending') as HTMLElement).style.minHeight).toBe('160px');
+    await act(async () => { finish({ success: false, error: 'The disk is full.' }); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending')).toHaveTextContent('The disk is full.'));
+    expect(text(view)).toBe('Intro\n');
+    const retry = [...view.contentDOM.querySelectorAll<HTMLButtonElement>('.cm-file-pending button')].find((control) => control.textContent === 'Retry');
+    await act(async () => { retry?.click(); });
+    await waitFor(() => expect(text(view)).toBe(`Intro\n![[${stored('clip.mov')}]]\n`));
+    expect(view.contentDOM.querySelector('.cm-file-pending')).toBeNull();
+  });
+
+  it('writes a file whose name a wiki link can\'t hold as a Markdown link with its address encoded', async () => {
+    installFilesApi({
+      import: vi.fn(async () => ({ success: true as const, data: { path: '/Vault/Docs/Plan #2 [draft].pptx', vaultPath: 'Docs/Plan #2 [draft].pptx', name: 'Plan #2 [draft].pptx' } })),
+    });
+    const view = await mount('Intro\n');
+    drop(view, [file('Plan #2 [draft].pptx')]);
+    await waitFor(() => expect(text(view)).toBe('Intro\n[Plan #2 \\[draft\\].pptx](<../Docs/Plan %232 [draft].pptx>)\n'));
+  });
+});

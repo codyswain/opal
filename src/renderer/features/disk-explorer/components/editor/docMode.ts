@@ -33,7 +33,7 @@ import {
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
 import { firstLine } from './firstLine';
-import { insertImageItem } from './imageInsert';
+import { insertFileItem, insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setCellCaret, setOpenBlock, type HiddenRange } from './livePreview';
 import { objectAt } from './extensionPoints';
@@ -475,6 +475,7 @@ export function docModeExtensions(): Extension {
     objectFrameExtension,
     codeDocExtension({ toggleInline: toggleInlineCode, editLink }),
     insertImageItem,
+    insertFileItem,
     insertTableItem,
     docListKeys,
     headingKeys,
