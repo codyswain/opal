@@ -210,4 +210,22 @@ describe('Find and Replace in a document', () => {
     expect(view.contentDOM.querySelectorAll('.cm-searchMatch:not(.opal-searchKept)').length).toBe(0);
     expect(view.contentDOM.querySelectorAll('.opal-searchKept').length).toBe(3);
   });
+
+  it('writes a replacement into a wiki link\'s text as written, and keeps the match when brackets or a bar would end the link', () => {
+    const view = mount('[[React Home|React Home]] and Home\n');
+    query(view, 'Home', '*Home*');
+    run(view, replaceAll);
+    expect(text(view)).toBe('[[React Home|React *Home*]] and \\*Home\\*\n');
+    const kept = mount('[[React Home|React Home]] and Home\n');
+    query(kept, 'Home', 'Home [x]');
+    run(kept, replaceAll);
+    expect(text(kept)).toBe('[[React Home|React Home]] and Home [x]\n');
+  });
+
+  it('escapes brackets that would unmake the link around a replacement', () => {
+    const view = mount('see [this one](https://x.com) now\n');
+    query(view, 'this', 'this [Zq]');
+    run(view, replaceAll);
+    expect(text(view)).toBe('see [this \\[Zq\\] one](https://x.com) now\n');
+  });
 });

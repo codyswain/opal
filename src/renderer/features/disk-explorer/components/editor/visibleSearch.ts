@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { latestTree, objectAt, protectedIn } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
 import { setFrame } from './objectFrame';
-import { literalTexts } from './typing';
+import { inWikiLink, literalTexts } from './typing';
 import { OBJECT, rawRange, visibleLines, visibleSlice, type VisibleLine } from './visibleText';
 
 /*
@@ -228,8 +228,10 @@ export function replaceEdits(
   edits: readonly { from: number; to: number; insert: string }[],
   replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] },
 ): ChangeSet {
-  // A backtick would end inline code early, so a match there keeps its text.
-  const replaced = edits.filter((edit) => !keptText(state, edit.from, edit.to) && !(edit.insert.includes('`') && inNode(state, edit.from, 'InlineCode')));
+  // A backtick would end inline code early, and a bracket or bar a wiki link's text, so a match there keeps its text.
+  const replaced = edits.filter((edit) => !keptText(state, edit.from, edit.to)
+    && !(edit.insert.includes('`') && inNode(state, edit.from, 'InlineCode'))
+    && !(/[[\]|\n]/.test(edit.insert) && inWikiLink(state, edit.from)));
   const texts = literalTexts(state, replaced.map((edit) => ({ ...edit, table: inNode(state, edit.from, 'Table') })));
   const specs: ChangeSpec[] = [];
   replaced.forEach((edit, index) => specs.push(...replace(state, edit.from, edit.to, texts[index]).changes));
@@ -275,9 +277,21 @@ const keptMatches = ViewPlugin.fromClass(class {
 }, { decorations: (plugin) => plugin.decorations });
 
 // No fill, so a kept match reads apart from the grey of those Replace changes.
-const keptTheme = EditorView.theme({
+// The Find bar floats over the page's top right corner on the popover surface, so opening it moves nothing.
+const searchTheme = [EditorView.editorAttributes.of({ class: 'opal-docFind' }), EditorView.theme({
   '.opal-searchKept': { textDecoration: 'underline dashed 1px hsl(var(--text-tertiary))', textUnderlineOffset: '3px' },
-});
+  '&.opal-docFind.cm-editor .cm-panels.cm-panels-top': { height: '0', overflow: 'visible', border: 'none', background: 'transparent' },
+  '&.opal-docFind.cm-editor .cm-panels-top .cm-panel.cm-search': {
+    position: 'absolute',
+    top: '8px',
+    right: '16px',
+    maxWidth: 'calc(100% - 32px)',
+    background: 'hsl(var(--surface-raised))',
+    border: '1px solid hsl(var(--border-overlay))',
+    borderRadius: 'var(--radius-overlay)',
+    boxShadow: 'var(--shadow-overlay)',
+  },
+})];
 
 // The Find bar's labels in sentence case.
 const searchPhrases = EditorState.phrases.of({
@@ -298,7 +312,7 @@ const searchPhrases = EditorState.phrases.of({
  * opens its source, a protected range frames its object.
  */
 export function visibleSearch(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
-  return [keptMatches, keptTheme, searchPhrases, EditorState.transactionFilter.of((tr) => {
+  return [keptMatches, searchTheme, searchPhrases, EditorState.transactionFilter.of((tr) => {
     if (!tr.startState.facet(docMode)) return tr;
     const queries = tr.effects.filter((effect) => effect.is(setSearchQuery) && !(effect.value instanceof VisibleQuery));
     if (queries.length > 0) {
