@@ -229,7 +229,8 @@ try {
   const bar = page.locator('[data-object-bar]');
   const barShown = await bar.waitFor({ timeout: 5000 }).then(() => true, () => false);
   const barText = barShown ? await bar.textContent() : '';
-  check('a click on a card frames it and shows the bar: destination first, then the main action, Show as and More', barShown && /gob-deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && /Show as/.test(barText) && /More/.test(barText), barText);
+  // A deck is a card in either look, so its bar has no Show as.
+  check('a click on a card frames it and shows the bar: destination first, then the main action and More', barShown && /gob-deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && !/Show as/.test(barText) && /More/.test(barText), barText);
   const framed = await page.locator('.cm-file-card[data-file-framed]').count();
   check('the framed card draws its ring', framed === 1);
   if (shotsDir) {
@@ -240,7 +241,34 @@ try {
     }
     await setTheme('light');
   }
+
+  // More > Rename…: the field takes focus once the menu has closed, and Enter writes the new name into the link.
+  await bar.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Rename…' }).click();
+  const ask = page.locator('.opal-file-ask input');
+  await ask.waitFor({ timeout: 3000 }).catch(() => undefined);
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement?.closest('.opal-file-ask') !== null);
+  const barHidden = await bar.evaluate((node) => getComputedStyle(node).visibility === 'hidden').catch(() => true);
+  check('Rename… opens with its field focused, in the bar\'s place', focused && barHidden, `focused ${focused}, bar hidden ${barHidden}`);
+  if (shotsDir) await page.screenshot({ path: path.join(shotsDir, 'rename-light.png') });
+  await page.keyboard.press('Meta+A');
+  await page.keyboard.type('Gob deck v2');
+  await page.keyboard.press('Enter');
+  let renamed = '';
+  for (let tries = 0; tries < 20; tries += 1) {
+    await page.waitForTimeout(250);
+    renamed = await readFile(path.join(gallery, 'files.mdo'), 'utf8');
+    if (renamed.includes('|Gob deck v2]]')) break;
+  }
+  check('Rename… writes the name into the link and types nothing into the page', renamed.includes('gob-deck.a3f9c2e1.pptx|Gob deck v2]]') && !/^Gob deck v2$/m.test(renamed), renamed.split('\n').find((line) => line.includes('gob-deck')) ?? '');
+  check('the field closes once applied', await page.locator('.opal-file-ask').count() === 0);
   await page.keyboard.press('Escape');
+
+  // A picture whose bytes are on the Mini is the Not-downloaded card, not a line of text.
+  await reach('.cm-file-card[data-state="remote"]');
+  const remoteCards = await page.locator('.cm-file-card[data-state="remote"]').allTextContents();
+  check('a picture not on this Mac shows the Not-downloaded card with Get from Mini', remoteCards.some((text) => text.includes('Not downloaded yet') && text.includes('Get from Mini') && !text.includes('Board deck')), remoteCards.join(' | '));
 
   // A framed picture lets the browser start a drag of its file.
   await reach('.cm-md-image img[src*="diagram"]');

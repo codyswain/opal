@@ -395,7 +395,7 @@ async function result(call: Promise<{ success: boolean; error?: string }>, done:
   else toast.error(answer?.error ?? 'That did not work.');
 }
 
-/** Asks for one line of text under the file, as Rename… and Caption… do; null when dismissed. */
+/** Asks for one line of text under the file whose link starts at `at`, as Rename… and Caption… do; null when dismissed. */
 export type AskText = (view: EditorView, at: number, label: string, value: string) => Promise<string | null>;
 
 let asker: AskText = askInPlace;
@@ -437,7 +437,8 @@ async function askInPlace(view: EditorView, at: number, label: string, value: st
     done.type = 'submit';
     done.textContent = 'Done';
     box.append(input, done);
-    const place = view.coordsAtPos(at);
+    // Under the file, from its left edge: `at` is where its link starts.
+    const place = view.coordsAtPos(at, 1);
     box.style.top = `${Math.min(window.innerHeight - 48, (place?.bottom ?? 80) + 8)}px`;
     box.style.left = `${Math.max(8, Math.min(window.innerWidth - 328, place?.left ?? 80))}px`;
     let finished = false;
@@ -474,7 +475,7 @@ async function askInPlace(view: EditorView, at: number, label: string, value: st
 }
 
 async function rename(view: EditorView, ref: FileRef): Promise<void> {
-  const name = await asker(view, ref.to, 'Name', nameFor(ref));
+  const name = await asker(view, ref.from, 'Name', nameFor(ref));
   const fresh = name === null ? null : refAt(view.state, ref);
   if (!fresh || name === null) return;
   const text = renameText(view.state, fresh, name);
@@ -482,7 +483,7 @@ async function rename(view: EditorView, ref: FileRef): Promise<void> {
 }
 
 async function caption(view: EditorView, ref: FileRef): Promise<void> {
-  const text = await asker(view, ref.to, 'Caption', captionOf(ref) ?? '');
+  const text = await asker(view, ref.from, 'Caption', captionOf(ref) ?? '');
   const fresh = text === null ? null : refAt(view.state, ref);
   if (!fresh || text === null) return;
   const written = captionText(view.state, fresh, text);

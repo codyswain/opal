@@ -114,6 +114,7 @@ export default async function setup(vault, pageDir = path.join(vault, 'Gallery')
   await writeFile(path.join(files, 'old-format.a3f9c2e1.avi'), Buffer.from('RIFF\u0000\u0000\u0000\u0000AVI LIST', 'latin1'));
   // Still on the Mini: a placeholder with no object here.
   await writeFile(path.join(files, 'board-deck.b7c8d9e0.pdf'), pointer(Buffer.from('a deck that lives on the Mini')));
+  await writeFile(path.join(files, 'dock-photo.0badf00d.png'), pointer(Buffer.from('a photo that lives on the Mini')));
   // Moved: linked from 2026-11, kept in 2026-10 with the same hash.
   await writeFile(path.join(older, 'site-photo.c0ffee12.png'), shade(480, 270));
 
