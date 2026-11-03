@@ -52,6 +52,18 @@ await writeFile(GALLERY, await readFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures
 const IME = `${vault}/Notes/ime.mdo`;
 const IME_TEXT = 'Energy $E=mc^2$ and more.\n\n$x$ starts this line.\n\nThis line ends with $y$\n';
 await writeFile(IME, IME_TEXT);
+const LONG_TEX = 'f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 + a_5 x^5 + a_6 x^6 + a_7 x^7 + a_8 x^8 + a_9 x^9 + a_{10} x^{10} + a_{11} x^{11} + a_{12} x^{12}';
+const LONG = `${vault}/Notes/long.mdo`;
+const filler = (from, count) => Array.from({ length: count }, (_, index) => `Filler line ${from + index} with enough words to scroll the page down a little.\n`);
+const LONG_TEXT = [
+  '# Long', '',
+  ...filler(0, 3),
+  'Energy $E=mc^2$ sits a little way down.', '',
+  `Long $${LONG_TEX}$ here.`, '',
+  '$\\gdef\\R{\\mathbb{R}}$ defines R. Then $\\R^n$ inline.', '',
+  ...filler(3, 45),
+].join('\n');
+await writeFile(LONG, LONG_TEXT);
 const NOTE = `${vault}/Notes/math-note.md`;
 await writeFile(NOTE, await readFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'math.mdo'), 'utf8'));
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
@@ -314,6 +326,72 @@ try {
   }
   const formulasKept = await page.evaluate(() => [...document.querySelectorAll('.cm-math')].map((element) => element.getAttribute('aria-label')).join(' '));
   check('input methods leave the formulas whole', formulasKept === 'E=mc^2 x y', formulasKept);
+
+  // A longer page: the edited formula shows as selected, the popover moves with the page, a click on the page keeps its caret,
+  // long TeX fits the column and the field, and a macro definition shows as its source.
+  await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, LONG);
+  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('sits a little way down'), null, { timeout: 15_000 });
+  await page.waitForTimeout(500);
+  await formula('E=mc^2').click();
+  await popover.waitFor({ timeout: 5_000 });
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(200);
+  const selected = await page.evaluate(() => {
+    const drawn = document.querySelector('.cm-content .cm-math[aria-label="E=mc^2"]');
+    return Boolean(drawn?.parentElement?.classList.contains('cm-math-editing')) && getComputedStyle(drawn).boxShadow !== 'none';
+  });
+  check('the formula the popover edits shows as selected', selected);
+  const sunken = await page.evaluate(() => getComputedStyle(document.querySelector('.opal-math-preview')).backgroundColor);
+  check('the preview sits in a grey box', sunken !== 'rgba(0, 0, 0, 0)', sunken);
+  // The popover sits under the formula, or above it near the window's bottom edge.
+  const tops = () => page.evaluate(() => {
+    const box = document.querySelector('[data-testid="math-popover"]')?.getBoundingClientRect();
+    const drawn = document.querySelector('.cm-content .cm-math[aria-label="E=mc^2"]')?.getBoundingClientRect();
+    if (!box || !drawn) return null;
+    return { formula: drawn.top, attached: Math.abs(box.top - drawn.bottom - 6) < 3 || Math.abs(drawn.top - box.bottom - 6) < 3 };
+  });
+  const before = await tops();
+  await page.evaluate(() => { document.querySelector('.cm-scroller').scrollTop += 120; });
+  await page.waitForTimeout(400);
+  const after = await tops();
+  check('the popover moves with the page as it scrolls', Boolean(before?.attached && after?.attached && Math.abs(after.formula - before.formula + 120) < 2), JSON.stringify({ before, after }));
+  await shoot('math-popover-scrolled', { window: true });
+  await page.locator('.cm-line', { hasText: 'Filler line 4 ' }).click({ position: { x: 450, y: 8 } });
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  await page.keyboard.type('Z');
+  const readLong = () => readFile(LONG, 'utf8');
+  let typedZ = await readLong();
+  for (let tries = 0; tries < 50 && !typedZ.includes('Z'); tries += 1) { await page.waitForTimeout(100); typedZ = await readLong(); }
+  const zLine = typedZ.split('\n').find((line) => line.includes('Z')) ?? '';
+  check('a click on the page while the popover is open keeps the caret where it lands', zLine.startsWith('Filler line 4 '), JSON.stringify(zLine));
+  await page.keyboard.press('Meta+z');
+  await page.evaluate(() => { document.querySelector('.cm-scroller').scrollTop = 0; });
+  await page.waitForTimeout(300);
+  const fits = await page.evaluate(() => {
+    const drawn = [...document.querySelectorAll('.cm-content .cm-math')].find((element) => element.getAttribute('aria-label')?.startsWith('f(x)'));
+    const content = document.querySelector('.cm-content').getBoundingClientRect();
+    if (!drawn) return 'missing';
+    const box = drawn.getBoundingClientRect();
+    return box.right <= content.right + 1 && drawn.scrollWidth <= drawn.clientWidth + 1 ? 'fits' : JSON.stringify({ right: box.right, content: content.right, scroll: drawn.scrollWidth, client: drawn.clientWidth });
+  });
+  check('a long inline formula fits the column', fits === 'fits', fits);
+  const definition = await page.evaluate(() => {
+    const drawn = document.querySelector('.cm-content .cm-math-empty');
+    const box = drawn?.getBoundingClientRect();
+    return box ? { width: box.width, text: drawn.textContent } : null;
+  });
+  check('a macro definition shows as its source', Boolean(definition && definition.width > 0 && definition.text.includes('\\gdef')), JSON.stringify(definition));
+  await shoot('math-long');
+  await formula(LONG_TEX).click();
+  await popover.waitFor({ timeout: 5_000 });
+  const longField = await page.evaluate(() => {
+    const field = document.querySelector('.opal-math-field');
+    return { value: field.value.slice(0, 4), client: field.clientHeight, scroll: field.scrollHeight };
+  });
+  check('the TeX field shows all of long TeX', longField.value === 'f(x)' && longField.client >= longField.scroll - 1, JSON.stringify(longField));
+  await shoot('math-popover-long', { window: true });
+  await page.keyboard.press('Escape');
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
 
   // The gallery fixture, top and bottom, for people to look at: chemistry, money, lists, callouts and tables sit below the fold.
   await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, GALLERY);

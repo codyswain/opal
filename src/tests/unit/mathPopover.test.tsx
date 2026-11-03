@@ -171,6 +171,20 @@ describe('the formula popover on the page', () => {
     await waitFor(() => expect(top()).toBe(before - 120));
   });
 
+  it('opens with the TeX field sized to long TeX', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', { configurable: true, get(this: HTMLTextAreaElement) { return this.value.length > 40 ? 87 : 31; } });
+    try {
+      const tex = 'f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4';
+      const view = await openEditor(`Long $${tex}$ here.\n`);
+      const popover = await clickFormula(view, tex);
+      await waitFor(() => expect((within(popover).getByRole('textbox', { name: 'TeX' }) as HTMLTextAreaElement).style.height).toBe('87px'));
+    } finally {
+      delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', descriptor);
+    }
+  });
+
   it('grows the TeX field to fit long TeX, up to eight lines', async () => {
     const view = await openEditor('Long $x$ here.\n');
     const popover = await clickFormula(view, 'x');

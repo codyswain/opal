@@ -17,6 +17,17 @@ import {
 
 const MAX_ROWS = 8;
 
+/** Sizes the TeX field to its text, one to eight rows, counting the lines long TeX wraps onto. */
+function fit(element: HTMLTextAreaElement): void {
+  element.style.height = 'auto';
+  if (element.scrollHeight <= 0) return;
+  const style = getComputedStyle(element);
+  const borders = pixels(style, style.borderTopWidth) + pixels(style, style.borderBottomWidth);
+  const line = pixels(style, style.lineHeight) || 1.45 * (parseFloat(style.fontSize) || 13);
+  const most = MAX_ROWS * line + pixels(style, style.paddingTop) + pixels(style, style.paddingBottom) + borders;
+  element.style.height = `${Math.min(element.scrollHeight + borders, most)}px`;
+}
+
 /** A length the field's computed style gives, in pixels; a bare line height is a multiple of the font size. */
 function pixels(style: CSSStyleDeclaration, value: string): number {
   const number = parseFloat(value) || 0;
@@ -101,22 +112,17 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   useLayoutEffect(() => {
     const element = fieldRef.current;
     if (!element) return;
-    // One to eight rows, counting the lines long TeX wraps onto.
-    element.style.height = 'auto';
-    if (element.scrollHeight > 0) {
-      const style = getComputedStyle(element);
-      const borders = pixels(style, style.borderTopWidth) + pixels(style, style.borderBottomWidth);
-      const line = pixels(style, style.lineHeight) || 1.45 * (parseFloat(style.fontSize) || 13);
-      const most = MAX_ROWS * line + pixels(style, style.paddingTop) + pixels(style, style.paddingBottom) + borders;
-      element.style.height = `${Math.min(element.scrollHeight + borders, most)}px`;
-    }
+    fit(element);
     if (caret.current === null) return;
     element.setSelectionRange(caret.current, caret.current);
     caret.current = null;
   });
 
+  // Only this opening's formula: another one may have taken its place.
+  const mine = () => view.state.field(mathEditor, false)?.id === shown.current.id;
+
   const close = (keepFocus = true) => {
-    if (!view.state.field(mathEditor, false)) return;
+    if (!mine()) return;
     closeMathEditor(view, value.current, keepFocus && !outside.current, outside.current ? 'keep' : 'after');
   };
 
@@ -133,7 +139,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
     return () => {
       window.removeEventListener('blur', onBlur);
       view.scrollDOM.removeEventListener('scroll', onScroll);
-      if (view.dom.isConnected && view.state.field(mathEditor, false)) closeMathEditor(view, value.current, false);
+      if (view.dom.isConnected && mine()) closeMathEditor(view, value.current, false);
     };
   }, [view]);
 
@@ -179,6 +185,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
         aria-label="Formula"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
+          // The field mounts in a portal after the first layout pass, so it is sized here too.
+          if (fieldRef.current) fit(fieldRef.current);
           fieldRef.current?.focus();
           fieldRef.current?.setSelectionRange(field.length, field.length);
         }}

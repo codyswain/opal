@@ -418,8 +418,9 @@ export function closeMathEditor(view: EditorView, field: string | null = null, f
   if (focus && !keep) view.focus();
 }
 
-/** Opens the popover on the formula `node`. */
+/** Opens the popover on the formula `node`. A formula already open closes first, keeping what was written as its own undo step; the page's text ends as it was, so `node` still holds. */
 export function openMathEditor(view: EditorView, node: SyntaxNode): void {
+  if (view.state.field(mathEditor, false)) closeMathEditor(view, null, false, 'keep');
   view.dispatch({ effects: [setMathEditor.of(editorFor(view.state, node)), setFrame.of(null)], selection: { anchor: node.to } });
 }
 
@@ -636,8 +637,9 @@ function newEditor(state: EditorState, at: number, kind: MathKind): MathEditor {
  * Nothing is written until the field has text.
  */
 export const editFormula: Command = (view) => {
+  if (!view.state.facet(docMode) || view.state.readOnly) return false;
+  if (view.state.field(mathEditor, false)) closeMathEditor(view, null, false, 'keep');
   const { state } = view;
-  if (!state.facet(docMode) || state.readOnly) return false;
   const { main } = state.selection;
   const tree = syntaxTree(state);
   const beside = main.empty ? mathNodeAt(tree, main.head, -1) ?? mathNodeAt(tree, main.head, 1) : null;

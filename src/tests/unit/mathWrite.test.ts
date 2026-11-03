@@ -653,3 +653,19 @@ describe('how formulas look while edited, in tables and when they draw nothing',
     expect(note.contentDOM.querySelector<HTMLElement>('td .cm-math')?.dataset.formula).toBeUndefined();
   });
 });
+
+describe('opening one formula while another is open', () => {
+  it('closes the first as one undo step before the second opens', () => {
+    const view = mount('a $x$ and $y$ b');
+    openMathEditor(view, mathNodeAt(syntaxTree(view.state), 2, 1) as never);
+    const first = view.state.field(mathEditor);
+    if (!first) throw new Error('no editor');
+    writeLive(view, first, 'x+1', () => true);
+    openMathEditor(view, mathNodeAt(syntaxTree(view.state), 13, 1) as never);
+    expect(view.state.field(mathEditor)).toMatchObject({ tex: 'y' });
+    act(() => { closeMathEditor(view, 'y', false); });
+    expect(text(view)).toBe('a $x+1$ and $y$ b');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('a $x$ and $y$ b');
+  });
+});
