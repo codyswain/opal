@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { retypeCallout } from '@/renderer/features/disk-explorer/components/editor/callouts';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
@@ -65,6 +65,18 @@ describe('callouts', () => {
     expect(lines(view)).toContain('hidden body');
     act(() => { view.contentDOM.querySelectorAll('.cm-md-callout-fold')[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); });
     expect(lines(view)).not.toContain('shown body');
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('folds and opens a callout on Cmd+Enter on its title, writing nothing', () => {
+    const doc = '> [!tip]- Folded\n> hidden body\n\nAfter\n';
+    const view = mount(doc);
+    act(() => { view.dispatch({ selection: { anchor: doc.indexOf('Folded') + 3 } }); });
+    const press = () => act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter', ...(/Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true }) }), 'editor'); });
+    press();
+    expect(lines(view)).toContain('hidden body');
+    press();
+    expect(lines(view)).not.toContain('hidden body');
     expect(view.state.doc.toString()).toBe(doc);
   });
 

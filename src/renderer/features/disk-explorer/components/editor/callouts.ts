@@ -1,6 +1,6 @@
 import { syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
+import { Decoration, EditorView, WidgetType, keymap, type Command, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 
 /*
@@ -135,6 +135,7 @@ class ChevronWidget extends WidgetType {
     button.dataset.open = String(this.open);
     button.setAttribute('aria-expanded', String(this.open));
     button.setAttribute('aria-label', this.open ? 'Fold callout' : 'Open callout');
+    button.setAttribute('aria-keyshortcuts', 'Meta+Enter');
     button.innerHTML = svg('chevron-right', 14);
     button.addEventListener('mousedown', (event) => {
       event.preventDefault();
@@ -209,4 +210,13 @@ export function calloutHeadAt(state: EditorState, at: number): number | null {
   return CALLOUT_HEAD.test(head.text) ? head.from : null;
 }
 
-export const callouts: Extension = calloutFolds;
+/** Cmd+Enter on a foldable callout's first line folds or opens it, as on a toggle in Notion. Writes nothing. */
+const toggleFoldHere: Command = (view) => {
+  const line = view.state.doc.lineAt(view.state.selection.main.head);
+  const callout = foldables(view.state).find((each) => each.head === line.from);
+  if (!callout) return false;
+  view.dispatch({ effects: toggleFold.of(callout.head) });
+  return true;
+};
+
+export const callouts: Extension = [calloutFolds, keymap.of([{ key: 'Mod-Enter', run: toggleFoldHere }])];
