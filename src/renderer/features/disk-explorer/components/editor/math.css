@@ -9,8 +9,10 @@
   text-indent: 0;
 }
 
+/* An inline-block takes the line's text-indent, which a list item's line sets to hang its marker. */
 .opal-editor .cm-editor .cm-math-inline {
   display: inline-block;
+  text-indent: 0;
   max-width: 100%;
   border-radius: 4px;
   vertical-align: baseline;
@@ -20,6 +22,7 @@
 /* Display math: centred on its own line, scrolling sideways in its own box when wide. */
 .opal-editor .cm-editor .cm-math-display {
   display: block;
+  text-indent: 0;
   box-sizing: border-box;
   max-width: 100%;
   overflow-x: auto;

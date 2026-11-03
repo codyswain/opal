@@ -310,7 +310,8 @@ export function writeLive(view: EditorView, editor: MathEditor, input: string, r
     to: result.to,
     tex: result.tex,
     problem: null,
-    lastGood: result.tex && rendered(result.tex) ? result.tex : editor.lastGood,
+    // What the field holds must render: TeX that only reads back with its {} guard, such as a trailing "\", is not yet a formula to keep.
+    lastGood: result.tex && rendered(editor.open === '$' ? input.trim() : input) ? result.tex : editor.lastGood,
   };
   view.dispatch({
     changes: result.changes,

@@ -203,19 +203,20 @@ function parseBlockMath(cx: BlockContext, line: BlockLine): boolean {
   const text = (textFrom: number, textTo: number) => {
     if (textTo > textFrom) children.push(cx.elt('MathText', textFrom, textTo));
   };
-  if (opener === 'dollar') text(cx.lineStart + line.skipSpace(line.pos + 2), cx.lineStart + line.text.trimEnd().length);
+  // The TeX keeps each line's spaces, so a write maps onto the file's bytes exactly.
+  if (opener === 'dollar') text(cx.lineStart + line.skipSpace(line.pos + 2), cx.lineStart + line.text.length);
   let end = cx.lineStart + line.text.length;
   while (cx.nextLine() && (line as unknown as LineInternals).depth >= cx.depth) {
     children.push(...line.markers);
     const close = closerOf(opener, line.text, line.pos);
     end = cx.lineStart + line.text.length;
     if (close >= 0) {
-      text(cx.lineStart + line.basePos, cx.lineStart + line.text.slice(0, close).trimEnd().length);
+      text(cx.lineStart + line.basePos, cx.lineStart + close);
       children.push(cx.elt('MathMark', cx.lineStart + close, cx.lineStart + close + 2));
       cx.nextLine();
       break;
     }
-    text(cx.lineStart + line.basePos, cx.lineStart + line.text.trimEnd().length);
+    text(cx.lineStart + line.basePos, cx.lineStart + line.text.length);
   }
   children.sort((a, b) => a.from - b.from);
   cx.addElement(cx.elt('BlockMath', from, end, children));

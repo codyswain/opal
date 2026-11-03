@@ -183,6 +183,15 @@ describe('formula write rules', () => {
     expect(text(view)).toBe('a $x + \\$$ b');
   });
 
+  it('keeps a trailing space in a block line where it was typed', () => {
+    const view = mount('Text\n\n$$\nx\n$$');
+    edit(view, 6, 'x + ');
+    const editor = view.state.field(mathEditor);
+    if (!editor) throw new Error('no editor');
+    writeLive(view, editor, 'x + k', () => true);
+    expect(text(view)).toBe('Text\n\n$$\nx + k\n$$');
+  });
+
   it('gives a new line in a quoted block the quote marks', () => {
     const view = mount('> $$\n> a\n> $$');
     edit(view, 2, 'a\nb');
