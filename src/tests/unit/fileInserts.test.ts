@@ -6,7 +6,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
-import { dropAfter, placeEmbed } from '@/renderer/features/disk-explorer/components/editor/imageInsert';
+import { dropAfter, insertedText, placeEmbed } from '@/renderer/features/disk-explorer/components/editor/imageInsert';
 import { embedWidth, imageSize } from '@/renderer/features/disk-explorer/components/editor/imageSize';
 import { setActiveDragSourcePath, clearActiveDragSourcePath } from '@/renderer/features/disk-explorer/components/dragMoveState';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
@@ -172,6 +172,16 @@ describe('where a file goes', () => {
     expect(place('Text\n\n    code line\n    more code\n\nAfter\n', 10)).toBe('Text\n\n    code line\n    more code\n![[f.png]]\n\nAfter\n');
     expect(place('- item\n\n      code\n      more\n', 15)).toBe('- item\n\n      code\n      more\n  ![[f.png]]\n');
     expect(place('> text\n>\n>     code\n', 13)).toBe('> text\n>\n>     code\n> ![[f.png]]\n');
+  });
+
+  it('keeps brackets in a shown name, as escaped link text, and writes accented names in NFC', () => {
+    const file = (name: string, stem: string) => ({ path: `/Vault/Library/files/2026-11/${stem}`, vaultPath: `Library/files/2026-11/${stem}`, name });
+    expect(insertedText(file('Q3 #1 50% [draft].txt', 'q3-1-50-draft.80a3ef2f.txt'), DOC, 'card', null))
+      .toBe('[Q3 #1 50% \\[draft\\].txt](<../Library/files/2026-11/q3-1-50-draft.80a3ef2f.txt>)');
+    const accented = 'Cafe\u0301 re\u0301sume\u0301.pdf';
+    const written = insertedText(file(accented, 'café-résumé.993a86b6.pdf'), DOC, 'default', null);
+    expect(written).toBe('![[Library/files/2026-11/café-résumé.993a86b6.pdf|Café résumé.pdf]]'.normalize('NFC'));
+    expect(written.normalize('NFC')).toBe(written);
   });
 
   it('drops after the nearer edge of the block under the pointer, past blank lines', () => {

@@ -123,12 +123,14 @@ export interface LinkSpec {
 /**
  * A link to a file as Opal writes it: `[[path|Name]]` or `![[path|640]]`,
  * or `[Name](<path>)` and `![Name](<path>)` relative to the page when the
- * path holds a character a wiki link can't.
+ * path holds a character a wiki link can't, or the name a bracket, which
+ * Markdown link text keeps escaped.
  */
 export function linkFor(spec: LinkSpec): string {
   const bang = spec.embed ? '!' : '';
   const slot = spec.slot ?? null;
-  if (!WIKI_UNSAFE.test(spec.vaultPath)) {
+  const bracketed = slot !== null && !isSize(slot) && /[[\]]/.test(slot);
+  if (!WIKI_UNSAFE.test(spec.vaultPath) && !bracketed) {
     const bar = spec.inTable ? '\\|' : '|';
     return `${bang}[[${spec.vaultPath}${slot !== null && slot !== '' ? `${bar}${isSize(slot) ? slot.trim() : wikiAlias(slot, spec.inTable)}` : ''}]]`;
   }

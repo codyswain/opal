@@ -164,7 +164,9 @@ export type InsertLook = 'chip' | 'default' | 'card';
  * card are a link with the file's name. A dropped `.webloc` or `.url` is a
  * link to its address.
  */
-export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
+export function insertedText(stored: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
+  // Finder hands names over decomposed; the page writes them composed, as the stored path is, so Find and grep match.
+  const file = { ...stored, name: stored.name.normalize('NFC') };
   // A dropped .webloc or .url stored nothing: it links to the address it holds.
   if (file.url) return `[${escapeLinkText(file.name.replace(/\.(webloc|url)$/i, ''), inTable)}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`;
   const kind = classifyFile(file.path);
