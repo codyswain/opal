@@ -176,6 +176,8 @@ export class FilesService {
     const suggested = given ? (extension && !given.toLowerCase().endsWith(`.${extension}`) ? `${given}.${extension}` : given) : fallback;
     const destination = await this.platform.saveDialog(suggested);
     if (!destination) return { saved: null };
+    // Saving over the vault file itself would copy it onto itself; it is already there.
+    if (path.resolve(destination) === resolved || path.resolve(destination) === source) return { saved: destination };
     await copyFile(source, destination, constants.COPYFILE_FICLONE);
     await chmod(destination, 0o644);
     return { saved: destination };

@@ -133,3 +133,59 @@ describe('openable', () => {
     expect(platform.openPath).not.toHaveBeenCalled();
   });
 });
+
+describe('copies out of the vault', () => {
+  let temporary: string, root: string, platform: FilesPlatform, service: FilesService;
+
+  beforeEach(async () => {
+    temporary = await mkdtemp(path.join(os.tmpdir(), 'opal-save-copy-'));
+    const registry = new RootRegistry({ storePath: path.join(temporary, 'roots.json') });
+    await mkdir(path.join(temporary, 'vault/.git'), { recursive: true });
+    await mkdir(path.join(temporary, 'Downloads'));
+    root = await registry.add(path.join(temporary, 'vault'));
+    platform = fakePlatform();
+    service = new FilesService({ registry, links: { invalidateDirectories: vi.fn() }, platform, appData: path.join(temporary, 'app-data') });
+  });
+  afterEach(async () => { await rm(temporary, { recursive: true, force: true }); });
+
+  it('saves a writable copy of an LFS file\'s real bytes under its shown name, and leaves the vault alone', async () => {
+    const deck = path.join(root, 'q3.a1b2c3d4.pdf');
+    await writeFile(deck, POINTER);
+    const object = path.join(root, '.git/lfs/objects', OID.slice(0, 2), OID.slice(2, 4), OID);
+    await mkdir(path.dirname(object), { recursive: true });
+    await writeFile(object, BYTES);
+    const destination = path.join(temporary, 'Downloads/Q3 report.pdf');
+    vi.mocked(platform.saveDialog).mockResolvedValueOnce(destination);
+    expect(await service.saveCopy(deck, 'Q3 report')).toEqual({ saved: destination });
+    expect(platform.saveDialog).toHaveBeenCalledWith('Q3 report.pdf');
+    expect(await readFile(destination)).toEqual(BYTES);
+    expect((await stat(destination)).mode & 0o777).toBe(0o644);
+    expect(await readFile(deck, 'utf8')).toBe(POINTER);
+    vi.mocked(platform.saveDialog).mockResolvedValueOnce(null);
+    expect(await service.saveCopy(deck)).toEqual({ saved: null });
+    expect(platform.saveDialog).toHaveBeenLastCalledWith('q3.pdf');
+  });
+
+  it('copies nothing when the copy would land on the file itself', async () => {
+    const note = path.join(root, 'plan.pdf');
+    await writeFile(note, BYTES);
+    vi.mocked(platform.saveDialog).mockResolvedValueOnce(note);
+    expect(await service.saveCopy(note)).toEqual({ saved: note });
+    expect(await readFile(note)).toEqual(BYTES);
+  });
+
+  it('puts the real bytes on the pasteboard and drags them, never the placeholder', async () => {
+    const deck = path.join(root, 'q3.a1b2c3d4.pdf');
+    await writeFile(deck, POINTER);
+    await expect(service.copyFile(deck)).rejects.toThrow(/not on this Mac yet/);
+    const object = path.join(root, '.git/lfs/objects', OID.slice(0, 2), OID.slice(2, 4), OID);
+    await mkdir(path.dirname(object), { recursive: true });
+    await writeFile(object, BYTES);
+    await service.copyFile(deck);
+    const copied = vi.mocked(platform.copyFileToClipboard).mock.calls[0][0];
+    expect(await readFile(copied)).toEqual(BYTES);
+    await service.startDrag({} as never, deck);
+    expect(vi.mocked(platform.startDrag).mock.calls[0][1]).toBe(copied);
+    await expect(service.copyFile(path.join(temporary, 'Downloads'))).rejects.toThrow(/not inside/);
+  });
+});
