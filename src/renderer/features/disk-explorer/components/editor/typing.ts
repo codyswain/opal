@@ -1,7 +1,8 @@
-import { EditorState, MapMode, Prec, StateField, Transaction, type Extension, type TransactionSpec } from '@codemirror/state';
+import { ChangeSet, EditorState, MapMode, Prec, StateField, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, nodeDecorators, protectedIn } from './extensionPoints';
-import { inlineSpans } from './formatCommands';
+import { inlineSpans, typingStyle } from './formatCommands';
 import { docMode, hiddenRanges } from './livePreview';
 import { visibleLine, visibleOffset, visibleSlice } from './visibleText';
 
@@ -159,9 +160,9 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
 
   // Punctuation is checked against what the page shows; letters only where they touch a mark.
   if (!ASCII_PUNCTUATION.test(text)) return otherSide(tr, caret, text);
-  // A bullet, quote or heading mark typed at a line start is a shortcut.
+  // A bullet, quote or heading mark typed at the end of a line is a shortcut; before text it stays text.
   const mark = latestTree(after).resolveInner(at, 1);
-  if (LINE_SHORTCUTS.has(mark.name) && mark.from === at) return null;
+  if (LINE_SHORTCUTS.has(mark.name) && mark.from === at && !/\S/.test(after.sliceDoc(at + text.length, line.to))) return null;
   const shown = visibleLine(before, caret);
   const offset = visibleOffset(shown, caret);
   const expected = shown.text.slice(0, offset) + text + shown.text.slice(offset);
@@ -385,5 +386,58 @@ const hardBreaks = nodeDecorators.of({
   },
 });
 
-/** Doc mode's typing: the session's typed marks, the escapes, Enter in formatting and hidden hard breaks. */
-export const typingExtension: Extension = [typedMarks, Prec.high(typingFilter), hardBreaks];
+/*
+ * Input methods. A composition over a selection would leave half of a mark
+ * behind, so the selection goes first, as Backspace takes it, keeping the
+ * marks around it. A style turned on with Cmd+B for the next text still
+ * applies when that text comes from an input method: the composed text is
+ * wrapped in its marks in one change once the composition ends.
+ */
+
+interface Composing {
+  from: number;
+  length: number;
+  markers: readonly string[];
+}
+
+const composing = new WeakMap<EditorView, Composing>();
+
+function compositionHooks(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
+  return EditorView.domEventObservers({
+    compositionstart(_event, view) {
+      let { state } = view;
+      if (!state.facet(docMode) || state.readOnly || state.selection.ranges.length > 1) return;
+      const { main } = state.selection;
+      if (!main.empty && !rawAt(state, main.from)) {
+        const { changes } = replace(state, main.from, main.to, '');
+        const set = ChangeSet.of(changes, state.doc.length);
+        view.dispatch({ changes: set, selection: { anchor: set.mapPos(main.from, 1) }, userEvent: 'delete.selection' });
+        state = view.state;
+      }
+      const style = state.field(typingStyle, false);
+      const at = state.selection.main.head;
+      if (style && style.at === at && style.markers.length > 0) composing.set(view, { from: at, length: state.doc.length, markers: style.markers });
+      else composing.delete(view);
+    },
+    compositionend(_event, view) {
+      const started = composing.get(view);
+      composing.delete(view);
+      if (!started) return;
+      // CodeMirror reads the composed text from the page just after the event.
+      setTimeout(() => {
+        if (view.composing) return;
+        const { state } = view;
+        const to = state.selection.main.head;
+        if (to <= started.from || state.doc.length - started.length !== to - started.from) return;
+        const open = started.markers.join('');
+        const close = [...started.markers].reverse().join('');
+        view.dispatch({ changes: [{ from: started.from, insert: open }, { from: to, insert: close }], selection: { anchor: to + open.length + close.length }, userEvent: 'input' });
+      }, 30);
+    },
+  });
+}
+
+/** Doc mode's typing: the session's typed marks, the escapes, Enter in formatting, hidden hard breaks and input methods. */
+export function typingExtension(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
+  return [typedMarks, Prec.high(typingFilter), hardBreaks, compositionHooks(replace)];
+}

@@ -127,11 +127,21 @@ describe('typing in a document', () => {
     expect(text(one)).toBe('1. go\n');
   });
 
-  it('keeps a bullet typed at a line start', () => {
-    const view = mount('\n');
-    at(view, 0);
-    type(view, '* x');
-    expect(text(view)).toBe('* x\n');
+  it('keeps a bullet, task, quote or heading typed at a line start, and escapes a mark typed before text', () => {
+    for (const typed of ['* x', '- [ ] task', '> quote', '## Head']) {
+      const view = mount('\n');
+      at(view, 0);
+      type(view, typed);
+      expect(text(view)).toBe(`${typed}\n`);
+    }
+    const before = mount('  raw text\n');
+    at(before, 0);
+    type(before, '*');
+    expect(text(before)).toBe('\\*  raw text\n');
+    const quote = mount('hello\n');
+    at(quote, 0);
+    type(quote, '>');
+    expect(text(quote)).toBe('\\>hello\n');
   });
 
   it('escapes <!-- so the rest of the page stays text', () => {
@@ -290,5 +300,15 @@ describe('hard breaks in a document', () => {
       type(view, 'x');
       expect(text(view)).toBe(typedDoc);
     }
+  });
+});
+
+describe('input methods in a document', () => {
+  it('take a selection across a mark out first, keeping the marks, when a composition starts', () => {
+    const view = mount('Some **bold** text\n');
+    act(() => { view.dispatch({ selection: { anchor: 9, head: 15 } }); });
+    act(() => { view.contentDOM.dispatchEvent(new Event('compositionstart', { bubbles: true })); });
+    expect(text(view)).toBe('Some **bo**ext\n');
+    expect(view.state.selection.main.head).toBe(9);
   });
 });

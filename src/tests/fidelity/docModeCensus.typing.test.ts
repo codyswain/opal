@@ -187,7 +187,10 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
 
         // Typed delimiters show as typed, mid-line and at the line's text start.
         const line = doc.lineAt(spot.at);
-        const lineStart = visibleLines(state, line.from, line.from)[0].starts[0] ?? line.from;
+        // The line's text starts at its first visible character that is not a space.
+        const shown = visibleLines(state, line.from, line.from)[0];
+        const first = shown.text.search(/\S/);
+        const lineStart = first === -1 ? line.from : shown.starts[first];
         for (const at of [spot.at, lineStart]) {
           for (const typed of TYPED) {
             counts.typed += 1;
