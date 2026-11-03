@@ -720,6 +720,22 @@
   transition: background-color var(--duration-hover), color var(--duration-hover);
 }
 
+/* A thin rule sets the toggles apart from the buttons before them. */
+.opal-editor .cm-editor .cm-panel.cm-search label:first-of-type {
+  margin-left: 11px;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label:first-of-type::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -7px;
+  width: 1px;
+  height: 16px;
+  margin-top: -8px;
+  background: hsl(var(--border-subtle));
+}
+
 .opal-editor .cm-editor .cm-panel.cm-search label:hover {
   background: hsl(var(--surface-hover));
 }

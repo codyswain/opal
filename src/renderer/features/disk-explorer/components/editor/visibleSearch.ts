@@ -262,8 +262,10 @@ export function replaceEdits(
   state: EditorState,
   edits: readonly { from: number; to: number; insert: string }[],
   replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] },
+  counted?: { replaced: number },
 ): ChangeSet {
   const replaced = edits.filter((edit) => replaceable(state, edit));
+  if (counted) counted.replaced = replaced.length;
   const texts = literalTexts(state, replaced.map((edit) => ({ ...edit, table: inNode(state, edit.from, 'Table') })));
   const specs: ChangeSpec[] = [];
   replaced.forEach((edit, index) => {
@@ -366,7 +368,8 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
       const edits: { from: number; to: number; insert: string }[] = [];
       // One edit per match, side-by-side matches included.
       tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, insert: inserted.toString() }), true);
-      const changes = replaceEdits(tr.startState, edits, replace);
+      const counted = { replaced: 0 };
+      const changes = replaceEdits(tr.startState, edits, replace, counted);
       // Positions after CodeMirror's changes, such as the next match to scroll to, moved onto the changes written instead.
       const back = tr.changes.invert(tr.startState.doc);
       const selection = tr.selection
@@ -377,9 +380,8 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
       if (tr.isUserEvent('input.replace.all')) {
         const query = getSearchQuery(tr.startState);
         const found = query instanceof VisibleQuery ? query.create().matchAll(tr.startState, 1e9) ?? [] : [];
-        const replaced = edits.filter((edit) => replaceable(tr.startState, edit)).length;
-        const kept = found.length - replaced;
-        if (kept > 0) annotations.push(keptByReplace.of({ replaced, kept }));
+        const kept = found.length - counted.replaced;
+        if (kept > 0) annotations.push(keptByReplace.of({ replaced: counted.replaced, kept }));
       }
       const spec: TransactionSpec = { changes, selection, effects, annotations, scrollIntoView: tr.scrollIntoView, userEvent: tr.annotation(Transaction.userEvent) };
       return spec;
