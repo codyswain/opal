@@ -1,0 +1,128 @@
+import { EditorSelection, Prec, type EditorState, type Extension, type Line } from '@codemirror/state';
+import { keymap, type Command } from '@codemirror/view';
+import type { SyntaxNode } from '@lezer/common';
+import { latestTree } from './extensionPoints';
+import { drawnBlockAt } from './livePreview';
+
+/*
+ * Keys in a table's Markdown, as in a spreadsheet: Tab and Shift+Tab go to
+ * the next and previous cell, selecting its text, and Tab in the last cell
+ * adds a row. Enter adds an empty row under the caret's row, or under the
+ * delimiter row from the header, with the caret in its first cell. New rows
+ * are written "|  |  |", one space on each side of where the text goes.
+ * Only while the table shows its Markdown: a drawn table takes no keys.
+ */
+
+interface Cell {
+  /** The cell's text, without the spaces around it. */
+  from: number;
+  to: number;
+  /** Between the pipes. */
+  start: number;
+  end: number;
+}
+
+/** The table node holding `at`, when its Markdown shows. */
+function tableAt(state: EditorState, at: number): SyntaxNode | null {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, -1); node; node = node.parent) {
+    if (node.name === 'Table') return drawnBlockAt(state, node.from) ? null : node;
+  }
+  return null;
+}
+
+/** The rows of a table: header, delimiter and body rows, in order. */
+function rowsOf(table: SyntaxNode): SyntaxNode[] {
+  const rows: SyntaxNode[] = [];
+  for (let child = table.firstChild; child; child = child.nextSibling) {
+    if (child.name === 'TableHeader' || child.name === 'TableRow' || child.name === 'TableDelimiter') rows.push(child);
+  }
+  return rows;
+}
+
+/** The cells of a header or body row, the spaces between its pipes included. */
+function cellsOf(state: EditorState, row: SyntaxNode): Cell[] {
+  const pipes: number[] = [];
+  for (let child = row.firstChild; child; child = child.nextSibling) if (child.name === 'TableDelimiter') pipes.push(child.from);
+  // A row without an outer pipe has a cell there all the same.
+  const edges = [...(pipes[0] === row.from ? [] : [row.from - 1]), ...pipes, ...(pipes[pipes.length - 1] === row.to - 1 ? [] : [row.to])];
+  const cells: Cell[] = [];
+  for (let index = 0; index + 1 < edges.length; index += 1) {
+    const start = edges[index] + 1;
+    const end = edges[index + 1];
+    const text = state.sliceDoc(start, end);
+    const lead = text.length - text.trimStart().length;
+    const trail = text.length - text.trimEnd().length;
+    cells.push({ start, end, from: start + lead, to: Math.max(start + lead, end - trail) });
+  }
+  return cells;
+}
+
+/** The selection for going into `cell`: its text, or a caret inside its spaces. */
+function enter(cell: Cell): EditorSelection {
+  if (cell.to > cell.from) return EditorSelection.single(cell.from, cell.to);
+  return EditorSelection.single(Math.min(cell.end, cell.start + 1));
+}
+
+/** An empty row as wide as the header, with the quote marks or indent the table sits in. */
+function emptyRow(state: EditorState, table: SyntaxNode, header: SyntaxNode): string {
+  const first = state.doc.lineAt(table.from);
+  const prefix = state.sliceDoc(first.from, table.from);
+  return `${prefix}|${'  |'.repeat(Math.max(1, cellsOf(state, header).length))}`;
+}
+
+/** Adds an empty row after `line`, with the caret in its first cell. */
+function addRow(state: EditorState, table: SyntaxNode, line: Line, dispatch: Parameters<Command>[0]['dispatch']): boolean {
+  const header = rowsOf(table).find((row) => row.name === 'TableHeader');
+  if (!header) return false;
+  const row = emptyRow(state, table, header);
+  const prefix = state.sliceDoc(state.doc.lineAt(table.from).from, table.from);
+  const caret = line.to + 1 + prefix.length + 2;
+  dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input' }));
+  return true;
+}
+
+/** Tab (1) or Shift+Tab (-1) in a table's Markdown. */
+function moveCell(dir: 1 | -1): Command {
+  return (view) => {
+    const { state } = view;
+    const { main } = state.selection;
+    const table = tableAt(state, main.head);
+    if (!table || state.selection.ranges.length > 1) return false;
+    const cells = rowsOf(table).filter((row) => row.name !== 'TableDelimiter').flatMap((row) => cellsOf(state, row));
+    const at = cells.findIndex((cell) => cell.start <= main.head && main.head <= cell.end);
+    if (at === -1) {
+      // On the delimiter row: on to the first body cell, or back to the header.
+      const next = dir > 0 ? cells.find((cell) => cell.start > main.head) : [...cells].reverse().find((cell) => cell.end < main.head);
+      if (next) view.dispatch({ selection: enter(next), scrollIntoView: true, userEvent: 'select' });
+      return true;
+    }
+    const target = cells[at + dir];
+    if (target) {
+      view.dispatch({ selection: enter(target), scrollIntoView: true, userEvent: 'select' });
+      return true;
+    }
+    if (dir < 0) return true;
+    return addRow(state, table, state.doc.lineAt(main.head), view.dispatch);
+  };
+}
+
+/** Enter in a table's Markdown: an empty row under the caret's row, or under the delimiter row from the header. */
+const newRow: Command = (view) => {
+  const { state } = view;
+  const { main } = state.selection;
+  const table = main.empty && state.selection.ranges.length === 1 ? tableAt(state, main.head) : null;
+  if (!table) return false;
+  const rows = rowsOf(table);
+  const line = state.doc.lineAt(main.head);
+  const row = rows.find((each) => state.doc.lineAt(each.from).number === line.number);
+  if (!row) return false;
+  const delimiter = rows.find((each) => each.name === 'TableDelimiter');
+  const under = row.name === 'TableRow' || !delimiter ? line : state.doc.lineAt(delimiter.from);
+  return addRow(state, table, under, view.dispatch);
+};
+
+/** A table's keys, for notes and documents. */
+export const tableKeys: Extension = Prec.high(keymap.of([
+  { key: 'Tab', run: moveCell(1), shift: moveCell(-1) },
+  { key: 'Enter', run: newRow },
+]));

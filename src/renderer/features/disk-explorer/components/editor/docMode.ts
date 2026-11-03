@@ -33,7 +33,7 @@ import { imageFrame } from './imageFrame';
 import { firstLine } from './firstLine';
 import { insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
-import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
+import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setCellCaret, setOpenBlock, type HiddenRange } from './livePreview';
 import { objectAt } from './extensionPoints';
 import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension, setFrame } from './objectFrame';
 import { headingKeys } from './headingKeys';
@@ -382,7 +382,8 @@ const docClicks = EditorView.domEventHandlers({
     const block = blockElement && drawnBlockAt(view.state, view.posAtDOM(blockElement));
     if (blockElement && block) {
       const table = blockElement.classList.contains('cm-md-table');
-      if (table && event.detail < 2 && target.closest('td[data-offset], th[data-offset]')) return false;
+      const cell = table && event.detail < 2 ? target.closest<HTMLElement>('td[data-offset], th[data-offset]') : null;
+      if (cell) return clickInCell(view, event, cell, view.posAtDOM(blockElement));
       event.preventDefault();
       const after = { anchor: Math.min(block.to + 1, view.state.doc.length) };
       const framed = table ? objectAt(view.state, block.from, 1) : null;
@@ -402,6 +403,27 @@ const docClicks = EditorView.domEventHandlers({
     return true;
   },
 });
+
+/**
+ * A click in a drawn table's cell: the cell caret (livePreview.ts), and on a
+ * link the link's popover as anywhere else. Cmd+click on a link follows it.
+ */
+function clickInCell(view: EditorView, event: MouseEvent, cell: HTMLElement, tableFrom: number): boolean {
+  const element = (event.target as Element).closest<HTMLElement>('[data-href], [data-wiki-target]');
+  if (!element || opensNewTab(event)) return false;
+  const at = tableFrom + Number(cell.dataset.offset);
+  const line = view.state.doc.lineAt(at);
+  let link: ReturnType<typeof linkAt> = null;
+  for (let pos = at; pos <= line.to && !link; pos += 1) {
+    const found = linkAt(view.state, pos);
+    if (found && found.from >= at && view.state.sliceDoc(found.textFrom, found.textTo).replace(/\\(.)/g, '$1').includes(element.textContent ?? '')) link = found;
+  }
+  if (!link) return false;
+  event.preventDefault();
+  view.dispatch({ selection: { anchor: link.textFrom }, effects: [setCellCaret.of(at), setLinkEditor.of({ from: link.from, to: link.to, editing: false })] });
+  view.focus();
+  return true;
+}
 
 const atom = Decoration.replace({});
 

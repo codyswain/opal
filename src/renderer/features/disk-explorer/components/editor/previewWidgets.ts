@@ -285,7 +285,8 @@ export type InlinePiece =
   | { kind: 'strong' | 'em' | 'strike'; children: InlinePiece[] }
   | { kind: 'code'; text: string }
   | { kind: 'link'; children: InlinePiece[]; href: string | null }
-  | { kind: 'wiki'; text: string; target: string };
+  | { kind: 'wiki'; text: string; target: string }
+  | { kind: 'break' };
 
 export interface TableCell {
   /** Where the cell's text starts, from the start of the table. */
@@ -301,7 +302,9 @@ export interface TableModel {
 
 function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
   for (const piece of pieces) {
-    if (piece.kind === 'text') {
+    if (piece.kind === 'break') {
+      parent.append(document.createElement('br'));
+    } else if (piece.kind === 'text') {
       parent.append(piece.text);
     } else if (piece.kind === 'code') {
       const code = document.createElement('code');
@@ -355,11 +358,15 @@ export class TableWidget extends WidgetType {
     const scroller = document.createElement('div');
     scroller.className = 'cm-md-table-scroll';
     const table = document.createElement('table');
+    // Cells past the header's columns still show, in a muted column of their own.
+    const columns = Math.max(this.model.align.length, ...this.model.rows.map((cells) => cells.length));
     const row = (cells: TableCell[], tag: 'th' | 'td') => {
       const tr = document.createElement('tr');
-      this.model.align.forEach((align, column) => {
+      Array.from({ length: columns }, (_, column) => column).forEach((column) => {
         const cell = document.createElement(tag);
         const source = cells[column];
+        const align = this.model.align[column];
+        if (column >= this.model.align.length) cell.classList.add('cm-md-cell-extra');
         if (align) cell.style.textAlign = align;
         if (source) {
           cell.dataset.offset = String(source.offset);

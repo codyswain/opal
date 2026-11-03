@@ -7,6 +7,8 @@ import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
+import { linkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
+import { objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { insertTable } from '@/renderer/features/disk-explorer/components/editor/tableInsert';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -331,5 +333,107 @@ describe('Normal text on a heading next to other blocks', () => {
     expect(onAll(`${TABLE}\n## Next\n`, setHeading(0))).toBe(`${TABLE}\n\nNext\n`);
     expect(onAll('Text\n## Head\nMore\n', setHeading(0))).toBe('Text\n\nHead\n\nMore\n');
     expect(onAll('# A\n## B\n', setHeading(0))).toBe('A\n\nB\n');
+  });
+});
+
+describe('keys in a table\'s Markdown', () => {
+  const selected = (view: EditorView) => view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
+
+  it('moves between cells on Tab and Shift+Tab, selecting their text, and adds a row from the last cell', async () => {
+    const view = mount(`| a‸ | b |\n|---|---|\n| 1 | 2 |\n`, NOTE);
+    await focusPage(view);
+    key(view, 'Tab');
+    expect(selected(view)).toBe('b');
+    key(view, 'Tab');
+    expect(selected(view)).toBe('1');
+    key(view, 'Tab', { shiftKey: true });
+    expect(selected(view)).toBe('b');
+    key(view, 'Tab');
+    key(view, 'Tab');
+    expect(selected(view)).toBe('2');
+    key(view, 'Tab');
+    expect(marked(view)).toBe('| a | b |\n|---|---|\n| 1 | 2 |\n| ‸ |  |\n');
+    type(view, 'x');
+    expect(text(view)).toBe('| a | b |\n|---|---|\n| 1 | 2 |\n| x |  |\n');
+  });
+
+  it('adds a row under the caret\'s row on Enter, and after the delimiter row from the header', async () => {
+    const view = mount(`> | a | b‸ |\n> |---|---|\n> | 1 | 2 |\n`, NOTE);
+    await focusPage(view);
+    key(view, 'Enter');
+    expect(marked(view)).toBe('> | a | b |\n> |---|---|\n> | ‸ |  |\n> | 1 | 2 |\n');
+    const body = mount(`| a | b |\n|---|---|\n| 1 | 2‸ |\n\nAfter\n`, NOTE);
+    await focusPage(body);
+    key(body, 'Enter');
+    expect(marked(body)).toBe('| a | b |\n|---|---|\n| 1 | 2 |\n| ‸ |  |\n\nAfter\n');
+  });
+
+  it('works in a document while the table shows its Markdown, and leaves a drawn table alone', async () => {
+    const view = mount(`Intro\n\n${TABLE}\n\nEnd\n`);
+    await focusPage(view);
+    const cell = view.contentDOM.querySelector('.cm-md-table td[data-offset]') as HTMLElement;
+    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    key(view, 'Enter');
+    expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
+    key(view, 'Tab');
+    expect(selected(view)).toBe('2');
+    key(view, 'Tab');
+    expect(text(view)).toBe(`Intro\n\n${TABLE}\n|  |  |\n\nEnd\n`);
+    expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
+  });
+});
+
+describe('what a drawn table shows', () => {
+  const click = (element: Element, init: MouseEventInit = {}) => act(() => {
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1, ...init }));
+  });
+
+  it('types into an empty cell with a space on each side, and adds a missing cell at its row\'s end', async () => {
+    const view = mount('| a | b |\n|---|---|\n| 1 |  |\n| 2 |\n\nEnd\n');
+    await focusPage(view);
+    const cells = view.contentDOM.querySelectorAll('.cm-md-table td');
+    click(cells[1]);
+    key(view, 'x');
+    type(view, 'x');
+    expect(text(view)).toBe('| a | b |\n|---|---|\n| 1 | x |\n| 2 |\n\nEnd\n');
+    act(() => { view.dispatch({ selection: { anchor: text(view).length - 1 } }); });
+    click(view.contentDOM.querySelectorAll('.cm-md-table td')[3]);
+    key(view, 'y');
+    type(view, 'y');
+    expect(text(view)).toBe('| a | b |\n|---|---|\n| 1 | x |\n| 2 |y\n\nEnd\n');
+  });
+
+  it('draws <br> as a line break and an escaped pipe in code as a plain pipe', () => {
+    const view = mount('| a | b |\n|---|---|\n| one<br>two | `x \\| y` |\n');
+    const cells = view.contentDOM.querySelectorAll('.cm-md-table td');
+    expect(cells[0].querySelector('br')).not.toBeNull();
+    expect(cells[0].textContent).toBe('onetwo');
+    expect(cells[1].querySelector('code')?.textContent).toBe('x | y');
+  });
+
+  it('shows cells past the header in a muted column, and Fix links writes one backslash before a link\'s pipe', () => {
+    const doc = '| Note | When |\n|---|---|\n| [[Plan|The plan]] | today |\n';
+    const view = mount(doc);
+    expect(view.contentDOM.querySelectorAll('.cm-md-table td')).toHaveLength(3);
+    expect(view.contentDOM.querySelectorAll('.cm-md-table .cm-md-cell-extra')).toHaveLength(2);
+    const table = { kind: 'table', from: 0, to: doc.length - 1, node: 'Table' };
+    const kinds = view.state.facet(objectKinds);
+    const fix = kinds.find((kind) => kind.kind === 'table')?.actions(view.state, table).find((action) => action.id === 'fix-links');
+    act(() => { fix?.run?.(view, table); });
+    expect(text(view)).toBe('| Note | When |\n|---|---|\n| [[Plan\\|The plan]] | today |\n');
+    expect(view.contentDOM.querySelectorAll('.cm-md-table .cm-md-cell-extra')).toHaveLength(0);
+    expect(kinds.find((kind) => kind.kind === 'table')?.actions(view.state, table).some((action) => action.id === 'fix-links')).toBe(false);
+  });
+
+  it('shows a link\'s popover on a click in a cell and follows it on Cmd+click', async () => {
+    const view = mount('| Link |\n|---|\n| [site](https://example.com) |\n\nEnd\n');
+    await focusPage(view);
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    click(view.contentDOM.querySelector('.cm-md-table [data-href]') as Element);
+    expect(open).not.toHaveBeenCalled();
+    expect(view.state.field(linkEditor)).toMatchObject({ from: 17, to: 44, editing: false });
+    expect(view.contentDOM.querySelector('.cm-md-table')).not.toBeNull();
+    click(view.contentDOM.querySelector('.cm-md-table [data-href]') as Element, { metaKey: true });
+    expect(open).toHaveBeenCalledWith('https://example.com', '_blank');
   });
 });

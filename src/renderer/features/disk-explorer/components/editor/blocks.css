@@ -50,6 +50,12 @@
   box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
 }
 
+/* Cells past the header's columns: muted, behind a dashed edge, never hidden. */
+.opal-editor .cm-editor .cm-md-table .cm-md-cell-extra {
+  border-left: 2px dashed hsl(var(--border-default));
+  color: hsl(var(--text-tertiary));
+}
+
 /* The style menu on a callout's title, which takes no heading. */
 .opal-editor .opal-doc-toolbar-style:disabled {
   pointer-events: none;

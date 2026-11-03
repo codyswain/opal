@@ -44,12 +44,32 @@ function copyMarkdown(view: EditorView, obj: PageObject): void {
 const remove: ObjectAction = { id: 'remove', label: 'Remove', icon: Trash2, run: (view, obj) => removeObject(view, obj, -1, 'delete.selection') };
 const copy: ObjectAction = { id: 'copy', label: 'Copy as Markdown', icon: Copy, run: copyMarkdown };
 
+// A wiki link's alias pipe, unescaped, which splits a table cell in two.
+const WIKI_PIPE = /\[\[[^\]\n|]*?(?<!\\)\|[^\]\n]*?\]\]/g;
+
+/** Where the unescaped alias pipes of wiki links in a table are. */
+export function splitLinks(state: EditorState, obj: PageObject): number[] {
+  const text = state.sliceDoc(obj.from, obj.to);
+  return [...text.matchAll(WIKI_PIPE)].map((match) => obj.from + (match.index ?? 0) + match[0].indexOf('|'));
+}
+
+/** Writes one backslash before each such pipe, so each link is one cell again. */
+function fixLinks(view: EditorView, obj: PageObject): void {
+  const pipes = splitLinks(view.state, obj);
+  if (pipes.length > 0) view.dispatch({ changes: pipes.map((at) => ({ from: at, insert: '\\' })), userEvent: 'input' });
+}
+
 const tableKind: ObjectKind = {
   kind: 'table',
   nodes: ['Table'],
   block: true,
   open: openSource,
-  actions: () => [{ id: 'edit', label: 'Edit', run: openSource }, copy, remove],
+  actions: (state, obj) => [
+    { id: 'edit', label: 'Edit', run: openSource },
+    ...(splitLinks(state, obj).length > 0 ? [{ id: 'fix-links', label: 'Fix links', run: fixLinks }] : []),
+    copy,
+    remove,
+  ],
 };
 
 const ruleKind: ObjectKind = {

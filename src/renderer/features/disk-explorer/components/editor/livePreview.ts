@@ -50,7 +50,7 @@ export const docMode = Facet.define<boolean, boolean>({ combine: (values) => val
 const setFocused = StateEffect.define<boolean>();
 const setPointerDown = StateEffect.define<boolean>();
 /** Puts a cell caret at a position in a table, or with null turns it into the table's source. */
-const setCellCaret = StateEffect.define<number | null>();
+export const setCellCaret = StateEffect.define<number | null>();
 /** In a document, shows the source of the table or code block over these lines, or with null draws it again. */
 export const setOpenBlock = StateEffect.define<{ from: number; to: number } | null>();
 
@@ -331,7 +331,8 @@ function inlinePieces(state: EditorState, node: SyntaxNode, from: number, to: nu
       pieces.push({ kind, children: inlinePieces(state, child, edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to) });
     } else if (child.name === 'InlineCode') {
       const edges = marks('CodeMark');
-      pieces.push({ kind: 'code', text: state.sliceDoc(edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to) });
+      // In a table cell a pipe in code is written "\|", and reads as a plain pipe.
+      pieces.push({ kind: 'code', text: state.sliceDoc(edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to).replace(/\\\|/g, '|') });
     } else if (child.name === 'Link') {
       const edges = marks('LinkMark');
       const target = linkTarget(state, child);
@@ -348,6 +349,8 @@ function inlinePieces(state: EditorState, node: SyntaxNode, from: number, to: nu
       pieces.push({ kind: 'link', children: [{ kind: 'text', text: written }], href: autolinkHref(written) });
     } else if (child.name === 'Escape') {
       pieces.push({ kind: 'text', text: state.sliceDoc(child.from + 1, child.to) });
+    } else if (child.name === 'HTMLTag' && /^<br\s*\/?>$/i.test(state.sliceDoc(child.from, child.to))) {
+      pieces.push({ kind: 'break' });
     } else {
       pieces.push({ kind: 'text', text: state.sliceDoc(child.from, child.to) });
     }
@@ -362,7 +365,11 @@ function columnAlignment(cell: string): TableModel['align'][number] {
   return left && right ? 'center' : right ? 'right' : left ? 'left' : null;
 }
 
-/** A row's cells by column. A column with no cell node is empty and keeps the spot after its pipe. */
+/**
+ * A row's cells by column. A column with no cell node is empty and keeps the
+ * spot after its pipe and one space, so text typed there has a space on
+ * each side.
+ */
 function rowCells(state: EditorState, start: number, row: SyntaxNode): TableCell[] {
   const cells: TableCell[] = [];
   let column = 0;
@@ -373,7 +380,7 @@ function rowCells(state: EditorState, start: number, row: SyntaxNode): TableCell
         cells[column] ??= { offset: empty, content: [] };
         column += 1;
       }
-      empty = child.to - start;
+      empty = child.to - start + (state.sliceDoc(child.to, child.to + 2) === '  ' ? 1 : 0);
     } else if (child.name === 'TableCell') {
       cells[column] = { offset: child.from - start, content: inlinePieces(state, child, child.from, child.to) };
     }
@@ -387,7 +394,10 @@ function tableModel(state: EditorState, table: SyntaxNode, start: number): Table
     if (child.name === 'TableHeader') {
       model.header = rowCells(state, start, child);
     } else if (child.name === 'TableRow') {
-      model.rows.push(rowCells(state, start, child));
+      // A row short of cells takes them at its end, where typing adds them.
+      const cells = rowCells(state, start, child);
+      while (cells.length < model.header.length) cells.push({ offset: child.to - start, content: [] });
+      model.rows.push(cells);
     } else if (child.name === 'TableDelimiter') {
       const cells = state.sliceDoc(child.from, child.to).trim().replace(/^\||\|$/g, '').split('|');
       model.align = cells.map((cell) => columnAlignment(cell.trim()));

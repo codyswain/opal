@@ -17,6 +17,7 @@ import { nestListItems, withoutRenumbering } from './listKeys';
 import { fileInserts } from './imageInsert';
 import { docMode, linkMarkStyle, livePreview } from './livePreview';
 import { pageProperties } from './pageProperties';
+import { tableKeys } from './tableKeys';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -180,6 +181,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     livePreview,
     blockGuards,
     guardedLineMoves,
+    tableKeys,
     pageProperties,
     search({ top: true }),
     keymap.of([
