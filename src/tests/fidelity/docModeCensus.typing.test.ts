@@ -7,8 +7,10 @@ import type { SyntaxNode } from '@lezer/common';
 import { MarkdownError, parseMarkdown } from '@/main/fs/MarkdownDocumentService';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { replaceVisible } from '@/renderer/features/disk-explorer/components/editor/docMode';
+import { latestTree } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { clearFormatting, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { hiddenRanges } from '@/renderer/features/disk-explorer/components/editor/livePreview';
+import { mathNodes } from '@/renderer/features/disk-explorer/components/editor/math';
 import { VisibleQuery, replaceEdits } from '@/renderer/features/disk-explorer/components/editor/visibleSearch';
 import { visibleLines, visibleOffset, visibleSlice } from '@/renderer/features/disk-explorer/components/editor/visibleText';
 import { wordStep } from '@/renderer/features/disk-explorer/components/editor/wordMotion';
@@ -321,6 +323,10 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
             if (problems.length > 0 && problems.every((problem) => problem.startsWith('bytes at the caret')) && insertedAround(before.doc.toString(), after.doc.toString(), typed)) problems = [];
             // `N. ` under an ordered item continues the list, as decided.
             if (problems.length > 0 && typed === '1984. ' && continuesOrderedList(before, caret)) problems = [];
+            // A digit typed right after a formula gets a space first, so the formula stays one (PR 4).
+            if (problems.length > 0 && /^\d/.test(typed) && mathNodes(latestTree(before), caret, caret).some((node) => node.to === caret)) {
+              problems = expectTyped(before, after, typed, caret, { escapes: '\\', separators: ` ${blockSeparators(before, caret)}` });
+            }
             if (problems.length === 0) continue;
             const owner = lonePending(before, typed, caret) ?? pendingOwner(before, after, typed, caret);
             if (owner) pending.set(owner, [...(pending.get(owner) ?? []), `${where} typed ${JSON.stringify(typed)}: ${problems.join('; ')}`]);
