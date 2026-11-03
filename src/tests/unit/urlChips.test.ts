@@ -36,13 +36,13 @@ function mount(doc: string, page = DOC) {
 describe('service chips', () => {
   it('read a label from each service\'s address alone', () => {
     const table: [string, string | null][] = [
-      ['https://linear.app/parametricpbc/issue/sw-640/batteries-no-tether', 'SW-640'],
-      ['https://linear.app/parametricpbc/project/nest-1-abc', 'Linear project'],
-      ['https://github.com/codyswain/opal/pull/13', 'opal#13'],
-      ['https://github.com/codyswain/opal/issues/7', 'opal#7'],
-      ['https://github.com/codyswain/opal/commit/41ca4514b394dbcc7eec6b894568f962f3e0d154', 'opal@41ca451'],
-      ['https://github.com/codyswain/opal/blob/main/src/main.ts', 'main.ts'],
-      ['https://github.com/codyswain/opal', 'codyswain/opal'],
+      ['https://linear.app/acme/issue/eng-12/fix-sign-in', 'ENG-12'],
+      ['https://linear.app/acme/project/launch-abc', 'Linear project'],
+      ['https://github.com/example/project/pull/13', 'project#13'],
+      ['https://github.com/example/project/issues/7', 'project#7'],
+      ['https://github.com/example/project/commit/41ca4514b394dbcc7eec6b894568f962f3e0d154', 'project@41ca451'],
+      ['https://github.com/example/project/blob/main/src/main.ts', 'main.ts'],
+      ['https://github.com/example/project', 'example/project'],
       ['https://docs.google.com/document/d/1KhEoybd1ca9/edit', 'Google Doc'],
       ['https://docs.google.com/spreadsheets/d/1abc/edit#gid=0', 'Google Sheet'],
       ['https://docs.google.com/presentation/d/1abc/edit', 'Google Slides'],
@@ -50,10 +50,10 @@ describe('service chips', () => {
       ['https://drive.google.com/file/d/1abc/view', 'Drive file'],
       ['https://calendar.google.com/calendar/event?eid=abc', 'Calendar event'],
       ['https://mail.google.com/mail/u/0/#all/18f2', 'Email'],
-      ['https://parametric.slack.com/archives/C07ABC/p1730000000', 'Slack message'],
+      ['https://acme.slack.com/archives/C07ABC/p1730000000', 'Slack message'],
       ['https://www.figma.com/design/AbC123/Bit-shell-v2?node-id=1', 'Bit shell v2'],
       ['https://cad.onshape.com/documents/abc/w/def/e/ghi', 'Onshape document'],
-      ['https://www.notion.so/parametric/Kigali-ops-plan-0123456789abcdef0123456789abcdef', 'Kigali ops plan'],
+      ['https://www.notion.so/acme/Team-plan-0123456789abcdef0123456789abcdef', 'Team plan'],
       ['https://www.youtube.com/watch?v=abc', 'YouTube video'],
       ['https://example.com/page', null],
     ];
@@ -61,7 +61,7 @@ describe('service chips', () => {
   });
 
   it('draw as a chip in text, once the address is ended', () => {
-    const url = 'https://github.com/codyswain/opal/pull/13';
+    const url = 'https://github.com/example/project/pull/13';
     const view = mount('See \n');
     // Typed character by character, the address stays text while the caret is at its end.
     for (const [index, char] of [...url].entries()) {
@@ -69,21 +69,21 @@ describe('service chips', () => {
     }
     expect(view.contentDOM.querySelector('.cm-url-chip')).toBeNull();
     act(() => { view.dispatch({ changes: { from: 4 + url.length, insert: ' ' }, selection: { anchor: 5 + url.length }, userEvent: 'input.type' }); });
-    expect(view.contentDOM.querySelector('.cm-url-chip')).toHaveTextContent('opal#13');
+    expect(view.contentDOM.querySelector('.cm-url-chip')).toHaveTextContent('project#13');
     expect(view.state.doc.toString()).toBe(`See ${url} \n`);
   });
 
   it('forms at once for a pasted address, and goes in one Backspace in a document', () => {
-    const url = 'https://linear.app/parametricpbc/issue/SW-640';
+    const url = 'https://linear.app/acme/issue/ENG-12';
     const view = mount('See \n');
     act(() => { view.dispatch({ changes: { from: 4, insert: url }, selection: { anchor: 4 + url.length }, userEvent: 'input.paste' }); });
-    expect(view.contentDOM.querySelector('.cm-url-chip')).toHaveTextContent('SW-640');
+    expect(view.contentDOM.querySelector('.cm-url-chip')).toHaveTextContent('ENG-12');
     act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
     expect(view.state.doc.toString()).toBe('See \n');
   });
 
   it('shows the address as written while a document\'s caret is at its start, where a typed letter would join it', () => {
-    const url = 'https://github.com/codyswain/opal/pull/13';
+    const url = 'https://github.com/example/project/pull/13';
     const shown = mount(`Watch: ${url}\n`);
     expect(shown.contentDOM.querySelector('.cm-url-chip')).not.toBeNull();
     act(() => { shown.dispatch({ selection: { anchor: 7 } }); });
@@ -95,7 +95,7 @@ describe('service chips', () => {
   });
 
   it('leaves written links with their own text and unknown addresses alone, and loads nothing', () => {
-    const view = mount('[the PR](https://github.com/codyswain/opal/pull/13) and https://example.com/x \n');
+    const view = mount('[the PR](https://github.com/example/project/pull/13) and https://example.com/x \n');
     expect(view.contentDOM.querySelector('.cm-url-chip')).toBeNull();
     expect(view.contentDOM.querySelectorAll('[src^="http"]')).toHaveLength(0);
   });
@@ -115,17 +115,17 @@ describe('service chips', () => {
   });
 
   it('takes one character on Backspace while an address being typed still shows as text, and on Delete at its start', () => {
-    const url = 'https://github.com/codyswain/opal/pull/13x';
+    const url = 'https://github.com/example/project/pull/13x';
     const view = mount('See \n');
     const type = (char: string, at: number) => act(() => { view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: 'input.type' }); });
     for (const [index, char] of [...url].entries()) type(char, 4 + index);
     expect(view.contentDOM.querySelector('.cm-url-chip')).toBeNull();
     act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
-    expect(view.state.doc.toString()).toBe('See https://github.com/codyswain/opal/pull/13\n');
-    const start = mount('See https://github.com/codyswain/opal/pull/13 now\n');
+    expect(view.state.doc.toString()).toBe('See https://github.com/example/project/pull/13\n');
+    const start = mount('See https://github.com/example/project/pull/13 now\n');
     act(() => { start.dispatch({ selection: { anchor: 4 } }); });
     act(() => { runScopeHandlers(start, new KeyboardEvent('keydown', { key: 'Delete' }), 'editor'); });
-    expect(start.state.doc.toString()).toBe('See ttps://github.com/codyswain/opal/pull/13 now\n');
+    expect(start.state.doc.toString()).toBe('See ttps://github.com/example/project/pull/13 now\n');
   });
 
   it('keeps a YouTube address alone on its line a card object, framed on the first Backspace', () => {

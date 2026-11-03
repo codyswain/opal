@@ -347,13 +347,13 @@ describe('dropping files', () => {
   it('links a dropped .webloc to its address, and says when a file linked in place is too large for GitHub', async () => {
     installFilesApi({
       import: vi.fn(async (_page: string, file: File) => (file.name.endsWith('.webloc')
-        ? { success: true as const, data: { path: '', vaultPath: '', name: 'Opal [PR] *13*', url: 'https://github.com/codyswain/opal/pull/13' } }
+        ? { success: true as const, data: { path: '', vaultPath: '', name: 'Opal [PR] *13*', url: 'https://github.com/example/project/pull/13' } }
         : { success: true as const, data: { path: '/Vault/Library/clip.mov', vaultPath: 'Library/clip.mov', name: 'clip.mov', warning: '"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.' } })),
     });
     const view = mount('Notes\n');
     pointAt(view, 0, 5);
     drag(view, 'drop', [new File(['x'], 'Opal PR.webloc'), new File(['x'], 'clip.mov')], { clientY: 30 });
-    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n![[Library/clip.mov]]\n'));
+    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/example/project/pull/13)\n![[Library/clip.mov]]\n'));
     expect(toastPlain).toHaveBeenCalledWith('"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.');
   });
 

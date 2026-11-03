@@ -121,7 +121,7 @@ export function inTableAt(state: EditorState, at: number): boolean {
 /**
  * A Markdown link's or image's address as written, and its URL node: the one
  * after "](", not an address the link's own text holds, as in
- * `[henry@x.com](mailto:henry@x.com)`. A reference link's comes from its
+ * `[alex@example.com](mailto:alex@example.com)`. A reference link's comes from its
  * definition.
  */
 function addressOf(state: EditorState, node: SyntaxNode, marks: readonly SyntaxNode[]): { written: string | null; url: SyntaxNode | null } {

@@ -99,7 +99,7 @@ await writeFile(path.join(files, 'bytes.bin'), BYTES);
 await writeFile(path.join(files, 'page.a1b2c3d4.html'), '<!doctype html><title>static</title><script>document.title = "ran"</script><p>hello</p>');
 await writeFile(path.join(files, 'q3.a1b2c3d4.pdf'), pdf('Q3 report'));
 await lfs(vault, path.join(files, 'deck.b2c3d4e5.pdf'), pdf('Deck from LFS'));
-const CSV = 'week,boxes,operator minutes per box\n2026-10-05,412,3.9\n2026-10-12,455,3.6\n2026-10-19,501,3.4\n2026-10-26,548,3.1\n';
+const CSV = 'week,orders,minutes per order\n2026-10-05,412,3.9\n2026-10-12,455,3.6\n2026-10-19,501,3.4\n2026-10-26,548,3.1\n';
 await lfs(vault, path.join(files, 'throughput.c3d4e5f6.csv'), Buffer.from(CSV));
 await writeFile(path.join(files, 'deploy.command'), '#!/bin/sh\necho never\n');
 await writeFile(path.join(files, 'diagram.f6a7b8c9.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#888"/><script>parent.postMessage("ran", "*")</script></svg>');

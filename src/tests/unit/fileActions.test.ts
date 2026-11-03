@@ -113,7 +113,7 @@ async function bytes(doc: string, path: string, needle = doc.trim().slice(0, 4))
 
 describe('the bar', () => {
   it('leads with the main action for the type, then Show as, Size and More', () => {
-    const view = mount(`![[${PDF}|Q3 report.pdf]]\n\n[[${PPTX}|Gob deck.pptx]]\n\n![[${PNG}|300]]\n`);
+    const view = mount(`![[${PDF}|Q3 report.pdf]]\n\n[[${PPTX}|Demo deck.pptx]]\n\n![[${PNG}|300]]\n`);
     const ids = (needle: string) => {
       const at = text(view).indexOf(needle);
       const line = view.state.doc.lineAt(at);
@@ -139,7 +139,7 @@ describe('the bar', () => {
   });
 
   it('names the app once main has said it, and never shows a placeholder for it', async () => {
-    const view = mount(`![[${PDF}|Q3 report.pdf]]\n\n[[${PPTX}|Gob deck.pptx]]\n`);
+    const view = mount(`![[${PDF}|Q3 report.pdf]]\n\n[[${PPTX}|Demo deck.pptx]]\n`);
     await flush();
     const labels = (needle: string) => {
       const line = view.state.doc.lineAt(text(view).indexOf(needle));
@@ -180,7 +180,7 @@ describe('the bar', () => {
   });
 
   it('offers Show as only where Card and Preview look different', () => {
-    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n\n![[${PPTX}]]\n\nhttps://www.youtube.com/watch?v=abc\n\n![](https://www.youtube.com/watch?v=abc)\n`);
+    const view = mount(`[[${PPTX}|Demo deck.pptx]]\n\n![[${PPTX}]]\n\nhttps://www.youtube.com/watch?v=abc\n\n![](https://www.youtube.com/watch?v=abc)\n`);
     for (const needle of [`[[${PPTX}`, `![[${PPTX}`, 'https://www.youtube.com/watch?v=abc\n', '![](https']) {
       const at = text(view).indexOf(needle);
       const line = view.state.doc.lineAt(at);
@@ -212,8 +212,8 @@ describe('the bar', () => {
   it('edits a caption, renames a shown name, and removes, each in one undo step', async () => {
     setAskText(async () => 'Night shift | rig 2');
     expect(await bytes('![Old|300](assets/a.png)\n', 'caption')).toEqual(['![Night shift | rig 2|300](assets/a.png)\n', '![Old|300](assets/a.png)\n']);
-    setAskText(async () => 'Gob deck [final]');
-    expect(await bytes(`[[${PPTX}|Gob deck.pptx]]\n`, 'more/rename')).toEqual([`[[${PPTX}|Gob deck final]]\n`, `[[${PPTX}|Gob deck.pptx]]\n`]);
+    setAskText(async () => 'Demo deck [final]');
+    expect(await bytes(`[[${PPTX}|Demo deck.pptx]]\n`, 'more/rename')).toEqual([`[[${PPTX}|Demo deck final]]\n`, `[[${PPTX}|Demo deck.pptx]]\n`]);
     setAskText(async () => 'Notes * v2');
     expect(await bytes('[Old](assets/x.pptx)\n', 'more/rename')).toEqual(['[Notes \\* v2](assets/x.pptx)\n', '[Old](assets/x.pptx)\n']);
     expect(await bytes(`Intro\n\n[[${PPTX}]]\n\nAfter\n`, 'more/remove', '[[')).toEqual(['Intro\n\nAfter\n', `Intro\n\n[[${PPTX}]]\n\nAfter\n`]);
@@ -228,7 +228,7 @@ describe('the bar', () => {
 
   it('opens Rename… once the More menu has closed and given focus back, and applies what is typed there', async () => {
     setAskText(null);
-    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n`);
+    const view = mount(`[[${PPTX}|Demo deck.pptx]]\n`);
     // The menu is open, with focus in it, when its item runs.
     const menu = document.createElement('div');
     menu.setAttribute('role', 'menu');
@@ -243,22 +243,22 @@ describe('the bar', () => {
     view.contentDOM.focus();
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.opal-file-ask input')));
     const input = document.activeElement as HTMLInputElement;
-    input.value = 'Gob deck v2';
+    input.value = 'Demo deck v2';
     await act(async () => { input.form?.requestSubmit(); });
-    expect(text(view)).toBe(`[[${PPTX}|Gob deck v2]]\n`);
+    expect(text(view)).toBe(`[[${PPTX}|Demo deck v2]]\n`);
     expect(document.querySelector('.opal-file-ask')).toBeNull();
   });
 
   it('closes the Rename… field when the page scrolls, writing nothing', async () => {
     setAskText(null);
-    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n`);
+    const view = mount(`[[${PPTX}|Demo deck.pptx]]\n`);
     await act(async () => { action(view, PPTX, 'more/rename').run?.(view, { kind: 'file', from: 0, to: 0, node: '' }); });
     await waitFor(() => expect(document.querySelector('.opal-file-ask')).not.toBeNull());
     expect(document.body.hasAttribute('data-file-ask')).toBe(true);
     act(() => { view.scrollDOM.dispatchEvent(new Event('scroll')); });
     await waitFor(() => expect(document.querySelector('.opal-file-ask')).toBeNull());
     expect(document.body.hasAttribute('data-file-ask')).toBe(false);
-    expect(text(view)).toBe(`[[${PPTX}|Gob deck.pptx]]\n`);
+    expect(text(view)).toBe(`[[${PPTX}|Demo deck.pptx]]\n`);
   });
 
   it('copies the Markdown, the path, the file and the image', async () => {
@@ -308,13 +308,13 @@ describe('writing links', () => {
 
   it('reads no file from a link to a heading on the page or to a folder, in a folder whose name has a dot', () => {
     const doc = 'See [Goals](#goals) and [v1](../v1.2/) below.\n';
-    const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Library/bit-0.2/Plan.md') });
+    const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Library/v0.2/Plan.md') });
     expect(refAt(state, { from: 4, to: 19 })).toBeNull();
     expect(refAt(state, { from: doc.indexOf('[v1'), to: doc.indexOf(' below') })).toBeNull();
   });
 
   it('reads a link\'s address after its text, so a mail link whose text is an address is no file', () => {
-    const doc = '[henry@parametric.company](mailto:henry@parametric.company) and [Q3](<../Docs/q3 report.pdf>)\n';
+    const doc = '[alex@example.com](mailto:alex@example.com) and [Q3](<../Docs/q3 report.pdf>)\n';
     const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Notes/Plan.md') });
     expect(refAt(state, { from: 0, to: 0 })).toBeNull();
     const at = doc.indexOf('[Q3');

@@ -32,7 +32,7 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: toastError }) 
 const DOC = '/Vault/Notes/Plan.mdo';
 const NOTE = '/Vault/Notes/Plan.md';
 const PDF = 'Library/files/2026-11/q3-report.a3f9c2e1.pdf';
-const DECK = 'Library/files/2026-11/gob-deck.a3f9c2e1.pptx';
+const DECK = 'Library/files/2026-11/demo-deck.a3f9c2e1.pptx';
 const CLIP = 'Library/files/2026-11/clip.a3f9c2e1.mp4';
 const MEMO = 'Library/files/2026-11/memo.a3f9c2e1.m4a';
 const SHOT = 'Library/files/2026-11/shot.a3f9c2e1.png';
@@ -113,7 +113,7 @@ describe('reading file links', () => {
   it('gives each its look: a chip in text, a card alone on its line, a preview for embeds of images, PDF, video and audio', () => {
     const doc = [
       `See [[${PDF}|Q3 report]] today.`,
-      `[[${DECK}|Gob deck.pptx]]`,
+      `[[${DECK}|Demo deck.pptx]]`,
       `![[${PDF}|Q3 report.pdf]]`,
       `![[${DECK}]]`,
       `![[${CLIP}|640]]`,
@@ -124,9 +124,9 @@ describe('reading file links', () => {
     ].join('\n');
     expect(refs(doc).map((ref) => [shownName(ref), lookOf(ref)])).toEqual([
       ['Q3 report', 'chip'],
-      ['Gob deck.pptx', 'card'],
+      ['Demo deck.pptx', 'card'],
       ['Q3 report.pdf', 'preview'],
-      ['gob-deck.pptx', 'card'],
+      ['demo-deck.pptx', 'card'],
       ['clip.mp4', 'preview'],
       ['memo.m4a', 'preview'],
       ['In a list', 'chip'],
@@ -176,12 +176,12 @@ describe('reading file links', () => {
 
 describe('file widgets', () => {
   it('draws a chip, a card with kind and size, and a PDF preview with its page count, never showing the Markdown', async () => {
-    const view = await mount(`See [[${PDF}|Q3 report]] today.\n[[${DECK}|Gob deck.pptx]]\n![[${PDF}|Q3 report.pdf]]\n`);
+    const view = await mount(`See [[${PDF}|Q3 report]] today.\n[[${DECK}|Demo deck.pptx]]\n![[${PDF}|Q3 report.pdf]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
     expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveTextContent('Q3 report');
     expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveAttribute('aria-label', 'PDF, Q3 report');
     expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('role', 'group');
-    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('aria-label', 'PowerPoint, Gob deck.pptx');
+    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('aria-label', 'PowerPoint, Demo deck.pptx');
     expect(view.contentDOM.querySelector('.cm-file-pdf')).toHaveAttribute('aria-label', 'PDF, Q3 report.pdf');
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf-footer')).toHaveTextContent('Q3 report.pdf15 pages · 9.1 MB'));
     expect(view.contentDOM.textContent).not.toContain('[[');
@@ -190,7 +190,7 @@ describe('file widgets', () => {
 
   it('says a file is not downloaded and gets it from the Mini', async () => {
     statuses[`/Vault/${DECK}`] = 'lfs-missing';
-    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    const view = await mount(`[[${DECK}|Demo deck.pptx]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Not downloaded yet'));
     statuses = {};
     const control = view.contentDOM.querySelector('.cm-file-card button') as HTMLButtonElement;
@@ -281,7 +281,7 @@ describe('file widgets', () => {
       listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
       onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => undefined; }),
     });
-    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n\n![[${PDF}|Q3.pdf]]\n`);
+    const view = await mount(`[[${DECK}|Demo deck.pptx]]\n\n![[${PDF}|Q3.pdf]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf')).not.toBeNull());
     const pdf = view.contentDOM.querySelector('.cm-file-pdf');
@@ -378,7 +378,7 @@ describe('file widgets', () => {
       info: vi.fn(async (target: string) => ({ success: true as const, data: info(target) })),
       thumbnail: vi.fn(async (_target: string, px: number) => ({ success: true as const, data: `data:image/png;base64,${px}` })),
     });
-    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    const view = await mount(`[[${DECK}|Demo deck.pptx]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-thumb')).toHaveAttribute('src', 'data:image/png;base64,48'));
     // A deck's slide is a page, so its tile draws a hairline edge (files.css).
     expect([...(view.contentDOM.querySelector('.cm-file-card-tile')?.classList ?? [])]).toEqual(expect.arrayContaining(['cm-file-card-tile-thumb', 'cm-file-card-tile-page']));
@@ -408,7 +408,7 @@ describe('file widgets', () => {
   });
 
   it('drags the file itself out of the window from a card\'s tile', async () => {
-    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    const view = await mount(`[[${DECK}|Demo deck.pptx]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('[data-drag-file]')).not.toBeNull());
     const tile = view.contentDOM.querySelector('[data-drag-file]') as HTMLElement;
     expect(tile.draggable).toBe(true);
@@ -461,12 +461,12 @@ describe('file widgets', () => {
 
 describe('file objects in a document', () => {
   it('frames a card on the first Backspace and removes it on the second; a chip goes in one press', async () => {
-    const view = await mount(`Intro\n[[${DECK}|Gob deck.pptx]]\nSee [[${PDF}|Q3]] here\n`);
+    const view = await mount(`Intro\n[[${DECK}|Demo deck.pptx]]\nSee [[${PDF}|Q3]] here\n`);
     const line = text(view).indexOf('\nSee');
     act(() => { view.dispatch({ selection: { anchor: line + 1 } }); });
     key(view, 'Backspace');
     expect(view.state.field(objectFrame)).toMatchObject({ kind: 'file', from: 6 });
-    expect(text(view)).toContain('[[Library/files/2026-11/gob-deck');
+    expect(text(view)).toContain('[[Library/files/2026-11/demo-deck');
     key(view, 'Backspace');
     expect(text(view)).toBe(`Intro\n\nSee [[${PDF}|Q3]] here\n`);
     const chipEnd = text(view).indexOf(' here');
@@ -517,12 +517,12 @@ describe('file objects in a document', () => {
   });
 
   it('opens Quick Look on Space when a file is framed', async () => {
-    const view = await mount(`Intro\n[[${DECK}|Gob deck.pptx]]\n`);
+    const view = await mount(`Intro\n[[${DECK}|Demo deck.pptx]]\n`);
     act(() => { view.dispatch({ selection: { anchor: text(view).length } }); });
     key(view, 'Backspace');
     press(view, ' ');
     expect(window.filesAPI.quickLook).toHaveBeenCalledWith(`/Vault/${DECK}`, { confirmed: undefined });
-    expect(text(view)).toBe(`Intro\n[[${DECK}|Gob deck.pptx]]\n`);
+    expect(text(view)).toBe(`Intro\n[[${DECK}|Demo deck.pptx]]\n`);
   });
 
   it('opens a PDF in an Opal tab and a deck in its app on Enter', async () => {
@@ -563,8 +563,8 @@ describe('putting files in', () => {
   it('puts a file in mid-sentence as a chip, and on an empty line in its type\'s look', async () => {
     const view = await mount('See  today\n\n');
     act(() => { view.dispatch({ selection: { anchor: 4 } }); });
-    paste(view, [file('Gob deck.pptx')]);
-    await waitFor(() => expect(text(view)).toBe(`See [[${stored('Gob deck.pptx')}|Gob deck.pptx]] today\n\n`));
+    paste(view, [file('Demo deck.pptx')]);
+    await waitFor(() => expect(text(view)).toBe(`See [[${stored('Demo deck.pptx')}|Demo deck.pptx]] today\n\n`));
     act(() => { view.dispatch({ selection: { anchor: text(view).length - 1 } }); });
     paste(view, [file('Q3 report.pdf')]);
     await waitFor(() => expect(text(view)).toContain(`![[${stored('Q3 report.pdf')}|Q3 report.pdf]]`));
@@ -572,13 +572,13 @@ describe('putting files in', () => {
 
   it('drops a PDF, a video and a deck one per line, as previews and a card', async () => {
     const view = await mount('Intro\n');
-    drop(view, [file('Q3 report.pdf'), file('clip.mp4'), file('Gob deck.pptx')]);
+    drop(view, [file('Q3 report.pdf'), file('clip.mp4'), file('Demo deck.pptx')]);
     await waitFor(() => expect(text(view)).toBe([
       'Intro',
       `![[${stored('Q3 report.pdf')}|Q3 report.pdf]]`,
       // The video's width from its header; in the app the column caps it.
       `![[${stored('clip.mp4')}|1920]]`,
-      `[[${stored('Gob deck.pptx')}|Gob deck.pptx]]`,
+      `[[${stored('Demo deck.pptx')}|Demo deck.pptx]]`,
       '',
     ].join('\n')));
   });
@@ -586,13 +586,13 @@ describe('putting files in', () => {
   it('puts a pasted file after a code block, and escapes its alias pipe in a table cell', async () => {
     const code = await mount('```sh\nls -la here\n```\n');
     act(() => { code.dispatch({ selection: { anchor: text(code).indexOf('here') } }); });
-    paste(code, [file('Gob deck.pptx')]);
-    await waitFor(() => expect(text(code)).toContain(`\`\`\`sh\nls -la here\n\`\`\`\n[[${stored('Gob deck.pptx')}|Gob deck.pptx]]`));
+    paste(code, [file('Demo deck.pptx')]);
+    await waitFor(() => expect(text(code)).toContain(`\`\`\`sh\nls -la here\n\`\`\`\n[[${stored('Demo deck.pptx')}|Demo deck.pptx]]`));
     // A note: a document draws the table, so its caret is never in a cell.
-    const table = await mount('| Item | Owner |\n| --- | --- |\n| Q3  | Cody |\n', '/Vault/Notes/Plan.md');
+    const table = await mount('| Item | Owner |\n| --- | --- |\n| Q3  | Alex |\n', '/Vault/Notes/Plan.md');
     act(() => { table.dispatch({ selection: { anchor: text(table).indexOf('Q3 ') + 3 } }); });
-    paste(table, [file('Gob deck.pptx')]);
-    await waitFor(() => expect(text(table)).toBe(`| Item | Owner |\n| --- | --- |\n| Q3 [[${stored('Gob deck.pptx')}\\|Gob deck.pptx]] | Cody |\n`));
+    paste(table, [file('Demo deck.pptx')]);
+    await waitFor(() => expect(text(table)).toBe(`| Item | Owner |\n| --- | --- |\n| Q3 [[${stored('Demo deck.pptx')}\\|Demo deck.pptx]] | Alex |\n`));
   });
 
   it('puts ten dropped PDFs in as cards, not previews', async () => {

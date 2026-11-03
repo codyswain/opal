@@ -1,6 +1,6 @@
 // Disposable Electron acceptance for files in documents: chips, cards and
 // previews drawn from e2e/fixtures/gallery/files.mdo, every failure state,
-// captions from the investor update's forms, a movie seeking to its end,
+// captions from a long document's forms, a movie seeking to its end,
 // the object bar, a drop of a PDF, a movie and a deck, and no web loads. Own userData and temp vault; thumbnails come
 // from macOS as in the app. Run from the repository root after the Vite
 // bundles are built (see README.md here):
@@ -165,7 +165,7 @@ try {
   }
   check('a PDF previews with its pages and size in the footer', seen['.cm-file-pdf-footer'].some((line) => line.includes('3 pages')), seen['.cm-file-pdf-footer'].join(' | '));
   const captions = seen['.cm-file-caption'];
-  check('the investor update\'s alt text shows as captions', ['SF box-assembly rigs, with two rigs shown', 'Bit', 'Autonomous policy rollout'].every((caption) => captions.includes(caption)), captions.join(' | '));
+  check('a long document\'s alt text shows as captions', ['A wide photo', 'A ring', 'A short clip'].every((caption) => captions.includes(caption)), captions.join(' | '));
 
   await reach('.cm-file-pdf');
   const pdfShown = await page.waitForSelector('.cm-file-pdf-image', { timeout: 20_000 }).then(() => true, () => false);
@@ -222,13 +222,13 @@ try {
 
   // The bar: a click on the deck card frames it and shows where it points, then its actions.
   await reach('.cm-file-card');
-  const card = page.locator('.cm-file-card', { hasText: 'Gob deck.pptx' }).first();
+  const card = page.locator('.cm-file-card', { hasText: 'Demo deck.pptx' }).first();
   await card.click();
   const bar = page.locator('[data-object-bar]');
   const barShown = await bar.waitFor({ timeout: 5000 }).then(() => true, () => false);
   const barText = barShown ? await bar.textContent() : '';
   // A deck is a card in either look, so its bar has no Show as.
-  check('a click on a card frames it and shows the bar: destination first, then the main action and More', barShown && /Gob deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && !/Show as/.test(barText) && /More/.test(barText), barText);
+  check('a click on a card frames it and shows the bar: destination first, then the main action and More', barShown && /Demo deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && !/Show as/.test(barText) && /More/.test(barText), barText);
   const framed = await page.locator('.cm-file-card[data-file-framed]').count();
   check('the framed card draws its ring', framed === 1);
   if (shotsDir) {
@@ -251,15 +251,15 @@ try {
   check('Rename… opens with its field focused, in the bar\'s place', focused && barHidden, `focused ${focused}, bar hidden ${barHidden}`);
   if (shotsDir) await page.screenshot({ path: path.join(shotsDir, 'rename-light.png') });
   await page.keyboard.press('Meta+A');
-  await page.keyboard.type('Gob deck v2');
+  await page.keyboard.type('Demo deck v2');
   await page.keyboard.press('Enter');
   let renamed = '';
   for (let tries = 0; tries < 20; tries += 1) {
     await page.waitForTimeout(250);
     renamed = await readFile(path.join(gallery, 'files.mdo'), 'utf8');
-    if (renamed.includes('|Gob deck v2]]')) break;
+    if (renamed.includes('|Demo deck v2]]')) break;
   }
-  check('Rename… writes the name into the link and types nothing into the page', renamed.includes('gob-deck.a3f9c2e1.pptx|Gob deck v2]]') && !/^Gob deck v2$/m.test(renamed), renamed.split('\n').find((line) => line.includes('gob-deck')) ?? '');
+  check('Rename… writes the name into the link and types nothing into the page', renamed.includes('demo-deck.a3f9c2e1.pptx|Demo deck v2]]') && !/^Demo deck v2$/m.test(renamed), renamed.split('\n').find((line) => line.includes('demo-deck')) ?? '');
   check('the field closes once applied', await page.locator('.opal-file-ask').count() === 0);
   await page.keyboard.press('Escape');
 

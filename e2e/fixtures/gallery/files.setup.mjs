@@ -2,7 +2,7 @@
 // picture with a transparent ground, a three-page PDF, a short movie and a
 // voice memo (made with ffmpeg when it is installed), a deck, a model, an
 // archive, a file still on the Mini, one that moved, one that is gone, and
-// the October investor update's assets beside the page. Nothing here is
+// a long document's assets beside the page. Nothing here is
 // fetched; the YouTube card stays a card.
 import { execFile } from 'child_process';
 import { createHash } from 'crypto';
@@ -48,7 +48,7 @@ export function pdf(pages) {
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
   const kids = [];
   for (const [index, title] of pages.entries()) {
-    const lines = [`BT /F1 28 Tf 72 700 Td (${title}) Tj ET`, ...[0, 1, 2, 3, 4, 5].map((row) => `BT /F1 12 Tf 72 ${650 - row * 22} Td (Line ${row + 1} of page ${index + 1}: boxes per operator hour) Tj ET`), '0.6 g 72 360 468 120 re f'];
+    const lines = [`BT /F1 28 Tf 72 700 Td (${title}) Tj ET`, ...[0, 1, 2, 3, 4, 5].map((row) => `BT /F1 12 Tf 72 ${650 - row * 22} Td (Line ${row + 1} of page ${index + 1}: orders per hour) Tj ET`), '0.6 g 72 360 468 120 re f'];
     const stream = lines.join('\n');
     const number = objects.length + 1;
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${number + 1} 0 R /Resources << /Font << /F1 3 0 R >> >> >>`);
@@ -106,11 +106,11 @@ export default async function setup(vault, pageDir = path.join(vault, 'Gallery')
 
   await writeFile(path.join(files, 'diagram.a3f9c2e1.png'), ring(640, 360));
   await writeFile(path.join(files, 'q3-report.a3f9c2e1.pdf'), pdf(['Q3 report', 'Throughput', 'Next quarter']));
-  await writeFile(path.join(files, 'gob-deck.a3f9c2e1.pptx'), Buffer.concat([Buffer.from('PK\u0003\u0004', 'latin1'), Buffer.alloc(2048, 1)]));
+  await writeFile(path.join(files, 'demo-deck.a3f9c2e1.pptx'), Buffer.concat([Buffer.from('PK\u0003\u0004', 'latin1'), Buffer.alloc(2048, 1)]));
   await writeFile(path.join(files, 'bracket.a3f9c2e1.stl'), 'solid bracket\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid bracket\n');
   await writeFile(path.join(files, 'logs.a3f9c2e1.zip'), Buffer.concat([Buffer.from('PK\u0005\u0006', 'latin1'), Buffer.alloc(18)]));
-  await writeFile(path.join(files, 'throughput.a3f9c2e1.csv'), 'week,boxes\n2026-10-05,412\n2026-10-12,455\n');
-  await writeFile(path.join(files, 'rig-sketch.a3f9c2e1.excalidraw'), '{"type":"excalidraw","elements":[]}');
+  await writeFile(path.join(files, 'throughput.a3f9c2e1.csv'), 'week,orders\n2026-10-05,412\n2026-10-12,455\n');
+  await writeFile(path.join(files, 'sketch.a3f9c2e1.excalidraw'), '{"type":"excalidraw","elements":[]}');
   await writeFile(path.join(files, 'old-format.a3f9c2e1.avi'), Buffer.from('RIFF\u0000\u0000\u0000\u0000AVI LIST', 'latin1'));
   // Still on the Mini: a placeholder with no object here.
   await writeFile(path.join(files, 'board-deck.b7c8d9e0.pdf'), pointer(Buffer.from('a deck that lives on the Mini')));
@@ -118,12 +118,12 @@ export default async function setup(vault, pageDir = path.join(vault, 'Gallery')
   // Moved: linked from 2026-11, kept in 2026-10 with the same hash.
   await writeFile(path.join(older, 'site-photo.c0ffee12.png'), shade(480, 270));
 
-  await writeFile(path.join(assets, 'rig.png'), shade(960, 540));
-  await writeFile(path.join(assets, 'bit.png'), ring(400, 300));
+  await writeFile(path.join(assets, 'wide.png'), shade(960, 540));
+  await writeFile(path.join(assets, 'ring.png'), ring(400, 300));
   await writeFile(path.join(assets, 'appendix.pdf'), pdf(['Appendix']));
 
   const movie = await ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=640x360:rate=12', '-vf', 'hue=s=0', '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-movflags', '+faststart', '-y', path.join(files, 'night-shift.a3f9c2e1.mp4')]);
-  if (movie) await ffmpeg(['-i', path.join(files, 'night-shift.a3f9c2e1.mp4'), '-c', 'copy', '-y', path.join(assets, 'rollout.mp4')]);
-  const audio = await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=330:duration=4', '-c:a', 'aac', '-b:a', '64k', '-y', path.join(files, 'standup-memo.a3f9c2e1.m4a')]);
+  if (movie) await ffmpeg(['-i', path.join(files, 'night-shift.a3f9c2e1.mp4'), '-c', 'copy', '-y', path.join(assets, 'clip.mp4')]);
+  const audio = await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=330:duration=4', '-c:a', 'aac', '-b:a', '64k', '-y', path.join(files, 'voice-memo.a3f9c2e1.m4a')]);
   return { movie, audio, files, assets };
 }
