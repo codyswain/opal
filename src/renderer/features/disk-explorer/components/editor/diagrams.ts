@@ -57,6 +57,8 @@ export function pocketSteps(source: string): string[] | null {
   return steps.length > 0 ? steps : null;
 }
 
+const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 const ARROW = '<svg viewBox="0 0 12 20" width="12" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v17"/><path d="m2 14 4 4 4-4"/></svg>';
 
 function drawPocket(steps: readonly string[], parent: HTMLElement): void {
@@ -389,6 +391,25 @@ export class DiagramWidget extends WidgetType {
       control.append(diagram, code);
       head.append(control);
     }
+    // Copy, as on a code block's header: the diagram's source.
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'cm-code-copy';
+    copy.tabIndex = -1;
+    copy.setAttribute('aria-label', 'Copy diagram source');
+    copy.innerHTML = `${COPY_ICON}<span>Copy</span>`;
+    copy.addEventListener('mousedown', (event) => event.preventDefault());
+    copy.addEventListener('click', () => {
+      void navigator.clipboard?.writeText(this.source).then(() => {
+        copy.dataset.copied = 'true';
+        copy.innerHTML = `${CHECK_ICON}<span>Copied</span>`;
+        window.setTimeout(() => {
+          delete copy.dataset.copied;
+          copy.innerHTML = `${COPY_ICON}<span>Copy</span>`;
+        }, 1500);
+      });
+    });
+    head.append(copy);
     box.append(head, canvas);
     frame.append(box);
     drawInto(canvas, this.kind, this.source, true);

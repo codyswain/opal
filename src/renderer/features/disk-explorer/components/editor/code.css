@@ -575,6 +575,16 @@
   line-height: 1.4;
 }
 
+/* A diagram's Copy shows on hover, as a code block's does. */
+.opal-editor .cm-editor .cm-diagram-header .cm-code-copy {
+  margin-left: 4px;
+}
+
+.opal-editor .cm-editor .cm-diagram:hover .cm-diagram-header .cm-code-copy,
+.opal-editor .cm-editor .cm-diagram[data-object-framed] .cm-diagram-header .cm-code-copy {
+  opacity: 1;
+}
+
 /* Diagram and Code: a two-part control in greys. */
 .opal-editor .cm-editor .cm-diagram-modes {
   display: inline-flex;
