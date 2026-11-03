@@ -84,14 +84,19 @@
 
 .opal-editor .cm-editor .cm-code-open-end {
   display: block;
+  /* Out of the code's hanging indent, in the code's own font, so the footer lines up with the code. */
+  margin-left: -2ch;
   padding: 0.4em 0 0.15em;
   text-indent: 0;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-code-open-end-text {
   color: hsl(var(--text-tertiary));
   font-family: var(--font-sans);
   font-feature-settings: var(--font-features);
   font-size: var(--text-label-size);
   line-height: 1.4;
-  user-select: none;
 }
 
 .opal-editor .cm-editor .cm-code-end-here {
@@ -129,6 +134,66 @@
   border-bottom-right-radius: var(--radius-row);
 }
 
+/* A long block: its last shown line fades into the grey, then "Show all N lines". */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-fade::after,
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-fade::after {
+  position: absolute;
+  left: var(--code-box-left, 0);
+  right: var(--code-right, 0px);
+  bottom: 0;
+  height: 1.6em;
+  background:
+    linear-gradient(to bottom, transparent, var(--editor-sunken)),
+    linear-gradient(to bottom, hsl(var(--canvas) / 0), hsl(var(--canvas)));
+  content: "";
+  pointer-events: none;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-fade {
+  position: relative;
+}
+
+.opal-editor .cm-editor .cm-code-collapsed-box {
+  display: flex;
+  justify-content: center;
+  padding: 2px 1em 6px;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+}
+
+.opal-editor .cm-editor .cm-md-in-callout .cm-code-collapsed-box {
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-box .cm-code-collapsed-box {
+  padding: 4px 0 0;
+  background: none;
+}
+
+.opal-editor .cm-editor .cm-code-show-all {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-show-all:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-show-all:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
 /* The header's contents: the language on the left, Copy on the right. */
 .opal-editor .cm-editor .cm-code-header {
   display: inline-flex;
@@ -153,9 +218,49 @@
 }
 
 .opal-editor .cm-editor .cm-code-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  margin-left: -6px;
+  padding: 0 4px 0 6px;
   overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 22px;
   white-space: nowrap;
   text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-label:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-label:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+  opacity: 1;
+}
+
+/* The chevron shows on hover or with the caret in the block. */
+.opal-editor .cm-editor .cm-code-chevron {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-header:hover .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-header[data-hover] .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-header[data-active] .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-label:focus-visible .cm-code-chevron {
+  opacity: 1;
 }
 
 .opal-editor .cm-editor .cm-code-copy {
@@ -287,7 +392,73 @@
   max-width: 100%;
 }
 
+/* The language menu: the popover surface, a search field over the list. */
+.opal-code-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  box-sizing: border-box;
+  width: 220px;
+  max-height: 300px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid hsl(var(--border-overlay));
+  border-radius: var(--radius-overlay);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-overlay);
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: 13px;
+}
+
+.opal-code-menu-search {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-default));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font: inherit;
+  outline: none;
+}
+
+.opal-code-menu-search:focus {
+  border-color: hsl(var(--foreground) / 0.4);
+}
+
+.opal-code-menu-list {
+  overflow-y: auto;
+}
+
+.opal-code-menu-item {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  user-select: none;
+}
+
+.opal-code-menu-item[data-active],
+.opal-code-menu-item:hover {
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-code-menu-empty {
+  padding: 6px 8px;
+  color: hsl(var(--text-tertiary));
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-code-chevron,
+  .opal-editor .cm-editor .cm-code-show-all,
+  .opal-editor .cm-editor .cm-code-label,
   .opal-editor .cm-editor .cm-code-copy,
   .opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label {
     transition: none;

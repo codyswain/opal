@@ -258,16 +258,24 @@ interface LinkDefinitions {
   long: readonly { line: number; from: number; to: number }[];
 }
 
+// A fence line: its marks and what follows them.
+const FENCE_LINE = /^[ \t>]*(`{3,}|~{3,})(.*)$/;
+
 /**
  * Reads definitions off the text rather than the syntax tree: exports put
- * them at the end of long notes, past where the parser has read.
+ * them at the end of long notes, past where the parser has read. A
+ * "[label]: url" line inside a fenced code block is code, not a definition.
  */
 function findDefinitions(doc: Text): LinkDefinitions {
   const targets = new Map<string, string>();
   const long: { line: number; from: number; to: number }[] = [];
   let at = 0;
+  let fence: string | null = null;
   for (const line of doc.iterLines()) {
-    const match = line.includes(']:') ? DEFINITION.exec(line) : null;
+    const marks = line.includes('``') || line.includes('~~') ? FENCE_LINE.exec(line) : null;
+    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) fence = marks[1];
+    else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
+    const match = fence === null && line.includes(']:') ? DEFINITION.exec(line) : null;
     if (match) {
       const key = referenceKey(match[1]);
       if (!targets.has(key)) targets.set(key, unwrap(match[2]));

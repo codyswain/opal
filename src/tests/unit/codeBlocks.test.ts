@@ -3,7 +3,7 @@ import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { codeText, copiedCode, copyCode, fenceAt, setLanguage, toggleCodeBlock } from '@/renderer/features/disk-explorer/components/editor/codeBlocks';
+import { codeText, collapsedBlocks, copiedCode, copyCode, fenceAt, setLanguage, toggleCodeBlock } from '@/renderer/features/disk-explorer/components/editor/codeBlocks';
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { objectAt, objectKind } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
@@ -344,6 +344,74 @@ describe('a code block in a document', () => {
     expect(view.contentDOM.querySelector('.cm-code-diff-add')?.textContent).toBe('+new');
     expect(view.contentDOM.querySelector('.cm-code-diff-del')?.textContent).toBe('-old');
     expect(view.contentDOM.querySelector('.cm-code-diff-meta')?.textContent).toBe('@@ -1 +1 @@');
+  });
+});
+
+describe('the header and long blocks', () => {
+  it('opens a language menu whose search writes nothing, and a pick writes the info string\'s first word', async () => {
+    const doc = '```ts title="a"\ncode\n```\n';
+    const view = mount(doc);
+    const label = view.contentDOM.querySelector('.cm-code-label') as HTMLElement;
+    expect(label.getAttribute('aria-label')).toBe('Language, TypeScript');
+    act(() => { label.click(); });
+    const search = document.querySelector('.opal-code-menu-search') as HTMLInputElement;
+    expect(search).not.toBeNull();
+    act(() => {
+      search.value = 'pyth';
+      search.dispatchEvent(new Event('input'));
+    });
+    expect([...document.querySelectorAll('.opal-code-menu-item')].map((item) => item.textContent)).toEqual(['Python']);
+    expect(text(view)).toBe(doc);
+    act(() => { search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); });
+    expect(text(view)).toBe('```python title="a"\ncode\n```\n');
+    expect(document.querySelector('.opal-code-menu')).toBeNull();
+  });
+
+  it('shows Plain text only as a quiet label for a fence with no language', () => {
+    const view = mount('```\nx\n```\n');
+    const header = view.contentDOM.querySelector('.cm-code-header') as HTMLElement;
+    expect(header.dataset.quiet).toBe('true');
+    expect(header.textContent).toContain('Plain text');
+    expect(header.getAttribute('aria-label')).toBe('Code');
+  });
+
+  it('moves focus to the header\'s buttons on Option+F10 with the caret in a block', async () => {
+    const doc = 'A\n\n```sh\nls\n```\n';
+    const view = mount(doc, doc.indexOf('ls'));
+    await focusPage(view);
+    key(view, 'F10', { altKey: true });
+    expect(document.activeElement?.classList.contains('cm-code-label')).toBe(true);
+  });
+
+  it('collapses a block over 40 lines behind Show all, steps over the hidden lines, and shows them for a search match', async () => {
+    const code = Array.from({ length: 60 }, (_, line) => `line ${line}`).join('\n');
+    const doc = `Top\n\n\`\`\`\n${code}\n\`\`\`\nAfter\n`;
+    const view = mount(doc);
+    await focusPage(view);
+    expect(collapsedBlocks(view.state)).toEqual([{ from: doc.indexOf('line 40'), to: doc.indexOf('\n```\nAfter'), block: doc.indexOf('```') }]);
+    select(view, doc.indexOf('line 39') + 7);
+    key(view, 'ArrowRight');
+    expect(caret(view)).toBe(doc.indexOf('After'));
+    act(() => { view.dispatch({ selection: EditorSelection.range(doc.indexOf('line 50'), doc.indexOf('line 50') + 7), userEvent: 'select.search' }); });
+    expect(view.state.selection.main.from).toBe(doc.indexOf('line 50'));
+    expect(collapsedBlocks(view.state)).toEqual([]);
+    expect(text(view)).toBe(doc);
+  });
+
+  it('collapses a long block in a note too, until Show all', () => {
+    const code = Array.from({ length: 45 }, (_, line) => `l${line}`).join('\n');
+    const view = mount(`\`\`\`\n${code}\n\`\`\`\n`, 0, NOTE);
+    const block = view.contentDOM.querySelector('.cm-md-codeblock-widget') as HTMLElement;
+    expect(block.querySelectorAll('[data-offset]')).toHaveLength(40);
+    act(() => { (block.querySelector('.cm-code-show-all') as HTMLElement).click(); });
+    expect(block.querySelectorAll('[data-offset]')).toHaveLength(45);
+  });
+
+  it('never reads a [ref]: url line inside code as a link definition', () => {
+    const view = mount('See [docs] here.\n\n```\n[docs]: https://example.com\n```\n', 0, NOTE);
+    expect(view.contentDOM.querySelector('[data-href]')).toBeNull();
+    const defined = mount('See [docs] here.\n\n[docs]: https://example.com\n', 0, NOTE);
+    expect(defined.contentDOM.querySelector('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
   });
 });
 

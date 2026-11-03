@@ -184,6 +184,7 @@ export function inCodeBlock(state: EditorState): boolean {
 const ICONS = {
   copy: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+  chevron: '<svg class="cm-code-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
 };
 
 const COPIED_MS = 1500;
@@ -242,20 +243,144 @@ class CodeHeaderWidget extends WidgetType {
     head.setAttribute('aria-label', this.quiet ? 'Code' : `Code, ${this.label}`);
     if (this.quiet) head.dataset.quiet = 'true';
     if (this.active) head.dataset.active = 'true';
-    const label = document.createElement('span');
-    label.className = 'cm-code-label';
-    label.textContent = this.label;
+    const label = button('cm-code-label', `Language, ${this.label}`, '');
+    label.append(this.label);
+    label.insertAdjacentHTML('beforeend', ICONS.chevron);
+    label.setAttribute('aria-haspopup', 'listbox');
+    label.addEventListener('click', () => openLanguageMenu(view, label, view.posAtDOM(head)));
     const copy = button('cm-code-copy', 'Copy code', `${ICONS.copy}<span>Copy</span>`);
     copy.addEventListener('click', () => { copyCode(view, view.posAtDOM(head), copy); });
     head.append(label, copy);
+    // Arrow keys move between the header's buttons; Escape goes back to the code.
+    head.addEventListener('keydown', (event) => {
+      const buttons = [label, copy];
+      const at = buttons.indexOf(event.target as HTMLButtonElement);
+      if (at === -1) return;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        buttons[(at + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length].focus();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        view.focus();
+      }
+    });
     return head;
   }
 
-  // Its buttons handle their own clicks; a click anywhere else reaches the editor and frames the block.
+  // Its buttons handle their own clicks and keys; a click anywhere else reaches the editor and frames the block.
   ignoreEvent(event: Event) {
     return event.target instanceof Element && event.target.closest('button') !== null;
   }
 }
+
+/** The language menu of a block's header: a search field over the list. Searching writes nothing; a pick writes the info string's first word. */
+let openMenu: { close: () => void } | null = null;
+
+function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): void {
+  openMenu?.close();
+  const fence = fenceAt(view.state, at);
+  if (!fence) return;
+  const current = fenceLanguage(fence.info.text);
+  const options = [
+    { id: 'text', label: 'Plain text', names: ['text', 'plain'], on: current.quiet },
+    ...CODE_LANGUAGES.map((language) => ({ id: language.id, label: language.label, names: language.names, on: current.language?.id === language.id })),
+    { id: 'mermaid', label: 'Mermaid diagram', names: ['mermaid', 'diagram'], on: current.word.toLowerCase() === 'mermaid' },
+  ];
+  const menu = document.createElement('div');
+  menu.className = 'opal-code-menu';
+  menu.setAttribute('role', 'dialog');
+  menu.setAttribute('aria-label', 'Language');
+  const search = document.createElement('input');
+  search.className = 'opal-code-menu-search';
+  search.placeholder = 'Search languages';
+  search.setAttribute('aria-label', 'Search languages');
+  search.spellcheck = false;
+  const list = document.createElement('div');
+  list.className = 'opal-code-menu-list';
+  list.setAttribute('role', 'listbox');
+  menu.append(search, list);
+  let shown = options;
+  let active = Math.max(0, options.findIndex((option) => option.on));
+  const close = () => {
+    menu.remove();
+    document.removeEventListener('mousedown', outside, true);
+    if (openMenu?.close === close) openMenu = null;
+  };
+  const pick = (id: string) => {
+    close();
+    setLanguage(view, at, id);
+    view.focus();
+  };
+  const render = () => {
+    list.textContent = '';
+    shown.forEach((option, index) => {
+      const row = document.createElement('div');
+      row.className = 'opal-code-menu-item';
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(index === active));
+      if (index === active) row.dataset.active = 'true';
+      row.textContent = option.label;
+      if (option.on) row.insertAdjacentHTML('beforeend', ICONS.check);
+      row.addEventListener('mousedown', (event) => event.preventDefault());
+      row.addEventListener('click', () => pick(option.id));
+      list.append(row);
+    });
+    if (shown.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'opal-code-menu-empty';
+      empty.textContent = 'No language matches';
+      list.append(empty);
+    }
+    list.querySelector('[data-active]')?.scrollIntoView?.({ block: 'nearest' });
+  };
+  search.addEventListener('input', () => {
+    const query = search.value.trim().toLowerCase();
+    shown = options.filter((option) => !query || option.label.toLowerCase().includes(query) || option.names.some((name) => name.startsWith(query)));
+    active = 0;
+    render();
+  });
+  search.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (shown.length > 0) active = (active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length;
+      render();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (shown[active]) pick(shown[active].id);
+    } else if (event.key === 'Escape' || event.key === 'Tab') {
+      event.preventDefault();
+      close();
+      view.focus();
+    }
+  });
+  const outside = (event: MouseEvent) => {
+    if (!menu.contains(event.target as Node)) close();
+  };
+  document.addEventListener('mousedown', outside, true);
+  render();
+  document.body.append(menu);
+  const box = anchor.getBoundingClientRect();
+  const height = menu.offsetHeight || 280;
+  const below = box.bottom + 4 + height <= window.innerHeight - 8;
+  menu.style.top = `${Math.max(8, below ? box.bottom + 4 : box.top - 4 - height)}px`;
+  menu.style.left = `${Math.max(8, Math.min(box.left - 4, window.innerWidth - 8 - (menu.offsetWidth || 220)))}px`;
+  search.focus();
+  openMenu = { close };
+}
+
+/** Option+F10 or ⌃⌥T with the caret in a block: focus moves to its header's buttons. */
+const focusHeader: Command = (view) => {
+  const inside = codeAt(view.state, view.state.selection.main.head);
+  if (!inside) return false;
+  for (const header of view.contentDOM.querySelectorAll<HTMLElement>('.cm-code-header')) {
+    let at: number;
+    try { at = view.posAtDOM(header); } catch { continue; }
+    if (at !== inside.fence.node.from) continue;
+    header.querySelector<HTMLElement>('button')?.focus();
+    return true;
+  }
+  return false;
+};
 
 /** The muted "Code" in an empty block's one line. */
 class PlaceholderWidget extends WidgetType {
@@ -279,13 +404,16 @@ class OpenEndWidget extends WidgetType {
     const foot = document.createElement('span');
     foot.className = 'cm-code-open-end';
     foot.setAttribute('contenteditable', 'false');
+    const inner = document.createElement('span');
+    inner.className = 'cm-code-open-end-text';
+    foot.append(inner);
     const note = document.createElement('span');
     note.textContent = 'No closing fence';
     const dot = document.createElement('span');
     dot.textContent = ' · ';
     const end = button('cm-code-end-here', 'End code here', 'End code here');
     end.addEventListener('click', () => { endCodeHere(view, view.posAtDOM(foot)); });
-    foot.append(note, dot, end);
+    inner.append(note, dot, end);
     return foot;
   }
 
@@ -332,27 +460,43 @@ export class CodeBlockWidget extends WidgetType {
     lines.className = 'cm-md-codeblock-lines';
     box.append(lines);
     frame.append(box);
-    this.fill(lines);
+    // A long block shows its first lines until Show all, which writes nothing.
+    let limit = this.offsets.length > COLLAPSE_AFTER ? COLLAPSE_AFTER : Infinity;
+    this.fill(lines, limit);
+    if (limit !== Infinity) {
+      const total = this.offsets.length.toLocaleString('en-US');
+      const show = button('cm-code-show-all', `Show all ${total} lines`, `Show all ${total} lines`);
+      const row = document.createElement('div');
+      row.className = 'cm-code-collapsed-box';
+      row.append(show);
+      box.append(row);
+      show.addEventListener('click', () => {
+        limit = Infinity;
+        row.remove();
+        this.fill(lines, limit);
+      });
+    }
     // A language still loading colours the block once it is ready.
     if (this.language.language && highlightMarks(this.code, this.language.language).length === 0 && this.code.trim()) {
       const stop = onLanguageLoaded(() => {
         stop();
-        if (lines.isConnected) this.fill(lines);
+        if (lines.isConnected) this.fill(lines, limit);
       });
     }
     return frame;
   }
 
-  fill(parent: HTMLElement) {
+  fill(parent: HTMLElement, limit: number) {
     parent.textContent = '';
     const marks = highlightMarks(this.code, this.language.language);
     const diff = this.language.language?.id === 'diff';
     let at = 0;
     let next = 0;
-    this.code.split('\n').forEach((text, index) => {
+    this.code.split('\n').slice(0, limit).forEach((text, index, shown) => {
       const element = document.createElement('div');
       element.dataset.offset = String(this.offsets[index]);
       if (diff) element.className = diffClass(text);
+      if (index === COLLAPSE_AFTER - 1 && shown.length < this.offsets.length) element.classList.add('cm-code-fade');
       const end = at + text.length;
       let written = at;
       for (; next < marks.length && marks[next].from < end; next += 1) {
@@ -376,9 +520,12 @@ export class CodeBlockWidget extends WidgetType {
     });
   }
 
-  get estimatedHeight() { return this.offsets.length * 21 + 26; }
+  get estimatedHeight() { return Math.min(this.offsets.length, COLLAPSE_AFTER + 1) * 21 + 26; }
 
-  ignoreEvent() { return false; }
+  // Show all handles its own click; a click anywhere else puts the caret in the code.
+  ignoreEvent(event: Event) {
+    return event.target instanceof Element && event.target.closest('button') !== null;
+  }
 }
 
 /** A diff line's look: an added line on a grey fill, a removed one struck through, a hunk header muted. */
@@ -387,6 +534,128 @@ function diffClass(text: string): string {
   if (text.startsWith('+')) return 'cm-code-diff-add';
   if (text.startsWith('-')) return 'cm-code-diff-del';
   return '';
+}
+
+// ---------------------------------------------------------------------------
+// Long blocks
+
+/** Blocks longer than this show their first lines and "Show all N lines". */
+export const COLLAPSE_AFTER = 40;
+
+/** Shows all of the block whose opening fence starts at this position. */
+const expandCode = StateEffect.define<number>();
+
+interface CollapsedBlock {
+  /** The hidden lines: from the first one past the cut to the last code line's end. */
+  from: number;
+  to: number;
+  /** Where the block's opening fence starts. */
+  block: number;
+}
+
+interface Collapse {
+  expanded: readonly number[];
+  blocks: readonly CollapsedBlock[];
+  decorations: DecorationSet;
+}
+
+/** "Show all N lines" under a long block's first lines. */
+class ShowAllWidget extends WidgetType {
+  constructor(readonly hidden: number, readonly total: number, readonly block: number, readonly context: BlockContext, readonly indent: number) { super(); }
+
+  eq(other: ShowAllWidget) {
+    return other.total === this.total && other.hidden === this.hidden && other.context === this.context && other.indent === this.indent;
+  }
+
+  toDOM(view: EditorView) {
+    const frame = blockFrame('cm-code-collapsed', this.context, this.indent);
+    const box = document.createElement('div');
+    box.className = 'cm-code-collapsed-box';
+    const show = button('cm-code-show-all', `Show all ${this.total.toLocaleString('en-US')} lines`, `Show all ${this.total.toLocaleString('en-US')} lines`);
+    show.addEventListener('click', () => {
+      const at = view.posAtDOM(frame);
+      const fence = fenceAt(view.state, Math.max(0, at - 1));
+      if (fence) view.dispatch({ effects: expandCode.of(fence.open.from) });
+    });
+    box.append(show);
+    frame.append(box);
+    return frame;
+  }
+
+  get estimatedHeight() { return 36; }
+
+  ignoreEvent(event: Event) {
+    return event.target instanceof Element && event.target.closest('button') !== null;
+  }
+}
+
+const CALLOUT_LINE = /^(?:[ \t]*>[ \t]?)+\[![\w-]+\]/;
+
+/** Where a block sits for a widget drawn in it: a quote or callout, and its list indent. */
+function contextOf(state: EditorState, node: SyntaxNode): BlockContext {
+  let quote: SyntaxNode | null = null;
+  for (let at = node.parent; at; at = at.parent) if (at.name === 'Blockquote') quote = at;
+  if (!quote) return null;
+  return CALLOUT_LINE.test(state.doc.lineAt(quote.from).text) ? 'callout' : 'quote';
+}
+
+function collapseBlocks(state: EditorState, expanded: readonly number[]): Collapse {
+  const blocks: CollapsedBlock[] = [];
+  const widgets: ReturnType<Decoration['range']>[] = [];
+  syntaxTree(state).iterate({
+    enter: (ref) => {
+      if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
+      const fence = fenceOf(state, ref.node);
+      const { lines } = fence;
+      if (lines.length <= COLLAPSE_AFTER || expanded.includes(fence.open.from)) return false;
+      const from = lines[COLLAPSE_AFTER].line.from;
+      const to = lines[lines.length - 1].line.to;
+      blocks.push({ from, to, block: fence.open.from });
+      const widget = new ShowAllWidget(lines.length - COLLAPSE_AFTER, lines.length, fence.open.from, contextOf(state, ref.node), listIndent(ref.node));
+      widgets.push(Decoration.replace({ widget, block: true }).range(from, to));
+      return false;
+    },
+  });
+  return { expanded, blocks, decorations: Decoration.set(widgets) };
+}
+
+const LEAF = new Set(['Paragraph', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'ATXHeading6', 'SetextHeading1', 'SetextHeading2', 'CodeBlock', 'HTMLBlock', 'CommentBlock', 'LinkReference', 'HorizontalRule', 'Table']);
+
+/** A document's long blocks, collapsed until shown. View-only: nothing is written. */
+const collapsedCode = StateField.define<Collapse>({
+  create: (state) => collapseBlocks(state, []),
+  update(value, tr) {
+    let expanded = tr.docChanged ? value.expanded.map((at) => tr.changes.mapPos(at)) : value.expanded;
+    let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state);
+    for (const effect of tr.effects) {
+      if (effect.is(expandCode)) {
+        expanded = [...expanded, effect.value];
+        changed = true;
+      }
+    }
+    return changed ? collapseBlocks(tr.state, expanded) : value;
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+});
+
+/** The collapsed blocks of a document, for tests. */
+export function collapsedBlocks(state: EditorState): readonly CollapsedBlock[] {
+  return state.field(collapsedCode, false)?.blocks ?? [];
+}
+
+/** The collapsed block that `fence` is, if it is one. */
+function collapsedOf(state: EditorState, fence: Fence): CollapsedBlock | null {
+  return state.field(collapsedCode, false)?.blocks.find((block) => block.block === fence.open.from) ?? null;
+}
+
+/** A selection that lands in a collapsed block, as a search match does, shows all of it first. */
+function expandForSelection(tr: Transaction): TransactionSpec | readonly TransactionSpec[] | null {
+  if (!tr.selection || tr.docChanged) return null;
+  const collapse = tr.startState.field(collapsedCode, false);
+  if (!collapse || collapse.blocks.length === 0) return null;
+  const { main } = tr.selection;
+  const hit = collapse.blocks.find((block) => main.to >= block.from && main.from <= block.to);
+  return hit ? [tr, { effects: expandCode.of(hit.block) }] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +691,9 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   const style = indent ? `--code-indent: ${indent}em` : undefined;
   const shown = (line: Line) => line.to >= ctx.from && line.from <= ctx.to;
   for (const unit of fenceUnits(doc, fence)) ctx.unit(unit.from, unit.to);
+  // A collapsed block's hidden lines are one step for the caret, together with the closing fence.
+  const collapsed = collapsedOf(state, fence);
+  if (collapsed) ctx.unit(lines[COLLAPSE_AFTER - 1].line.to, close && close.to < doc.length ? close.to + 1 : (close ?? lines[lines.length - 1].line).to);
 
   if (shown(open)) {
     ctx.lineClass(open.from, 'cm-code-line cm-code-head', style);
@@ -430,9 +702,10 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   }
   const diff = language.language?.id === 'diff';
   lines.forEach(({ line, from }, index) => {
-    if (!shown(line)) return;
+    if (!shown(line) || (collapsed && index >= COLLAPSE_AFTER)) return;
     const last = index === lines.length - 1;
     const classes = ['cm-code-line'];
+    if (collapsed && index === COLLAPSE_AFTER - 1) classes.push('cm-code-fade');
     if (last && (after || !close)) classes.push('cm-code-bottom');
     if (last && !close) classes.push('cm-code-unclosed');
     if (diff) classes.push(diffClass(doc.sliceString(from, line.to)));
@@ -1165,7 +1438,9 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
     madeFence,
     framedLines,
     hoverHeader,
-    Prec.high(EditorState.transactionFilter.of((tr) => guardFences(tr) ?? tr)),
+    collapsedCode,
+    // Filters run lowest precedence first, so these run before doc mode settles the caret.
+    Prec.low(EditorState.transactionFilter.of((tr) => guardFences(tr) ?? expandForSelection(tr) ?? tr)),
     Prec.highest(keymap.of([
       { key: 'Enter', run: (view) => makeFence(view) || codeEnter(view) },
       { key: 'Backspace', run: (view) => unmakeFence(view) || indentedBackspace(view) },
@@ -1178,6 +1453,8 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
       { key: 'Mod-e', run: (view) => inCode(view) || toggleInline(view) },
       { key: 'Mod-k', run: (view) => linkAroundCode(view) || editLink(view) },
       { key: 'Mod-Alt-c', run: toggleCodeBlock },
+      { key: 'Alt-F10', run: focusHeader },
+      { key: 'Ctrl-Alt-t', run: focusHeader },
       ...['Mod-b', 'Mod-i', 'Mod-Shift-x', 'Mod-Shift-7', 'Mod-Shift-8', 'Mod-Shift-9', ...[0, 1, 2, 3, 4, 5, 6].map((level) => `Mod-Alt-${level}`)]
         .map((key) => ({ key, run: inCode })),
     ])),
