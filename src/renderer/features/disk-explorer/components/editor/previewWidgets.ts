@@ -161,7 +161,7 @@ export interface ImageExtras {
   /** Reads width over height when it was not known yet, so the box has its height before the bytes arrive. */
   measure?: (file: string) => Promise<number | null>;
   /** Draws a file that is gone, not downloaded, or unreadable in place of the image. */
-  fail?: (view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable') => void;
+  fail?: (view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable' | 'remote') => void;
 }
 
 /** Stops watching the folder of a picture that waits for its bytes, once its frame is gone. */
@@ -211,7 +211,10 @@ export class ImageWidget extends WidgetType {
         if (ratio) image.style.aspectRatio = String(ratio);
       });
     }
-    image.addEventListener('load', () => view.requestMeasure());
+    image.addEventListener('load', () => {
+      image.dataset.loaded = '';
+      view.requestMeasure();
+    });
     image.addEventListener('error', () => { void this.explainMissing(view, frame, image); });
     box.append(image);
     frame.append(box);
@@ -267,11 +270,11 @@ export class ImageWidget extends WidgetType {
     }
     const status = file ? await fileStatus(file) : null;
     const { fail } = this.extras;
-    if (file && status === 'remote') {
+    if (fail && file) {
+      fail(view, frame, status === 'remote' ? 'remote' : status === 'missing' ? 'missing' : 'unreadable');
+    } else if (file && status === 'remote') {
       frame.replaceChildren();
       this.offerDownload(view, frame, file);
-    } else if (fail && file) {
-      fail(view, frame, status === 'missing' ? 'missing' : 'unreadable');
     } else {
       frame.replaceChildren();
       frame.classList.add('cm-md-image-missing');

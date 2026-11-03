@@ -3,7 +3,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from 
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
 import { storedExtension, type FileKind } from '@/common/fileKind';
-import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
+import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { FileInfo } from '@/types/files';
 import { nodeDecorators, objectKinds, type DecorateContext, type ObjectKind } from './extensionPoints';
@@ -99,6 +99,12 @@ const keyOf = (drawn: Drawn, extra = '') => {
   const { ref } = drawn;
   return [ref.form, ref.target, ref.fragment ?? '', ref.slot ?? '', ref.text ?? '', String(ref.path), ref.alone, drawn.name, drawn.version, extra].join('\u0000');
 };
+
+/** Names a card or preview for VoiceOver by its kind and name: "PDF, Q3 report". */
+function labelObject(dom: HTMLElement, ref: FileRef, name: string): void {
+  dom.setAttribute('role', 'group');
+  dom.setAttribute('aria-label', `${kindLabel(fileName(ref), ref.kind)}, ${name}`);
+}
 
 /** The link a widget stands for, found again from its place on the page, since edits move it. */
 function refFrom(view: EditorView, dom: HTMLElement): FileRef | null {
@@ -212,13 +218,19 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
         break;
       }
       default:
-        meta.textContent = service ? `${service} video · ${hostOf(ref.url ?? '')}` : metaLine(fileName(ref), ref.kind, info);
+        meta.textContent = service ? addressOf(ref.url ?? '') : metaLine(fileName(ref), ref.kind, info);
     }
     if (state === 'ready' && service && ref.url) videoStill(view, card, tile, actions, ref.url);
     body.append(title, meta);
     card.append(tile, body);
     if (actions.childElementCount > 0) card.append(actions);
-    card.setAttribute('aria-label', `${service ? `${service} video` : kindLabel(fileName(ref), ref.kind)}, ${name}`);
+    if (service) {
+      card.setAttribute('role', 'group');
+      card.setAttribute('aria-label', `${service} video, ${name}`);
+    } else {
+      labelObject(card, ref, name);
+    }
+    if (state === 'remote' && ref.path) watchForBytes(view, card, ref.path);
     if (state === 'ready' && ref.path && !service) dragOut(tile, ref.path);
     if (state === 'ready' && ref.path && !service && hasPicture(ref)) {
       void thumbnailInto(view, tile, ref.path);
@@ -255,6 +267,23 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
   void appFor(path);
 }
 
+/** The vault's sync may bring a file's bytes before Get from Mini does: the page draws it again when its folder changes. */
+function watchForBytes(view: EditorView, card: HTMLElement, path: string): void {
+  if (card.dataset.watching) return;
+  card.dataset.watching = 'on';
+  const folder = parentFsPath(path);
+  const stop = window.diskAPI.onChanged(({ directories }) => {
+    if (!card.isConnected || !view.dom.isConnected) {
+      stop();
+      return;
+    }
+    if (!folder || !directories.includes(folder)) return;
+    stop();
+    forgetInfo(path);
+    view.dispatch({ effects: fileChanged.of(toOpalFileUrl(path)) });
+  });
+}
+
 /** Where a wiki link's target would be if it is a path from the vault's top, as Opal writes stored files. */
 function storedPathOf(view: EditorView, ref: FileRef): string | null {
   if (ref.form !== 'wiki' && ref.form !== 'embed') return null;
@@ -273,8 +302,14 @@ function hasPicture(ref: FileRef): boolean {
   return PICTURED.has(storedExtension(basenameFsPath(ref.path ?? ref.target)));
 }
 
-const hostOf = (url: string) => {
-  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+/** A web address as a card's second line: "youtube.com/watch?v=dQw4w9WgXcQ". */
+const addressOf = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.hostname.replace(/^www\./, '')}${parsed.pathname === '/' ? '' : parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
 };
 
 function stateOf(info: FileInfo | null | undefined): CardState {
@@ -392,6 +427,8 @@ function dragOut(tile: HTMLElement, path: string): void {
 
 const HOVER_MS = 400;
 const HOVER_PX = 240;
+// The floating picture's height at most, with its padding and the 8px gap.
+const HOVER_ROOM = HOVER_PX + 18;
 
 /** After 400 ms on a card with a picture, a 240px preview of it floats above the card. Off under reduced motion. */
 function hoverPreview(card: HTMLElement, path: string): void {
@@ -413,6 +450,9 @@ function hoverPreview(card: HTMLElement, path: string): void {
         image.src = url;
         image.alt = '';
         float.append(image);
+        // Under the card when the picture would go past the top of the page's scroller.
+        const top = card.closest('.cm-scroller')?.getBoundingClientRect().top ?? 0;
+        if (card.getBoundingClientRect().top - HOVER_ROOM < top) float.classList.add('cm-file-hover-below');
         card.append(float);
       });
     }, HOVER_MS);
@@ -459,6 +499,7 @@ export class PdfPreviewWidget extends WidgetType {
     const { ref, name } = this.drawn;
     const preview = element('span', 'cm-file-preview cm-file-pdf');
     preview.dataset.object = 'file';
+    labelObject(preview, ref, name);
     const height = fragmentValue(ref, 'height') ?? PDF_HEIGHT;
     const page = element('span', 'cm-file-pdf-page');
     page.style.height = `${height}px`;
@@ -654,6 +695,7 @@ export class VideoWidget extends WidgetType {
     const { ref } = this.drawn;
     const wrap = element('span', 'cm-file-figure');
     const box = element('span', 'cm-file-preview cm-file-video');
+    labelObject(box, this.drawn.ref, this.drawn.name);
     const width = slotWidth(ref.slot);
     if (width) {
       box.style.width = `${width}px`;
@@ -728,6 +770,7 @@ export class AudioWidget extends WidgetType {
     const wrap = element('span', 'cm-file-figure');
     const row = element('span', 'cm-file-preview cm-file-audio');
     row.dataset.object = 'file';
+    labelObject(row, ref, name);
     const meta = element('span', 'cm-file-card-meta');
     const body = element('span', 'cm-file-card-body');
     body.append(element('span', 'cm-file-card-name', name), meta);
@@ -775,7 +818,7 @@ export class AudioWidget extends WidgetType {
 }
 
 /** An image the vault can't show: gone (Locate…, Remove), moved (Update link), or unreadable (Open in Preview). */
-function imageFailure(view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable'): void {
+function imageFailure(view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable' | 'remote'): void {
   const at = refFrom(view, frame);
   if (!at) return;
   const state: CardState = reason;
@@ -811,8 +854,10 @@ function widgetFor(ctx: DecorateContext, ref: FileRef, look: FileLook): WidgetTy
   if (ref.kind === 'pdf') return new PdfPreviewWidget(drawn);
   if (ref.kind === 'video') return new VideoWidget(drawn);
   if (ref.kind === 'audio') return new AudioWidget(drawn);
-  const src = ref.path ? toOpalFileUrl(ref.path) : toOpalFileUrl(ref.target);
   const info = ref.path ? knownInfo(ref.path) : undefined;
+  // A picture known to be not on this Mac, or gone, is its card from the start.
+  if (info && stateOf(info) !== 'ready') return new FileCardWidget(drawn);
+  const src = ref.path ? toOpalFileUrl(ref.path) : toOpalFileUrl(ref.target);
   const ratio = info?.width && info.height ? info.width / info.height : null;
   return new ImageWidget(src, ref.form === 'image' ? ref.text ?? '' : fileName(ref), slotWidth(ref.slot), ctx.versions.get(src), false, {
     caption: captionOf(ref),

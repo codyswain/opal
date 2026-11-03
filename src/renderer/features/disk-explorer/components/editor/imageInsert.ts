@@ -14,7 +14,7 @@ import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
 import { WIKI_UNSAFE, escapeLinkText, linkFor, wikiAlias } from './fileActions';
 import { inCode, inTableAt } from './fileEmbeds';
-import { embedWidth } from './imageSize';
+import { embedWidth, imageSize } from './imageSize';
 import { linksResolved, pageContext } from './wikiLinks';
 
 /*
@@ -125,12 +125,17 @@ async function widthFor(view: EditorView, path: string): Promise<number | null> 
       ? { width: info.data.width, height: info.data.height, retina: info.data.retina ?? false }
       : null;
     if (!size) return null;
-    const style = getComputedStyle(view.contentDOM);
-    const column = view.contentDOM.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    return embedWidth(size, { width: column, height: Math.min(window.innerHeight, view.scrollDOM.clientHeight) });
+    return embedWidth(size, roomOf(view));
   } catch {
     return null;
   }
+}
+
+/** The column's width and one screen's height, which a new picture or video fits in. */
+function roomOf(view: EditorView): { width: number; height: number } {
+  const style = getComputedStyle(view.contentDOM);
+  const column = view.contentDOM.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
+  return { width: Math.max(0, column), height: Math.min(window.innerHeight, view.scrollDOM.clientHeight) };
 }
 
 type InsertEvent = 'input' | 'input.drop' | 'input.paste';
@@ -213,11 +218,19 @@ function looksFor(files: readonly { name: string }[], inline: boolean): InsertLo
   });
 }
 
+/** The box a file's look will take once it is in: a preview's width and height, or a card's height. */
+interface PendingSize {
+  preview: boolean;
+  width: number | null;
+  height: number;
+}
+
 /** A file being stored, drawn where it will go until it is in, or as an error card with Retry and Remove. */
 interface Pending {
   at: number;
   name: string;
   look: InsertLook;
+  size: PendingSize;
   failed: string | null;
   retry: () => void;
 }
@@ -243,26 +256,59 @@ const pendingFiles = StateField.define<ReadonlyMap<number, Pending>>({
     Decoration.widget({ widget: new PendingWidget(id, file), block: true, side: 1 }).range(file.at)), true)),
 });
 
-/** The height a file's look will have, so the page doesn't jump when it lands. */
-function pendingHeight(name: string, look: InsertLook): number {
-  const kind = classifyFile(name);
-  if (look !== 'default') return 64;
-  if (kind === 'image' || kind === 'video') return 160;
-  if (kind === 'pdf') return 401;
-  if (kind === 'audio') return 56;
-  return 64;
+const CARD_HEIGHT = 64;
+// A video's width before it is stored, when the column can't be read.
+const VIDEO_WIDTH = 640;
+
+/**
+ * The box a file's look will take, so the page doesn't move when it lands:
+ * a picture at the width it will be written with, read from its first
+ * bytes; a video at the column's width, 16:9; a PDF at its first page and
+ * footer; audio's row; otherwise a card.
+ */
+export async function pendingSize(view: EditorView, file: File, look: InsertLook): Promise<PendingSize> {
+  const kind = classifyFile(file.name);
+  const card: PendingSize = { preview: false, width: null, height: CARD_HEIGHT };
+  if (look !== 'default') return card;
+  if (kind === 'pdf') return { preview: true, width: null, height: 401 };
+  if (kind === 'audio') return { preview: true, width: null, height: 56 };
+  if (kind !== 'image' && kind !== 'video') return card;
+  const room = roomOf(view);
+  if (kind === 'video') {
+    const width = room.width > 0 ? room.width : VIDEO_WIDTH;
+    return { preview: true, width, height: Math.round((width * 9) / 16) };
+  }
+  const bytes = await Promise.resolve().then(() => file.slice(0, 256 * 1024).arrayBuffer()).catch(() => null);
+  const size = bytes ? imageSize(new Uint8Array(bytes)) : null;
+  if (!size) return { preview: true, width: null, height: 240 };
+  const width = embedWidth(size, room);
+  return { preview: true, width, height: Math.round((width * size.height) / size.width) };
 }
 
 class PendingWidget extends WidgetType {
   constructor(readonly id: number, readonly file: Pending) { super(); }
 
   eq(other: PendingWidget) {
-    return other.id === this.id && other.file.failed === this.file.failed && other.file.name === this.file.name;
+    return other.id === this.id && other.file.failed === this.file.failed && other.file.name === this.file.name &&
+      other.file.size.width === this.file.size.width && other.file.size.height === this.file.size.height;
   }
+
+  get estimatedHeight() { return this.file.failed ? CARD_HEIGHT : this.file.size.height; }
 
   toDOM(view: EditorView) {
     const box = document.createElement('div');
     box.className = 'cm-file-pending';
+    const { size } = this.file;
+    // A preview's place: a grey box at its final size, with what is being added inside it.
+    if (!this.file.failed && size.preview) {
+      const shape = document.createElement('span');
+      shape.className = 'cm-file-pending-box';
+      shape.style.height = `${size.height}px`;
+      if (size.width) shape.style.width = `${size.width}px`;
+      shape.textContent = `Adding ${this.file.name}…`;
+      box.append(shape);
+      return box;
+    }
     const card = document.createElement('span');
     card.className = 'cm-file-card';
     card.dataset.state = this.file.failed ? 'failed' : 'adding';
@@ -293,8 +339,6 @@ class PendingWidget extends WidgetType {
         control('Remove', () => view.dispatch({ effects: setPending.of({ id: this.id, pending: null }) })),
       );
       card.append(actions);
-    } else {
-      box.style.minHeight = `${pendingHeight(this.file.name, this.file.look)}px`;
     }
     box.append(card);
     return box;
@@ -313,11 +357,16 @@ async function storeOne(view: EditorView, id: number, file: File, look: InsertLo
     const place = view.state.field(places).get(id);
     return place ? placeEmbed(view.state, place.at, '').from : view.state.doc.length;
   };
+  const sizing = pendingSize(view, file, look);
   const attempt = async (): Promise<void> => {
     if (!view.dom.isConnected) return;
-    view.dispatch({ effects: setPending.of({ id: pending, pending: { at: at(), name: file.name, look, failed: null, retry: () => undefined } }) });
-    const stored: FilesResult<ImportedFile> = await window.filesAPI.import(page, file)
+    // Storing starts at once; the placeholder shows as soon as its size is read.
+    const storing: Promise<FilesResult<ImportedFile>> = window.filesAPI.import(page, file)
       .catch(() => ({ success: false as const, error: `"${file.name}" could not be added.` }));
+    const size = await sizing;
+    if (!view.dom.isConnected) return;
+    view.dispatch({ effects: setPending.of({ id: pending, pending: { at: at(), name: file.name, look, size, failed: null, retry: () => undefined } }) });
+    const stored = await storing;
     if (!view.dom.isConnected) return;
     if (stored.success) {
       view.dispatch({ effects: setPending.of({ id: pending, pending: null }) });
@@ -325,7 +374,7 @@ async function storeOne(view: EditorView, id: number, file: File, look: InsertLo
       return;
     }
     toast.error(stored.error);
-    const failed: Pending = { at: at(), name: file.name, look, failed: stored.error, retry: () => {
+    const failed: Pending = { at: at(), name: file.name, look, size: await sizing, failed: stored.error, retry: () => {
       // A retry goes where the error card is.
       const kept = holdPlace(view, view.state.field(pendingFiles).get(pending)?.at ?? at(), null);
       view.dispatch({ effects: setPending.of({ id: pending, pending: null }) });

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { Pencil, Unlink } from 'lucide-react';
-import { fileTreeLabel } from '@/common/fileKind';
 import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
 import type { DiskEntry } from '@/types/disk';
 import { setLinkEditor, type LinkEditor } from './docMode';

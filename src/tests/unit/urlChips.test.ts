@@ -176,7 +176,8 @@ describe('service chips', () => {
     const api = installFilesApi({ videoStill: vi.fn(async (_address: string, options?: { cached?: boolean }) => ({ success: true as const, data: options?.cached ? null : still })) });
     const view = mount('Intro\n\nhttps://www.youtube.com/watch?v=abc\n\nAfter\n');
     const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
-    expect(card).toHaveTextContent('YouTube video');
+    expect(card.querySelector('.cm-file-card-name')).toHaveTextContent('YouTube video');
+    expect(card.querySelector('.cm-file-card-meta')).toHaveTextContent('youtube.com/watch?v=abc');
     const load = await waitFor(() => [...card.querySelectorAll('button')].find((control) => control.textContent === 'Load preview') as HTMLButtonElement);
     expect(api.videoStill).toHaveBeenCalledWith('https://www.youtube.com/watch?v=abc', { cached: true });
     await act(async () => { load.click(); });

@@ -9,6 +9,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import {
   captionOf,
   clearFileInfo,
+  fileInfo,
   fileRefOf,
   lookOf,
   namesFile,
@@ -178,6 +179,9 @@ describe('file widgets', () => {
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
     expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveTextContent('Q3 report');
     expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveAttribute('aria-label', 'PDF, Q3 report');
+    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('role', 'group');
+    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('aria-label', 'PowerPoint, Gob deck.pptx');
+    expect(view.contentDOM.querySelector('.cm-file-pdf')).toHaveAttribute('aria-label', 'PDF, Q3 report.pdf');
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf-footer')).toHaveTextContent('Q3 report.pdf15 pages · 9.1 MB'));
     expect(view.contentDOM.textContent).not.toContain('[[');
     expect(view.contentDOM.textContent).not.toContain('a3f9c2e1');
@@ -193,6 +197,27 @@ describe('file widgets', () => {
     await act(async () => { control.click(); });
     expect(window.filesAPI.fetch).toHaveBeenCalledWith(`/Vault/${DECK}`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
+  });
+
+  it('draws a picture that is not on this Mac as the Not-downloaded card, before and after its bytes fail to load', async () => {
+    statuses[`/Vault/${SHOT}`] = 'lfs-missing';
+    installFilesApi({
+      info: vi.fn(async (target: string) => ({ success: true as const, data: info(target) })),
+      status: vi.fn(async () => ({ success: true as const, data: 'remote' as const })),
+    });
+    // Known before the page draws: a card from the start.
+    await act(async () => { await fileInfo(`/Vault/${SHOT}`); });
+    const known = await mount(`![[${SHOT}|480]]\n`);
+    expect(known.contentDOM.querySelector('.cm-md-image img')).toBeNull();
+    expect(known.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Not downloaded yet');
+    // Found out when the picture fails to load: the same card, not a line of text.
+    clearFileInfo();
+    const late = await mount(`![[${SHOT}|480]]\n`);
+    const image = late.contentDOM.querySelector('.cm-md-image img');
+    if (image) await act(async () => { image.dispatchEvent(new Event('error')); });
+    await waitFor(() => expect(late.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Not downloaded yet'));
+    expect(late.contentDOM.querySelector('.cm-md-image-remote')).toBeNull();
+    expect(late.contentDOM.querySelector('.cm-file-card button')).toHaveTextContent('Get from Mini');
   });
 
   it('says a file is gone, with Locate… and Remove, and Remove takes the link off the page in one undo step', async () => {
@@ -288,14 +313,21 @@ describe('file widgets', () => {
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-thumb')).toHaveAttribute('src', 'data:image/png;base64,48'));
     vi.useFakeTimers();
     const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
+    const at = (top: number) => ({ top, bottom: top + 64, left: 0, right: 400, width: 400, height: 64, x: 0, y: top, toJSON: () => ({}) });
+    const place = vi.spyOn(card, 'getBoundingClientRect').mockReturnValue(at(400));
     card.dispatchEvent(new MouseEvent('mouseenter'));
     await act(async () => { await vi.advanceTimersByTimeAsync(399); });
     expect(card.querySelector('.cm-file-hover')).toBeNull();
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     vi.useRealTimers();
     await waitFor(() => expect(card.querySelector('.cm-file-hover img')).toHaveAttribute('src', 'data:image/png;base64,240'));
+    expect(card.querySelector('.cm-file-hover')).not.toHaveClass('cm-file-hover-below');
     card.dispatchEvent(new MouseEvent('mouseleave'));
     expect(card.querySelector('.cm-file-hover')).toBeNull();
+    // Near the top of the page there is no room above the card, so the picture goes under it.
+    place.mockReturnValue(at(85));
+    card.dispatchEvent(new MouseEvent('mouseenter'));
+    await waitFor(() => expect(card.querySelector('.cm-file-hover')).toHaveClass('cm-file-hover-below'), { timeout: 2000 });
   });
 
   it('gives a picture its height before it loads, from files:info', async () => {
@@ -381,10 +413,11 @@ describe('file objects in a document', () => {
     expect(text(view)).toBe(doc);
     const frame = view.state.field(objectFrame);
     expect(frame).toMatchObject({ kind: 'web-picture', from: 5 });
+    if (!frame) return;
     const kind = view.state.facet(objectKinds).find((candidate) => candidate.kind === 'web-picture');
-    expect(kind?.destination?.(view.state, frame!)).toBe('example.com/chart.png');
-    const medium = kind?.actions(view.state, frame!).find((item) => item.id === 'size')?.items?.find((item) => item.id === 'medium');
-    act(() => { medium?.run?.(view, frame!); });
+    expect(kind?.destination?.(view.state, frame)).toBe('example.com/chart.png');
+    const medium = kind?.actions(view.state, frame).find((item) => item.id === 'size')?.items?.find((item) => item.id === 'medium');
+    act(() => { medium?.run?.(view, frame); });
     expect(text(view)).toBe('Text\n![chart|400](https://example.com/chart.png)\nMore\n');
     key(view, 'Backspace');
     key(view, 'Backspace');
@@ -509,7 +542,9 @@ describe('putting files in', () => {
     const view = await mount('Intro\n');
     drop(view, [file('clip.mov')]);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending')).toHaveTextContent('Adding clip.mov…'));
-    expect((view.contentDOM.querySelector('.cm-file-pending') as HTMLElement).style.minHeight).toBe('160px');
+    // A grey box at the movie's final size: the column's width (640 when it can't be read) at 16:9.
+    const box = view.contentDOM.querySelector('.cm-file-pending-box') as HTMLElement;
+    expect([box.style.width, box.style.height]).toEqual(['640px', '360px']);
     await act(async () => { finish({ success: false, error: 'The disk is full.' }); });
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending')).toHaveTextContent('The disk is full.'));
     expect(text(view)).toBe('Intro\n');

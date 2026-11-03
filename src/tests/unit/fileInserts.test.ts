@@ -190,6 +190,21 @@ describe('pasting files', () => {
     expect(window.markdownAPI.resolveLinks).not.toHaveBeenCalledWith(DOC, ['Library/files/2026-11/screen-shot.a3f9c2e1.png']);
   });
 
+  it('holds a pasted picture\'s place at the size it will land at while it is stored', async () => {
+    let finish: (value: FilesResult<ImportedFile>) => void = () => undefined;
+    installFilesApi({ import: vi.fn(() => new Promise<FilesResult<ImportedFile>>((resolve) => { finish = resolve; })) });
+    const view = mount('Notes here\n');
+    act(() => { view.dispatch({ selection: { anchor: 3 } }); });
+    // A Retina screenshot, 1094 by 898 pixels at 144 dpi: 547 points wide.
+    paste(view, [new File([png(1094, 898, 5669)], 'Screen Shot.png', { type: 'image/png' })]);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending-box')).not.toBeNull());
+    const box = view.contentDOM.querySelector('.cm-file-pending-box') as HTMLElement;
+    expect([box.style.width, box.style.height]).toEqual(['547px', '449px']);
+    expect(box).toHaveTextContent('Adding Screen Shot.png…');
+    await act(async () => { finish({ success: true, data: storedFile('Screen Shot.png') }); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending-box')).toBeNull());
+  });
+
   it('is its own undo step, apart from the words typed before it', async () => {
     const view = mount('', NOTE);
     act(() => { view.dispatch({ changes: { from: 0, insert: 'typed' }, selection: { anchor: 5 }, userEvent: 'input.type' }); });

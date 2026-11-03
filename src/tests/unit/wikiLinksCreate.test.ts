@@ -118,7 +118,7 @@ describe('wiki links to notes', () => {
     const open = (at: number) => {
       const obj = objectAt(view.state, at, 1);
       const kind = view.state.facet(objectKinds).find((candidate) => candidate.kind === 'wikilink');
-      return kind?.actions(view.state, obj!).find((item) => item.id === 'open')?.run?.(view, obj!);
+      if (obj) kind?.actions(view.state, obj).find((item) => item.id === 'open')?.run?.(view, obj);
     };
     await act(async () => { open(doc.indexOf('[[#Goals')); });
     expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('## Goals');
