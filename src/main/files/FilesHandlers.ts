@@ -8,7 +8,7 @@ import { FilesError, type ImportSource } from './FileStore';
 import type { FilesService } from './FilesService';
 
 export interface FilesHandlerDependencies {
-  ipc: Pick<IpcMain, 'handle'>;
+  ipc: Pick<IpcMain, 'handle' | 'on'>;
   service: FilesService;
   showOpenDialog: (options: OpenDialogOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
 }
@@ -26,6 +26,22 @@ function isSource(value: unknown): value is ImportSource {
 
 const invalid = (): FilesResult<never> => ({ success: false, error: 'Invalid files request.' });
 
+/** A size in pixels the page asks for: a whole number up to 4096, or nothing. */
+const isPixels = (value: unknown, optional = false): value is number | undefined =>
+  (optional && value === undefined) || (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4096);
+
+/** `{ visible?: boolean }` or `{ confirmed?: boolean }`, or nothing. */
+const flags = (value: unknown, key: 'visible' | 'confirmed'): { [name: string]: boolean } | null => {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object') return null;
+  const flag = (value as Record<string, unknown>)[key];
+  if (flag !== undefined && typeof flag !== 'boolean') return null;
+  return { [key]: flag === true };
+};
+
+const isName = (value: unknown): value is string | undefined =>
+  value === undefined || (typeof value === 'string' && value.length > 0 && value.length <= 255 && !value.includes('\0'));
+
 export class FilesHandlers {
   constructor(private deps: FilesHandlerDependencies) {}
 
@@ -39,6 +55,39 @@ export class FilesHandlers {
       isPath(target) ? this.respond(() => service.status(target), 'Failed to check the file') : invalid());
     ipc.handle('files:fetch', (_, target: unknown) =>
       isPath(target) ? this.respond(() => service.fetch(target), 'Failed to download the file') : invalid());
+    ipc.handle('files:info', (_, target: unknown) =>
+      isPath(target) ? this.respond(() => service.info(target), 'Failed to read the file') : invalid());
+    ipc.handle('files:thumbnail', (_, target: unknown, px: unknown, options: unknown) => {
+      const visible = flags(options, 'visible');
+      return isPath(target) && isPixels(px) && visible ? this.respond(() => service.thumbnail(target, px, visible), 'Failed to draw the file') : invalid();
+    });
+    ipc.handle('files:rendition', (_, target: unknown, width: unknown, options: unknown) => {
+      const visible = flags(options, 'visible');
+      return isPath(target) && isPixels(width, true) && visible ? this.respond(() => service.rendition(target, width, visible), 'Failed to draw the picture') : invalid();
+    });
+    ipc.handle('files:open', (_, target: unknown, options: unknown) => {
+      const confirmed = flags(options, 'confirmed');
+      return isPath(target) && confirmed ? this.respond(() => service.open(target, confirmed), 'Failed to open the file') : invalid();
+    });
+    ipc.handle('files:app-name', (_, target: unknown) =>
+      isPath(target) ? this.respond(() => service.appName(target), 'Failed to find the app') : invalid());
+    ipc.handle('files:quick-look', (_, target: unknown, options: unknown) => {
+      const confirmed = flags(options, 'confirmed');
+      return isPath(target) && confirmed ? this.respond(() => service.quickLook(target, confirmed), 'Failed to show the file') : invalid();
+    });
+    ipc.handle('files:copy-file', (_, target: unknown) =>
+      isPath(target) ? this.respond(() => service.copyFile(target), 'Failed to copy the file') : invalid());
+    ipc.handle('files:save-copy', (_, target: unknown, name: unknown) =>
+      isPath(target) && isName(name) ? this.respond(() => service.saveCopy(target, name), 'Failed to save a copy') : invalid());
+    ipc.handle('files:find-moved', (_, target: unknown) =>
+      isPath(target) ? this.respond(() => service.findMoved(target), 'Failed to look for the file') : invalid());
+    // Sent from the page's dragstart, which can't wait for an answer.
+    ipc.on('files:start-drag', (event, target: unknown) => {
+      if (!isPath(target)) return;
+      service.startDrag(event.sender, target).catch((error) => {
+        if (!(error instanceof FilesError || error instanceof PathNotAllowedError)) logger.error('Failed to drag a file', error instanceof Error ? error : undefined);
+      });
+    });
   }
 
   /** Insert image: the open dialog, then each picked image in order. One that fails is skipped with its reason. */

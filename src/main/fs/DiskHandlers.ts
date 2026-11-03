@@ -9,6 +9,9 @@ import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
 import logger from '@/main/logger';
 import { MetadataError } from '@/main/fs/MetadataCodec';
 import { searchCurrentText } from '@/main/fs/contentSearch';
+import { FilesError } from '@/main/files/FileStore';
+import { openFile } from '@/main/files/openable';
+import type { OpenResult } from '@/types/files';
 
 export interface DiskShell {
   showItemInFolder: (fullPath: string) => void;
@@ -23,6 +26,8 @@ export interface DiskHandlerDependencies {
   /** Injected so the dialog can be stubbed in tests. */
   showOpenDialog: () => Promise<OpenDialogReturnValue>;
   shell: DiskShell;
+  /** Where Open in default app puts read-only copies of LFS files, under Opal's app data. */
+  copiesDir: string;
   watcher: {
     watch: (rootPath: string) => Promise<void>;
     unwatch: (rootPath: string) => Promise<void>;
@@ -243,13 +248,12 @@ export class DiskHandlers {
   private registerOpenExternal(): void {
     this.deps.ipc.handle(
       'disk:open-external',
-      async (_, target: string): Promise<IPCResponse> => {
+      async (_, target: string): Promise<IPCResponse<OpenResult>> => {
         try {
           const resolved = await this.deps.registry.assertAllowed(target);
-          // openPath resolves to '' on success and to a message on failure.
-          const failure = await this.deps.shell.openPath(resolved);
-          if (failure) return { success: false, error: failure };
-          return { success: true };
+          // Apps and scripts go to Finder; an LFS file opens from a read-only copy of its bytes.
+          const { openPath, showItemInFolder } = this.deps.shell;
+          return { success: true, data: await openFile(resolved, { inside: true }, { copiesDir: this.deps.copiesDir, openPath, showItemInFolder }) };
         } catch (error) {
           return { success: false, error: describeError(error, 'Failed to open file') };
         }
@@ -265,6 +269,7 @@ export class DiskHandlers {
  */
 function describeError(error: unknown, fallback: string): string {
   if (error instanceof PathNotAllowedError) return error.message;
+  if (error instanceof FilesError) return error.message;
   if (error instanceof DestinationExistsError) return error.message;
   if (error instanceof InvalidNameError) return error.message;
   if (error instanceof MetadataError) return error.message;

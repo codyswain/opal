@@ -7,13 +7,12 @@ import { ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { classifyFile, pageName } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
-import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { FilesResult, ImportedFile } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
 import { draggedTreeFile } from '../dragMoveState';
 import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
-import { embedWidth, imageSize } from './imageSize';
+import { embedWidth } from './imageSize';
 import { linksResolved, pageContext } from './wikiLinks';
 
 /*
@@ -109,11 +108,17 @@ function letGo(view: EditorView, id: number): void {
   if (view.dom.isConnected) view.dispatch({ effects: setPlace.of({ id, place: null }) });
 }
 
-/** A width that keeps a stored picture within the column and one screen height, or null when its size can't be read. */
+/**
+ * A width that keeps a stored picture within the column and one screen
+ * height, or null when its size can't be read. The main process reads the
+ * size from the file's first bytes (files:info); the page can't fetch them.
+ */
 async function widthFor(view: EditorView, path: string): Promise<number | null> {
   try {
-    const response = await fetch(toOpalFileUrl(path));
-    const size = response.ok ? imageSize(new Uint8Array(await response.arrayBuffer())) : null;
+    const info = await window.filesAPI.info(path);
+    const size = info.success && info.data.width && info.data.height
+      ? { width: info.data.width, height: info.data.height, retina: info.data.retina ?? false }
+      : null;
     if (!size) return null;
     const style = getComputedStyle(view.contentDOM);
     const column = view.contentDOM.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);

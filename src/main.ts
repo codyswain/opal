@@ -53,10 +53,11 @@ import { CollectionIndex } from "@/main/collections/CollectionIndex";
 import { CollectionQueryService } from "@/main/collections/CollectionQueryService";
 import { CollectionHandlers } from "@/main/collections/CollectionHandlers";
 import {
-  OPAL_FILE_SCHEME,
   registerOpalFileScheme,
   registerOpalFileProtocol,
 } from "@/main/protocol/opalFile";
+import { applyAppPolicy } from "@/main/window/contentSecurity";
+import { electronFilesPlatform } from "@/main/files/electronPlatform";
 import { OpalLinks } from "@/main/protocol/OpalLinks";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -81,19 +82,6 @@ const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;
 // Set once startup has made the first window, so a link never makes a second.
 let windowStarted = false;
-
-// CSP Configuration
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: https: ${OPAL_FILE_SCHEME}:`,
-  "font-src 'self' data:",
-  `connect-src 'self' https: ws: http://localhost:11434 ${OPAL_FILE_SCHEME}:`, // Ollama + disk assets
-  `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
-  `object-src 'self' ${OPAL_FILE_SCHEME}:`,
-  `frame-src 'self' ${OPAL_FILE_SCHEME}:`,
-].join("; "); // Join CSP directives
 
 // Must run at module load, before app.whenReady() — Electron requires
 // privileged schemes to be declared before the protocol layer initializes.
@@ -201,21 +189,9 @@ const createWindow = () => {
     });
   });
 
-  // Chromium's PDF viewer is an extension page with its own policy; the app's
-  // policy would block its scripts and leave an embedded PDF blank.
+  // The app's policy on its own pages; the PDF viewer and opal-file: keep theirs.
   mainWindow.webContents.session.webRequest.onHeadersReceived(
-    (details, callback) => {
-      if (/^chrome(-extension)?:/.test(details.url)) {
-        callback({});
-        return;
-      }
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          "Content-Security-Policy": [CSP],
-        },
-      });
-    },
+    (details, callback) => callback(applyAppPolicy(details)),
   );
 
   const loadPage = () => {
@@ -481,9 +457,15 @@ const pinsHandlers = new PinsHandlers({
   ipc: ipcMain,
   service: new PinsService({ registry: rootRegistry }),
 });
+const filesService = new FilesService({
+  registry: rootRegistry,
+  links: linkIndex,
+  platform: electronFilesPlatform(),
+  appData: userDataDir,
+});
 const filesHandlers = new FilesHandlers({
   ipc: ipcMain,
-  service: new FilesService({ registry: rootRegistry, links: linkIndex }),
+  service: filesService,
   showOpenDialog: (options) => {
     const window = BrowserWindow.getFocusedWindow();
     return window
@@ -512,6 +494,7 @@ const diskHandlers = new DiskHandlers({
     showItemInFolder: (fullPath) => shell.showItemInFolder(fullPath),
     openPath: (fullPath) => shell.openPath(fullPath),
   },
+  copiesDir: filesService.copiesDir,
   watcher: diskWatcher,
   writer: fileWriter,
   onRootsChanged: () => {
@@ -564,6 +547,7 @@ app.whenReady().then(async () => {
     vaultHandlers.registerAll();
     pinsHandlers.registerAll();
     filesHandlers.registerAll();
+    void filesService.cleanup({ all: false });
     log.info("Disk explorer IPC handlers and file protocols registered");
 
     await windowStateStore.load();
@@ -583,6 +567,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", async () => {
   try {
+    await filesService.cleanup({ all: true });
     await diskWatcher.closeAll();
   } catch (error) {
     log.error("Error during app shutdown:", error);

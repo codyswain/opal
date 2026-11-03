@@ -1,4 +1,5 @@
 import type { ContentSearchResult, DiskEntry, DirectoryListing, DiskResult, TextFileContents } from '@/types/disk';
+import type { OpenResult } from '@/types/files';
 
 export interface DiskAPI {
   openFolder: () => Promise<DiskResult<{ root: string | null }>>;
@@ -11,7 +12,8 @@ export interface DiskAPI {
   move: (target: string, destinationDir: string) => Promise<DiskResult<{ path: string }>>;
   trash: (target: string) => Promise<DiskResult>;
   reveal: (target: string) => Promise<DiskResult>;
-  openExternal: (target: string) => Promise<DiskResult>;
+  /** Opens the file in its default app; apps and scripts are shown in Finder instead, and an LFS file opens from a read-only copy. */
+  openExternal: (target: string) => Promise<DiskResult<OpenResult>>;
   stat: (target: string) => Promise<DiskResult<DiskEntry>>;
   searchContent: (query: string) => Promise<DiskResult<ContentSearchResult>>;
   onChanged: (callback: (payload: { directories: string[] }) => void) => () => void;

@@ -5,6 +5,8 @@ import { normalizePath } from '@/main/fs/paths';
 import { isValidAdjacentCarrier } from './MetadataCodec';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import type { DiskEntry, DirectoryListing } from '@/types/disk';
+import { FilesError } from '@/main/files/FileStore';
+import { localObject, readPlaceholder } from '@/main/files/lfsPlaceholder';
 
 export interface DiskReaderDependencies {
   registry: RootRegistry;
@@ -109,9 +111,19 @@ export class DiskReader {
   ): Promise<TextFileContents> {
     const resolved = await this.deps.registry.assertAllowed(target);
 
-    const info = await stat(resolved);
+    let info = await stat(resolved);
     if (info.isDirectory()) {
       throw new Error(`Cannot read as text because it is not a file: ${target}`);
+    }
+
+    // A Git LFS placeholder shows its object's text, never the pointer.
+    let source = resolved;
+    const placeholder = info.size < 1024 ? await readPlaceholder(resolved).catch(() => null) : null;
+    if (placeholder) {
+      const object = await localObject(resolved, placeholder);
+      if (!object) throw new FilesError(`"${path.basename(resolved)}" is not on this Mac yet. Download it first.`);
+      source = object;
+      info = await stat(object);
     }
 
     const maxBytes = options.maxBytes ?? DEFAULT_MAX_TEXT_BYTES;
@@ -119,7 +131,7 @@ export class DiskReader {
 
     // Read only the prefix rather than the whole file, so an enormous file
     // costs a fixed amount of memory instead of its full size.
-    const handle = await open(resolved, 'r');
+    const handle = await open(source, 'r');
     try {
       const buffer = Buffer.alloc(Math.min(info.size, maxBytes));
       await handle.read(buffer, 0, buffer.length, 0);

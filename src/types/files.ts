@@ -1,3 +1,5 @@
+import type { FileKind } from '@/common/fileKind';
+
 /** Whether a stored file's bytes are on this Mac, still on the store, or gone. */
 export type FileStatus = 'here' | 'remote' | 'missing';
 
@@ -13,6 +15,14 @@ export interface ImportedFile {
   vaultPath: string;
   /** The name the file had before it was stored. */
   name: string;
+  /**
+   * Set when a dropped `.webloc` or `.url` was read as the address it holds:
+   * the page links to it and nothing was stored, so `path` and `vaultPath`
+   * are empty.
+   */
+  url?: string;
+  /** Something to tell the person, as when a file over 100 MB linked in place is not in Git LFS. */
+  warning?: string;
 }
 
 /** What Insert image stored, and a message for each picked file it refused. */
@@ -25,3 +35,51 @@ export interface PickedFiles {
 export type FilesResult<T> =
   | { success: true; data: T; error?: undefined }
   | { success: false; error: string; data?: undefined };
+
+/**
+ * Where a file's bytes are: a plain file, a Git LFS file whose object is on
+ * this Mac or only on the file store, or nothing at that path.
+ */
+export type FileInfoStatus = 'local' | 'lfs-present' | 'lfs-missing' | 'missing';
+
+/** What the page shows about a file before it loads it. */
+export interface FileInfo {
+  /** Absolute and resolved. */
+  path: string;
+  name: string;
+  /** Bytes; for an LFS file, its object's size from the placeholder. 0 when missing. */
+  size: number;
+  /** Milliseconds since the epoch. 0 when missing. */
+  mtimeMs: number;
+  kind: FileKind;
+  status: FileInfoStatus;
+  /** The SHA-256 a Git LFS placeholder names. */
+  oid?: string;
+  /** From the file's own headers, with Spotlight as the fallback. Missing when neither says. */
+  pages?: number;
+  /** Seconds. */
+  duration?: number;
+  /** Pixels as the picture or video shows. */
+  width?: number;
+  height?: number;
+  /** A Retina screenshot: two pixels to a point. */
+  retina?: boolean;
+}
+
+/**
+ * What Open did: opened the file (from a read-only copy for an LFS file,
+ * with `notice` saying so), showed it in Finder because Opal never opens
+ * apps and scripts, or nothing yet because the file is outside the opened
+ * folders and the page must ask first, naming the app.
+ */
+export type OpenResult =
+  | { action: 'opened'; app: string | null; notice?: string }
+  | { action: 'revealed'; reason: string }
+  | { action: 'confirm'; app: string | null };
+
+/** A JPEG or PNG copy of a picture for display, as a data: URL. */
+export interface Rendition {
+  url: string;
+  width: number;
+  height: number;
+}

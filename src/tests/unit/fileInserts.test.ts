@@ -48,10 +48,11 @@ let views: EditorView[] = [];
 beforeEach(() => {
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })) });
   installMarkdownApi({ [DOC]: '', [NOTE]: '' });
+  // Reads every stored picture's size as 1600 by 1000 at 144 dpi, as files:info does from its first bytes.
   installFilesApi();
   toastError.mockClear();
-  // The stored files' first bytes, as opal-file:// serves them.
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => png(1600, 1000, 5669).buffer })));
+  // The page never fetches file bytes; this catches it if it does.
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('fetch is not allowed'); }));
 });
 
 afterEach(() => {
@@ -180,7 +181,8 @@ describe('pasting files', () => {
     const embed = '![[Library/files/2026-11/screen-shot.a3f9c2e1.png|800]]';
     await waitFor(() => expect(text(view)).toBe(`Notes here\n${embed}\nMore\n`));
     expect(window.filesAPI.import).toHaveBeenCalledWith(DOC, file);
-    expect(fetch).toHaveBeenCalledWith(toOpalFileUrl(storedFile('Screen Shot.png').path));
+    expect(window.filesAPI.info).toHaveBeenCalledWith(storedFile('Screen Shot.png').path);
+    expect(fetch).not.toHaveBeenCalled();
     expect(view.state.selection.main.head).toBe(11 + embed.length);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-md-image img')).toHaveAttribute('src', toOpalFileUrl(storedFile('Screen Shot.png').path)));
     expect(window.markdownAPI.resolveLinks).not.toHaveBeenCalledWith(DOC, ['Library/files/2026-11/screen-shot.a3f9c2e1.png']);
@@ -209,7 +211,7 @@ describe('pasting files', () => {
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
     await waitFor(() => expect(text(view)).toBe('Start\n[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]]\n'));
-    expect(fetch).not.toHaveBeenCalled();
+    expect(window.filesAPI.info).not.toHaveBeenCalled();
   });
 
   it('leaves a paste without files to CodeMirror', () => {

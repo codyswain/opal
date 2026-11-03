@@ -91,6 +91,7 @@ beforeEach(async () => {
     reader: new DiskReader({ registry }),
     showOpenDialog,
     shell: { showItemInFolder, openPath },
+    copiesDir: path.join(os.tmpdir(), 'opal-disk-handlers-copies'),
     watcher: { watch: watchRoot, unwatch: unwatchRoot },
     writer,
   }).registerAll();

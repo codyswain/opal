@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { classifyFile } from '@/common/fileKind';
 import type { FilesAPI } from '@/renderer/shared/types/filesApi';
 import type { ImportedFile } from '@/types/files';
 
@@ -13,7 +14,8 @@ export function storedFile(name: string): ImportedFile {
 /**
  * Installs a fake filesAPI on the real `window`; see installDiskApi for why.
  * `import` stores every file as `storedFile` names it, `hasPath` says no
- * file has a path, and every stored file is here.
+ * file has a path, every stored file is here, and `info` reads every
+ * picture as a 1600 by 1000 Retina screenshot.
  */
 export function installFilesApi(overrides: Partial<FilesAPI> = {}): FilesAPI {
   const api: FilesAPI = {
@@ -22,6 +24,22 @@ export function installFilesApi(overrides: Partial<FilesAPI> = {}): FilesAPI {
     pickAndImport: vi.fn(async () => ({ success: true as const, data: { files: [], skipped: [] } })),
     status: vi.fn(async () => ({ success: true as const, data: 'here' as const })),
     fetch: vi.fn(async () => ({ success: true as const, data: 'here' as const })),
+    // Every picture is a 1600 by 1000 Retina screenshot.
+    info: vi.fn(async (target: string) => {
+      const name = target.slice(target.lastIndexOf('/') + 1);
+      const kind = classifyFile(name);
+      const size = kind === 'image' ? { width: 1600, height: 1000, retina: true } : {};
+      return { success: true as const, data: { path: target, name, size: 1, mtimeMs: 0, kind, status: 'local' as const, ...size } };
+    }),
+    thumbnail: vi.fn(async () => ({ success: true as const, data: null })),
+    rendition: vi.fn(async () => ({ success: true as const, data: null })),
+    open: vi.fn(async () => ({ success: true as const, data: { action: 'opened' as const, app: null } })),
+    appName: vi.fn(async () => ({ success: true as const, data: null })),
+    quickLook: vi.fn(async () => ({ success: true as const, data: { action: 'opened' as const, app: null } })),
+    copyFile: vi.fn(async () => ({ success: true as const, data: undefined })),
+    saveCopy: vi.fn(async () => ({ success: true as const, data: { saved: null } })),
+    startDrag: vi.fn(),
+    findMoved: vi.fn(async () => ({ success: true as const, data: null })),
     ...overrides,
   };
   (window as unknown as { filesAPI: FilesAPI }).filesAPI = api;
