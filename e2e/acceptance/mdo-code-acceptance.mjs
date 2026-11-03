@@ -30,10 +30,12 @@ const GALLERY = path.join(vault, 'Docs', 'code.mdo');
 const NOTE = path.join(vault, 'Docs', 'note.md');
 const KEYS = path.join(vault, 'Docs', 'keys.mdo');
 const EDGES = path.join(vault, 'Docs', 'edges.mdo');
+const HUGE = path.join(vault, 'Docs', 'huge.mdo');
 const KEYS_TEXT = 'Top\n\n> ```py\n> def f():\n>     return 1\n> ```\n\nAfter words\n';
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
 await writeFile(KEYS, KEYS_TEXT);
 await writeFile(EDGES, '```js\nlet a = 1;\n```');
+await writeFile(HUGE, `A diagram past Mermaid's limits:\n\n\`\`\`mermaid\ngraph TD\n${Array.from({ length: 600 }, (_, index) => `  n${index} --> n${index + 1}`).join('\n')}\n\`\`\`\n\nAfter.\n`);
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
 await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
@@ -187,6 +189,13 @@ try {
     await page.locator('.cm-scroller').first().evaluate((element) => { element.scrollTop += element.clientHeight / 3; });
     await page.waitForTimeout(300);
   }
+  // A theme switch draws the picture again from the other theme's cache.
+  const lightSource = await page.evaluate(() => document.querySelector('img.cm-diagram-image')?.getAttribute('src') ?? '');
+  await setTheme('dark');
+  await page.waitForFunction((before) => (document.querySelector('img.cm-diagram-image')?.getAttribute('src') ?? before) !== before, lightSource, { timeout: 10_000 }).catch(() => undefined);
+  const darkSource = await page.evaluate(() => document.querySelector('img.cm-diagram-image')?.getAttribute('src') ?? '');
+  check('a theme switch draws a diagram again in the other theme', darkSource !== lightSource && decodeURIComponent(darkSource).includes('#1a1a1a'));
+  await setTheme('light');
   const steps = await page.locator('.cm-diagram-step').allTextContents();
   check('a Pocket flowchart draws its chain', steps.join(' > ') === 'Recording > Transcript > Summary', steps.join(' > '));
   const diagram = page.locator('.cm-diagram').first();
@@ -251,6 +260,12 @@ try {
     await page.waitForTimeout(200);
     check('Show all shows a long block\'s lines', (await page.locator('.cm-code-show-all').count()) === 0 && (await page.locator('.cm-code-line', { hasText: '"line50"' }).count()) === 1);
   }
+  // A diagram past Mermaid's limits stops with its message instead of drawing.
+  await open(HUGE);
+  await page.waitForFunction(() => Boolean(document.querySelector('.cm-diagram-error') || document.querySelector('img.cm-diagram-image')), null, { timeout: 20_000 }).catch(() => undefined);
+  const limit = await page.evaluate(() => document.querySelector('.cm-diagram-error')?.textContent ?? '');
+  check('a diagram past Mermaid\'s size limits shows a message', limit.length > 0 && (await page.locator('img.cm-diagram-image').count()) === 0, limit);
+
   // A note keeps the drawn block, highlighted, scrolling sideways inside the column.
   await open(NOTE);
   for (const theme of ['light', 'dark']) {
