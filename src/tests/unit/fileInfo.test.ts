@@ -7,7 +7,7 @@ import path from 'path';
 import { imageSize } from '@/common/imageSize';
 import { FileInfoReader, MDLS } from '@/main/files/fileInfo';
 import type { RunFile } from '@/main/files/FileStore';
-import { PDF_WHOLE, pdfHeaders } from '@/main/files/mediaHeaders';
+import { IMAGE_HEAD, PDF_WHOLE, pdfHeaders, readMediaHeaders } from '@/main/files/mediaHeaders';
 import { jobQueue } from '@/main/mapLimited';
 import { makePdf } from '../../../e2e/helpers/pdfFixture';
 import { aiff, bmp, compressedPdf, flac, heif, linearizedPdf, movie, mp3, mp3Xing, wav, webp } from '../helpers/mediaFixtures';
@@ -83,6 +83,20 @@ describe('file info from headers', () => {
     expect(svg('width="200px" viewBox="0 0 400 300"')).toEqual({ width: 200, height: 150, retina: false });
     expect(svg('')).toBeNull();
     expect(await reader.info(await put('shot.webp', webp('VP8X', 3000, 2000)))).toMatchObject({ kind: 'image', width: 3000, height: 2000 });
+  });
+
+  it('reads only the first 64 KB of a picture for its size', async () => {
+    const asked: [number, number][] = [];
+    const big = Buffer.concat([webp('VP8X', 8000, 6000), Buffer.alloc(40 * 1024 * 1024)]);
+    const headers = await readMediaHeaders('huge.webp', big.length, async (position, length) => {
+      asked.push([position, length]);
+      return big.subarray(position, position + length);
+    });
+    expect(headers).toEqual({ width: 8000, height: 6000, retina: false });
+    expect(asked).toEqual([[0, IMAGE_HEAD]]);
+    expect(IMAGE_HEAD).toBe(64 * 1024);
+    // A text file is never read as a picture, whatever it holds.
+    expect(await readMediaHeaders('notes.txt', 40, async () => Buffer.from('<svg width="10" height="10"></svg>'))).toEqual({});
   });
 
   it('reads an LFS file from its object when it is here, and says when it is not', async () => {
