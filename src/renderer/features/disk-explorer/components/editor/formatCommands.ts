@@ -1,8 +1,19 @@
 import { indentLess, indentMore } from '@codemirror/commands';
 import { indentUnit, syntaxTree } from '@codemirror/language';
-import { ChangeSet, EditorSelection, type ChangeSpec, type EditorState, type Line, type SelectionRange, type StateCommand, type TransactionSpec } from '@codemirror/state';
+import {
+  ChangeSet,
+  EditorSelection,
+  StateEffect,
+  StateField,
+  type ChangeSpec,
+  type EditorState,
+  type Line,
+  type SelectionRange,
+  type StateCommand,
+  type TransactionSpec,
+} from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
-import { linkTarget } from './livePreview';
+import { docMode, linkTarget } from './livePreview';
 import { parseWikiTarget } from './wikiLinks';
 
 /*
@@ -104,6 +115,24 @@ export function inlineSpans(state: EditorState, from: number, to: number): Inlin
       if (span) spans.push(span);
     },
   });
+  return spans;
+}
+
+/** Whether text typed at `at` takes the formatting `name`, as the text just before it has it. */
+export function styledAt(state: EditorState, at: number, name: string): boolean {
+  return inlineSpans(state, at, at).some((span) => span.name === name && span.textFrom <= at && at <= span.textTo);
+}
+
+// Formatting whose closing marks Markdown reads only right after text, never after a space or a line break.
+export const EMPHASIS: ReadonlySet<string> = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough']);
+
+const closingSpan = (state: EditorState, at: number) =>
+  inlineSpans(state, at, at).find((span) => EMPHASIS.has(span.name) && span.textTo === at);
+
+/** The bold, italic and strikethrough whose text ends at `at`, inner first: only their closing marks follow it. */
+export function closingAt(state: EditorState, at: number): InlineSpan[] {
+  const spans: InlineSpan[] = [];
+  for (let span = closingSpan(state, at); span; span = closingSpan(state, span.to)) spans.push(span);
   return spans;
 }
 
@@ -228,33 +257,89 @@ function removeStyle(state: EditorState, text: SelectedText, name: string, remov
   });
 }
 
-const STYLES: Record<string, string> = { '**': 'StrongEmphasis', '*': 'Emphasis', '~~': 'Strikethrough' };
+export const STYLES: Record<string, string> = { '**': 'StrongEmphasis', '*': 'Emphasis', '~~': 'Strikethrough' };
+
+/**
+ * In a document, the styles Cmd+B, Cmd+I or ⇧⌘X with nothing selected turned
+ * on or off for the next text typed at `at`, as their marks, since a document
+ * shows no empty pair of marks. Gone once the caret moves or the text changes.
+ */
+export interface TypingStyle {
+  at: number;
+  markers: readonly string[];
+}
+
+export const setTypingStyle = StateEffect.define<TypingStyle | null>();
+
+export const typingStyle = StateField.define<TypingStyle | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setTypingStyle)) return effect.value;
+    return tr.docChanged || tr.selection ? null : value;
+  },
+});
+
+/** The word `at` is inside, not at either end of. */
+function wordAround(state: EditorState, at: number): SelectionRange | null {
+  const word = state.wordAt(at);
+  return word && word.from < at && at < word.to ? word : null;
+}
+
+/**
+ * A document's caret outside a word: the style goes on or off for the text
+ * typed next. Off only where the style's text ends, since typed text can
+ * leave formatting only past its closing marks.
+ */
+function toggleTyping(state: EditorState, marker: string): TransactionSpec | null {
+  const { head } = state.selection.main;
+  const style = state.field(typingStyle, false);
+  const markers = style?.at === head ? style.markers : [];
+  if (markers.includes(marker)) {
+    const rest = markers.filter((other) => other !== marker);
+    return { effects: setTypingStyle.of(rest.length > 0 ? { at: head, markers: rest } : null) };
+  }
+  const name = STYLES[marker];
+  if (styledAt(state, head, name) && !closingAt(state, head).some((span) => span.name === name)) return null;
+  return { effects: setTypingStyle.of({ at: head, markers: [...markers, marker] }) };
+}
 
 /**
  * Bold (`**`), italic (`*`) or strikethrough (`~~`) on the selection, by
  * Google Docs' rule: unless every selected character already has it, all of
  * them get it; otherwise it comes off the selected characters only. `_` and
  * `__` count as the marks they are. With nothing selected the caret gets an
- * empty pair, or loses the empty pair it sits in.
+ * empty pair, or loses the empty pair it sits in. A document instead formats
+ * the word the caret is in, or the text typed next, as Google Docs does.
  */
 export function toggleMarker(marker: string): StateCommand {
   const name = STYLES[marker];
   return ({ state, dispatch }) => {
+    const doc = state.facet(docMode);
+    const target = (range: SelectionRange) => (doc && range.empty ? wordAround(state, range.head) ?? range : range);
+    if (doc && state.selection.ranges.every((range) => target(range).empty)) {
+      const typing = toggleTyping(state, marker);
+      if (typing) dispatch(state.update(typing));
+      return true;
+    }
     const size = marker.length;
     // One star beside exactly one other is half of a bold's "**".
     const isMarker = (from: number, to: number) => state.sliceDoc(from, to) === marker
       && !(size === 1 && (state.sliceDoc(from - 1, from) === '*') !== (state.sliceDoc(to, to + 1) === '*'));
-    const texts = state.selection.ranges.flatMap((range) => selectedText(state, range));
+    const texts = state.selection.ranges.flatMap((range) => selectedText(state, target(range)));
     const unstyle = texts.length > 0 && texts.every((text) => allStyled(state, text, name));
     dispatch(state.update(state.changeByRange((range) => {
-      if (range.empty) {
+      const span = target(range);
+      if (span.empty) {
+        if (doc) return { range };
         return isMarker(range.from - size, range.from) && isMarker(range.from, range.from + size)
           ? { changes: { from: range.from - size, to: range.from + size }, range: EditorSelection.cursor(range.from - size) }
           : { changes: { from: range.from, insert: marker + marker }, range: EditorSelection.cursor(range.from + size) };
       }
-      const parts = selectedText(state, range);
+      const parts = selectedText(state, span);
       if (parts.length === 0) return { range };
       const changes = ChangeSet.of(ordered(parts.flatMap((text) => (unstyle ? removeStyle(state, text, name) : addStyle(state, text, name, marker)))), state.doc.length);
+      // The caret stays in its word.
+      if (span !== range) return { changes, range: EditorSelection.cursor(changes.mapPos(range.head)) };
       const from = changes.mapPos(parts[0].from, 1);
       const to = changes.mapPos(parts[parts.length - 1].to, -1);
       return { changes, range: range.anchor > range.head ? EditorSelection.range(to, from) : EditorSelection.range(from, to) };
@@ -435,7 +520,7 @@ export interface LinkAt {
   to: number;
   textFrom: number;
   textTo: number;
-  /** The URL, or a wiki link's target. */
+  /** The URL, or a wiki link's target with its "#heading". */
   target: string;
 }
 
@@ -448,7 +533,8 @@ function linkOf(state: EditorState, node: SyntaxNode): LinkAt | null {
   if (node.name === 'WikiLink') {
     const span = inlineSpan(state, node);
     const [open, close] = node.getChildren('WikiLinkMark');
-    return span && { kind: 'wiki', from, to, textFrom: span.textFrom, textTo: span.textTo, target: parseWikiTarget(state.sliceDoc(open.to, close.from)).target };
+    const { aliasAt } = parseWikiTarget(state.sliceDoc(open.to, close.from));
+    return span && { kind: 'wiki', from, to, textFrom: span.textFrom, textTo: span.textTo, target: state.sliceDoc(open.to, aliasAt === null ? close.from : open.to + aliasAt - 1) };
   }
   if (node.name === 'Autolink') {
     const span = inlineSpan(state, node);
@@ -486,9 +572,11 @@ const destination = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<
 /**
  * Writes a link to `url` with `text`: over `range` for a new one, or in place
  * of `link`. A Markdown link whose text is unchanged keeps its text as
- * written, formatting and all, and only its URL changes.
+ * written, formatting and all, and only its URL changes. A link with neither
+ * changed is left as written.
  */
 export function writeLink(state: EditorState, range: { from: number; to: number }, text: string, url: string, link: LinkAt | null): TransactionSpec {
+  if (link && url === link.target && text === state.sliceDoc(link.textFrom, link.textTo)) return { selection: { anchor: link.to }, scrollIntoView: true };
   const shown = text || url;
   let change: Change;
   if (link?.kind === 'wiki') {

@@ -148,7 +148,6 @@
   text-decoration: line-through;
 }
 
-/* Headings and the inline title share the serif, bold, larger than the body. */
 /* A document's toolbar: one row of grey icon buttons over the text column,
    in the interface's sans. It sits outside the page's scroller, so it holds
    still while the page scrolls. A pressed button takes IconButton's grey. */
@@ -204,6 +203,7 @@
   box-shadow: 0 0 0 2px hsl(var(--focus));
 }
 
+/* Headings and the inline title share the serif, bold, larger than the body. */
 .opal-editor .cm-editor .cm-md-inline-title,
 .opal-editor .cm-editor .cm-md-heading {
   font-weight: 700;

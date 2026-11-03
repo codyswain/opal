@@ -151,6 +151,10 @@ describe('where a file goes', () => {
     expect(place(table, 2)).toBe('| a | b |\n| - | - |\n| 1 | 2 |\n\n![[f.png]]\n\nAfter\n');
     expect(place('> | a |\n> | - |\n> | 1 |\n', 2)).toBe('> | a |\n> | - |\n> | 1 |\n>\n> ![[f.png]]\n');
     expect(place('```\ncode\n```\nAfter\n', 5)).toBe('```\ncode\n```\n![[f.png]]\nAfter\n');
+    // An indented code block's indent is not the embed's: it lines up with the list item holding the block, or the left edge.
+    expect(place('Text\n\n    code line\n    more code\n\nAfter\n', 10)).toBe('Text\n\n    code line\n    more code\n![[f.png]]\n\nAfter\n');
+    expect(place('- item\n\n      code\n      more\n', 15)).toBe('- item\n\n      code\n      more\n  ![[f.png]]\n');
+    expect(place('> text\n>\n>     code\n', 13)).toBe('> text\n>\n>     code\n> ![[f.png]]\n');
   });
 
   it('drops after the nearer edge of the block under the pointer, past blank lines', () => {
@@ -263,6 +267,23 @@ describe('dropping files', () => {
     closed.destroy();
     await act(async () => { finish(); });
     expect(text(closed)).toBe('First\n');
+  });
+
+  it('goes after the line it was put on while typing carries on below it, and leaves the caret where the typing is', async () => {
+    let finish: () => void = () => undefined;
+    installFilesApi({
+      import: vi.fn((_page: string, file: File) => new Promise<FilesResult<ImportedFile>>((resolve) => {
+        finish = () => resolve({ success: true as const, data: storedFile(file.name) });
+      })),
+    });
+    const view = mount('Intro line\n');
+    act(() => { view.dispatch({ selection: { anchor: 10 } }); });
+    paste(view, [shot('image.png')]);
+    act(() => { view.dispatch({ changes: { from: 10, insert: '\n' }, selection: { anchor: 11 }, userEvent: 'input' }); });
+    act(() => { view.dispatch({ changes: { from: 11, insert: 'Next thought' }, selection: { anchor: 23 }, userEvent: 'input.type' }); });
+    await act(async () => { finish(); });
+    await waitFor(() => expect(text(view)).toBe('Intro line\n![[Library/files/2026-11/image.a3f9c2e1.png|800]]\nNext thought\n'));
+    expect(view.state.selection.main.head).toBe(text(view).length - 1);
   });
 
   it('links a row dragged from the tree by its path from the vault\'s top, and copies nothing', () => {

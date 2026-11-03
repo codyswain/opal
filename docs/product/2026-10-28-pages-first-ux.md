@@ -266,7 +266,9 @@ Tokens follow the design brief from Bastion and Linear:
 - A document (`.mdo`) is the same editor in doc mode (the .mdo spec,
   2026-11-02): its Markdown never shows, a formatting toolbar sits in the
   card above the text, and Docs' shortcuts apply. There Cmd+K edits a link;
-  Cmd+P and Cmd+O still search.
+  Cmd+P and Cmd+O still search. Cmd+B with nothing selected bolds the word
+  the caret is in, or else the text typed next, and never writes an empty
+  `****`. A space or Enter at the end of bold goes after its closing marks.
 - Files dropped or pasted on any page, a note or a document, are copied into
   the vault's files folder and go in on a line of their own: an image as an
   embed sized to fit one screen, any other file as a link. A line shows

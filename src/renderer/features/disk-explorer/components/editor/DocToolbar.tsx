@@ -84,7 +84,7 @@ interface DocToolbarProps {
  * A document's formatting toolbar, in Google Docs' order, inside the page
  * card above the text. Buttons that do not fit move into a "more" menu.
  * Arrow keys move between buttons and one of them is in the tab order;
- * Escape goes back to the text, and Option+F10 in the text comes here.
+ * Escape goes back to the text, and Option+F10 or ⌃⌥T in the text comes here.
  */
 export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const row = useRef<HTMLDivElement>(null);
@@ -172,6 +172,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
       ref={row}
       role="toolbar"
       aria-label="Formatting"
+      aria-keyshortcuts="Alt+F10 Control+Alt+T"
       className="opal-doc-toolbar"
       onKeyDown={onKeyDown}
       onFocus={(event) => {

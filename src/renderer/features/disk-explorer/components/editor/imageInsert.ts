@@ -24,6 +24,8 @@ import { linksResolved, pageContext } from './wikiLinks';
  */
 
 const hasText = (text: string) => /[^\s>]/.test(text);
+// The quote marks that open a line, with the space after each.
+const QUOTE = /^(?:[ \t]*>[ \t]?)*/;
 
 /**
  * Where `embed` goes to sit on a line of its own after the line holding
@@ -36,35 +38,57 @@ const hasText = (text: string) => /[^\s>]/.test(text);
 export function placeEmbed(state: EditorState, at: number, embed: string): { from: number; insert: string } {
   const { doc } = state;
   let line = doc.lineAt(at);
+  // The line whose indent or list item the embed lines up with.
+  let under = line.text;
   let table = false;
   const textFrom = line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0);
   for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(textFrom, 1); node; node = node.parent) {
     if (node.name === 'Table' || node.name === 'FencedCode' || node.name === 'CodeBlock') {
       line = doc.lineAt(Math.max(node.from, node.to - 1));
+      under = line.text;
       table = node.name === 'Table';
+      // An indented code block's own indent would make the embed code: it lines up with the list item holding the block, or the left edge.
+      if (node.name === 'CodeBlock') {
+        let item = node.parent;
+        while (item && item.name !== 'ListItem') item = item.parent;
+        under = item ? doc.lineAt(item.from).text : '';
+      }
       break;
     }
   }
   if (!hasText(line.text)) return { from: line.to, insert: embed };
-  const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
-  const rest = line.text.slice(quote.length);
+  const quote = QUOTE.exec(line.text)?.[0] ?? '';
+  const rest = under.slice(QUOTE.exec(under)?.[0].length ?? 0);
   const item = table ? undefined : /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(rest)?.[0];
   const indent = item ? ' '.repeat(item.length) : /^[ \t]*/.exec(rest)?.[0] ?? '';
   return { from: line.to, insert: `${table ? `\n${quote.trimEnd()}` : ''}\n${quote}${indent}${embed}` };
 }
 
-/** Where each import still under way puts its files, kept in step with edits made meanwhile. */
-const setPlace = StateEffect.define<{ id: number; at: number | null }>();
+/**
+ * Where an import still under way puts its files, kept in step with edits
+ * made meanwhile, and where the caret was when it began, while it is still
+ * there. Text typed at the place stays after it, so the files go after the
+ * line they were put on.
+ */
+interface Place {
+  at: number;
+  caret: number | null;
+}
 
-const places = StateField.define<ReadonlyMap<number, number>>({
+const setPlace = StateEffect.define<{ id: number; place: Place | null }>();
+
+const places = StateField.define<ReadonlyMap<number, Place>>({
   create: () => new Map(),
   update(value, tr) {
-    let next = value.size > 0 && tr.docChanged ? new Map([...value].map(([id, at]) => [id, tr.changes.mapPos(at, 1)])) : value;
+    const map = (at: number) => tr.changes.mapPos(at, -1);
+    let next = value.size > 0 && tr.docChanged
+      ? new Map([...value].map(([id, { at, caret }]) => [id, { at: map(at), caret: caret === null ? null : map(caret) }]))
+      : value;
     for (const effect of tr.effects) {
       if (!effect.is(setPlace)) continue;
       const changed = new Map(next);
-      if (effect.value.at === null) changed.delete(effect.value.id);
-      else changed.set(effect.value.id, effect.value.at);
+      if (effect.value.place === null) changed.delete(effect.value.id);
+      else changed.set(effect.value.id, effect.value.place);
       next = changed;
     }
     return next;
@@ -75,12 +99,12 @@ let lastPlace = 0;
 
 function holdPlace(view: EditorView, at: number): number {
   const id = ++lastPlace;
-  view.dispatch({ effects: setPlace.of({ id, at }) });
+  view.dispatch({ effects: setPlace.of({ id, place: { at, caret: view.state.selection.main.head } }) });
   return id;
 }
 
 function letGo(view: EditorView, id: number): void {
-  if (view.dom.isConnected) view.dispatch({ effects: setPlace.of({ id, at: null }) });
+  if (view.dom.isConnected) view.dispatch({ effects: setPlace.of({ id, place: null }) });
 }
 
 /** A width that keeps a stored picture within the column and one screen height, or null when its size can't be read. */
@@ -99,19 +123,25 @@ async function widthFor(view: EditorView, path: string): Promise<number | null> 
 
 type InsertEvent = 'input' | 'input.drop' | 'input.paste';
 
-/** Puts a stored file in at its import's place and moves the place past it. Nothing once the page has closed: the file stays. */
+/**
+ * Puts a stored file in at its import's place and moves the place past it.
+ * The caret goes after it only if it has stayed where it was, so typing
+ * meanwhile carries on undisturbed. Nothing once the page has closed: the
+ * file stays.
+ */
 async function putFile(view: EditorView, id: number, file: ImportedFile, userEvent: InsertEvent): Promise<void> {
   const image = classifyFile(file.path) === 'image';
   const width = image ? await widthFor(view, file.path) : null;
-  const at = view.dom.isConnected ? view.state.field(places).get(id) : undefined;
-  if (at === undefined) return;
+  const place = view.dom.isConnected ? view.state.field(places).get(id) : undefined;
+  if (!place) return;
   const embed = image ? `![[${file.vaultPath}${width ? `|${width}` : ''}]]` : `[[${file.vaultPath}|${file.name.replace(/[[\]|]/g, '')}]]`;
-  const { from, insert } = placeEmbed(view.state, at, embed);
+  const { from, insert } = placeEmbed(view.state, place.at, embed);
   const end = from + insert.length;
+  const follow = view.state.selection.main.head === place.caret;
   view.dispatch({
     changes: { from, insert },
-    selection: { anchor: end },
-    effects: [linksResolved.of({ [file.vaultPath]: file.path }), setPlace.of({ id, at: end })],
+    selection: follow ? { anchor: end } : undefined,
+    effects: [linksResolved.of({ [file.vaultPath]: file.path }), setPlace.of({ id, place: { at: end, caret: follow ? end : null } })],
     annotations: isolateHistory.of('full'),
     scrollIntoView: true,
     userEvent,

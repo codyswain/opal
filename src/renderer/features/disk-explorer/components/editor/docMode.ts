@@ -16,7 +16,19 @@ import {
   type TransactionSpec,
 } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, keymap, type Command, type ViewUpdate } from '@codemirror/view';
-import { inlineSpans, linkAt, setHeading, toggleList, toggleMarker } from './formatCommands';
+import {
+  EMPHASIS,
+  STYLES,
+  closingAt,
+  inlineSpans,
+  linkAt,
+  setHeading,
+  setTypingStyle,
+  styledAt,
+  toggleList,
+  toggleMarker,
+  typingStyle,
+} from './formatCommands';
 import { imageFrame } from './imageFrame';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
 import { opensNewTab } from './wikiLinks';
@@ -137,6 +149,65 @@ function keepMarks(tr: Transaction): TransactionSpec | null {
   const spec = { changes, selection: { anchor: caret }, scrollIntoView: tr.scrollIntoView, userEvent: tr.annotation(Transaction.userEvent) };
   const next = tr.startState.update({ ...spec, filter: false });
   return next.newDoc.eq(tr.newDoc) ? null : { ...spec, selection: settle(next.state, next.newSelection) };
+}
+
+/**
+ * `tr` with the text it inserts at the caret put where the page shows it
+ * going, or null when it already goes there. A space or line break at the
+ * end of bold, italic or strikethrough goes after their closing marks, since
+ * Markdown ends none of them on a space. Typed text leaves formatting a
+ * toggle turned off by going past its closing marks, and is wrapped in the
+ * marks of styles a toggle turned on, or joins the same style beside it.
+ */
+function placeTyped(tr: Transaction): TransactionSpec | null {
+  const state = tr.startState;
+  const caret = state.selection.main;
+  if (!tr.isUserEvent('input') || state.selection.ranges.length > 1 || !caret.empty) return null;
+  const inserts: string[] = [];
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => { inserts.push(fromA === caret.head && toA === fromA ? inserted.toString() : ''); });
+  const text = inserts.length === 1 ? inserts[0] : '';
+  if (!text) return null;
+  const at = caret.head;
+  const style = state.field(typingStyle);
+  const markers = tr.isUserEvent('input.type') && style?.at === at ? style.markers : [];
+  const space = /^\s*/.exec(text)?.[0] ?? '';
+  const words = text.slice(space.length);
+  const closing = closingAt(state, at);
+  const left = space ? closing : closing.filter((span) => markers.some((marker) => STYLES[marker] === span.name));
+  let from = left.length > 0 ? left[left.length - 1].to : at;
+  const wrap: string[] = [];
+  for (const marker of markers.filter((other) => !styledAt(state, at, STYLES[other]))) {
+    // Two pairs of the same marks side by side format nothing, so typed text joins the formatting beside it.
+    const beside = space ? null : inlineSpans(state, from, from).find((span) => span.name === STYLES[marker] && (span.to === from || span.from === from));
+    if (beside) from = beside.to === from ? beside.textTo : beside.textFrom;
+    else wrap.push(marker);
+  }
+  if (from === at && wrap.length === 0) return null;
+  const open = words ? wrap.join('') : '';
+  const close = words ? [...wrap].reverse().join('') : '';
+  // A line break takes the spaces after it, as Enter does elsewhere.
+  let to = from;
+  if (space.includes('\n')) while (/[ \t]/.test(state.sliceDoc(to, to + 1))) to += 1;
+  const anchor = from + space.length + open.length + words.length;
+  return {
+    changes: { from, to, insert: space + open + words + close },
+    selection: { anchor },
+    // Spaces typed before any words keep the styles turned on for the words.
+    effects: words || wrap.length === 0 ? [] : setTypingStyle.of({ at: anchor, markers: wrap }),
+    scrollIntoView: tr.scrollIntoView,
+    userEvent: tr.annotation(Transaction.userEvent),
+  };
+}
+
+/** After typing that closed bold, italic or strikethrough, as the last "*" of "**x**" does: the end of its closing marks. */
+function closedByTyping(tr: Transaction): number | null {
+  if (!tr.isUserEvent('input.type') || tr.newSelection.ranges.length > 1) return null;
+  const typed: { from: number; to: number }[] = [];
+  tr.changes.iterChangedRanges((_fromA, _toA, from, to) => { typed.push({ from, to }); });
+  if (typed.length !== 1) return null;
+  const { from, to } = typed[0];
+  const closed = inlineSpans(tr.state, from, to).filter((span) => EMPHASIS.has(span.name) && span.textTo <= from && to <= span.to);
+  return closed.length > 0 ? Math.min(...closed.map((span) => span.to)) : null;
 }
 
 /** Where one key press moves the caret from `at`: over hidden marks and one character, or over a picture or block as a whole. */
@@ -264,16 +335,18 @@ export const linkEditor = StateField.define<LinkEditor | null>({
   },
 });
 
-/** Cmd+K: edits the link at the caret, or starts one over the selection. */
+/** Cmd+K: edits the link at the caret, or starts one over the selection's first line, the text the form shows. */
 export const editLink: Command = (view) => {
-  const { main } = view.state.selection;
-  const link = linkAt(view.state, main.from);
-  const range = link && main.to <= link.to ? link : main;
+  const { state } = view;
+  const { main } = state.selection;
+  const link = linkAt(state, main.from);
+  const line = state.doc.lineAt(main.from);
+  const range = link && main.to <= link.to ? link : { from: main.from, to: Math.max(main.from, Math.min(main.to, line.from + line.text.trimEnd().length)) };
   view.dispatch({ effects: setLinkEditor.of({ from: range.from, to: range.to, editing: true }) });
   return true;
 };
 
-/** Option+F10 moves focus to the toolbar, since Tab indents in the text. */
+/** Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the toolbar, since Tab indents in the text. */
 const focusToolbar: Command = (view) => {
   const button = view.dom.closest('.opal-editor')?.querySelector<HTMLElement>('[role="toolbar"] [tabindex="0"]');
   button?.focus();
@@ -340,6 +413,7 @@ const docKeymap = [
   { key: 'Mod-Shift-9', run: toggleList('task') },
   { key: 'Mod-k', run: editLink },
   { key: 'Alt-F10', run: focusToolbar },
+  { key: 'Ctrl-Alt-t', run: focusToolbar },
 ];
 
 /** Doc mode's extensions. Each editor gets its own, since they track that editor's input method. */
@@ -350,11 +424,15 @@ export function docModeExtensions(): Extension {
     autoformatted,
     linkEditor,
     atoms,
+    typingStyle,
     EditorState.transactionFilter.of((tr) => {
       if (input.composing || tr.isUserEvent('input.type.compose')) return tr;
-      const kept = keepMarks(tr);
+      const kept = keepMarks(tr) ?? placeTyped(tr);
       if (kept) return kept;
       if (!tr.docChanged && !tr.selection) return tr;
+      // Typed closing marks leave the caret after them, so the text typed next is plain.
+      const closed = closedByTyping(tr);
+      if (closed !== null) return [tr, { selection: { anchor: closed }, sequential: true }];
       const selection = settle(tr.state, tr.newSelection);
       return selection === tr.newSelection ? tr : [tr, { selection, sequential: true }];
     }),
@@ -363,7 +441,7 @@ export function docModeExtensions(): Extension {
       const { selection } = view.state;
       const caret = selection.main;
       if (view.composing || view.compositionStarted || from !== to || selection.ranges.length > 1 || !caret.empty || from === caret.head) return false;
-      if (caretPosition(view.state, from) !== caret.head) return false;
+      if (caretPosition(view.state, from) !== caretPosition(view.state, caret.head)) return false;
       view.dispatch({ changes: { from: caret.head, insert: text }, selection: { anchor: caret.head + text.length }, scrollIntoView: true, userEvent: 'input.type' });
       return true;
     }),

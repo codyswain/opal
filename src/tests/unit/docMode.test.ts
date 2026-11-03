@@ -4,6 +4,8 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions, replaceText } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { linkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
+import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 
@@ -201,6 +203,105 @@ describe('doc mode', () => {
     expect(caret(view)).toBe(5);
     type(view, 'Y', 7);
     expect(text(view)).toBe('A **bY** z\n');
+  });
+
+  it('puts a line break or space typed at the end of bold, italic or strikethrough after its closing marks', async () => {
+    // Enter at the end of a line as the page shows it, plain and in a list.
+    for (const [doc, after] of [
+      ['Some **bold**\nNext\n', 'Some **bold**\n\nNext\n'],
+      ['**Summary**\n', '**Summary**\n\n'],
+      ['- see **this**\n', '- see **this**\n- \n'],
+      ['An *italic*\n', 'An *italic*\n\n'],
+      ['A ~~gone~~\n', 'A ~~gone~~\n\n'],
+      ['- ***both***\n', '- ***both***\n- \n'],
+    ]) {
+      const view = mount(doc);
+      await focusPage(view);
+      select(view, doc.indexOf('\n'));
+      key(view, 'Enter');
+      expect(text(view)).toBe(after);
+      expect(caret(view)).toBe(after.indexOf('\n') + (after.includes('\n- ') ? 3 : 1));
+    }
+    // Enter before text that follows bold takes the space after the marks too.
+    const split = mount('**bold** more\n');
+    await focusPage(split);
+    select(split, 8);
+    key(split, 'Enter');
+    expect(text(split)).toBe('**bold**\nmore\n');
+    // A space at the end of bold or italic goes after its marks, and the text after it is plain.
+    const view = mount('This is **important**\n');
+    await focusPage(view);
+    select(view, 21);
+    type(view, ' ');
+    type(view, 'x');
+    expect(text(view)).toBe('This is **important** x\n');
+    expect(lineText(view)).toBe('This is important x');
+    act(() => { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'An *aside*\n' } }); });
+    select(view, 10);
+    type(view, ' ');
+    expect(text(view)).toBe('An *aside* \n');
+  });
+
+  it('leaves the caret after typed closing marks, so the text typed next is plain', async () => {
+    for (const [typed, shown] of [['a **x** rest', 'a x rest'], ['a *x* rest', 'a x rest'], ['a **x**y', 'a xy'], ['a ~~x~~ y', 'a x y']]) {
+      const view = mount('');
+      await focusPage(view);
+      for (const char of typed) type(view, char);
+      expect(text(view)).toBe(typed);
+      expect(lineText(view)).toBe(shown);
+    }
+    // The browser may type on the other side of the hidden closing marks; the text still goes after them.
+    const view = mount('');
+    await focusPage(view);
+    for (const char of 'a **x**') type(view, char);
+    expect(caret(view)).toBe(7);
+    type(view, 'y', 5);
+    expect(text(view)).toBe('a **x**y');
+  });
+
+  it('formats the word the caret is in on Cmd+B, and otherwise the text typed next, writing no empty marks', async () => {
+    const view = mount('one two\n');
+    await focusPage(view);
+    const bold = () => act(() => { toggleMarker('**')(view); });
+    // Inside a word: the word, and the caret stays put.
+    select(view, 1);
+    bold();
+    expect(text(view)).toBe('**one** two\n');
+    expect(caret(view)).toBe(3);
+    bold();
+    expect(text(view)).toBe('one two\n');
+    expect(caret(view)).toBe(1);
+    // At the end of a word: nothing is written, the button shows pressed, and typed text is bold.
+    select(view, 3);
+    bold();
+    expect(text(view)).toBe('one two\n');
+    expect(formatState(view.state).bold).toBe(true);
+    type(view, ' ');
+    type(view, 'x');
+    type(view, 'y');
+    expect(text(view)).toBe('one **xy** two\n');
+    // At the end of bold: typed text leaves it.
+    expect(formatState(view.state).bold).toBe(true);
+    bold();
+    expect(formatState(view.state).bold).toBe(false);
+    expect(text(view)).toBe('one **xy** two\n');
+    type(view, 'z');
+    expect(text(view)).toBe('one **xy**z two\n');
+    // Turned on and off again, or left by moving the caret, it writes nothing.
+    select(view, 0);
+    bold();
+    bold();
+    expect(formatState(view.state).bold).toBe(false);
+    bold();
+    select(view, 1);
+    expect(formatState(view.state).bold).toBe(false);
+    expect(text(view)).toBe('one **xy**z two\n');
+    // Beside bold, typed text joins it rather than writing a second pair of marks.
+    select(view, 4);
+    expect(caret(view)).toBe(4);
+    bold();
+    type(view, 'w');
+    expect(text(view)).toBe('one **wxy**z two\n');
   });
 
   it('turns a typed "# ", "- " or "1. " back into text on the next Backspace', async () => {

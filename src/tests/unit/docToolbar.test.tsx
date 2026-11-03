@@ -99,6 +99,11 @@ describe('the document toolbar', () => {
     expect(button('Clear formatting')).toHaveFocus();
     fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
     expect(focusText).toHaveBeenCalled();
+    // ⌃⌥T comes here too, for a Mac keyboard where F10 is the Mute key.
+    expect(toolbar).toHaveAttribute('aria-keyshortcuts', 'Alt+F10 Control+Alt+T');
+    act(() => { (document.activeElement as HTMLElement).blur(); });
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: '†', keyCode: 84, ctrlKey: true, altKey: true, bubbles: true, cancelable: true })); });
+    expect(button('Clear formatting')).toHaveFocus();
   });
 
   it('sets a heading from the style menu and gives focus back to the text', async () => {
@@ -151,6 +156,33 @@ describe('the link popover', () => {
     fireEvent.click(within(popover).getByRole('button', { name: 'Remove link' }));
     expect(view.state.doc.toString()).toBe('See the site now.\n');
     await waitFor(() => expect(screen.queryByTestId('link-popover')).toBeNull());
+  });
+
+  it('shows and keeps a wiki link\'s heading, and follows the link to its page', async () => {
+    const user = userEvent.setup();
+    const view = await openEditor(DOC, 'See [[Other#Budget|the budget]] now.\n');
+    view.focus = vi.fn();
+    const link = await waitFor(() => view.contentDOM.querySelector('.cm-md-wikilink') as Element);
+    act(() => { link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    const popover = await screen.findByTestId('link-popover');
+    await user.click(within(popover).getByRole('button', { name: 'Other#Budget' }));
+    await waitFor(() => expect(window.markdownAPI.resolveLinks).toHaveBeenCalledWith(DOC, ['Other']));
+    await user.click(within(popover).getByRole('button', { name: 'Edit link' }));
+    expect(await screen.findByRole('textbox', { name: 'Link' })).toHaveValue('Other#Budget');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(view.state.doc.toString()).toBe('See [[Other#Budget|the budget]] now.\n');
+  });
+
+  it('links only the first line of a selection over several, the text its form shows', async () => {
+    const user = userEvent.setup();
+    const view = await openEditor(DOC, 'First paragraph  \n\nSecond paragraph\n');
+    view.focus = vi.fn();
+    select(view, 0, view.state.doc.length);
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true, ...MOD })); });
+    const field = await screen.findByRole('textbox', { name: 'Link' });
+    expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('First paragraph');
+    await user.type(field, 'https://example.com{Enter}');
+    expect(view.state.doc.toString()).toBe('[First paragraph](https://example.com)  \n\nSecond paragraph\n');
   });
 
   it('edits a link from Edit, writing only its address when the text stays', async () => {

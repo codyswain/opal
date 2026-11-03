@@ -5,7 +5,7 @@ import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from '@/re
 import { setLinkEditor, type LinkEditor } from './docMode';
 import { linkBetween, removeLink, writeLink, type LinkAt } from './formatCommands';
 import { autolinkHref, openLink } from './livePreview';
-import { openWikiLink } from './wikiLinks';
+import { openWikiLink, parseWikiTarget } from './wikiLinks';
 
 /** Where the link sits on screen, from its first character on its first line. */
 function linkRect(view: EditorView, from: number, to: number): DOMRect {
@@ -27,7 +27,7 @@ interface LinkFormProps {
 /** The text and the address of a link, written when applied. */
 const LinkForm: React.FC<LinkFormProps> = ({ view, editor, link }) => {
   const { state } = view;
-  const [text, setText] = useState(() => (link ? state.sliceDoc(link.textFrom, link.textTo) : state.sliceDoc(editor.from, editor.to).split('\n')[0]));
+  const [text, setText] = useState(() => (link ? state.sliceDoc(link.textFrom, link.textTo) : state.sliceDoc(editor.from, editor.to)));
   const [url, setUrl] = useState(link?.target ?? '');
   return (
     <form
@@ -66,7 +66,7 @@ export const LinkPopover: React.FC<LinkPopoverProps> = ({ view, editor }) => {
   const close = () => view.dispatch({ effects: setLinkEditor.of(null) });
   const follow = () => {
     if (!link) return;
-    if (link.kind === 'wiki') void openWikiLink(view, link.target);
+    if (link.kind === 'wiki') void openWikiLink(view, parseWikiTarget(link.target).target);
     else openLink(view, link.kind === 'url' ? autolinkHref(link.target) : link.target, false);
   };
 

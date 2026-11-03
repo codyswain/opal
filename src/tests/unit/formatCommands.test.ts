@@ -15,14 +15,15 @@ import {
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 
 const DOC = '/Vault/Notes/Plan.mdo';
+const NOTE = '/Vault/Notes/Plan.md';
 
 /** A state from text where "‹" and "›" mark the selection, or one "‸" the caret. */
-function stateOf(marked: string): EditorState {
+function stateOf(marked: string, path = DOC): EditorState {
   const caret = marked.indexOf('‸');
   const anchor = caret === -1 ? marked.indexOf('‹') : caret;
   const doc = marked.replace(/[‹›‸]/g, '');
   const head = caret === -1 ? marked.replace('‹', '').indexOf('›') : caret;
-  return EditorState.create({ doc, selection: EditorSelection.single(anchor === -1 ? 0 : anchor, head === -1 ? 0 : head), extensions: markdownEditorExtensions(DOC) });
+  return EditorState.create({ doc, selection: EditorSelection.single(anchor === -1 ? 0 : anchor, head === -1 ? 0 : head), extensions: markdownEditorExtensions(path) });
 }
 
 /** The text with the selection marked the same way. */
@@ -32,8 +33,8 @@ function marked(state: EditorState): string {
   return from === to ? `${doc.slice(0, from)}‸${doc.slice(from)}` : `${doc.slice(0, from)}‹${doc.slice(from, to)}›${doc.slice(to)}`;
 }
 
-function run(text: string, command: StateCommand): string {
-  let state = stateOf(text);
+function run(text: string, command: StateCommand, path = DOC): string {
+  let state = stateOf(text, path);
   command({ state, dispatch: (tr) => { state = tr.state; } });
   return marked(state);
 }
@@ -59,6 +60,14 @@ describe('bold, italic and strikethrough', () => {
     expect(run('**‹a› b**', toggleMarker('**'))).toBe('‹a› **b**');
     expect(run('**a ‹b›**', toggleMarker('**'))).toBe('**a** ‹b›');
     expect(run('*a **‹b›** c*', toggleMarker('*'))).toBe('*a* **‹b›** *c*');
+  });
+
+  it('gives a note\'s caret an empty pair, while a document formats the caret\'s word or nothing', () => {
+    expect(run('a ‸b', toggleMarker('**'), NOTE)).toBe('a **‸**b');
+    expect(run('a **‸**b', toggleMarker('**'), NOTE)).toBe('a ‸b');
+    expect(run('a ‸b', toggleMarker('**'))).toBe('a ‸b');
+    expect(run('a b‸c d', toggleMarker('*'))).toBe('a *b‸c* d');
+    expect(run('a **bo‸ld** b', toggleMarker('**'))).toBe('a bo‸ld b');
   });
 
   it('reads _ and __ as the marks they are, so Cmd+I on _x_ takes the italic off', () => {
@@ -137,6 +146,12 @@ describe('links', () => {
     expect(apply('see [**th‸is**](https://old.com) now', 'https://new.com', '**this**')).toBe('see [**this**](https://new.com)‸ now');
     expect(apply('see [th‸is](https://old.com) now', 'https://x.com/a b', 'that')).toBe('see [that](<https://x.com/a b>)‸ now');
     expect(apply('see [[No‸tes]] now', 'Library/Notes', 'notes')).toBe('see [[Library/Notes|notes]]‸ now');
+    // A wiki link keeps its heading, and a link left as it was is not rewritten.
+    expect(linkAt(stateOf('see [[Plan#Budget|the bu‸dget]] now'), 22)).toMatchObject({ kind: 'wiki', target: 'Plan#Budget' });
+    expect(apply('see [[Plan#Budget|the bu‸dget]] now', 'Plan#Budget', 'the budget')).toBe('see [[Plan#Budget|the budget]]‸ now');
+    expect(apply('see [[Plan#Bu‸dget]] now', 'Plan#Budget', 'Plan#Budget')).toBe('see [[Plan#Budget]]‸ now');
+    expect(apply('see [[Plan#Bu‸dget]] now', 'Plan#Costs', 'Plan#Costs')).toBe('see [[Plan#Costs]]‸ now');
+    expect(apply('see https://x.c‸om now', 'https://x.com', 'https://x.com')).toBe('see https://x.com‸ now');
     const state = stateOf('see [th‸is](https://x.com) now');
     const link = linkAt(state, state.selection.main.head);
     expect(link).toMatchObject({ kind: 'link', target: 'https://x.com' });
