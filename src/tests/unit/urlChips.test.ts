@@ -86,6 +86,20 @@ describe('service chips', () => {
     expect(view.contentDOM.querySelectorAll('[src^="http"]')).toHaveLength(0);
   });
 
+  it('writes a link dragged from a browser as [Anchor](url), its text escaped', () => {
+    const view = mount('Read  today\n');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(5);
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    const data: Record<string, string> = {
+      'text/uri-list': 'https://example.com/a_b',
+      'text/html': '<meta charset="utf-8"><a href="https://example.com/a_b">Q3 *final* [draft] | notes</a>',
+      'text/plain': 'https://example.com/a_b',
+    };
+    Object.defineProperty(event, 'dataTransfer', { value: { types: Object.keys(data), getData: (type: string) => data[type] ?? '' } });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+    expect(view.state.doc.toString()).toBe('Read [Q3 \\*final\\* \\[draft\\] | notes](https://example.com/a_b) today\n');
+  });
+
   it('draws a YouTube address alone on its line as a card', () => {
     const view = mount('Intro\n\nhttps://www.youtube.com/watch?v=abc\n\nAfter\n');
     expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('YouTube video');

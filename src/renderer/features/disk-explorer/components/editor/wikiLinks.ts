@@ -184,6 +184,13 @@ export function noteToCreate(target: string): { name: string; extension: 'md' | 
  */
 export async function openWikiLink(view: EditorView, target: string, newTab = false): Promise<void> {
   const { path, openNote } = view.state.facet(pageContext);
+  // A heading on this page: scroll to it.
+  if (target.startsWith('#')) {
+    const heading = headingLine(view.state, target.slice(1));
+    if (heading !== null) view.dispatch({ selection: { anchor: heading }, scrollIntoView: true });
+    else toast.error(`Could not find the heading ${target.slice(1)}.`);
+    return;
+  }
   const wanted = target.normalize('NFC');
   const response = await window.markdownAPI.resolveLinks(path, [wanted]).catch(() => null);
   const resolved = response?.success ? response.data[wanted] : null;
@@ -206,6 +213,17 @@ export async function openWikiLink(view: EditorView, target: string, newTab = fa
   }
   view.dispatch({ effects: linksResolved.of({ [target]: created.data.path }) });
   openNote(created.data.path, newTab);
+}
+
+/** Where the heading named `name` starts on the page, matching as Obsidian does: case and spacing aside. */
+export function headingLine(state: EditorState, name: string): number | null {
+  const wanted = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  for (let number = 1; number <= state.doc.lines; number += 1) {
+    const line = state.doc.line(number);
+    const match = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line.text);
+    if (match && match[1].toLowerCase().replace(/\s+/g, ' ') === wanted) return line.from;
+  }
+  return null;
 }
 
 /** How a wiki link to a note reads: "Plan", "Plan › Goals", or "Goals" for a heading on this page. */
@@ -252,7 +270,9 @@ function drawWikiName(ctx: DecorateContext, node: SyntaxNode): boolean {
   if (found.link.target && (ctx.links.get(found.link.target) ? classifyFile(ctx.links.get(found.link.target) ?? '') !== 'markdown' : namesFile(found.link.target))) return false;
   if (ctx.state.doc.lineAt(node.from).to < node.to) return false;
   const missing = Boolean(found.link.target) && ctx.links.get(found.link.target) === null;
-  ctx.out.push(Decoration.replace({ widget: new WikiNameWidget(wikiDisplay(found.link), found.link.target, missing) }).range(node.from, node.to));
+  // A heading on this page is followed by "#heading", which scrolls there.
+  const follow = found.link.target || `#${found.link.heading ?? ''}`;
+  ctx.out.push(Decoration.replace({ widget: new WikiNameWidget(wikiDisplay(found.link), follow, missing) }).range(node.from, node.to));
   return true;
 }
 

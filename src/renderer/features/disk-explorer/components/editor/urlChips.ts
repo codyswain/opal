@@ -1,9 +1,10 @@
 import { isolateHistory } from '@codemirror/commands';
-import { StateField, type EditorState, type Extension } from '@codemirror/state';
-import { Decoration, WidgetType } from '@codemirror/view';
+import { Prec, StateField, type EditorState, type Extension } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
 import { nodeDecorators, objectKinds, type DecorateContext } from './extensionPoints';
+import { escapeLinkText } from './fileActions';
 import { fileIcon, type FileIconName } from './fileIcons';
 import { videoService } from './fileEmbeds';
 import { autolinkHref, openLink } from './livePreview';
@@ -164,5 +165,39 @@ const urlObject = objectKinds.of({
   ],
 });
 
-/** Service chips on every page. */
-export const urlChips: Extension = [typingAddress, nodeDecorators.of({ nodes: ['URL'], decorate: drawUrl }), urlObject];
+/** The anchor text and address of a link dragged from a browser, or null for any other drag. */
+export function droppedLink(data: Pick<DataTransfer, 'getData' | 'types'>): { text: string; url: string } | null {
+  if (data.types.includes('Files')) return null;
+  const url = (data.getData('text/uri-list') || '').split(/\r?\n/).find((line) => line && !line.startsWith('#'))?.trim();
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const html = data.getData('text/html');
+  let text = '';
+  if (html) {
+    const anchor = new DOMParser().parseFromString(html, 'text/html').querySelector('a');
+    text = anchor?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  }
+  return { text: text || url, url };
+}
+
+/**
+ * A link dragged from a browser goes in as `[Anchor](url)` where it drops,
+ * its text escaped so it stays the link's text. Text dragged within the
+ * page is left to CodeMirror.
+ */
+const browserLinkDrops = EditorView.domEventHandlers({
+  drop(event, view) {
+    const data = event.dataTransfer;
+    if (!data || view.state.readOnly || data.types.includes('application/x-codemirror')) return false;
+    const link = droppedLink(data);
+    if (!link) return false;
+    const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+    const insert = `[${escapeLinkText(link.text)}](${/[\s()<>]/.test(link.url) ? `<${link.url}>` : link.url})`;
+    event.preventDefault();
+    view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length }, annotations: isolateHistory.of('full'), userEvent: 'input.drop' });
+    view.focus();
+    return true;
+  },
+});
+
+/** Service chips on every page, and links dropped from a browser. */
+export const urlChips: Extension = [typingAddress, nodeDecorators.of({ nodes: ['URL'], decorate: drawUrl }), urlObject, Prec.high(browserLinkDrops)];

@@ -85,6 +85,15 @@ describe('wiki links to notes', () => {
     expect(view.contentDOM.querySelector('.cm-line')?.textContent).toBe('See Plan and Plan › Goals.');
   });
 
+  it('scroll to a heading on this page when followed', async () => {
+    installMarkdownApi({ [DOC]: '' });
+    const view = mount('See [[#Next steps]].\n\n## Goals\n\n## Next  Steps\n');
+    await openWikiLink(view, '#Next steps');
+    // A document's caret rests after the hidden "## ".
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('## Next  Steps');
+    expect(view.contentDOM.querySelector('[data-wiki-name]')).toHaveAttribute('data-wiki-target', '#Next steps');
+  });
+
   it('go whole on one Backspace in a document, keep typing outside the brackets, and leave an alias editable', async () => {
     installMarkdownApi({ [DOC]: '' });
     const view = mount('See [[Plan]] now\n');
