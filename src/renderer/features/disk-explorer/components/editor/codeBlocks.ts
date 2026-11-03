@@ -619,6 +619,8 @@ function collapseBlocks(state: EditorState, expanded: readonly number[]): Collap
   syntaxTree(state).iterate({
     enter: (ref) => {
       if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
+      // Only long blocks are read whole.
+      if (state.doc.lineAt(ref.to).number - state.doc.lineAt(ref.from).number <= COLLAPSE_AFTER) return false;
       const fence = fenceOf(state, ref.node);
       const { lines } = fence;
       // Diagrams draw as pictures, so they never collapse.

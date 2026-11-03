@@ -488,6 +488,9 @@ function build(state: EditorState, code: readonly number[]): Diagrams {
   syntaxTree(state).iterate({
     enter: (ref) => {
       if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
+      // Only diagram fences are read whole.
+      const info = ref.node.getChild('CodeInfo');
+      if (!info || !diagramKind(state.sliceDoc(info.from, info.to))) return false;
       const fence = fenceOf(state, ref.node);
       const kind = diagramFence(state, fence);
       if (!kind || !fence.close) return false;
