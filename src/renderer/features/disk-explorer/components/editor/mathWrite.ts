@@ -18,7 +18,11 @@ import { removalOf, removeObject, setFrame } from './objectFrame';
  * ignores) goes at its end, and if that fails too nothing is written.
  */
 
-/** Marks the popover's own writes, so doc mode's typing rules and the remote-edit rule leave them alone. */
+/**
+ * Marks the popover's own writes, so the edit-from-elsewhere rule leaves them
+ * alone. Their user events start with "math", so doc mode's typing rules,
+ * which read "input" and "delete" events, skip them too.
+ */
 export const mathWrite = Annotation.define<'live' | 'restore' | 'final'>();
 
 export type MathKind = 'inline' | 'display' | 'block';
@@ -56,10 +60,10 @@ export const setMathEditor = StateEffect.define<MathEditor | null>();
 
 let opened = 0;
 
-const EMPTY_TABLE = new Set(['TableCell', 'TableRow', 'TableHeader', 'Table']);
+const TABLE_NODES = new Set(['TableCell', 'TableRow', 'TableHeader', 'Table']);
 
 function inTable(node: SyntaxNode): boolean {
-  for (let at = node.parent; at; at = at.parent) if (EMPTY_TABLE.has(at.name)) return true;
+  for (let at = node.parent; at; at = at.parent) if (TABLE_NODES.has(at.name)) return true;
   return false;
 }
 
@@ -257,7 +261,8 @@ export interface TexWrite {
 }
 
 /**
- * The write for `tex`, by the write rules: inline TeX trimmed; a digit
+ * The write for `tex`, by the write rules: TeX between single dollars
+ * trimmed; a digit
  * right after a `$…$` gets a space before it, since a closing `$` before a
  * digit closes nothing; and the result read back as one formula, with `{}`
  * added at the end of the TeX when the money guard or a closing rule would
@@ -349,7 +354,7 @@ export function closeMathEditor(view: EditorView, field: string | null = null, f
       changes,
       selection: { anchor: changes.length > 0 ? caret : restored.from },
       effects: setMathEditor.of(null),
-      annotations: [mathWrite.of('final'), Transaction.userEvent.of('delete.math')],
+      annotations: [mathWrite.of('final'), Transaction.userEvent.of('math.remove')],
       scrollIntoView: true,
     });
   } else {
@@ -357,7 +362,7 @@ export function closeMathEditor(view: EditorView, field: string | null = null, f
       changes: { from: restored.from, to: restored.to, insert: final },
       selection: { anchor: restored.from + final.length },
       effects: setMathEditor.of(null),
-      annotations: [mathWrite.of('final'), Transaction.userEvent.of('input.math')],
+      annotations: [mathWrite.of('final'), Transaction.userEvent.of('math.write')],
       scrollIntoView: true,
     });
   }
@@ -392,23 +397,27 @@ export function notAFormula(state: EditorState, from: number, to: number): Chang
 
 const COMMENT = /(^|[^\\])%/;
 
-/** Display to inline, or back: the TeX in the other marks. Refused while a `%` comment would swallow the joined lines. */
+/** Display to inline, or back: the TeX in the other marks, read back as one formula. Refused while a `%` comment would swallow the joined lines. */
 export function switchDisplay(state: EditorState, editor: MathEditor): { changes: ChangeSpec[]; problem: string | null; anchor: number } {
-  if (editor.kind === 'block' || editor.kind === 'display') {
-    if (COMMENT.test(editor.tex)) return { changes: [], problem: 'Remove the % comment first', anchor: editor.to };
-    const tex = editor.tex.replace(/\s*\n\s*/g, ' ').trim();
-    const insert = `$${typedForFormula(tex, editor.table)}$`;
-    if (editor.kind === 'block') {
-      const line = state.doc.lineAt(editor.from);
-      const prefix = state.sliceDoc(line.from, editor.from);
-      const last = state.doc.lineAt(editor.to);
-      return { changes: [{ from: line.from, to: last.to, insert: `${prefix}${insert}` }], problem: null, anchor: line.from + prefix.length + insert.length };
-    }
+  const refuse = (problem: string) => ({ changes: [] as ChangeSpec[], problem, anchor: editor.to });
+  if (editor.kind === 'inline') {
+    if (editor.table) return refuse('A table cell holds only inline formulas');
+    const insert = `$$${editor.tex}$$`;
     return { changes: [{ from: editor.from, to: editor.to, insert }], problem: null, anchor: editor.from + insert.length };
   }
-  if (editor.table) return { changes: [], problem: 'A table cell holds only inline formulas', anchor: editor.to };
-  const insert = `$$${editor.tex}$$`;
-  return { changes: [{ from: editor.from, to: editor.to, insert }], problem: null, anchor: editor.from + insert.length };
+  if (COMMENT.test(editor.tex)) return refuse('Remove the % comment first');
+  const tex = editor.tex.replace(/\s*\n\s*/g, ' ').trim();
+  const line = state.doc.lineAt(editor.from);
+  // A block becomes a line of its own, keeping its quote marks or list item.
+  const from = editor.kind === 'block' ? line.from : editor.from;
+  const to = editor.kind === 'block' ? state.doc.lineAt(editor.to).to : editor.to;
+  const prefix = state.sliceDoc(from, editor.from);
+  for (const attempt of /(^|[^\\])(\\\\)*\\$/.test(tex) ? [`${tex} {}`] : [tex, `${tex}{}`]) {
+    const insert = `${prefix}$${attempt}$`;
+    const changes = [{ from, to, insert }];
+    if (readsBack(state, changes, from + prefix.length, from + insert.length)) return { changes, problem: null, anchor: from + insert.length };
+  }
+  return refuse('This formula would not read back inline');
 }
 
 const isMath = (state: EditorState, node: SyntaxNode, block: boolean) => {
@@ -424,7 +433,7 @@ function mathActions(): readonly ObjectAction[] {
       label: 'Not a formula',
       run: (view, target) => {
         const changes = notAFormula(view.state, target.from, target.to);
-        if (changes) view.dispatch({ changes, effects: setFrame.of(null), userEvent: 'input.math' });
+        if (changes) view.dispatch({ changes, effects: setFrame.of(null), userEvent: 'math.write' });
       },
     },
     { id: 'remove', label: 'Remove', run: (view, target) => removeObject(view, target) },
@@ -475,15 +484,15 @@ function linePrefix(text: string): string {
 }
 
 /** A new formula's editor at `at`, written on the first key. */
-function newEditor(state: EditorState, at: number, kind: MathKind, tex = ''): MathEditor {
+function newEditor(state: EditorState, at: number, kind: MathKind): MathEditor {
   const tree = syntaxTree(state);
   let table = false;
-  for (let node: SyntaxNode | null = tree.resolveInner(at, -1); node; node = node.parent) if (EMPTY_TABLE.has(node.name)) table = true;
+  for (let node: SyntaxNode | null = tree.resolveInner(at, -1); node; node = node.parent) if (TABLE_NODES.has(node.name)) table = true;
   const line = state.doc.lineAt(at);
   return {
     id: (opened += 1), from: at, to: at, kind: table ? 'inline' : kind,
     open: kind === 'block' && !table ? '$$' : '$', close: kind === 'block' && !table ? '$$' : '$',
-    opening: '', tex, lastGood: null, problem: null, version: 0, table,
+    opening: '', tex: '', lastGood: null, problem: null, version: 0, table,
     prefix: linePrefix(line.text), dollars: false,
   };
 }
@@ -528,7 +537,7 @@ const dollarsEnter: Command = (view) => {
   if (line.text.slice(raw.length) !== '$$') return false;
   const prefix = linePrefix(line.text);
   const insert = `\n${prefix}\n${prefix}$$`;
-  view.dispatch({ changes: { from: line.to, insert }, selection: { anchor: line.to + 1 + prefix.length }, userEvent: 'input.math' });
+  view.dispatch({ changes: { from: line.to, insert }, selection: { anchor: line.to + 1 + prefix.length }, userEvent: 'math.write' });
   const from = line.from + raw.length;
   view.dispatch({ effects: setMathEditor.of({ ...newEditor(view.state, from, 'block'), from, to: line.to + insert.length, opening: view.state.sliceDoc(from, line.to + insert.length), prefix, dollars: true }) });
   return true;
@@ -542,7 +551,7 @@ export function restoreDollars(view: EditorView): void {
     changes: { from: editor.from, to: editor.to, insert: '$$' },
     selection: { anchor: editor.from + 2 },
     effects: setMathEditor.of(null),
-    userEvent: 'delete.backward',
+    userEvent: 'math.remove',
   });
   view.focus();
 }
@@ -556,10 +565,10 @@ export const insertEquationItem = insertItems.of({
   order: 30,
   run: (view) => {
     // The menu gives focus back to the text as it closes; the popover opens after that, so its field keeps the focus.
-    let opened = false;
+    let done = false;
     const open = () => {
-      if (opened) return;
-      opened = true;
+      if (done) return;
+      done = true;
       editFormula(view);
     };
     view.contentDOM.addEventListener('focus', () => setTimeout(open, 0), { once: true });

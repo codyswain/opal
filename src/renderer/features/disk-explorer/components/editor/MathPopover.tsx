@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { syntaxTree } from '@codemirror/language';
 import { Transaction } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { Button, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
@@ -18,7 +19,6 @@ import {
   writeLive,
   type MathEditor,
 } from './mathWrite';
-import { syntaxTree } from '@codemirror/language';
 
 const MAX_ROWS = 8;
 
@@ -155,7 +155,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
       view.dispatch({ changes: { from: current.from, to: current.to, insert: current.opening }, annotations: [mathWrite.of('restore'), Transaction.addToHistory.of(false)] });
     }
     const changes = notAFormula(view.state, current.from, current.from + current.opening.length);
-    view.dispatch({ changes: changes ?? [], effects: setMathEditor.of(null), annotations: [mathWrite.of('final')], userEvent: 'input.math' });
+    view.dispatch({ changes: changes ?? [], effects: setMathEditor.of(null), annotations: [mathWrite.of('final')], userEvent: 'math.write' });
     view.focus();
   };
 

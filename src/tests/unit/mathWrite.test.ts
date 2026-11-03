@@ -281,6 +281,18 @@ describe('formula write rules', () => {
     expect(switchDisplay(view.state, editor).problem).toBe('Remove the % comment first');
   });
 
+  it('turns a display block into an inline formula that reads back, on its own line', () => {
+    const view = mount('> $$\n> 2 + 3\n> $$\n');
+    const node = mathNodeAt(syntaxTree(view.state), 2, 1);
+    if (!node) throw new Error('no formula');
+    openMathEditor(view, node);
+    const editor = view.state.field(mathEditor);
+    if (!editor) throw new Error('no editor');
+    const result = switchDisplay(view.state, editor);
+    act(() => { view.dispatch({ changes: result.changes }); });
+    expect(text(view)).toBe('> $2 + 3{}$\n');
+  });
+
   it('opens a new formula with Cmd+Shift+E and writes nothing until the field has text', () => {
     const view = mount('Text here');
     act(() => { view.dispatch({ selection: { anchor: 4 } }); });
