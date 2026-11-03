@@ -8,9 +8,10 @@ import { drawnBlockAt } from './livePreview';
  * Keys in a table's Markdown, as in a spreadsheet: Tab and Shift+Tab go to
  * the next and previous cell, selecting its text, and Tab in the last cell
  * adds a row. Enter adds an empty row under the caret's row, or under the
- * delimiter row from the header, with the caret in its first cell. New rows
- * are written "|  |  |", one space on each side of where the text goes.
- * Only while the table shows its Markdown: a drawn table takes no keys.
+ * delimiter row from the header, with the caret in its first cell; Enter on
+ * an empty last row leaves the table. New rows are written "|  |  |", one
+ * space on each side of where the text goes. Only while the table shows its
+ * Markdown: a drawn table takes no keys.
  */
 
 interface Cell {
@@ -117,6 +118,14 @@ const newRow: Command = (view) => {
   const row = rows.find((each) => state.doc.lineAt(each.from).number === line.number);
   if (!row) return false;
   const delimiter = rows.find((each) => each.name === 'TableDelimiter');
+  // Enter on an empty last row leaves the table: the row becomes the blank line under it.
+  if (row.name === 'TableRow' && row === rows[rows.length - 1] && cellsOf(state, row).every((cell) => cell.to === cell.from) && line.number > 1) {
+    const above = state.doc.line(line.number - 1);
+    const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0].replace(/[ \t]+$/, '') ?? '';
+    const insert = `\n${quote}\n${quote ? `${quote} ` : ''}`;
+    view.dispatch({ changes: { from: above.to, to: line.to, insert }, selection: { anchor: above.to + insert.length }, scrollIntoView: true, userEvent: 'input' });
+    return true;
+  }
   const under = row.name === 'TableRow' || !delimiter ? line : state.doc.lineAt(delimiter.from);
   return addRow(state, table, under, view.dispatch);
 };

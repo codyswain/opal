@@ -366,6 +366,13 @@ describe('keys in a table\'s Markdown', () => {
     await focusPage(body);
     key(body, 'Enter');
     expect(marked(body)).toBe('| a | b |\n|---|---|\n| 1 | 2 |\n| ‸ |  |\n\nAfter\n');
+    // Enter again on the empty last row leaves the table.
+    key(body, 'Enter');
+    expect(marked(body)).toBe('| a | b |\n|---|---|\n| 1 | 2 |\n\n‸\n\nAfter\n');
+    const quoted = mount(`> | a |\n> |---|\n> |  ‸|\n`, NOTE);
+    await focusPage(quoted);
+    key(quoted, 'Enter');
+    expect(marked(quoted)).toBe('> | a |\n> |---|\n>\n> ‸\n');
   });
 
   it('works in a document while the table shows its Markdown, and leaves a drawn table alone', async () => {
