@@ -1,5 +1,6 @@
 import { EditorSelection, EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
 import { EditorView, keymap, type Command } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree } from './extensionPoints';
 import { cellCaretOf, docMode, drawnBlockAt, setCellCaret } from './livePreview';
@@ -86,7 +87,8 @@ function addRow(state: EditorState, table: SyntaxNode, line: Line, dispatch: Par
   if (!header) return false;
   const row = emptyRow(state, table, header);
   const caret = line.to + 1 + rowPrefix(state, table).length + 2;
-  dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input' }));
+  // The new row is its own undo step, so Cmd+Z takes back what is typed into it first.
+  dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input', annotations: isolateHistory.of('full') }));
   return true;
 }
 
@@ -178,12 +180,14 @@ export function spacedCell(tr: Transaction): TransactionSpec | null {
   const line = state.doc.lineAt(main.head);
   const cell = cellsOf(state, row).find((each) => each.start <= main.head && main.head <= each.end);
   const userEvent = tr.annotation(Transaction.userEvent);
+  // The caret keeps its place in the typed text, such as inside the marks bold wrapped around it.
+  const offset = Math.min(typed.length, Math.max(0, tr.newSelection.main.head - main.head));
   if (cell && cell.to === cell.from) {
     const insert = ` ${typed} `;
-    return { changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + typed.length }, scrollIntoView: true, userEvent };
+    return { changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + offset }, scrollIntoView: true, userEvent };
   }
   if (!cell && main.head === line.to && state.sliceDoc(line.to - 1, line.to) === '|') {
-    return { changes: { from: main.head, insert: ` ${typed} |` }, selection: { anchor: main.head + 1 + typed.length }, scrollIntoView: true, userEvent };
+    return { changes: { from: main.head, insert: ` ${typed} |` }, selection: { anchor: main.head + 1 + offset }, scrollIntoView: true, userEvent };
   }
   return null;
 }

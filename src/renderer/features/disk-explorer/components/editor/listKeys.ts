@@ -92,12 +92,24 @@ function holdsBlock(state: EditorState, item: Item): boolean {
   return false;
 }
 
+/** Whether `item` has a paragraph, quote or other block of its own that starts on a later line, outside its nested lists. */
+function laterBlock(state: EditorState, item: Item): boolean {
+  for (let child = item.node.firstChild; child; child = child.nextSibling) {
+    if (child.name === 'BulletList' || child.name === 'OrderedList') continue;
+    if (state.doc.lineAt(child.from).number > item.line.number) return true;
+  }
+  return false;
+}
+
 /** Tab: `item` under the item above it, as its last child. */
 function nest(state: EditorState, item: Item): ChangeSpec[] {
-  // Only the item's first line moves, so an item that holds a block on a later line stays rather than leave the block behind.
-  if (holdsBlock(state, item)) return [];
+  // Only the item's first line moves, so an item that holds a block or a second paragraph on a later line stays rather than leave it behind.
+  if (holdsBlock(state, item) || laterBlock(state, item)) return [];
   let previous = item.node.prevSibling;
   while (previous && previous.name !== 'ListItem') previous = previous.prevSibling;
+  // The first item of a list right after a list of the other kind, as Shift+Tab leaves it, goes under that list's last item.
+  const list = item.node.parent?.prevSibling;
+  if (!previous && (list?.name === 'BulletList' || list?.name === 'OrderedList') && list.name !== item.node.parent?.name) previous = list.lastChild;
   const parent = previous && itemOf(state, previous);
   if (!parent) return [];
   const target = textColumn(state, parent);

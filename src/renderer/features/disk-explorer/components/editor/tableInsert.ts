@@ -2,6 +2,7 @@ import type { EditorState, Line } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Table } from 'lucide-react';
+import { calloutMarker } from './blockGuards';
 import { insertItems, latestTree } from './extensionPoints';
 import { listItemOf } from './formatCommands';
 import { setOpenBlock } from './livePreview';
@@ -25,13 +26,16 @@ const quoteOf = (text: string) => /^(?:[ \t]*>[ \t]?)*/.exec(text)?.[0] ?? '';
 // Blocks a new block never goes inside: it goes after their last line.
 const WHOLE = new Set(['Table', 'FencedCode', 'CodeBlock', 'HTMLBlock', 'CommentBlock', 'LinkReference', 'SetextHeading1', 'SetextHeading2']);
 
-/** The outermost table, code, HTML block or setext heading that holds `line`. */
-function wholeBlockAt(state: EditorState, line: Line): SyntaxNode | null {
+/** Whether `node` is a quote whose first line opens a callout. */
+const isCallout = (state: EditorState, node: SyntaxNode) => node.name === 'Blockquote' && calloutMarker(state, state.doc.lineAt(node.from)) !== null;
+
+/** The outermost table, code, HTML block or setext heading that holds `line`, and with `callouts` a callout too. */
+function wholeBlockAt(state: EditorState, line: Line, callouts = false): SyntaxNode | null {
   let found: SyntaxNode | null = null;
   const tree = latestTree(state);
   for (const [at, side] of [[line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0), 1], [line.to, -1]] as const) {
     for (let node: SyntaxNode | null = tree.resolveInner(at, side); node; node = node.parent) {
-      if (!WHOLE.has(node.name)) continue;
+      if (!WHOLE.has(node.name) && !(callouts && isCallout(state, node))) continue;
       const last = node.to > node.from && state.doc.lineAt(node.to).from === node.to ? node.to - 1 : node.to;
       if (state.doc.lineAt(node.from).number <= line.number && line.number <= state.doc.lineAt(last).number && (!found || node.from <= found.from)) found = node;
     }
@@ -59,18 +63,23 @@ function leadOf(state: EditorState, line: Line): string {
  * The change that writes `rows` as a block of its own at the caret: in
  * place of a blank line, after the caret's line, or after the table, code,
  * HTML block or setext heading the caret is in, so no block is split. The
- * rows keep the caret's quote and list item, and a blank line on each side
+ * rows keep the caret's quote and list item, and take the place of an
+ * empty item. With `callouts`, a callout counts as such a block, since a
+ * callout can't open inside another. A blank line on each side
  * keeps them apart from the text around them. `start` is where the first
  * row starts, `prefix` what each row starts with.
  */
-export function blockInsertion(state: EditorState, rows: readonly string[]): { from: number; to: number; insert: string; start: number; end: number; prefix: string } {
+export function blockInsertion(state: EditorState, rows: readonly string[], callouts = false): { from: number; to: number; insert: string; start: number; end: number; prefix: string } {
   const { doc } = state;
   const caretLine = doc.lineAt(state.selection.main.head);
-  const whole = wholeBlockAt(state, caretLine);
+  const whole = wholeBlockAt(state, caretLine, callouts);
   const line = whole ? doc.lineAt(whole.to > whole.from && doc.lineAt(whole.to).from === whole.to ? whole.to - 1 : whole.to) : caretLine;
-  const lead = whole ? doc.sliceString(doc.lineAt(whole.from).from, whole.from) : leadOf(state, line);
+  // An empty list item, as Enter at a list's end leaves, gives its place to the block.
+  const item = whole ? null : listItemOf(state, line);
+  const emptyItem = item !== null && item.textFrom === line.to;
+  const lead = whole ? doc.sliceString(doc.lineAt(whole.from).from, whole.from) : emptyItem ? line.text.slice(0, item.markFrom - line.from) : leadOf(state, line);
   const { prefix, gap } = prefixOf(lead);
-  const empty = !whole && !hasText(line.text);
+  const empty = !whole && (emptyItem || !hasText(line.text));
   const above = empty ? (line.number > 1 ? doc.line(line.number - 1) : null) : line;
   const below = line.number < doc.lines ? doc.line(line.number + 1) : null;
   const text = rows.map((row) => prefix + row).join('\n');

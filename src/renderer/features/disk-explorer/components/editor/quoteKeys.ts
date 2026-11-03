@@ -32,7 +32,9 @@ const leaveQuote: Command = (view) => {
     if (node.name === 'FencedCode' || node.name === 'CodeBlock') return false;
   }
   const levels = marks.match(/>/g)?.length ?? 0;
-  const outer = levels > 1 ? `${'> '.repeat(levels - 1)}` : '';
+  // What comes before the first ">", such as a list item's indent, stays, so the line stays in the item.
+  const lead = /^[ \t]*/.exec(marks)?.[0] ?? '';
+  const outer = `${lead}${levels > 1 ? '> '.repeat(levels - 1) : ''}`;
   const insert = `${outer.trimEnd()}\n${outer}`;
   view.dispatch({ changes: { from: line.from, to: line.to, insert }, selection: { anchor: line.from + insert.length }, scrollIntoView: true, userEvent: 'input' });
   return true;
@@ -78,9 +80,9 @@ export function spacedTitle(tr: Transaction): TransactionSpec | null {
  * where), and puts the caret at the end of the last row, or with `below` on
  * the line under the block.
  */
-function insertBlock(view: EditorView, rows: readonly string[], below = false): void {
+function insertBlock(view: EditorView, rows: readonly string[], below = false, callouts = false): void {
   const { state } = view;
-  const { from, to, insert, end } = blockInsertion(state, rows);
+  const { from, to, insert, end } = blockInsertion(state, rows, callouts);
   const changes = state.changes({ from, to, insert });
   const doc = changes.apply(state.doc);
   const last = doc.lineAt(end);
@@ -94,7 +96,7 @@ export const insertCalloutItem = insertItems.of({
   label: 'Callout',
   icon: MessageSquareQuote,
   order: 30,
-  run: (view) => insertBlock(view, ['> [!note] Note', '> ']),
+  run: (view) => insertBlock(view, ['> [!note] Note', '> '], false, true),
 });
 
 export const insertRuleItem = insertItems.of({

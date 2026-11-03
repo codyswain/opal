@@ -67,6 +67,14 @@ function blockOf(state: EditorState, line: Line): SyntaxNode | null {
   return null;
 }
 
+/** Whether `line` holds the frame of `block`: a table's delimiter row, or a code block's opening or closing fence. */
+function structural(state: EditorState, block: SyntaxNode, line: Line): boolean {
+  if (block.name === 'Table') return /^[\s>]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/.test(line.text);
+  if (block.name !== 'FencedCode') return false;
+  const last = block.to > block.from && state.doc.lineAt(block.to).from === block.to ? block.to - 1 : block.to;
+  return line.number === state.doc.lineAt(block.from).number || (line.number === state.doc.lineAt(last).number && block.lastChild?.name === 'CodeMark');
+}
+
 const sameBlock = (a: SyntaxNode | null, b: SyntaxNode | null) => (a === null && b === null) || (a !== null && b !== null && a.from === b.from && a.to === b.to);
 
 /** Whether the lines `first` to `last` carry a list item without the items nested under it. */
@@ -93,7 +101,10 @@ function refuseMove(dir: -1 | 1): Command {
     const neighbour = dir < 0 ? first.number - 1 : last.number + 1;
     if (neighbour < 1 || neighbour > state.doc.lines) return false;
     const moving = blockOf(state, first);
-    if (!sameBlock(moving, blockOf(state, last)) || !sameBlock(moving, blockOf(state, state.doc.line(neighbour)))) return true;
+    const other = state.doc.line(neighbour);
+    if (!sameBlock(moving, blockOf(state, last)) || !sameBlock(moving, blockOf(state, other))) return true;
+    // Inside a block, a table's delimiter row and a code block's fences stay where they are, and no line passes them.
+    if (moving && [first, last, other].some((line) => structural(state, moving, line))) return true;
     return leavesChildren(state, first, last);
   };
 }

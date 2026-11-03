@@ -28,11 +28,10 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), succe
  *   byte inside hidden text (marks, link addresses, targets) or bare URLs.
  * - Replace All writes the word inside stars, brackets and an underscore,
  *   and the changed lines show exactly that, with the escapes hidden.
- * - Bold, italic, strikethrough and Clear on a sampled word leave the page
- *   showing the same words and no new marker character. A command that
- *   refuses is counted by name. Headings and lists may add a drawn box or
- *   blank lines; where they show a mark, the run is counted as pending for
- *   PR 1, which owns those commands.
+ * - Bold, italic, strikethrough, Clear, headings and lists on a sampled
+ *   word leave the page showing the same words and no new marker character.
+ *   A command that refuses is counted by name. Headings and lists may add a
+ *   drawn box or blank lines, and a list on an empty line an empty item.
  * - Typing `*`, `_`, `\`, `1984. ` and `<!--` at sampled places shows
  *   exactly what was typed (`expectTyped`), with escapes as the only extra
  *   bytes.
@@ -117,33 +116,6 @@ function insertedAround(before: string, after: string, typed: string): boolean {
   return old === was.length && next === typed.length && /^[*_~`\s]*$/.test(was);
 }
 
-const LINE_COMMANDS = new Set(['heading 2', 'normal text', 'bulleted list', 'numbered list', 'checklist']);
-const BLOCK_OWNER = 'PR 1: headings and lists over tables, code, HTML, numbered headings and empty lines';
-const ITEM_OWNER = 'PR 1: a heading in a task or list item, a list on a heading or an indented line';
-const BLOCKS = new Set(['Table', 'FencedCode', 'CodeBlock', 'HTMLBlock', 'CommentBlock']);
-
-/**
- * Whether the selection's lines touch a table, code or HTML block, a
- * heading that starts with a number, or an empty line: PR 1's guards keep
- * line commands off blocks and turn "## 5. x" into text, not a list, and its
- * list markers draw an empty item's bullet.
- */
-function touchesBlock(state: EditorState): boolean {
-  const { from, to } = state.selection.main;
-  const first = state.doc.lineAt(from);
-  const last = state.doc.lineAt(to);
-  let found = /^#{1,6}[ \t]+\d+[.)]/.test(first.text) || !/\S/.test(first.text);
-  syntaxTree(state).iterate({
-    from: first.from,
-    to: last.to,
-    enter: (ref) => {
-      if (BLOCKS.has(ref.name)) found = true;
-      return !found;
-    },
-  });
-  return found;
-}
-
 /** The visible text of the lines a command changed, before and after. */
 function shownAround(tr: Transaction): [string, string] {
   let from = tr.startState.doc.length;
@@ -161,6 +133,8 @@ function shownAround(tr: Transaction): [string, string] {
 function sameWords(tr: Transaction): boolean {
   const words = (text: string) => text.split('\n').map((line) => line.replace(/\ufffc/g, '').trim()).filter(Boolean).join('\n');
   const [before, after] = shownAround(tr);
+  // A list on an empty line is an empty item, which shows its marker until text follows it.
+  if (words(before) === '' && /^(?:[-*+]|\d{1,9}[.)])(?: \[ \])?$/.test(words(after))) return true;
   return words(before) === words(after);
 }
 
@@ -218,11 +192,6 @@ function continuesOrderedList(state: EditorState, at: number): boolean {
     if (node.name === 'OrderedList') return true;
   }
   return false;
-}
-
-/** A lone `*` typed on an empty line is a bullet with no text, which PR 1 shows as text until a space follows. */
-function lonePending(state: EditorState, typed: string, at: number): string | null {
-  return typed === '*' && !/\S/.test(state.doc.lineAt(at).text) ? 'PR 1: a lone * on an empty line' : null;
 }
 
 describe.skipIf(!ROOT)('doc mode typing census', () => {
@@ -300,11 +269,7 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
             continue;
           }
           if (sameWords(result) && markers(shownAround(result)[1]) <= markers(shownAround(result)[0])) continue;
-          // Headings and lists are PR 1's commands: what they show over blocks and inside items is counted for it.
-          if (LINE_COMMANDS.has(name)) {
-            const owner = touchesBlock(selected) ? BLOCK_OWNER : ITEM_OWNER;
-            pending.set(owner, [...(pending.get(owner) ?? []), `${where} ${name}: ${shownChange(result)}`]);
-          } else failures.push(`${where} ${name} showed a mark: ${shownChange(result)}`);
+          failures.push(`${where} ${name} showed a mark: ${shownChange(result)}`);
         }
 
         // Typed delimiters show as typed, mid-line and at the line's text start.
@@ -328,7 +293,7 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
               problems = expectTyped(before, after, typed, caret, { escapes: '\\', separators: ` ${blockSeparators(before, caret)}` });
             }
             if (problems.length === 0) continue;
-            const owner = lonePending(before, typed, caret) ?? pendingOwner(before, after, typed, caret);
+            const owner = pendingOwner(before, after, typed, caret);
             if (owner) pending.set(owner, [...(pending.get(owner) ?? []), `${where} typed ${JSON.stringify(typed)}: ${problems.join('; ')}`]);
             else failures.push(`${where} typed ${JSON.stringify(typed)} at ${caret}: ${problems.join('; ')}`);
           }
