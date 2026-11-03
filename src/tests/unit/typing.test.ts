@@ -3,6 +3,7 @@ import { act } from '@testing-library/react';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { fitMarks, literalText } from '@/renderer/features/disk-explorer/components/editor/typing';
@@ -310,5 +311,36 @@ describe('input methods in a document', () => {
     act(() => { view.contentDOM.dispatchEvent(new Event('compositionstart', { bubbles: true })); });
     expect(text(view)).toBe('Some **bo**ext\n');
     expect(view.state.selection.main.head).toBe(9);
+  });
+});
+
+describe('undo right after an autoformat', () => {
+  const MOD = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+  const commandZ = (view: EditorView) => act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'z', ...MOD }), 'editor'); });
+  // Edit > Undo reaches the page as the browser's undo input, which the history takes.
+  const editUndo = (view: EditorView) => act(() => { view.contentDOM.dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true })); });
+
+  for (const [name, run] of [['Cmd+Z', commandZ], ['Edit > Undo', editUndo]] as const) {
+    it(`shows the marks as text first, then takes the typing back, through ${name}`, () => {
+      for (const [typed, formatted, literal] of [['# ', '# ', '\\# '], ['- ', '- ', '\\- '], ['1. ', '1. ', '1\\. '], ['see `x`', 'see `x`', 'see \\`x\\`'], ['see ~~x~~', 'see ~~x~~', 'see \\~\\~x\\~\\~']]) {
+        const view = mount('\n');
+        at(view, 0);
+        type(view, typed);
+        expect(text(view)).toBe(`${formatted}\n`);
+        run(view);
+        expect(text(view)).toBe(`${literal}\n`);
+        run(view);
+        expect(text(view)).toBe('\n');
+      }
+    });
+  }
+
+  it('keeps bold typed as **x** bold, and its first undo shows the stars', () => {
+    const view = mount('\n');
+    at(view, 0);
+    type(view, 'see **x**');
+    expect(text(view)).toBe('see **x**\n');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('see \\*\\*x\\*\\*\n');
   });
 });

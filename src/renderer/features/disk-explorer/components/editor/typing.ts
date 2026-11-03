@@ -1,5 +1,6 @@
-import { ChangeSet, EditorState, MapMode, Prec, StateField, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { isolateHistory, undo } from '@codemirror/commands';
+import { ChangeSet, EditorState, MapMode, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Text, type TransactionSpec } from '@codemirror/state';
+import { EditorView, ViewPlugin, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, nodeDecorators, protectedIn } from './extensionPoints';
 import { inlineSpans, typingStyle } from './formatCommands';
@@ -61,25 +62,100 @@ const MARK_OF: Record<string, string> = { Emphasis: 'EmphasisMark', StrongEmphas
 const WORD = /[\p{L}\p{N}]/u;
 
 /**
- * Whether the character at `at` closes formatting typed in this session as a
- * shortcut: its opener was typed here and does not sit inside a word.
+ * The marks of formatting the character at `at` closes as a shortcut typed
+ * in this session: its opener was typed here and does not sit inside a
+ * word. Null when it closes no such formatting.
  */
-function closesShortcut(state: EditorState, at: number): boolean {
+function shortcutMarks(state: EditorState, at: number): { open: { from: number; to: number }; close: { from: number; to: number } } | null {
   const typed = state.field(typedMarks, false) ?? [];
   for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, 1); node; node = node.parent) {
     if (!EMPHASIS_NODES.has(node.name)) continue;
     const marks = node.getChildren(MARK_OF[node.name]);
-    if (marks.length < 2) return false;
+    if (marks.length < 2) return null;
     const open = marks[0];
     const close = marks[marks.length - 1];
-    if (!(close.from <= at && at < close.to)) return false;
+    if (!(close.from <= at && at < close.to)) return null;
     const inWord = WORD.test(state.sliceDoc(open.from - 1, open.from)) && WORD.test(state.sliceDoc(open.to, open.to + 1));
     let opened = true;
     for (let mark = open.from; mark < open.to; mark += 1) if (!typed.includes(mark)) opened = false;
-    return opened && !inWord;
+    return opened && !inWord ? { open: { from: open.from, to: open.to }, close: { from: close.from, to: close.to } } : null;
   }
-  return false;
+  return null;
 }
+
+/*
+ * Autoformat is two undo steps: the typed text written literally, then the
+ * formatting. A shortcut's last key writes its marks escaped, so the page
+ * shows them as typed, and asks for the formatting, which goes in as its own
+ * history event right after. The first undo, from ⌘Z or Edit > Undo alike,
+ * shows the marks as text again; the next one takes the typing back.
+ */
+
+/** The changes that turn the literal marks into formatting, applied right after the typing. */
+const formatAfter = StateEffect.define<readonly { from: number; to: number }[]>();
+
+/** Writes a backslash before each of `positions` (in `tr`'s new text), and asks for them to go again as formatting. */
+function autoformatSpec(at: number, length: number, positions: readonly number[]): TransactionSpec {
+  const sorted = [...new Set(positions)].sort((a, b) => a - b);
+  const before = sorted.filter((position) => position <= at).length;
+  return {
+    changes: sorted.map((from) => ({ from, insert: '\\' })),
+    selection: { anchor: at + length + before },
+    effects: formatAfter.of(sorted.map((from, index) => ({ from: from + index, to: from + index + 1 }))),
+    sequential: true,
+  };
+}
+
+/** True right after the formatting went in, until the text or the caret changes. */
+const justFormatted = StateField.define<boolean>({
+  create: () => false,
+  update: (value, tr) => (tr.isUserEvent('input.autoformat') ? true : tr.docChanged || tr.selection ? false : value),
+});
+
+/** Turns the literal marks `removals` point at into formatting, as its own history event, when the text is still `doc`. */
+function format(view: EditorView, doc: Text, removals: readonly { from: number; to: number }[]): void {
+  if (view.state.doc !== doc) return;
+  const changes = ChangeSet.of(removals.map(({ from, to }) => ({ from, to })), doc.length);
+  view.dispatch({
+    changes,
+    selection: { anchor: changes.mapPos(view.state.selection.main.head, 1) },
+    annotations: [isolateHistory.of('full'), Transaction.userEvent.of('input.autoformat')],
+    filter: false,
+  });
+}
+
+const formatting = (tr: Transaction) => tr.effects.find((effect) => effect.is(formatAfter))?.value as readonly { from: number; to: number }[] | undefined;
+
+// Typed text that can finish a shortcut: a space after a line mark, or a closing delimiter.
+const SHORTCUT_KEYS = /^[ *_~`]$/;
+
+/** Typed text that finishes a shortcut is written, then formatted, in two dispatches straight away. */
+const typeThenFormat = EditorView.inputHandler.of((view, _from, _to, text, insert) => {
+  if (!SHORTCUT_KEYS.test(text) || view.composing || !view.state.facet(docMode)) return false;
+  const tr = insert();
+  const removals = formatting(tr);
+  if (!removals) return false;
+  view.dispatch(tr);
+  format(view, view.state.doc, removals);
+  return true;
+});
+
+/** Formatting asked for by typing that came another way, such as doc mode's own input handler. */
+const applyFormatting = ViewPlugin.fromClass(class {
+  constructor(readonly view: EditorView) {}
+
+  update(update: ViewUpdate) {
+    for (const tr of update.transactions) {
+      const removals = formatting(tr);
+      const { doc } = update.state;
+      // After this update and before the next key, so the page never shows the literal marks.
+      if (removals) queueMicrotask(() => format(this.view, doc, removals));
+    }
+  }
+});
+
+/** Backspace right after an autoformat shows its marks as text again, as the first undo does. */
+const undoFormatting = keymap.of([{ key: 'Backspace', run: (view) => (view.state.field(justFormatted, false) ? undo(view) : false) }]);
 
 /**
  * Whether line `lineNumber` is an item of an ordered list, or a later line
@@ -102,6 +178,8 @@ function inOrderedItem(state: EditorState, lineNumber: number, column: number): 
 const CONTAINER = /^(?:[ \t]*>[ \t]?)*(?:[ \t]*(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)*[ \t]*/;
 // Marks a line may start with, typed as shortcuts: a bullet, a quote, a heading.
 const LINE_SHORTCUTS = new Set(['ListMark', 'QuoteMark', 'HeaderMark']);
+// Marks a typed space turns into formatting: a heading, a list item, a task's box.
+const LINE_FORMATS = new Set(['HeaderMark', 'ListMark', 'TaskMarker']);
 
 /** The one character typed at a caret by `tr`: where it went in the new text, or null. */
 function typedCharacter(tr: Transaction): { at: number; text: string } | null {
@@ -140,7 +218,15 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     if (match && Number(match[1]) !== 1 && !inOrderedItem(before, lineBefore.number - 1, prefix.length)) {
       return insertBefore(line.from + prefix.length + match[1].length, '\\');
     }
-    return null;
+    if (text !== ' ') return null;
+  }
+
+  // A space that turns "#", "-", "1." or "[ ]" at the line's text start into formatting is an autoformat.
+  if (text === ' ') {
+    const mark = latestTree(after).resolveInner(at, -1);
+    if (!LINE_FORMATS.has(mark.name) || mark.to !== at || mark.from !== line.from + prefix.length) return null;
+    const numbered = mark.name === 'ListMark' && /\d/.test(after.sliceDoc(mark.from, mark.from + 1));
+    return autoformatSpec(at, text.length, [numbered ? mark.to - 1 : mark.from]);
   }
 
   // "<!--" would hide the rest of the page in Obsidian.
@@ -167,7 +253,12 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   const offset = visibleOffset(shown, caret);
   const expected = shown.text.slice(0, offset) + text + shown.text.slice(offset);
   if (visibleLine(after, at).text === expected) return null;
-  if (closesShortcut(after, at)) return null;
+  const marks = shortcutMarks(after, at);
+  if (marks) {
+    const positions: number[] = [];
+    for (const range of [marks.open, marks.close]) for (let index = range.from; index < range.to; index += 1) positions.push(index);
+    return autoformatSpec(at, text.length, positions);
+  }
   return insertBefore(at, '\\');
 }
 
@@ -439,5 +530,5 @@ function compositionHooks(replace: (state: EditorState, from: number, to: number
 
 /** Doc mode's typing: the session's typed marks, the escapes, Enter in formatting, hidden hard breaks and input methods. */
 export function typingExtension(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
-  return [typedMarks, Prec.high(typingFilter), hardBreaks, compositionHooks(replace)];
+  return [typedMarks, justFormatted, typeThenFormat, applyFormatting, Prec.high(undoFormatting), Prec.high(typingFilter), hardBreaks, compositionHooks(replace)];
 }
