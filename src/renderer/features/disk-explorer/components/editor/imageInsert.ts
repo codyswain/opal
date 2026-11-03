@@ -1,6 +1,6 @@
 import { isolateHistory } from '@codemirror/commands';
 import { syntaxTree } from '@codemirror/language';
-import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
+import { StateEffect, StateField, type EditorState, type Extension, type Line } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { ImagePlus, Paperclip } from 'lucide-react';
@@ -31,13 +31,22 @@ const hasText = (text: string) => /[^\s>]/.test(text);
 // The quote marks that open a line, with the space after each.
 const QUOTE = /^(?:[ \t]*>[ \t]?)*/;
 
+/** Whether `line` is a table's row, which would read text on the line right under it as another row. */
+function tableRow(state: EditorState, line: Line): boolean {
+  const lead = /^[\s>]*/.exec(line.text)?.[0].length ?? 0;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from + lead, 1); node; node = node.parent) {
+    if (node.name === 'Table') return true;
+  }
+  return false;
+}
+
 /**
  * Where `embed` goes to sit on a line of its own after the line holding
  * `at`, and the text that puts it there. In a quote the line keeps its ">",
  * and under a list item it lines up with the item's text. In a table or
- * code block it goes after the block, and after a table a blank line first,
- * since a line right under a table is one of its rows. An empty line takes
- * the embed itself.
+ * code block it goes after the block, and after a table a blank line
+ * first, since a line right under a table is one of its rows. An empty line
+ * takes the embed itself, unless it is the blank line under a table.
  */
 export function placeEmbed(state: EditorState, at: number, embed: string): { from: number; insert: string } {
   const { doc } = state;
@@ -60,8 +69,13 @@ export function placeEmbed(state: EditorState, at: number, embed: string): { fro
       break;
     }
   }
-  if (!hasText(line.text)) return { from: line.to, insert: embed };
   const quote = QUOTE.exec(line.text)?.[0] ?? '';
+  if (!hasText(line.text)) {
+    // After the quote's marks with a space, and under a table on a line of its own, keeping the blank line.
+    const lead = quote && !quote.endsWith(' ') ? ' ' : '';
+    const underTable = line.number > 1 && tableRow(state, doc.line(line.number - 1));
+    return { from: line.to, insert: `${underTable ? `\n${quote}` : ''}${lead}${embed}` };
+  }
   const rest = under.slice(QUOTE.exec(under)?.[0].length ?? 0);
   const item = table ? undefined : /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(rest)?.[0];
   const indent = item ? ' '.repeat(item.length) : /^[ \t]*/.exec(rest)?.[0] ?? '';
