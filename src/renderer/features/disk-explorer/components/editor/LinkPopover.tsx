@@ -3,8 +3,9 @@ import type { EditorView } from '@codemirror/view';
 import { Pencil, Unlink } from 'lucide-react';
 import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
 import { setLinkEditor, type LinkEditor } from './docMode';
-import { linkBetween, removeLink, writeLink, type LinkAt } from './formatCommands';
-import { autolinkHref, drawnBlockAt, openLink } from './livePreview';
+import { linkBetween, removeLink, typedLinkText, writeLink, type LinkAt } from './formatCommands';
+import { autolinkHref, docMode, drawnBlockAt, openLink } from './livePreview';
+import { visibleSlice } from './visibleText';
 import { openWikiLink, parseWikiTarget } from './wikiLinks';
 
 /** Where the link sits on screen, from its first character on its first line. */
@@ -27,10 +28,16 @@ interface LinkFormProps {
   link: LinkAt | null;
 }
 
-/** The text and the address of a link, written when applied. */
+/**
+ * The text and the address of a link, written when applied. The text field
+ * shows the text as the page does; unchanged, the link keeps its text as
+ * written, and typed text is written so it shows as typed.
+ */
 const LinkForm: React.FC<LinkFormProps> = ({ view, editor, link }) => {
   const { state } = view;
-  const [text, setText] = useState(() => (link ? state.sliceDoc(link.textFrom, link.textTo) : state.sliceDoc(editor.from, editor.to)));
+  const [written] = useState(() => (link ? { from: link.textFrom, to: link.textTo } : { from: editor.from, to: editor.to }));
+  const [shown] = useState(() => (state.facet(docMode) ? visibleSlice(state, written.from, written.to) : state.sliceDoc(written.from, written.to)));
+  const [text, setText] = useState(shown);
   const [url, setUrl] = useState(link?.target ?? '');
   return (
     <form
@@ -38,7 +45,9 @@ const LinkForm: React.FC<LinkFormProps> = ({ view, editor, link }) => {
       onSubmit={(event) => {
         event.preventDefault();
         if (!url.trim()) return;
-        view.dispatch(writeLink(view.state, editor, text, url.trim(), link), { effects: setLinkEditor.of(null) });
+        const { state: now } = view;
+        const raw = text === shown ? now.sliceDoc(written.from, written.to) : now.facet(docMode) ? typedLinkText(text) : text;
+        view.dispatch(writeLink(now, editor, raw, url.trim(), link), { effects: setLinkEditor.of(null) });
         view.focus();
       }}
     >

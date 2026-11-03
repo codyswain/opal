@@ -40,6 +40,7 @@ import { headingKeys } from './headingKeys';
 import { docListKeys } from './listKeys';
 import { quoteKeys } from './quoteKeys';
 import { insertTableItem } from './tableInsert';
+import { clipboard } from './clipboard';
 import { typingExtension } from './typing';
 import { hiddenOn } from './visibleText';
 import { visibleSearch } from './visibleSearch';
@@ -506,7 +507,7 @@ export function docModeExtensions(): Extension {
     }),
     Prec.highest(docClicks),
     imageFrame,
-    [typingExtension, visibleSearch(replaceVisible), wordMotion(replaceVisible)],
+    [typingExtension, visibleSearch(replaceVisible), wordMotion(replaceVisible), clipboard(replaceVisible)],
     Prec.high(keymap.of([
       { key: 'ArrowLeft', run: moveVisibly(false, false), shift: moveVisibly(false, true) },
       { key: 'ArrowRight', run: moveVisibly(true, false), shift: moveVisibly(true, true) },

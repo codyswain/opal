@@ -690,7 +690,44 @@ export function linkAt(state: EditorState, at: number): LinkAt | null {
 }
 
 const linkText = (text: string) => text.replace(/[[\]]/g, '\\$&');
+/** Brackets in Markdown that is already written, escaped unless they are already. */
+const writtenLinkText = (text: string) => text.replace(/(?<!\\)[[\]]/g, '\\$&');
 const destination = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url);
+
+/** Text typed into the link form, written so it shows as typed: stars, underscores and backticks escaped. */
+export const typedLinkText = (text: string) => text.replace(/[\\*_`]/g, (character) => (character === '\\' ? '\\\\' : `\\${character}`));
+
+/**
+ * A new link over `from` to `to` that keeps the formatting it half covers
+ * balanced: a span that starts before the link closes before it and opens
+ * again inside, and one that runs on past the link closes inside it and
+ * opens again after. `**bold** t` with "old t" linked is
+ * `**b**[**old** t](url)`. Formatting the link holds whole moves inside it
+ * with its marks.
+ */
+function linkOver(state: EditorState, from: number, to: number, url: string): Change {
+  const spans = inlineSpans(state, from, to).filter((span) => EMPHASIS.has(span.name) || span.name === 'InlineCode');
+  for (const span of spans) {
+    if (span.textFrom >= from && span.textTo <= to) {
+      from = Math.min(from, span.from);
+      to = Math.max(to, span.to);
+    }
+  }
+  let before = '';
+  let open = '';
+  let close = '';
+  let after = '';
+  for (const span of spans) {
+    const opens = state.sliceDoc(span.from, span.textFrom);
+    const closes = state.sliceDoc(span.textTo, span.to);
+    const startsBefore = span.from < from && from < span.textTo;
+    const endsAfter = span.to > to && to > span.textFrom;
+    if (startsBefore && endsAfter) continue;
+    if (startsBefore) { before = closes + before; open += opens; }
+    if (endsAfter) { close = closes + close; after += opens; }
+  }
+  return { from, to, insert: `${before}[${open}${writtenLinkText(state.sliceDoc(from, to))}${close}](${destination(url)})${after}` };
+}
 
 /**
  * Writes a link to `url` with `text`: over `range` for a new one, or in place
@@ -709,6 +746,8 @@ export function writeLink(state: EditorState, range: { from: number; to: number 
     const node = written.name === 'Link' ? written : written.parent;
     const at = node?.getChild('URL');
     change = at ? { from: at.from, to: at.to, insert: destination(url) } : { from: link.textTo, to: link.to, insert: `](${destination(url)})` };
+  } else if (!link && text && text === state.sliceDoc(range.from, range.to)) {
+    change = linkOver(state, range.from, range.to, url);
   } else {
     const { from, to } = link ?? range;
     change = { from, to, insert: `[${linkText(shown)}](${destination(url)})` };

@@ -123,6 +123,7 @@ export function buildMenuTemplate(
         { role: "cut", label: "Cut" },
         { role: "copy", label: "Copy" },
         { role: "paste", label: "Paste" },
+        { role: "pasteAndMatchStyle", label: "Paste and Match Style", accelerator: "CmdOrCtrl+Shift+V" },
         { role: "selectAll", label: "Select All" },
       ],
     },
