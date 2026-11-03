@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { lstat, readFile, readdir, writeFile } from 'fs/promises';
-import path from 'path';
+import { readFile, writeFile } from 'fs/promises';
 import { EditorState } from '@codemirror/state';
 import { MarkdownError, joinMarkdown, parseMarkdown } from '@/main/fs/MarkdownDocumentService';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+import { openedLine, vaultFiles } from './censusHelpers';
 
 /**
- * A read-only census of a real vault, in memory: every Markdown file is split
+ * A read-only census of a real vault, in memory: every note (.md) and
+ * document (.mdo) is split
  * the way the service reads it, loaded into the editor's state, and joined
  * back, and must come out byte for byte; with one typed character it must
  * come out one byte longer and otherwise the same. Nothing is written to the
@@ -15,18 +16,6 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
  *   OPAL_CENSUS_ROOT=/path/to/vault [OPAL_CENSUS_OUT=report.json] npx vitest run src/tests/fidelity
  */
 const ROOT = process.env.OPAL_CENSUS_ROOT;
-
-async function markdownFiles(dir: string, found: string[] = [], links: string[] = []): Promise<{ found: string[]; links: string[] }> {
-  for (const name of await readdir(dir)) {
-    if (name === '.git') continue;
-    const full = path.join(dir, name);
-    const info = await lstat(full);
-    if (info.isSymbolicLink()) { if (name.toLowerCase().endsWith('.md')) links.push(full); continue; }
-    if (info.isDirectory()) await markdownFiles(full, found, links);
-    else if (info.isFile() && name.toLowerCase().endsWith('.md')) found.push(full);
-  }
-  return { found, links };
-}
 
 /** Where an LF body offset falls in the source text, which may use CRLF. */
 function sourceIndex(source: string, offset: number): number {
@@ -37,7 +26,8 @@ function sourceIndex(source: string, offset: number): number {
 
 describe.skipIf(!ROOT)('vault census', () => {
   it('reproduces every Markdown file byte for byte', async () => {
-    const { found, links } = await markdownFiles(ROOT as string);
+    const vault = await vaultFiles(ROOT as string);
+    const { found, links } = vault;
     const failures: string[] = [];
     const editFailures: string[] = [];
     const notText: string[] = [];
@@ -76,6 +66,7 @@ describe.skipIf(!ROOT)('vault census', () => {
       withFrontmatter,
       crlf,
     };
+    console.info(openedLine('census', found.length - notText.length, vault));
     console.info(`[census] ${report.passed}/${found.length - notText.length} editable files reproduce exactly, ${editFailures.length} miss on a one-character edit; ${notText.length} are not UTF-8; ${links.length} symlinks skipped`);
     if (process.env.OPAL_CENSUS_OUT) await writeFile(process.env.OPAL_CENSUS_OUT, JSON.stringify(report, null, 2));
     expect(failures).toEqual([]);

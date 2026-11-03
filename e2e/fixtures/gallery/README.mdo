@@ -1,0 +1,37 @@
+# Gallery
+
+This document is the gallery's first fixture. Each area of the editor adds one document here, named after its area (`blocks.mdo`, `typing.mdo`, `code.mdo`, `math.mdo`, `files.mdo`), holding every object in every state the area draws.
+
+The gallery script opens each fixture in the built app and saves it light and dark, at 700 and 420 pixels wide, into one page for review. Screenshots are for people to look at. Nothing compares them.
+
+## Text
+
+A paragraph with **bold**, *italic*, ~~struck~~ and `inline code`, a [link](https://example.com) and a [[Missing note]].
+
+- A bullet
+	- A nested bullet
+- [ ] A task
+- [x] A done task
+
+1. First
+2. Second
+
+> A quote, which can run over more than one line in a narrow window.
+
+> [!note] A callout
+> With a second line.
+
+## Blocks
+
+| Area | Fixture | Owner |
+|---|---|---|
+| Blocks | blocks.mdo | PR 1 |
+| Typing | typing.mdo | PR 2 |
+
+---
+
+```ts
+const gallery = ['light', 'dark'];
+```
+
+The end.

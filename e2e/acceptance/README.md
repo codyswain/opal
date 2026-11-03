@@ -21,4 +21,9 @@ Then, from the repository root:
 node e2e/acceptance/editor-acceptance.mjs        # Markdown editing: autosave, external edits, conflicts, new note
 node e2e/acceptance/stack-stress-acceptance.mjs  # The daily stream with 100 daily pages: frame times, memory, editor count, drift, Back and relaunch
 node e2e/acceptance/git-autostash-acceptance.mjs # Autosave during vault-pull.sh's `git merge --autostash` in a 3,000-file repo: 30 runs, no saved, typed or upstream line lost
+node e2e/acceptance/gallery.mjs [area] [--out dir] # The look gallery: each e2e/fixtures/gallery/*.mdo light and dark at 700 and 420px, into e2e/out/gallery/index.html
 ```
+
+The gallery writes to `--out`, then `OPAL_GALLERY_OUT`, then `e2e/out/gallery`.
+Each area adds its own fixture document to `e2e/fixtures/gallery/`. Its
+screenshots are for people to look at and are never compared.
