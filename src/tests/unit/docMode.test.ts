@@ -172,16 +172,18 @@ describe('doc mode', () => {
     expect(caret(view)).toBe(1);
   });
 
-  it('removes a picture or a drawn block whole, keeping the lines around a block apart', async () => {
+  it('frames a drawn block on the first Backspace and removes it whole on the second, keeping the lines around it apart; a picture goes whole', async () => {
     const view = mount('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
     await focusPage(view);
     const after = text(view).indexOf('\nMore') + 1;
     select(view, after - 1);
     key(view, 'Backspace');
-    expect(text(view)).toBe('Text\n\n\nMore ![a](https://example.com/a.png) end\n');
+    expect(text(view)).toBe('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Text\n\nMore ![a](https://example.com/a.png) end\n');
     select(view, text(view).indexOf(' end'));
     key(view, 'Backspace');
-    expect(text(view)).toBe('Text\n\n\nMore  end\n');
+    expect(text(view)).toBe('Text\n\nMore  end\n');
   });
 
   it('types at the end of bold or italic inside it, and after a link or code outside it', async () => {
@@ -379,14 +381,16 @@ describe('doc mode', () => {
     expect(view.state.field(linkEditor)?.editing).toBe(false);
   });
 
-  it('puts the caret after a table on a click, and shows its Markdown on a double-click until the caret leaves', async () => {
+  it('puts a cell caret in a table on a click, and shows its Markdown on a double-click until the caret leaves', async () => {
     const view = mount('Intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nEnd\n');
     await focusPage(view);
     const table = view.contentDOM.querySelector('.cm-md-table') as Element;
     const cell = table.querySelector('td') as Element;
     act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
-    expect(caret(view)).toBe(text(view).indexOf('\nEnd'));
-    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 2 })); });
+    expect(caret(view)).toBe(text(view).indexOf('1 |'));
+    expect(view.contentDOM.querySelector('.cm-md-cell-caret')).not.toBeNull();
+    const outlined = view.contentDOM.querySelector('.cm-md-table td') as Element;
+    act(() => { outlined.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 2 })); });
     expect(view.contentDOM.querySelector('.cm-md-table')).toBeNull();
     expect(lineText(view, 2)).toBe('| a | b |');
     select(view, 0);

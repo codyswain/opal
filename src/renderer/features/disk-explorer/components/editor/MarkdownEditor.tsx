@@ -9,12 +9,17 @@ import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePr
 import { useTabsStore } from '../../store/tabsStore';
 import { isLogPage } from './activityLog';
 import { linkEditor, type LinkEditor } from './docMode';
+import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
+import type { PageObject } from './extensionPoints';
+import { setFileProperties } from './firstLine';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
 import { formatState, sameFormat, type FormatState } from './formatState';
 import { LinkPopover } from './LinkPopover';
 import { showInlineTitle } from './livePreview';
+import { ObjectBar, ObjectMenu } from './ObjectBar';
+import { objectFrame } from './objectFrame';
 import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
@@ -119,6 +124,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const [docView, setDocView] = useState<EditorView | null>(null);
   const [format, setFormat] = useState<FormatState | null>(null);
   const [link, setLink] = useState<LinkEditor | null>(null);
+  const [framed, setFramed] = useState<PageObject | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState(0);
   // The hook's state changes identity across renders; the editor reads the latest.
@@ -156,6 +162,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
               const next = formatState(update.state);
               setFormat((shown) => (sameFormat(shown, next) ? shown : next));
               setLink(update.state.field(linkEditor));
+              setFramed(update.state.field(objectFrame, false) ?? null);
             }
           }),
         ],
@@ -191,6 +198,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   useEffect(() => {
     view.current?.dispatch({ effects: setPageProperties.of(facts) });
   }, [facts]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: setFileProperties.of(document.properties > 0) });
+  }, [document.properties]);
 
   // The block opens under the title, so the page scrolls up to show it. Closing keeps the scroll.
   // In a stack the stack brings the section's top into view.
@@ -232,6 +243,9 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       {docView && format && !section ? <DocToolbar view={docView} format={format} /> : null}
       <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
       {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
+      {docView && framed ? <ObjectBar view={docView} frame={framed} /> : null}
+      {docView ? <ObjectMenu view={docView} /> : null}
+      {docView ? <CalloutTypeMenu view={docView} /> : null}
       <EditorStatus
         saveState={document.saveState}
         error={document.error}

@@ -6,7 +6,6 @@ import {
   Bold,
   ChevronDown,
   Ellipsis,
-  ImagePlus,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -14,6 +13,7 @@ import {
   List,
   ListOrdered,
   ListTodo,
+  Plus,
   Redo2,
   RemoveFormatting,
   Undo2,
@@ -27,15 +27,16 @@ import {
   MenuItem,
   MenuRadioGroup,
   MenuRadioItem,
+  MenuShortcut,
   MenuSub,
   MenuSubContent,
   MenuSubTrigger,
   MenuTrigger,
 } from '@/renderer/shared/ui';
 import { editLink } from './docMode';
+import { insertItems } from './extensionPoints';
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from './formatCommands';
 import type { FormatState } from './formatState';
-import { addPickedImages } from './imageInsert';
 
 const STYLES = ['Normal text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'];
 
@@ -50,13 +51,14 @@ interface Action {
   run: () => void;
 }
 
-type Item = Action | 'style' | 'separator';
+type Item = Action | 'style' | 'insert' | 'separator';
 
-// Widths in px, so the row knows what fits before it draws: a 28px button and its gap, a rule, the style menu.
+// Widths in px, so the row knows what fits before it draws: a 28px button and its gap, a rule, the style menu, the Insert menu.
 const BUTTON_WIDTH = 30;
 const SEPARATOR_WIDTH = 9;
 const STYLE_WIDTH = 124;
-const widthOf = (item: Item) => (item === 'separator' ? SEPARATOR_WIDTH : item === 'style' ? STYLE_WIDTH : BUTTON_WIDTH);
+const INSERT_WIDTH = 46;
+const widthOf = (item: Item) => (item === 'separator' ? SEPARATOR_WIDTH : item === 'style' ? STYLE_WIDTH : item === 'insert' ? INSERT_WIDTH : BUTTON_WIDTH);
 
 /** How many items fit in `width`, leaving room for the "more" button when some do not. */
 function fitting(items: readonly Item[], width: number): number {
@@ -105,10 +107,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   }, []);
 
   const command = (run: StateCommand) => () => { run(view); };
-  const insertImage = async () => {
-    await addPickedImages(view);
-    view.focus();
-  };
+  const inserts = view.state.facet(insertItems);
 
   const items: Item[] = [
     { id: 'undo', label: 'Undo', icon: Undo2, shortcut: '⌘Z', disabled: !format.canUndo, run: command(undo) },
@@ -120,7 +119,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, run: command(toggleMarker('*')) },
     'separator',
     { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, run: () => { editLink(view); } },
-    { id: 'image', label: 'Image', icon: ImagePlus, run: () => { void insertImage(); } },
+    'insert',
     'separator',
     { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', run: command(toggleList('task')) },
     { id: 'bullets', label: 'Bulleted list', icon: List, shortcut: '⇧⌘8', pressed: format.list === 'bullet', run: command(toggleList('bullet')) },
@@ -133,9 +132,9 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   ];
   const count = fitting(items, width);
   const shown = items.slice(0, count);
-  const hidden = items.slice(count).filter((item): item is Action | 'style' => item !== 'separator');
+  const hidden = items.slice(count).filter((item): item is Action | 'style' | 'insert' => item !== 'separator');
   // The one button in the tab order: the last one focused, or the first that can take focus.
-  const focusable = shown.flatMap((item) => (item === 'separator' ? [] : item === 'style' ? ['style'] : item.disabled ? [] : [item.id]));
+  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && format.headingDisabled) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
   if (hidden.length > 0) focusable.push('more');
   const tabStop = focusable.includes(current) ? current : focusable[0];
   const tabIndex = (id: string) => (id === tabStop ? 0 : -1);
@@ -159,6 +158,16 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     view.focus();
   };
   const styleName = format.heading === null ? 'Mixed styles' : STYLES[format.heading];
+  const insertMenuItems = inserts.map((item) => {
+    const Icon = item.icon;
+    return (
+      <MenuItem key={item.id} className="gap-2" onSelect={() => { void item.run(view); }}>
+        <Icon aria-hidden className="h-4 w-4" />
+        {item.label}
+        {item.shortcut ? <MenuShortcut>{item.shortcut}</MenuShortcut> : null}
+      </MenuItem>
+    );
+  });
   const styleItems = (
     <MenuRadioGroup value={String(format.heading ?? '')} onValueChange={(level) => setHeading(Number(level))(view)}>
       {STYLES.map((name, level) => (
@@ -182,11 +191,24 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     >
       {shown.map((item, index) => {
         if (item === 'separator') return <span key={`separator-${index}`} aria-hidden className="opal-doc-toolbar-rule" />;
+        if (item === 'insert') {
+          return (
+            <Menu key="insert">
+              <MenuTrigger asChild>
+                <button type="button" data-toolbar-item="insert" tabIndex={tabIndex('insert')} aria-label="Insert" title="Insert" onMouseDown={keepFocus} className="opal-doc-toolbar-insert">
+                  <Plus aria-hidden className="h-4 w-4" />
+                  <ChevronDown aria-hidden className="h-3 w-3" />
+                </button>
+              </MenuTrigger>
+              <MenuContent align="start" onCloseAutoFocus={backToText}>{insertMenuItems}</MenuContent>
+            </Menu>
+          );
+        }
         if (item === 'style') {
           return (
             <Menu key="style">
               <MenuTrigger asChild>
-                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
+                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} disabled={format.headingDisabled} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
                   <span className="truncate">{styleName}</span>
                   <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0" />
                 </button>
@@ -226,6 +248,14 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
                   <MenuSub key="style">
                     <MenuSubTrigger>Style</MenuSubTrigger>
                     <MenuSubContent>{styleItems}</MenuSubContent>
+                  </MenuSub>
+                );
+              }
+              if (item === 'insert') {
+                return (
+                  <MenuSub key="insert">
+                    <MenuSubTrigger>Insert</MenuSubTrigger>
+                    <MenuSubContent>{insertMenuItems}</MenuSubContent>
                   </MenuSub>
                 );
               }

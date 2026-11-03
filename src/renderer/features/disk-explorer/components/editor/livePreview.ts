@@ -8,8 +8,9 @@ import { classifyFile, pageName } from '@/common/fileKind';
 import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
+import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type TextRange } from './extensionPoints';
+import { CalloutIconWidget } from './callouts';
 import {
-  CalloutIconWidget,
   CalloutTitleWidget,
   CodeBlockWidget,
   EllipsisWidget,
@@ -49,7 +50,12 @@ export const docMode = Facet.define<boolean, boolean>({ combine: (values) => val
 const setFocused = StateEffect.define<boolean>();
 const setPointerDown = StateEffect.define<boolean>();
 /** Puts a cell caret at a position in a table, or with null turns it into the table's source. */
-const setCellCaret = StateEffect.define<number | null>();
+export const setCellCaret = StateEffect.define<number | null>();
+
+/** Where a click in a drawn table put the cell caret, or null. */
+export function cellCaretOf(state: EditorState): number | null {
+  return state.field(revealState, false)?.cell ?? null;
+}
 /** In a document, shows the source of the table or code block over these lines, or with null draws it again. */
 export const setOpenBlock = StateEffect.define<{ from: number; to: number } | null>();
 
@@ -102,22 +108,17 @@ const revealState = StateField.define<RevealState>({
 
 const trackFocus = EditorView.focusChangeEffect.of((_state, focusing) => setFocused.of(focusing));
 
-/** Which ranges show as source: `lines` when a selection touches one of their lines, `span` only when it touches the range itself. */
-interface Reveal {
-  lines: (from: number, to?: number) => boolean;
-  span: (from: number, to?: number) => boolean;
-}
-
 const NOTHING_REVEALED: Reveal = { lines: () => false, span: () => false };
 
 function revealer(state: EditorState): Reveal {
   const { revealed, block } = state.field(revealState);
-  if (!revealed) return NOTHING_REVEALED;
+  // A document's open table or code block shows its source with or without focus, as a menu takes it.
   if (state.facet(docMode)) {
     if (!block) return NOTHING_REVEALED;
     const open = (from: number, to = from) => from <= block.to && to >= block.from;
     return { lines: open, span: open };
   }
+  if (!revealed) return NOTHING_REVEALED;
   // Log pages and the old Activity Log section are read-only in Opal, so they always read as rendered.
   const locked = state.field(activityLogSection, false) ?? null;
   const editable = (from: number) => locked === null || from < locked;
@@ -156,6 +157,22 @@ const LIST_MARKER_EM = 1.5;
 /** How far a list item's text starts from its container's edge, in em. */
 function listIndent(depth: number): number {
   return depth * LIST_LEVEL_EM + LIST_MARKER_EM;
+}
+
+/**
+ * A document's number for an ordered item: the list's first number plus
+ * the item's place in it, so "1.", "1.", "1." and a list with an item
+ * deleted read 1, 2, 3. The file keeps the numbers as written.
+ */
+function shownNumber(state: EditorState, item: SyntaxNode, mark: SyntaxNode): string {
+  const list = item.parent;
+  const written = state.sliceDoc(mark.from, mark.to);
+  const first = list?.getChild('ListItem')?.getChild('ListMark');
+  if (!list || !first) return written;
+  let place = 0;
+  for (let child = list.firstChild; child && child.from < item.from; child = child.nextSibling) if (child.name === 'ListItem') place += 1;
+  const start = Number.parseInt(state.sliceDoc(first.from, first.to), 10) || 0;
+  return `${start + place}${written.slice(-1)}`;
 }
 
 function listDepth(node: SyntaxNode): number {
@@ -320,7 +337,8 @@ function inlinePieces(state: EditorState, node: SyntaxNode, from: number, to: nu
       pieces.push({ kind, children: inlinePieces(state, child, edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to) });
     } else if (child.name === 'InlineCode') {
       const edges = marks('CodeMark');
-      pieces.push({ kind: 'code', text: state.sliceDoc(edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to) });
+      // In a table cell a pipe in code is written "\|", and reads as a plain pipe.
+      pieces.push({ kind: 'code', text: state.sliceDoc(edges[0]?.to ?? child.from, edges[edges.length - 1]?.from ?? child.to).replace(/\\\|/g, '|') });
     } else if (child.name === 'Link') {
       const edges = marks('LinkMark');
       const target = linkTarget(state, child);
@@ -337,6 +355,8 @@ function inlinePieces(state: EditorState, node: SyntaxNode, from: number, to: nu
       pieces.push({ kind: 'link', children: [{ kind: 'text', text: written }], href: autolinkHref(written) });
     } else if (child.name === 'Escape') {
       pieces.push({ kind: 'text', text: state.sliceDoc(child.from + 1, child.to) });
+    } else if (child.name === 'HTMLTag' && /^<br\s*\/?>$/i.test(state.sliceDoc(child.from, child.to))) {
+      pieces.push({ kind: 'break' });
     } else {
       pieces.push({ kind: 'text', text: state.sliceDoc(child.from, child.to) });
     }
@@ -351,7 +371,11 @@ function columnAlignment(cell: string): TableModel['align'][number] {
   return left && right ? 'center' : right ? 'right' : left ? 'left' : null;
 }
 
-/** A row's cells by column. A column with no cell node is empty and keeps the spot after its pipe. */
+/**
+ * A row's cells by column. A column with no cell node is empty and keeps the
+ * spot after its pipe and one space, so text typed there has a space on
+ * each side.
+ */
 function rowCells(state: EditorState, start: number, row: SyntaxNode): TableCell[] {
   const cells: TableCell[] = [];
   let column = 0;
@@ -362,7 +386,7 @@ function rowCells(state: EditorState, start: number, row: SyntaxNode): TableCell
         cells[column] ??= { offset: empty, content: [] };
         column += 1;
       }
-      empty = child.to - start;
+      empty = child.to - start + (state.sliceDoc(child.to, child.to + 2) === '  ' ? 1 : 0);
     } else if (child.name === 'TableCell') {
       cells[column] = { offset: child.from - start, content: inlinePieces(state, child, child.from, child.to) };
     }
@@ -376,7 +400,10 @@ function tableModel(state: EditorState, table: SyntaxNode, start: number): Table
     if (child.name === 'TableHeader') {
       model.header = rowCells(state, start, child);
     } else if (child.name === 'TableRow') {
-      model.rows.push(rowCells(state, start, child));
+      // A row short of cells takes them at its end, where typing adds them.
+      const cells = rowCells(state, start, child);
+      while (cells.length < model.header.length) cells.push({ offset: child.to - start, content: [] });
+      model.rows.push(cells);
     } else if (child.name === 'TableDelimiter') {
       const cells = state.sliceDoc(child.from, child.to).trim().replace(/^\||\|$/g, '').split('|');
       model.align = cells.map((cell) => columnAlignment(cell.trim()));
@@ -425,8 +452,21 @@ const LEAF_BLOCKS = new Set([
 
 function findBlocks(state: EditorState): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
+  const renderers = state.facet(blockRenderers);
   syntaxTree(state).iterate({
     enter: (ref) => {
+      const registered = renderers.get(ref.name);
+      if (registered) {
+        const node = ref.node;
+        const from = state.doc.lineAt(node.from).from;
+        const to = lastLine(state.doc, node).to;
+        for (const renderer of registered) {
+          const widget = renderer.widget(state, node, from, to, blockLayout(state.doc, node, to));
+          if (widget === undefined) continue;
+          if (widget) blocks.push({ from, to, widget });
+          return false;
+        }
+      }
       if (LEAF_BLOCKS.has(ref.name)) return false;
       if (ref.name !== 'Table' && ref.name !== 'FencedCode') return;
       const node = ref.node;
@@ -496,9 +536,13 @@ const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
 const horizontalRule = new HorizontalRuleWidget();
+const horizontalRuleObject = new HorizontalRuleWidget(true);
 
-/** Decorations for the lines from `top` to `bottom`: everything but tables and fenced code. */
-function lineDecorations(state: EditorState, top: number, bottom: number): DecorationSet {
+/**
+ * Decorations for the lines from `top` to `bottom`: everything but tables and
+ * fenced code. Ranges node decorators mark as units go into `units`.
+ */
+function lineDecorations(state: EditorState, top: number, bottom: number, units?: TextRange[]): DecorationSet {
   const { doc } = state;
   const reveal = revealer(state);
   const page = state.facet(pageContext).path;
@@ -529,12 +573,18 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
   const continued = new Map<number, { indent: number; quoted: boolean }>();
   const markerLines = new Set<number>();
   const calloutHeads = new Set<number>();
+  const decorators = state.facet(nodeDecorators);
+  const ctx: DecorateContext = {
+    state, reveal, docMode: state.facet(docMode), page, links, versions, picked, out, hide, lineClass, covered,
+    unit: (from, to) => { if (to > from) units?.push({ from, to }); },
+  };
 
   syntaxTree(state).iterate({
     from: top,
     to: bottom,
     enter: (ref) => {
       const node = ref.node;
+      if (decorators.get(ref.name)?.some((decorator) => decorator.decorate(ctx, node) === true)) return false;
       switch (ref.name) {
         case 'Table':
         case 'FencedCode':
@@ -566,6 +616,13 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           const mark = node.getChild('HeaderMark');
           linesOf(ref.from, mark ? mark.from - 1 : ref.to, (line) => lineClass(line.from, `cm-md-heading cm-md-h${ref.name.slice(-1)}`));
           if (mark) lineClass(mark.from, 'cm-md-setext-mark');
+          // A document never shows the underline: the caret steps from the heading's end past it.
+          if (mark && state.facet(docMode)) {
+            const underline = doc.lineAt(mark.from);
+            hide(underline.from, underline.to);
+            lineClass(underline.from, 'cm-md-setext-hidden');
+            units?.push({ from: underline.from - 1, to: Math.min(doc.length, underline.to + 1) });
+          }
           return true;
         }
         case 'EmphasisMark':
@@ -655,7 +712,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           return false;
         }
         case 'HorizontalRule':
-          if (!reveal.lines(ref.from, ref.to)) out.push(Decoration.replace({ widget: horizontalRule }).range(ref.from, ref.to));
+          if (!reveal.lines(ref.from, ref.to)) out.push(Decoration.replace({ widget: state.facet(docMode) ? horizontalRuleObject : horizontalRule }).range(ref.from, ref.to));
           return false;
         case 'ListMark': {
           const item = node.parent;
@@ -666,14 +723,20 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           const box = item.getChild('Task')?.getChild('TaskMarker');
           const task = box && box.from <= line.to ? box : null;
           const textFrom = skipSpaces(doc, task ? task.to : ref.to, line.to);
-          const indent = listIndent(listDepth(node));
+          const depth = listDepth(node);
+          const indent = listIndent(depth);
           const checked = task ? /x/i.test(doc.sliceString(task.from, task.to)) : false;
+          const ordered = item.parent?.name === 'OrderedList';
+          const docs = state.facet(docMode);
+          // A document shows a lone "-" or "*" as typed until a space makes it a bullet.
+          if (docs && !ordered && ref.to === line.to) return true;
           lineClass(line.from, 'cm-md-list', `--list-indent: ${indent}em`);
           markerLines.add(line.number);
           // The marker shows as written only while the caret is in it.
           if (start <= ref.from && !reveal.span(start, textFrom - 1)) {
-            const kind = task ? 'task' : item.parent?.name === 'OrderedList' ? 'number' : 'bullet';
-            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, doc.sliceString(ref.from, ref.to), checked), caretAfter: true }).range(start, textFrom));
+            const kind = task ? 'task' : ordered ? 'number' : 'bullet';
+            const label = ordered && docs ? shownNumber(state, item, node) : doc.sliceString(ref.from, ref.to);
+            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, label, checked, depth, task && ordered ? label : null), caretAfter: true }).range(start, textFrom));
           }
           if (checked && textFrom < line.to) out.push(taskDone.range(textFrom, line.to));
           const last = lastLine(doc, item).number;
@@ -687,9 +750,12 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           const callout = calloutOf(doc, node);
           const kind = callout ? 'cm-md-callout' : 'cm-md-quote';
           linesOf(ref.from, lastLine(doc, node).to, (line, first, last) => {
+            // A nested quote draws one rule per level, in a callout too.
+            const depth = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0].match(/>/g)?.length ?? 1;
+            const nested = depth > 1 ? { style: `--quote-depth: ${depth}` } : {};
             out.push(Decoration.line({
               class: `${kind}${first ? ` ${kind}-first` : ''}${last ? ` ${kind}-last` : ''}`,
-              attributes: callout ? { 'data-callout': callout.type } : undefined,
+              attributes: callout ? { 'data-callout': callout.type, ...nested } : depth > 1 ? nested : undefined,
             }).range(line.from));
           });
           if (!callout) return true;
@@ -697,7 +763,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           calloutHeads.add(head.from);
           if (callout.title) out.push(calloutTitle.range(callout.titleFrom, head.to));
           if (!reveal.lines(head.from, head.to)) {
-            if (callout.type === 'ai') out.push(Decoration.widget({ widget: new CalloutIconWidget(), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
+            out.push(Decoration.widget({ widget: new CalloutIconWidget(callout.type, state.facet(docMode)), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
             if (callout.title) hide(head.from, callout.titleFrom, true);
             else out.push(Decoration.replace({ widget: new CalloutTitleWidget(callout.type[0].toUpperCase() + callout.type.slice(1)), caretAfter: true }).range(head.from, head.to));
           }
@@ -771,17 +837,24 @@ export function hiddenRanges(state: EditorState, from: number, to: number): Hidd
     if (node.name === 'ListItem') start = Math.min(start, node.from);
   }
   const found: HiddenRange[] = [];
-  lineDecorations(state, start, to).between(from, to, (rangeFrom, rangeTo, decoration) => {
+  const units: TextRange[] = [];
+  lineDecorations(state, start, to, units).between(from, to, (rangeFrom, rangeTo, decoration) => {
     if (!decoration.point || rangeTo <= rangeFrom) return;
     const caretAfter = Boolean(decoration.spec.caretAfter);
     found.push({ from: rangeFrom, to: rangeTo, caretAfter, unit: Boolean(decoration.spec.widget) && !caretAfter });
   });
+  for (const unit of units) {
+    if (unit.to >= from && unit.from <= to) found.push({ ...unit, caretAfter: false, unit: true });
+  }
   const reveal = revealer(state);
   for (const target of state.field(linkDefinitions).long) {
     if (target.to >= from && target.from <= to && !reveal.lines(target.line)) found.push({ from: target.from, to: target.to, caretAfter: false, unit: true });
   }
+  // A table holding a cell caret keeps the caret in its cell until a key shows its source.
+  const { cell } = state.field(revealState);
   for (const block of state.field(blockPreview).shown) {
     if (block.to < from || block.from > to) continue;
+    if (cell !== null && block.from <= cell && cell <= block.to) continue;
     found.push({ from: Math.max(0, block.from - 1), to: Math.min(state.doc.length, block.to + 1), caretAfter: false, unit: true });
   }
   return found.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -832,12 +905,18 @@ export function openLink(view: EditorView, href: string, newTab: boolean): void 
   else void openPathLink(view, href, newTab);
 }
 
-/** With a cell caret, Enter and the first typed key show the table's source; a typed character then lands in it. */
+/**
+ * With a cell caret, Enter and the first typed key show the table's source;
+ * a typed character then lands in it. A document opens the table's source
+ * for as long as the caret stays in it.
+ */
 function revealCell(event: KeyboardEvent, view: EditorView): boolean {
-  if (view.state.field(revealState).cell === null || event.metaKey || event.ctrlKey || event.altKey) return false;
+  const { cell } = view.state.field(revealState);
+  if (cell === null || event.metaKey || event.ctrlKey || event.altKey) return false;
   const typing = event.key.length === 1;
   if (!typing && !['Enter', 'Backspace', 'Delete'].includes(event.key)) return false;
-  view.dispatch({ effects: setCellCaret.of(null) });
+  const table = view.state.facet(docMode) ? drawnBlockAt(view.state, cell) : null;
+  view.dispatch({ effects: table ? [setCellCaret.of(null), setOpenBlock.of(table)] : setCellCaret.of(null) });
   if (typing) return false;
   event.preventDefault();
   return true;

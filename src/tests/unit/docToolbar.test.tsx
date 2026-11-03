@@ -54,7 +54,7 @@ describe('the document toolbar', () => {
     await openEditor(DOC, 'Some **bold** text.\n');
     const names = within(screen.getByRole('toolbar', { name: 'Formatting' })).getAllByRole('button').map((item) => item.getAttribute('aria-label'));
     expect(names).toEqual([
-      'Undo', 'Redo', 'Style, Normal text', 'Bold', 'Italic', 'Link', 'Image',
+      'Undo', 'Redo', 'Style, Normal text', 'Bold', 'Italic', 'Link', 'Insert',
       'Checklist', 'Bulleted list', 'Numbered list', 'Decrease indent', 'Increase indent', 'Clear formatting',
     ]);
     installMarkdownApi({ [NOTE]: 'Plain.\n' });
@@ -126,20 +126,23 @@ describe('the document toolbar', () => {
     expect(within(toolbar).getAllByRole('button').map((item) => item.getAttribute('aria-label'))).toEqual(['Undo', 'Redo', 'Style, Normal text', 'Bold', 'Italic', 'More']);
     select(view, 0, 4);
     await user.click(button('More'));
-    expect(await screen.findByRole('menuitem', { name: 'Image' })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'Insert' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitemcheckbox', { name: 'Numbered list' }));
     expect(view.state.doc.toString()).toBe('1. Text\n');
   });
 
-  it('inserts a picked image on a line after the caret\'s line', async () => {
+  it('inserts a picked image from the Insert menu on a line after the caret\'s line', async () => {
     const pickAndImport = vi.fn(async () => ({
       success: true as const,
       data: { files: [{ path: '/Vault/Library/files/2026-11/nest.a3f9c2e1.jpg', vaultPath: 'Library/files/2026-11/nest.a3f9c2e1.jpg', name: 'nest.jpg' }], skipped: [] },
     }));
     window.filesAPI = { pickAndImport } as unknown as typeof window.filesAPI;
+    const user = userEvent.setup();
     const view = await openEditor(DOC, '> Quoted line\nNext\n');
+    view.focus = vi.fn();
     select(view, 5);
-    fireEvent.click(button('Image'));
+    await user.click(button('Insert'));
+    await user.click(await screen.findByRole('menuitem', { name: 'Image…' }));
     await waitFor(() => expect(view.state.doc.toString()).toBe('> Quoted line\n> ![[Library/files/2026-11/nest.a3f9c2e1.jpg]]\nNext\n'));
     expect(pickAndImport).toHaveBeenCalledWith(DOC);
   });
@@ -217,5 +220,28 @@ describe('the link popover', () => {
     act(() => usePaletteStore.getState().hide());
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true, ...MOD })); });
     expect(usePaletteStore.getState().open).toBe(true);
+  });
+});
+
+describe('Option+F10 next to block objects and callout titles', () => {
+  it('moves focus to a framed table\'s bar, which sits outside the editor', async () => {
+    const view = await openEditor(DOC, 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nMore\n');
+    vi.spyOn(view, 'focus').mockImplementation(() => undefined);
+    const more = view.state.doc.toString().indexOf('More');
+    select(view, more);
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true })); });
+    const bar = await screen.findByRole('toolbar', { name: /table/ });
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true, cancelable: true })); });
+    expect(bar.contains(document.activeElement)).toBe(true);
+  });
+
+  it('skips the style menu while it is off, so the toolbar still takes focus on a callout title', async () => {
+    const view = await openEditor(DOC, '> [!note] A callout\n> body\n');
+    vi.spyOn(view, 'focus').mockImplementation(() => undefined);
+    select(view, '> [!note] A callout'.length);
+    expect(button('Style, Normal text')).toBeDisabled();
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true, cancelable: true })); });
+    expect(screen.getByRole('toolbar', { name: 'Formatting' }).contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(button('Style, Normal text'));
   });
 });

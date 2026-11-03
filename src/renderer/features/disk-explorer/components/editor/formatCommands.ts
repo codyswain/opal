@@ -1,5 +1,4 @@
-import { indentLess, indentMore } from '@codemirror/commands';
-import { indentUnit, syntaxTree } from '@codemirror/language';
+import { indentUnit } from '@codemirror/language';
 import {
   ChangeSet,
   EditorSelection,
@@ -13,6 +12,9 @@ import {
   type TransactionSpec,
 } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
+import { calloutMarker } from './blockGuards';
+import { latestTree, protectedIn, treeFor } from './extensionPoints';
+import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
 import { parseWikiTarget } from './wikiLinks';
 
@@ -29,12 +31,17 @@ const LINE_MARKS = new Set(['QuoteMark', 'ListMark', 'TaskMarker', 'HeaderMark']
 const BLOCK_MARKS = new Set(['QuoteMark', 'ListMark', 'TaskMarker']);
 const QUOTE_MARK = new Set(['QuoteMark']);
 
-/** Where a line's text starts, past spaces and the `marks` that open it. */
+/** Where a line's text starts, past spaces, the `marks` that open it and a callout's "[!type]". */
 function textStart(state: EditorState, line: Line, marks: ReadonlySet<string> = LINE_MARKS): number {
-  const tree = syntaxTree(state);
+  const tree = latestTree(state);
+  const callout = calloutMarker(state, line);
   let at = line.from;
   for (;;) {
     while (at < line.to && /[ \t]/.test(state.sliceDoc(at, at + 1))) at += 1;
+    if (callout && at === callout.from) {
+      at = callout.to;
+      continue;
+    }
     const node = tree.resolveInner(at, 1);
     if (node.from !== at || node.to > line.to || !marks.has(node.name)) return at;
     at = node.to;
@@ -42,7 +49,7 @@ function textStart(state: EditorState, line: Line, marks: ReadonlySet<string> = 
 }
 
 /** The lines the selection touches. A selection that ends at the start of a line leaves that line out. */
-export function selectedLines(state: EditorState): Line[] {
+function touchedLines(state: EditorState): Line[] {
   const lines = new Map<number, Line>();
   for (const range of state.selection.ranges) {
     const last = state.doc.lineAt(range.to);
@@ -51,6 +58,37 @@ export function selectedLines(state: EditorState): Line[] {
   }
   return [...lines.values()].sort((a, b) => a.number - b.number);
 }
+
+/** The lines the selection touches, less those a protected range covers whole, such as a table's. */
+export function selectedLines(state: EditorState): Line[] {
+  return touchedLines(state).filter((line) => !protectedIn(state, line.from, line.to).some((range) => range.from <= line.from && range.to >= line.to));
+}
+
+/**
+ * `text` kept out of protected ranges: its ends move out of one inside its
+ * line, so formatting goes around a formula, and it is cut short of one
+ * that spans lines or covers its lines whole, such as a table or a rule.
+ * Null when nothing is left.
+ */
+function unprotected(state: EditorState, text: { from: number; to: number }): { from: number; to: number } | null {
+  let { from, to } = text;
+  for (const range of protectedIn(state, from, to)) {
+    const first = state.doc.lineAt(range.from);
+    const last = state.doc.lineAt(range.to);
+    if (first.number === last.number && !(range.from === first.from && range.to === last.to)) {
+      if (range.from < from && from < range.to) from = range.from;
+      if (range.from < to && to < range.to) to = range.to;
+    } else {
+      if (range.from <= from && range.to >= to) return null;
+      if (range.from <= from && range.to > from) from = range.to;
+      if (range.from < to && range.to >= to) to = range.from;
+    }
+  }
+  return to > from ? { from, to } : null;
+}
+
+/** The end of the selection, for `treeFor`. */
+const selectionEnd = (state: EditorState) => Math.max(...state.selection.ranges.map((range) => range.to));
 
 /**
  * The parts of a selection to format, one per line: the selected text of
@@ -107,7 +145,7 @@ function inlineSpan(state: EditorState, node: SyntaxNode): InlineSpan | null {
 /** The inline formatting that touches `from` to `to`, outer spans before the ones inside them. */
 export function inlineSpans(state: EditorState, from: number, to: number): InlineSpan[] {
   const spans: InlineSpan[] = [];
-  syntaxTree(state).iterate({
+  latestTree(state).iterate({
     from,
     to,
     enter: (ref) => {
@@ -161,7 +199,8 @@ export interface SelectedText {
 export function selectedText(state: EditorState, range: SelectionRange): SelectedText[] {
   return lineSpans(state, range).flatMap((line) => {
     const spans = inlineSpans(state, line.from, line.to);
-    const bounds = textBounds(state, spans, line.from, line.to);
+    const found = textBounds(state, spans, line.from, line.to);
+    const bounds = found && unprotected(state, found);
     return bounds ? [{ ...bounds, spans }] : [];
   });
 }
@@ -314,6 +353,7 @@ function toggleTyping(state: EditorState, marker: string): TransactionSpec | nul
 export function toggleMarker(marker: string): StateCommand {
   const name = STYLES[marker];
   return ({ state, dispatch }) => {
+    if (!treeFor(state, selectionEnd(state))) return true;
     const doc = state.facet(docMode);
     const target = (range: SelectionRange) => (doc && range.empty ? wordAround(state, range.head) ?? range : range);
     if (doc && state.selection.ranges.every((range) => target(range).empty)) {
@@ -353,6 +393,7 @@ const CLEARED = ['StrongEmphasis', 'Emphasis', 'Strikethrough', 'InlineCode'];
 /** Takes bold, italic, strikethrough and code off the selection: only marks the syntax tree reads as formatting. */
 export const clearFormatting: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
+  if (!treeFor(state, selectionEnd(state))) return true;
   const changes = state.selection.ranges.flatMap((range) => selectedText(state, range))
     .flatMap((text) => CLEARED.flatMap((name) => removeStyle(state, text, name, CLEARED)));
   if (changes.length > 0) dispatch(state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' }));
@@ -365,13 +406,61 @@ const skipSpaces = (state: EditorState, from: number, to: number) => {
   return at;
 };
 
-/** The heading a line is: its level and its "#" marks, or null for any other line. */
+/** The heading a line starts, "#" marks or a setext underline: its level and node, or null for any other line. */
 export function headingOf(state: EditorState, line: Line): { level: number; node: SyntaxNode } | null {
-  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(textStart(state, line, BLOCK_MARKS), 1); node; node = node.parent) {
-    const level = /^ATXHeading(\d)$/.exec(node.name)?.[1];
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(textStart(state, line, BLOCK_MARKS), 1); node; node = node.parent) {
+    const level = /^(?:ATX|Setext)Heading(\d)$/.exec(node.name)?.[1];
     if (level) return node.from >= line.from && node.from <= line.to ? { level: Number(level), node } : null;
   }
   return null;
+}
+
+/** Whether a line is a setext heading's second or later text line, which its first line speaks for. */
+function setextLater(state: EditorState, line: Line): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(line.to, -1); node; node = node.parent) {
+    if (node.name === 'SetextHeading1' || node.name === 'SetextHeading2') return node.from < line.from;
+  }
+  return false;
+}
+
+/**
+ * A setext heading ("Title" over "===") at another level: written in "#"
+ * form, its lines joined and the underline gone, or as normal text with a
+ * blank line where the underline was when text follows it.
+ */
+export function rewriteSetext(state: EditorState, line: Line, node: SyntaxNode, level: number): ChangeSpec[] {
+  const mark = node.getChild('HeaderMark');
+  if (!mark) return [];
+  const underline = state.doc.lineAt(mark.from);
+  const lastText = state.doc.line(underline.number - 1);
+  const next = underline.number < state.doc.lines ? state.doc.line(underline.number + 1) : null;
+  const changes: ChangeSpec[] = [];
+  if (level > 0) changes.push({ from: textStart(state, line, BLOCK_MARKS), insert: `${'#'.repeat(level)} ` });
+  for (let number = line.number + 1; number < underline.number; number += 1) {
+    const later = state.doc.line(number);
+    changes.push({ from: state.doc.line(number - 1).to, to: textStart(state, later, BLOCK_MARKS), insert: ' ' });
+  }
+  if (level === 0 && next && /[^\s>]/.test(next.text)) changes.push({ from: underline.from, to: underline.to, insert: blankFor(underline) });
+  else changes.push({ from: lastText.to, to: underline.to });
+  return changes;
+}
+
+/** Whether a block ending on `above` would take `line`, as plain text, in as one of its own lines. */
+function takesLine(state: EditorState, above: Line, line: Line): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(above.to, -1); node; node = node.parent) {
+    if (['ListItem', 'Table', 'HTMLBlock', 'FencedCode'].includes(node.name)) return true;
+    if (node.name === 'Blockquote') return quoteOf(above).length > quoteOf(line).length;
+  }
+  return false;
+}
+
+/** Whether `next` would join the plain text line above it: an underline, a table's first row, or a list from 2. */
+function joinsBelow(state: EditorState, next: Line): boolean {
+  if (/^[\s>]*(?:=+|-+)[ \t]*$/.test(next.text) || /^[\s>]*(?:[2-9]|\d{2,})[.)][ \t]/.test(next.text)) return true;
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(next.from + quoteOf(next).length, 1); node; node = node.parent) {
+    if (node.name === 'Table') return state.doc.lineAt(node.from).number === next.number;
+  }
+  return false;
 }
 
 /**
@@ -382,9 +471,12 @@ export function headingOf(state: EditorState, line: Line): { level: number; node
 export function setHeading(level: number): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const lines = selectedLines(state);
+    if (!treeFor(state, selectionEnd(state))) return true;
+    // A callout's title line takes no heading.
+    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line) && !setextLater(state, line));
     const changes = lines.flatMap((line): ChangeSpec[] => {
       const heading = headingOf(state, line);
+      if (heading?.node.name.startsWith('Setext')) return heading.level === level ? [] : rewriteSetext(state, line, heading.node, level);
       if (!heading) {
         const blank = !/[^\s>]/.test(line.text);
         return level > 0 && (!blank || lines.length === 1) ? [{ from: textStart(state, line, BLOCK_MARKS), insert: `${'#'.repeat(level)} ` }] : [];
@@ -393,6 +485,14 @@ export function setHeading(level: number): StateCommand {
       if (level > 0) return heading.level === level ? [] : [{ from: open.from, to: open.to, insert: '#'.repeat(level) }];
       const marks: ChangeSpec[] = [{ from: open.from, to: skipSpaces(state, open.to, line.to) }];
       if (close) marks.push({ from: line.from + state.sliceDoc(line.from, close.from).trimEnd().length, to: close.to });
+      // Normal text sits on its own line, as Enter leaves it, unless that joins it to a block:
+      // a list item, quote, table or HTML above takes it in, and a "---" or "===" below
+      // underlines it, a table below loses its header and a list from 2 below joins it.
+      const previous = line.number > 1 ? state.doc.line(line.number - 1) : null;
+      const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+      const converted = (other: Line) => lines.some((each) => each.number === other.number) && headingOf(state, other) !== null;
+      if (previous && /[^\s>]/.test(previous.text) && !converted(previous) && takesLine(state, previous, line)) marks.unshift({ from: line.from, insert: `${blankFor(line)}\n` });
+      if (next && /[^\s>]/.test(next.text) && joinsBelow(state, next)) marks.push({ from: line.to, insert: `\n${blankFor(line)}` });
       return marks;
     });
     dispatch(state.update({ changes, scrollIntoView: true, userEvent: 'input' }));
@@ -411,7 +511,7 @@ interface ListLine {
 }
 
 export function listItemOf(state: EditorState, line: Line): ListLine | null {
-  const mark = syntaxTree(state).resolveInner(textStart(state, line, QUOTE_MARK), 1);
+  const mark = latestTree(state).resolveInner(textStart(state, line, QUOTE_MARK), 1);
   const item = mark.parent;
   if (mark.name !== 'ListMark' || mark.to > line.to || item?.name !== 'ListItem') return null;
   const box = item.getChild('Task')?.getChild('TaskMarker');
@@ -427,7 +527,7 @@ export function listItemOf(state: EditorState, line: Line): ListLine | null {
 /** Whether a line belongs to a list item: its first line, or one the item carries on to. */
 function inListItem(state: EditorState, line: Line): boolean {
   if (!/[^\s>]/.test(line.text)) return false;
-  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.to, -1); node; node = node.parent) {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(line.to, -1); node; node = node.parent) {
     if (node.name === 'ListItem') return true;
   }
   return false;
@@ -447,7 +547,9 @@ const blankFor = (line: Line) => quoteOf(line).replace(/[ \t]+$/, '');
 export function toggleList(kind: ListKind): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const touched = selectedLines(state);
+    if (!treeFor(state, selectionEnd(state))) return true;
+    // A callout's title line never becomes a list item.
+    const touched = selectedLines(state).filter((line) => !calloutMarker(state, line));
     const lines = touched.length === 1 ? touched : touched.filter((line) => /[^\s>]/.test(line.text));
     if (lines.length === 0) return false;
     const items = lines.map((line) => listItemOf(state, line));
@@ -461,10 +563,15 @@ export function toggleList(kind: ListKind): StateCommand {
       if (above && inListItem(state, above)) changes.push({ from: above.to, insert: `\n${blankFor(first)}` });
       if (below && listItemOf(state, below)) changes.push({ from: last.to, insert: `\n${blankFor(last)}` });
     } else {
-      const previous = above && listItemOf(state, above);
-      let number = previous?.kind === 'number' ? previous.number + 1 : 1;
+      let number = 1;
       lines.forEach((line, index) => {
         const item = items[index];
+        // Numbers carry on from the item above and over blank lines, and start again at 1 after other text, so a list never starts at 2.
+        const gap = index > 0 ? state.doc.sliceString(lines[index - 1].to, line.from) : null;
+        if (gap === null || /[^\s>]/.test(gap)) {
+          const previous = line.number > 1 ? listItemOf(state, state.doc.line(line.number - 1)) : null;
+          number = previous?.kind === 'number' ? previous.number + 1 : 1;
+        }
         const mark = kind === 'bullet' ? '- ' : kind === 'task' ? '- [ ] ' : `${number++}. `;
         if (item) changes.push({ from: item.markFrom, to: item.textFrom, insert: mark });
         else changes.push({ from: textStart(state, line, QUOTE_MARK), insert: mark });
@@ -489,7 +596,8 @@ const QUOTE_MARKS = /^ {0,3}(?:> ?)+/;
 export function indentInQuote(more: boolean): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const quoted = selectedLines(state).map((line) => ({ line, quote: QUOTE_MARKS.exec(line.text)?.[0] ?? '' }));
+    // Every touched line, code and HTML included: a note's Tab indents them after the quote marks.
+    const quoted = touchedLines(state).map((line) => ({ line, quote: QUOTE_MARKS.exec(line.text)?.[0] ?? '' }));
     if (quoted.some(({ quote }) => !quote)) return false;
     const unit = state.facet(indentUnit);
     const changes = quoted.flatMap(({ line, quote }): ChangeSpec[] => {
@@ -508,8 +616,8 @@ export function indentInQuote(more: boolean): StateCommand {
 export function indentList(more: boolean): StateCommand {
   return (target) => {
     const { state } = target;
-    if (!selectedLines(state).some((line) => listItemOf(state, line))) return false;
-    return indentInQuote(more)(target) || (more ? indentMore : indentLess)(target);
+    if (!treeFor(state, selectionEnd(state))) return true;
+    return nestListItems(more)(target);
   };
 }
 
@@ -548,7 +656,7 @@ function linkOf(state: EditorState, node: SyntaxNode): LinkAt | null {
 
 /** The link that runs from `from` to `to`, if one does. */
 export function linkBetween(state: EditorState, from: number, to: number): LinkAt | null {
-  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1); node && node.from === from && node.to <= to; node = node.parent) {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(from, 1); node && node.from === from && node.to <= to; node = node.parent) {
     const link = node.to === to ? linkOf(state, node) : null;
     if (link) return link;
   }
@@ -558,7 +666,7 @@ export function linkBetween(state: EditorState, from: number, to: number): LinkA
 /** The link whose text holds `at`, at either end included. */
 export function linkAt(state: EditorState, at: number): LinkAt | null {
   for (const side of [1, -1] as const) {
-    for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(at, side); node; node = node.parent) {
+    for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, side); node; node = node.parent) {
       const link = linkOf(state, node);
       if (link && link.textFrom <= at && at <= link.textTo) return link;
     }
@@ -582,7 +690,7 @@ export function writeLink(state: EditorState, range: { from: number; to: number 
   if (link?.kind === 'wiki') {
     change = { from: link.from, to: link.to, insert: `[[${url}${shown === url ? '' : `|${shown}`}]]` };
   } else if (link?.kind === 'link' && text === state.sliceDoc(link.textFrom, link.textTo)) {
-    const written = syntaxTree(state).resolveInner(link.from, 1);
+    const written = latestTree(state).resolveInner(link.from, 1);
     const node = written.name === 'Link' ? written : written.parent;
     const at = node?.getChild('URL');
     change = at ? { from: at.from, to: at.to, insert: destination(url) } : { from: link.textTo, to: link.to, insert: `](${destination(url)})` };

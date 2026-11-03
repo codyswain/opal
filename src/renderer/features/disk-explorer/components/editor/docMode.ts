@@ -30,7 +30,16 @@ import {
   typingStyle,
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
-import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
+import { firstLine } from './firstLine';
+import { insertImageItem } from './imageInsert';
+import { blockObjects } from './blockObjects';
+import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setCellCaret, setOpenBlock, type HiddenRange } from './livePreview';
+import { objectAt } from './extensionPoints';
+import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension, setFrame } from './objectFrame';
+import { headingKeys } from './headingKeys';
+import { docListKeys } from './listKeys';
+import { quoteKeys } from './quoteKeys';
+import { insertTableItem } from './tableInsert';
 import { opensNewTab } from './wikiLinks';
 
 /*
@@ -252,13 +261,15 @@ function moveVisibly(forward: boolean, extend: boolean): Command {
  * the selection. The marks around it stay, unless its formatting is left
  * with no text. At the start of a heading Backspace joins it to the line
  * above, or makes it text on the first line. Right after a list or quote
- * marker it leaves the key to the list commands.
+ * marker it leaves the key to the list commands. A framed object, the
+ * delete handlers and the objects beside the caret come first.
  */
 function deleteVisibly(forward: boolean): Command {
   return (view) => {
     const { state } = view;
     const range = state.selection.main;
     if (state.readOnly || state.selection.ranges.length > 1) return false;
+    if (deleteObject(view, forward ? 1 : -1, currentKeyEvent(view, forward ? 'Delete' : 'Backspace'))) return true;
     let { from, to } = range;
     if (range.empty) {
       const line = state.doc.lineAt(range.head);
@@ -346,8 +357,12 @@ export const editLink: Command = (view) => {
   return true;
 };
 
-/** Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the toolbar, since Tab indents in the text. */
+/**
+ * Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the framed
+ * object's bar, or else to the toolbar, since Tab indents in the text.
+ */
 const focusToolbar: Command = (view) => {
+  if (focusObjectBar(view)) return true;
   const button = view.dom.closest('.opal-editor')?.querySelector<HTMLElement>('[role="toolbar"] [tabindex="0"]');
   button?.focus();
   return Boolean(button);
@@ -355,8 +370,10 @@ const focusToolbar: Command = (view) => {
 
 /**
  * A click on a link puts the caret in it and shows its popover; Cmd+click
- * and middle-click still follow it. A click on a drawn table or code block
- * puts the caret after it, and a double-click shows its Markdown to edit.
+ * and middle-click still follow it. A click in a table's cell puts a cell
+ * caret there (livePreview.ts), and a click elsewhere on a table or on a
+ * drawn code block frames it with the caret after it. A double-click on
+ * either shows its Markdown to edit.
  */
 const docClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
@@ -365,10 +382,15 @@ const docClicks = EditorView.domEventHandlers({
     const blockElement = target.closest<HTMLElement>('.cm-md-block');
     const block = blockElement && drawnBlockAt(view.state, view.posAtDOM(blockElement));
     if (blockElement && block) {
+      const table = blockElement.classList.contains('cm-md-table');
+      const cell = table && event.detail < 2 ? target.closest<HTMLElement>('td[data-offset], th[data-offset]') : null;
+      if (cell) return clickInCell(view, event, cell, view.posAtDOM(blockElement));
       event.preventDefault();
+      const after = { anchor: Math.min(block.to + 1, view.state.doc.length) };
+      const framed = objectAt(view.state, block.from, 1);
       view.dispatch(event.detail >= 2
         ? { selection: { anchor: blockPosition(view, blockElement, target, event) }, effects: setOpenBlock.of(block) }
-        : { selection: { anchor: Math.min(block.to + 1, view.state.doc.length) } });
+        : { selection: after, effects: framed ? setFrame.of(framed) : [] });
       view.focus();
       return true;
     }
@@ -382,6 +404,27 @@ const docClicks = EditorView.domEventHandlers({
     return true;
   },
 });
+
+/**
+ * A click in a drawn table's cell: the cell caret (livePreview.ts), and on a
+ * link the link's popover as anywhere else. Cmd+click on a link follows it.
+ */
+function clickInCell(view: EditorView, event: MouseEvent, cell: HTMLElement, tableFrom: number): boolean {
+  const element = (event.target as Element).closest<HTMLElement>('[data-href], [data-wiki-target]');
+  if (!element || opensNewTab(event)) return false;
+  const at = tableFrom + Number(cell.dataset.offset);
+  const line = view.state.doc.lineAt(at);
+  let link: ReturnType<typeof linkAt> = null;
+  for (let pos = at; pos <= line.to && !link; pos += 1) {
+    const found = linkAt(view.state, pos);
+    if (found && found.from >= at && view.state.sliceDoc(found.textFrom, found.textTo).replace(/\\(.)/g, '$1').includes(element.textContent ?? '')) link = found;
+  }
+  if (!link) return false;
+  event.preventDefault();
+  view.dispatch({ selection: { anchor: link.textFrom }, effects: [setCellCaret.of(at), setLinkEditor.of({ from: link.from, to: link.to, editing: false })] });
+  view.focus();
+  return true;
+}
 
 const atom = Decoration.replace({});
 
@@ -421,6 +464,13 @@ export function docModeExtensions(): Extension {
   const input = { composing: false };
   return [
     docMode.of(true),
+    firstLine,
+    objectFrameExtension,
+    insertImageItem,
+    insertTableItem,
+    docListKeys,
+    headingKeys,
+    quoteKeys,
     autoformatted,
     linkEditor,
     atoms,
@@ -436,6 +486,7 @@ export function docModeExtensions(): Extension {
       const selection = settle(tr.state, tr.newSelection);
       return selection === tr.newSelection ? tr : [tr, { selection, sequential: true }];
     }),
+    blockObjects,
     // The browser types where its own caret is, which can be the other side of a hidden mark.
     EditorView.inputHandler.of((view, from, to, text) => {
       const { selection } = view.state;

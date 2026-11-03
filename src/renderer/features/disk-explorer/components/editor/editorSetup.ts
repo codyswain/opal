@@ -9,11 +9,16 @@ import { tags } from '@lezer/highlight';
 import { GFM } from '@lezer/markdown';
 import { isDocFile } from '@/common/fileKind';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
+import { blockGuards } from './blockGuards';
+import { callouts } from './callouts';
+import { guardedLineMoves } from './firstLine';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
+import { nestListItems, withoutRenumbering } from './listKeys';
 import { fileInserts } from './imageInsert';
-import { linkMarkStyle, livePreview } from './livePreview';
+import { docMode, linkMarkStyle, livePreview } from './livePreview';
 import { pageProperties } from './pageProperties';
+import { tableKeys } from './tableKeys';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -119,6 +124,7 @@ export const insertNewlineInList: StateCommand = ({ state, dispatch }) => {
     state,
     dispatch: (tr) => {
       if (tr.newDoc.eq(state.doc)) unchanged = true;
+      else if (state.facet(docMode)) dispatch(withoutRenumbering(blankLinesAroundEnd(withoutSpaceLines(tr))));
       else dispatch(blankLinesAroundEnd(withoutSpaceLines(tr)));
     },
   });
@@ -174,12 +180,16 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     wikiLinks,
     fileInserts,
     livePreview,
+    blockGuards,
+    guardedLineMoves,
+    tableKeys,
+    callouts,
     pageProperties,
     search({ top: true }),
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
       { key: 'Backspace', run: deleteMarkupInList },
-      { key: 'Tab', run: indentInQuote(true), shift: indentInQuote(false) },
+      { key: 'Tab', run: (view) => nestListItems(true)(view) || indentInQuote(true)(view), shift: (view) => nestListItems(false)(view) || indentInQuote(false)(view) },
       { key: 'Mod-b', run: toggleMarker('**') },
       { key: 'Mod-i', run: toggleMarker('*') },
       ...searchKeymap,

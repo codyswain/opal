@@ -34,20 +34,35 @@ export class InlineTitleWidget extends WidgetType {
 
 /**
  * A list item's indentation and marker: a bullet, the item's own number, or
- * a checkbox. The line is indented to match, so wrapped text hangs under the
- * text and not under the marker.
+ * a checkbox, after its number in a numbered list. The line is indented to
+ * match, so wrapped text hangs under the text and not under the marker.
+ * `depth` picks the bullet's shape: a dot, a ring, a square.
  */
 export class ListMarkerWidget extends WidgetType {
-  constructor(readonly kind: 'bullet' | 'number' | 'task', readonly label: string, readonly checked = false) { super(); }
+  constructor(
+    readonly kind: 'bullet' | 'number' | 'task',
+    readonly label: string,
+    readonly checked = false,
+    readonly depth = 0,
+    /** A numbered task's number, shown before its box. */
+    readonly ordinal: string | null = null,
+  ) { super(); }
 
   eq(other: ListMarkerWidget) {
-    return other.kind === this.kind && other.label === this.label && other.checked === this.checked;
+    return other.kind === this.kind && other.label === this.label && other.checked === this.checked && other.depth === this.depth && other.ordinal === this.ordinal;
   }
 
   toDOM() {
     const marker = document.createElement('span');
     marker.className = 'cm-md-list-marker';
     marker.dataset.kind = this.kind;
+    marker.dataset.depth = String(this.depth % 3);
+    if (this.ordinal) {
+      const number = document.createElement('span');
+      number.className = 'cm-md-number';
+      number.textContent = this.ordinal;
+      marker.append(number);
+    }
     const inner = document.createElement('span');
     if (this.kind === 'bullet') {
       inner.className = 'cm-md-bullet';
@@ -81,28 +96,20 @@ export class CalloutTitleWidget extends WidgetType {
   }
 }
 
-const BOT_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
-
-/** The bot icon before an [!ai] callout's title, so text an agent wrote reads as such at a glance. */
-export class CalloutIconWidget extends WidgetType {
-  eq() { return true; }
-
-  toDOM() {
-    const icon = document.createElement('span');
-    icon.className = 'cm-md-callout-icon';
-    icon.innerHTML = BOT_ICON;
-    return icon;
-  }
-}
-
+/** A rule. In a document it is an object: a click frames it and shows its bar. */
 export class HorizontalRuleWidget extends WidgetType {
-  eq() { return true; }
+  constructor(readonly object = false) { super(); }
+
+  eq(other: HorizontalRuleWidget) { return other.object === this.object; }
 
   toDOM() {
     const rule = document.createElement('span');
     rule.className = 'cm-md-hr';
+    if (this.object) rule.dataset.object = 'horizontal rule';
     return rule;
   }
+
+  ignoreEvent() { return !this.object; }
 }
 
 /** Stands in for the hidden end of a long link target. */
@@ -270,7 +277,8 @@ export type InlinePiece =
   | { kind: 'strong' | 'em' | 'strike'; children: InlinePiece[] }
   | { kind: 'code'; text: string }
   | { kind: 'link'; children: InlinePiece[]; href: string | null }
-  | { kind: 'wiki'; text: string; target: string };
+  | { kind: 'wiki'; text: string; target: string }
+  | { kind: 'break' };
 
 export interface TableCell {
   /** Where the cell's text starts, from the start of the table. */
@@ -286,7 +294,9 @@ export interface TableModel {
 
 function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
   for (const piece of pieces) {
-    if (piece.kind === 'text') {
+    if (piece.kind === 'break') {
+      parent.append(document.createElement('br'));
+    } else if (piece.kind === 'text') {
       parent.append(piece.text);
     } else if (piece.kind === 'code') {
       const code = document.createElement('code');
@@ -311,6 +321,17 @@ function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
       parent.append(element);
     }
   }
+}
+
+/** The resize watch of each drawn table, so a redraw or removal stops it. */
+const clipWatch = new WeakMap<HTMLElement, ResizeObserver>();
+
+/** Marks a wide table's clipped edges, where a fade shows there is more to scroll to. */
+function markClipped(frame: HTMLElement, scroller: HTMLElement) {
+  const left = scroller.scrollLeft > 0;
+  const right = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+  frame.classList.toggle('cm-md-clipped-left', left);
+  frame.classList.toggle('cm-md-clipped-right', right);
 }
 
 /**
@@ -340,16 +361,24 @@ export class TableWidget extends WidgetType {
     const scroller = document.createElement('div');
     scroller.className = 'cm-md-table-scroll';
     const table = document.createElement('table');
+    // Cells past the header's columns still show, in a muted column of their own.
+    const columns = Math.max(this.model.align.length, ...this.model.rows.map((cells) => cells.length));
     const row = (cells: TableCell[], tag: 'th' | 'td') => {
       const tr = document.createElement('tr');
-      this.model.align.forEach((align, column) => {
+      Array.from({ length: columns }, (_, column) => column).forEach((column) => {
         const cell = document.createElement(tag);
         const source = cells[column];
+        const align = this.model.align[column];
+        if (column >= this.model.align.length) cell.classList.add('cm-md-cell-extra');
         if (align) cell.style.textAlign = align;
         if (source) {
           cell.dataset.offset = String(source.offset);
           if (source.offset === this.cellCaret) cell.classList.add('cm-md-cell-caret');
-          renderInline(source.content, cell);
+          // The cell's text sits in a box no wider than 24em, which a table cell cannot cap by itself.
+          const text = document.createElement('div');
+          text.className = 'cm-md-cell';
+          renderInline(source.content, text);
+          cell.append(text);
         }
         tr.append(cell);
       });
@@ -361,8 +390,46 @@ export class TableWidget extends WidgetType {
     for (const cells of this.model.rows) body.append(row(cells, 'td'));
     table.append(head, body);
     scroller.append(table);
+    scroller.addEventListener('scroll', () => markClipped(frame, scroller), { passive: true });
     frame.append(scroller);
+    clipWatch.get(frame)?.disconnect();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => markClipped(frame, scroller));
+      observer.observe(scroller);
+      observer.observe(table);
+      clipWatch.set(frame, observer);
+    }
     return frame;
+  }
+
+  /** An edit, an agent's included, redraws the table in place and keeps its sideways scroll. */
+  updateDOM(frame: HTMLElement) {
+    const left = frame.querySelector('.cm-md-table-scroll')?.scrollLeft ?? 0;
+    const fresh = this.toDOM();
+    frame.className = fresh.className;
+    frame.style.cssText = fresh.style.cssText;
+    frame.replaceChildren(...fresh.childNodes);
+    clipWatch.get(frame)?.disconnect();
+    const scroller = frame.querySelector<HTMLElement>('.cm-md-table-scroll');
+    const table = scroller?.querySelector('table');
+    if (scroller && table) {
+      scroller.scrollLeft = left;
+      scroller.addEventListener('scroll', () => markClipped(frame, scroller), { passive: true });
+      const moved = clipWatch.get(fresh);
+      moved?.disconnect();
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => markClipped(frame, scroller));
+        observer.observe(scroller);
+        observer.observe(table);
+        clipWatch.set(frame, observer);
+      }
+      markClipped(frame, scroller);
+    }
+    return true;
+  }
+
+  destroy(frame: HTMLElement) {
+    clipWatch.get(frame)?.disconnect();
   }
 
   get estimatedHeight() { return (this.model.rows.length + 1) * 34 + 16; }
