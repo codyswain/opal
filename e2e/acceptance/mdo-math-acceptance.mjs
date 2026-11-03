@@ -206,6 +206,37 @@ try {
   await page.keyboard.press('Meta+z');
   await waitForFile((written) => written === ORIGINAL, 3_000);
 
+  // Backspace under a display block frames it and shows its bar; Escape leaves it as it was.
+  await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(200);
+  const framed = await page.evaluate(() => Boolean(document.querySelector('[data-object-framed]')) && Boolean(document.querySelector('[data-object-bar]')));
+  check('Backspace under a display block frames it and shows its bar', framed);
+  await shoot('math-framed', { window: true });
+  await page.keyboard.press('Escape');
+  check('a frame changes no bytes', (await readFile(DOC, 'utf8')) === ORIGINAL);
+
+  // Insert > Equation in the toolbar opens the popover at the caret, with the field focused.
+  await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' Sum ');
+  await page.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'Insert' }).click();
+  await page.getByRole('menuitem', { name: /Equation/ }).click();
+  await popover.waitFor({ timeout: 5_000 });
+  await page.waitForTimeout(200);
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+  check('Insert > Equation opens the popover with its field focused', focused === 'TeX', String(focused));
+  await page.keyboard.type('x+y');
+  await page.keyboard.press('Enter');
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  const inserted = await waitForFile((written) => written.includes('Sum $x+y$'));
+  check('Insert > Equation writes an inline formula at the caret', inserted.includes('$5M-$10M. Sum $x+y$'), JSON.stringify(inserted.split('\n')[8]));
+  for (let index = 0; index < 3; index += 1) await page.keyboard.press('Meta+z');
+  await waitForFile((written) => written === ORIGINAL, 3_000);
+  check('undo after inserting goes back to the original bytes', (await readFile(DOC, 'utf8')) === ORIGINAL);
+
   // Typing a formula in a document: it renders on the closing $, and Backspace then takes only that $.
   await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
   await page.keyboard.press('End');

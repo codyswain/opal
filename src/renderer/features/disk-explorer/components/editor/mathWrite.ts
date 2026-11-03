@@ -437,8 +437,8 @@ const openObject = (view: EditorView, obj: PageObject) => {
 };
 
 const mathObjects: Extension = [
-  objectKinds.of({ kind: 'math', nodes: ['InlineMath', 'DisplayMath'], block: false, test: (state, node) => isMath(state, node, false), open: openObject, actions: mathActions, destination: () => 'Formula' }),
-  objectKinds.of({ kind: 'math-block', nodes: ['BlockMath', 'DisplayMath'], block: true, test: (state, node) => isMath(state, node, true), open: openObject, actions: mathActions, destination: () => 'Formula' }),
+  objectKinds.of({ kind: 'math', nodes: ['InlineMath', 'DisplayMath'], block: false, test: (state, node) => isMath(state, node, false), open: openObject, actions: mathActions }),
+  objectKinds.of({ kind: 'math-block', nodes: ['BlockMath', 'DisplayMath'], block: true, test: (state, node) => isMath(state, node, true), open: openObject, actions: mathActions }),
 ];
 
 /** Right after a typed `$` closed a formula, the position after it. */
@@ -548,7 +548,24 @@ export function restoreDollars(view: EditorView): void {
 }
 
 /** Insert > Equation. */
-export const insertEquationItem = insertItems.of({ id: 'equation', label: 'Equation', icon: Sigma, shortcut: '⇧⌘E', order: 30, run: (view) => { editFormula(view); } });
+export const insertEquationItem = insertItems.of({
+  id: 'equation',
+  label: 'Equation',
+  icon: Sigma,
+  shortcut: '⇧⌘E',
+  order: 30,
+  run: (view) => {
+    // The menu gives focus back to the text as it closes; the popover opens after that, so its field keeps the focus.
+    let opened = false;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      editFormula(view);
+    };
+    view.contentDOM.addEventListener('focus', () => setTimeout(open, 0), { once: true });
+    setTimeout(open, 400);
+  },
+});
 
 /** Where a click opened the popover, so it sits by the formula that was clicked, which may be drawn in a table. */
 export const clickedFormula = new WeakMap<EditorView, DOMRect>();
@@ -568,7 +585,8 @@ function clickedNode(view: EditorView, element: Element): SyntaxNode | null {
   }
   let at: number;
   try { at = view.posAtDOM(element); } catch { return null; }
-  return mathNodeAt(tree, at, 1) ?? mathNodeAt(tree, at, 0);
+  // A block's widget starts at its first line, before any quote marks or list indent.
+  return mathNodeAt(tree, at, 1) ?? mathNodeAt(tree, at, 0) ?? (element.closest('.cm-math-block') ? mathNodes(tree, at, view.state.doc.lineAt(at).to)[0] ?? null : null);
 }
 
 /**

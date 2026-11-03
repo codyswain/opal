@@ -383,6 +383,25 @@ describe('formulas in tables, headings, links, lists and callouts', () => {
     expect(view.state.field(linkEditor)).not.toBeNull();
   });
 
+  it('opens the popover from a display block in a quote', () => {
+    const view = mount('> $$\n> x^2\n> $$\n');
+    view.focus = vi.fn();
+    const formula = view.contentDOM.querySelector('.cm-math-block .cm-math');
+    act(() => { formula?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(view.state.field(mathEditor)).toMatchObject({ kind: 'block', tex: 'x^2', prefix: '> ' });
+  });
+
+  it('crosses an inline formula in one arrow step, and never rests inside it', () => {
+    const view = mount('a $x^2$ b');
+    act(() => { view.dispatch({ selection: { anchor: 2 } }); });
+    key(view, 'ArrowRight');
+    expect(caret(view)).toBe(7);
+    key(view, 'ArrowLeft');
+    expect(caret(view)).toBe(2);
+    key(view, 'ArrowRight', { shiftKey: true });
+    expect(view.state.selection.main).toMatchObject({ anchor: 2, head: 7 });
+  });
+
   it('lines a display block up with a list item\'s text, and sets it on a callout\'s ground', () => {
     const listed = mount('- item\n\n  $$\n  x^2\n  $$\n');
     const inList = listed.contentDOM.querySelector<HTMLElement>('.cm-math-block');
