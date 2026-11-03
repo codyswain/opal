@@ -241,6 +241,40 @@ describe('file widgets', () => {
     expect(view.contentDOM.querySelector('video')).toBe(first);
   });
 
+  it('reads a PDF in place with Read here, one viewer in the window, until Done or Escape', async () => {
+    const view = await mount(`![[${PDF}|Q3.pdf]]\n\n![[${PDF}#page=3|Q3 again.pdf]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelectorAll('.cm-file-pdf-read')).toHaveLength(2));
+    const [first, second] = [...view.contentDOM.querySelectorAll<HTMLButtonElement>('.cm-file-pdf-read')];
+    act(() => { first.click(); });
+    const viewer = view.contentDOM.querySelector('.cm-file-pdf-viewer');
+    expect(viewer).toHaveAttribute('src', `${toOpalFileUrl(`/Vault/${PDF}`)}#toolbar=0&view=FitH`);
+    act(() => { second.click(); });
+    expect(view.contentDOM.querySelectorAll('.cm-file-pdf-viewer')).toHaveLength(1);
+    expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).toHaveAttribute('src', expect.stringContaining('&page=3'));
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).toBeNull();
+    expect(text(view)).toBe(`![[${PDF}|Q3.pdf]]\n\n![[${PDF}#page=3|Q3 again.pdf]]\n`);
+  });
+
+  it('floats a 240px picture over a card after 400 ms on it', async () => {
+    installFilesApi({
+      info: vi.fn(async (target: string) => ({ success: true as const, data: info(target) })),
+      thumbnail: vi.fn(async (_target: string, px: number) => ({ success: true as const, data: `data:image/png;base64,${px}` })),
+    });
+    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-thumb')).toHaveAttribute('src', 'data:image/png;base64,48'));
+    vi.useFakeTimers();
+    const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
+    card.dispatchEvent(new MouseEvent('mouseenter'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(399); });
+    expect(card.querySelector('.cm-file-hover')).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    vi.useRealTimers();
+    await waitFor(() => expect(card.querySelector('.cm-file-hover img')).toHaveAttribute('src', 'data:image/png;base64,240'));
+    card.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(card.querySelector('.cm-file-hover')).toBeNull();
+  });
+
   it('plays one video at a time in the window', async () => {
     const view = await mount(`![[${CLIP}|300]]\n\n![[${CLIP}|400]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelectorAll('video')).toHaveLength(2));

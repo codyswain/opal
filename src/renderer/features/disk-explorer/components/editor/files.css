@@ -233,6 +233,67 @@
   color: hsl(var(--text-tertiary));
 }
 
+/* Read here: Chromium's viewer at 80% of the window's height, with Done; the button shows on hover. */
+.opal-editor .cm-editor .cm-file-pdf {
+  position: relative;
+}
+
+.opal-editor .cm-editor .cm-file-pdf-read,
+.opal-editor .cm-editor .cm-file-pdf-done {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 8px;
+  box-shadow: var(--shadow-control);
+}
+
+.opal-editor .cm-editor .cm-file-pdf-read {
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-file-pdf:hover .cm-file-pdf-read,
+.opal-editor .cm-editor .cm-file-pdf-read:focus-visible {
+  opacity: 1;
+}
+
+.opal-editor .cm-editor .cm-file-pdf-read[hidden],
+.opal-editor .cm-editor .cm-file-pdf-done[hidden] {
+  display: none;
+}
+
+.opal-editor .cm-editor .cm-file-pdf-viewer {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* A hovered card's picture, 240px, floating above it. */
+.opal-editor .cm-editor .cm-file-card {
+  position: relative;
+}
+
+.opal-editor .cm-editor .cm-file-hover {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: block;
+  width: 240px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border-overlay));
+  border-radius: var(--radius-overlay);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-overlay);
+  pointer-events: none;
+}
+
+.opal-editor .cm-editor .cm-file-hover img {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+}
+
 /* Video: native controls on black at the written width or the column's, its height from the known shape. */
 .opal-editor .cm-editor .cm-file-video {
   position: relative;

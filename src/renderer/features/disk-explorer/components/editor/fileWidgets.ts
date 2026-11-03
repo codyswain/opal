@@ -216,7 +216,10 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
     card.append(tile, body);
     if (actions.childElementCount > 0) card.append(actions);
     card.setAttribute('aria-label', `${service ? `${service} video` : kindLabel(fileName(ref), ref.kind)}, ${name}`);
-    if (state === 'ready' && ref.path && !service && hasPicture(ref)) void thumbnailInto(view, tile, ref.path);
+    if (state === 'ready' && ref.path && !service && hasPicture(ref)) {
+      void thumbnailInto(view, tile, ref.path);
+      hoverPreview(card, ref.path);
+    }
   };
   if (forced) {
     draw(forced, ref.path ? knownInfo(ref.path) : null);
@@ -307,17 +310,60 @@ async function getFromMini(view: EditorView, card: HTMLElement, ref: FileRef, na
   fillCard(view, card, ref, name, null);
 }
 
-const thumbnails = new Map<string, string | null>();
+const thumbnails = new Map<string, Promise<string | null>>();
 
-async function thumbnailInto(view: EditorView, tile: HTMLElement, path: string, px = THUMB_PX): Promise<void> {
+/** The file's picture `px` points wide from macOS, asked once per size while the page is open. */
+function thumbnailUrl(path: string, px: number): Promise<string | null> {
   const key = `${path}@${px}`;
   let url = thumbnails.get(key);
-  if (url === undefined) {
-    const result = await Promise.resolve().then(() => window.filesAPI.thumbnail(path, px, { visible: true })).catch(() => null);
-    url = result?.success ? result.data : null;
+  if (!url) {
+    url = Promise.resolve()
+      .then(() => window.filesAPI.thumbnail(path, px, { visible: true }))
+      .then((result) => (result.success ? result.data : null))
+      .catch(() => null)
+      .then((found) => {
+        // Main keeps its own record of failures; the page asks again next time.
+        if (!found) thumbnails.delete(key);
+        return found;
+      });
     thumbnails.set(key, url);
   }
-  if (!url || !tile.isConnected && tile.parentElement === null) return;
+  return url;
+}
+
+const HOVER_MS = 400;
+const HOVER_PX = 240;
+
+/** After 400 ms on a card with a picture, a 240px preview of it floats above the card. Off under reduced motion. */
+function hoverPreview(card: HTMLElement, path: string): void {
+  if (card.dataset.hoverPreview) return;
+  card.dataset.hoverPreview = 'on';
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const hide = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    card.querySelector('.cm-file-hover')?.remove();
+  };
+  card.addEventListener('mouseenter', () => {
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    timer = setTimeout(() => {
+      void thumbnailUrl(path, HOVER_PX).then((url) => {
+        if (!url || !timer || card.querySelector('.cm-file-hover')) return;
+        const float = element('span', 'cm-file-hover');
+        const image = element('img');
+        image.src = url;
+        image.alt = '';
+        float.append(image);
+        card.append(float);
+      });
+    }, HOVER_MS);
+  });
+  card.addEventListener('mouseleave', hide);
+}
+
+async function thumbnailInto(view: EditorView, tile: HTMLElement, path: string, px = THUMB_PX): Promise<void> {
+  const url = await thumbnailUrl(path, px);
+  if (!url) return;
   const image = element('img', 'cm-file-thumb');
   image.src = url;
   image.alt = '';
@@ -371,6 +417,51 @@ export class PdfPreviewWidget extends WidgetType {
       fillAsCard(view, wrap, this.drawn, 'missing');
       return wrap;
     }
+    const firstPage = async () => {
+      const url = await thumbnailUrl(path, Math.max(240, Math.round(view.contentDOM.clientWidth || 700)));
+      if (!url || reading.has(this.key)) return;
+      const image = element('img', 'cm-file-pdf-image');
+      image.src = url;
+      image.alt = `First page of ${name}`;
+      image.draggable = false;
+      page.replaceChildren(image);
+    };
+    const done = button('Done', () => closeReader());
+    done.classList.add('cm-file-pdf-done');
+    done.hidden = true;
+    const read = button('Read here', () => openReader());
+    read.classList.add('cm-file-pdf-read');
+    const closeReader = () => {
+      reading.delete(this.key);
+      if (liveReader?.key === this.key) liveReader = null;
+      page.classList.remove('cm-file-pdf-reading');
+      page.style.height = `${height}px`;
+      page.replaceChildren(iconNode('fileText', 20, 'cm-file-pdf-blank'));
+      read.hidden = false;
+      done.hidden = true;
+      void firstPage();
+      view.requestMeasure();
+    };
+    // Chromium's viewer, one per window; it stays through redraws until Done or Escape.
+    const openReader = () => {
+      if (liveReader && liveReader.key !== this.key) liveReader.close();
+      let viewer = reading.get(this.key);
+      if (!viewer) {
+        viewer = document.createElement('embed');
+        viewer.setAttribute('type', 'application/pdf');
+        viewer.setAttribute('src', `${toOpalFileUrl(path)}#toolbar=0&view=FitH${fragmentValue(ref, 'page') ? `&page=${fragmentValue(ref, 'page')}` : ''}`);
+        viewer.className = 'cm-file-pdf-viewer';
+        reading.set(this.key, viewer);
+      }
+      liveReader = { key: this.key, close: closeReader };
+      page.classList.add('cm-file-pdf-reading');
+      page.style.height = '80vh';
+      page.replaceChildren(viewer);
+      read.hidden = true;
+      done.hidden = false;
+      view.requestMeasure();
+    };
+    preview.append(read, done);
     const show = (info: FileInfo | null) => {
       const state = stateOf(info);
       if (state !== 'ready') {
@@ -378,16 +469,8 @@ export class PdfPreviewWidget extends WidgetType {
         return;
       }
       meta.textContent = [info?.pages ? `${info.pages} ${info.pages === 1 ? 'page' : 'pages'}` : null, info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
-      void (async () => {
-        const width = Math.max(240, Math.round(view.contentDOM.clientWidth || 700));
-        const result = await Promise.resolve().then(() => window.filesAPI.thumbnail(path, width, { visible: true })).catch(() => null);
-        if (!result?.success || !result.data) return;
-        const image = element('img', 'cm-file-pdf-image');
-        image.src = result.data;
-        image.alt = `First page of ${name}`;
-        image.draggable = false;
-        page.replaceChildren(image);
-      })();
+      if (reading.has(this.key)) openReader();
+      else void firstPage();
     };
     const known = knownInfo(path);
     if (known !== undefined) show(known);
@@ -396,8 +479,22 @@ export class PdfPreviewWidget extends WidgetType {
   }
 
   ignoreEvent(event: Event) {
-    return event.target instanceof Element && event.target.closest('button') !== null;
+    return event.target instanceof Element && event.target.closest('button, embed') !== null;
   }
+}
+
+/** The PDF viewers open with Read here, by widget, so a redraw keeps them; one is live in the window at a time. */
+const reading = new Map<string, HTMLElement>();
+let liveReader: { key: string; close: () => void } | null = null;
+
+// Escape puts the first page back.
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && liveReader) {
+      liveReader.close();
+      event.stopPropagation();
+    }
+  }, true);
 }
 
 /** Replaces a preview's content with a card for the same file, in `state` or the one files:info says. */
