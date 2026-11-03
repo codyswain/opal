@@ -11,6 +11,9 @@ import { readMediaHeaders, type MediaHeaders } from './mediaHeaders';
 export const MDLS = '/usr/bin/mdls';
 const MDLS_TIMEOUT_MS = 3000;
 const CACHE_LIMIT = 2000;
+/** Files larger than this are read through the job queue. */
+const LARGE_READ = 8 * 1024 * 1024;
+const LARGE_READ_TIMEOUT_MS = 10_000;
 const MDLS_NAMES = ['kMDItemNumberOfPages', 'kMDItemDurationSeconds', 'kMDItemPixelWidth', 'kMDItemPixelHeight'] as const;
 
 export interface FileInfoDependencies {
@@ -73,17 +76,22 @@ export class FileInfoReader {
   }
 
   private async headers(file: string, name: string, size: number): Promise<MediaHeaders> {
-    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
-    if (!handle) return {};
-    try {
-      return await readMediaHeaders(name, size, async (position, length) => {
-        const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - position)));
-        const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
-        return buffer.subarray(0, bytesRead);
-      });
-    } finally {
-      await handle.close();
-    }
+    const read = async () => {
+      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
+      if (!handle) return {};
+      try {
+        return await readMediaHeaders(name, size, async (position, length) => {
+          const buffer = Buffer.alloc(Math.max(0, Math.min(length, size - position)));
+          const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+          return buffer.subarray(0, bytesRead);
+        });
+      } finally {
+        await handle.close();
+      }
+    };
+    // A PDF can be read whole, so large ones wait their turn in the queue and memory stays bounded.
+    if (size <= LARGE_READ) return read();
+    return this.deps.limiter.run(read, { timeoutMs: LARGE_READ_TIMEOUT_MS, label: `Reading ${name}` }).catch(() => ({}));
   }
 
   /** What Spotlight knows, for the fields the headers left out. Nothing when mdls is slow or missing. */

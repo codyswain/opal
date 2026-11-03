@@ -18,8 +18,15 @@ export type ReadAt = (position: number, length: number) => Promise<Uint8Array>;
 
 /** Width detection reads this much of an image, not all of it. */
 export const IMAGE_HEAD = 64 * 1024;
-/** A PDF or a movie's index larger than this is left to Spotlight. */
+/** A movie's index larger than this is left to Spotlight. */
 const WHOLE_LIMIT = 64 * 1024 * 1024;
+/**
+ * A PDF up to this size is read whole. A larger one is read at both ends,
+ * where writers put the page tree's root, and Spotlight answers when it is
+ * in neither.
+ */
+export const PDF_WHOLE = 32 * 1024 * 1024;
+const PDF_END = 8 * 1024 * 1024;
 
 const MP4 = new Set(['mp4', 'm4v', 'mov', 'm4a', '3gp', 'qt']);
 
@@ -32,7 +39,10 @@ const MP4 = new Set(['mp4', 'm4v', 'mov', 'm4a', '3gp', 'qt']);
 export async function readMediaHeaders(name: string, size: number, read: ReadAt): Promise<MediaHeaders> {
   const extension = extensionOf(name);
   try {
-    if (extension === 'pdf') return pdfHeaders(await read(0, Math.min(size, WHOLE_LIMIT)));
+    if (extension === 'pdf') {
+      if (size <= PDF_WHOLE) return pdfHeaders(await read(0, size));
+      return pdfHeaders(Buffer.concat([await read(0, PDF_END), Buffer.from('\n'), await read(size - PDF_END, PDF_END)]));
+    }
     if (MP4.has(extension)) return await mp4Headers(size, read);
     if (extension === 'wav') return wavHeaders(await read(0, IMAGE_HEAD));
     if (extension === 'aif' || extension === 'aiff') return aiffHeaders(await read(0, IMAGE_HEAD));
@@ -73,7 +83,11 @@ function dictAround(text: string, index: number): string {
   return '';
 }
 
-/** The largest `/Count` of a `/Type /Pages` node: the page tree's root counts every page. */
+/**
+ * The largest `/Count` of a `/Type /Pages` node. The page tree's root
+ * counts every page and every other node counts some of them, so the
+ * largest is the root's, wherever it sits.
+ */
 function pagesIn(text: string): number | null {
   let best: number | null = null;
   for (const match of text.matchAll(/\/Type\s*\/Pages\b/g)) {

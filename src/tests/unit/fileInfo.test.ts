@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, truncate, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { imageSize } from '@/common/imageSize';
 import { FileInfoReader, MDLS } from '@/main/files/fileInfo';
 import type { RunFile } from '@/main/files/FileStore';
-import { pdfHeaders } from '@/main/files/mediaHeaders';
+import { PDF_WHOLE, pdfHeaders } from '@/main/files/mediaHeaders';
 import { jobQueue } from '@/main/mapLimited';
 import { makePdf } from '../../../e2e/helpers/pdfFixture';
 import { aiff, bmp, compressedPdf, flac, heif, linearizedPdf, movie, mp3, mp3Xing, wav, webp } from '../helpers/mediaFixtures';
@@ -38,6 +38,19 @@ describe('file info from headers', () => {
     expect(await reader.info(await put('word.pdf', compressedPdf(42)))).toMatchObject({ pages: 42 });
     // A nested Pages node counts less than the root.
     expect(pdfHeaders(Buffer.from('1 0 obj << /Type /Pages /Kids [2 0 R] /Count 9 >> endobj 2 0 obj << /Type /Pages /Parent 1 0 R /Count 4 >> endobj'))).toEqual({ pages: 9 });
+  });
+
+  it('reads a large PDF at both ends, where writers put the page tree\'s root, through the queue', async () => {
+    const file = path.join(root, 'scan.pdf');
+    const head = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n');
+    const tail = Buffer.from('\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 212 >> endobj\n%%EOF\n');
+    await writeFile(file, head);
+    await truncate(file, PDF_WHOLE + 1024 * 1024);
+    await appendFile(file, tail);
+    const queue = jobQueue(3);
+    const run = vi.spyOn(queue, 'run');
+    expect(await new FileInfoReader({ limiter: queue, run: mdls }).info(file)).toMatchObject({ pages: 212 });
+    expect(run).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ label: 'Reading scan.pdf' }));
   });
 
   it('reads a movie\'s duration and size, with its index at the end, turned, and in a version 1 header', async () => {
