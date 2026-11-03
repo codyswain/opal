@@ -708,6 +708,12 @@ describe('the stops beside a block', () => {
     key(after, 'b', mod);
     type(after, 'x');
     expect(text(after)).toBe('Intro\n\n```\nab\n```\n**x**');
+    const listed = mount('Intro\n\n```\nab\n```', 13);
+    await focusPage(listed);
+    key(listed, 'Escape');
+    key(listed, '8', { ...mod, shiftKey: true });
+    type(listed, 'x');
+    expect(text(listed)).toBe('Intro\n\n```\nab\n```\n- x');
     const bold = mount('```\nab\n```\n\nafter', 5);
     await focusPage(bold);
     select(bold, 0);

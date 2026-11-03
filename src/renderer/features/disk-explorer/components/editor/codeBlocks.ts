@@ -1258,6 +1258,21 @@ const indentedBackspace: Command = (view) => {
 /** Formatting keys do nothing in a code block. */
 const inCode: Command = (view) => inCodeBlock(view.state);
 
+/**
+ * A list or heading key at the stop after a block that ends the page, or
+ * before one that starts it: the line it formats is written first, as the
+ * first typed character's would be. False, so the key's own command runs.
+ */
+const lineAtStop: Command = (view) => {
+  const { state } = view;
+  const { main } = state.selection;
+  if (!main.empty || state.selection.ranges.length > 1) return false;
+  const line = state.doc.lineAt(main.head);
+  if (main.head === state.doc.length && fenceEndingOn(state, line)) view.dispatch({ changes: { from: main.head, insert: '\n' }, selection: { anchor: main.head + 1 }, userEvent: 'input' });
+  else if (main.head === 0 && fenceOpeningOn(state, line)) view.dispatch({ changes: { from: 0, insert: '\n' }, selection: { anchor: 0 }, userEvent: 'input' });
+  return false;
+};
+
 // ---------------------------------------------------------------------------
 // Backspace and Delete next to code
 
@@ -1785,8 +1800,9 @@ export function codeDocExtension({ toggleInline, editLink }: { toggleInline: Sta
       { key: 'Mod-Alt-c', run: toggleCodeBlock },
       { key: 'Alt-F10', run: focusHeader },
       { key: 'Ctrl-Alt-t', run: focusHeader },
-      ...['Mod-b', 'Mod-i', 'Mod-Shift-x', 'Mod-Shift-7', 'Mod-Shift-8', 'Mod-Shift-9', ...[0, 1, 2, 3, 4, 5, 6].map((level) => `Mod-Alt-${level}`)]
-        .map((key) => ({ key, run: inCode })),
+      ...['Mod-b', 'Mod-i', 'Mod-Shift-x'].map((key) => ({ key, run: inCode })),
+      ...['Mod-Shift-7', 'Mod-Shift-8', 'Mod-Shift-9', ...[0, 1, 2, 3, 4, 5, 6].map((level) => `Mod-Alt-${level}`)]
+        .map((key) => ({ key, run: (view: EditorView) => inCode(view) || lineAtStop(view) })),
     ])),
   ];
 }

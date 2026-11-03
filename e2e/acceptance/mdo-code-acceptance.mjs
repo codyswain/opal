@@ -139,6 +139,8 @@ try {
   const saved = await waitForFile(TYPING, (text) => text === expected);
   check('Enter writes both fences and the file holds the typed code', saved === expected, JSON.stringify(saved));
   check('no fence shows on the page', !(await page.locator('.cm-content').textContent()).includes('```'));
+  await setTheme('light');
+  await shot('light-made-block', page.locator('.cm-code-head').first(), { above: 90, below: 140 });
 
   // Copy puts only the code on the clipboard; the page's clipboard write is stubbed.
   await page.evaluate(() => {
