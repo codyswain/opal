@@ -290,6 +290,10 @@ describe('file widgets', () => {
     act(() => { tile.dispatchEvent(drag); });
     expect(drag.defaultPrevented).toBe(true);
     expect(window.filesAPI.startDrag).toHaveBeenCalledWith(`/Vault/${DECK}`);
+    const pdf = await mount(`![[${PDF}|Q3.pdf]]\n`);
+    const icon = await waitFor(() => pdf.contentDOM.querySelector('.cm-file-pdf-footer [data-drag-file]') as HTMLElement);
+    act(() => { icon.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true })); });
+    expect(window.filesAPI.startDrag).toHaveBeenLastCalledWith(`/Vault/${PDF}`);
   });
 
   it('plays one video at a time in the window', async () => {

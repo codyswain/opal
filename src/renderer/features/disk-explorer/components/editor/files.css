@@ -101,6 +101,7 @@
   display: none;
 }
 
+.opal-editor .cm-editor .cm-file-icon[data-drag-file],
 .opal-editor .cm-editor .cm-file-card-tile[data-drag-file] {
   cursor: grab;
 }

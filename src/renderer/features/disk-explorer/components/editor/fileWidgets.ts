@@ -463,7 +463,9 @@ export class PdfPreviewWidget extends WidgetType {
     page.append(iconNode('fileText', 20, 'cm-file-pdf-blank'));
     const footer = element('span', 'cm-file-pdf-footer');
     const meta = element('span', 'cm-file-card-meta');
-    footer.append(iconNode('fileText'), element('span', 'cm-file-card-name', name), meta);
+    const handle = iconNode('fileText');
+    footer.append(handle, element('span', 'cm-file-card-name', name), meta);
+    if (ref.path) dragOut(handle, ref.path);
     preview.append(page, footer);
     const caption = captionNode(captionOf(ref));
     const wrap = element('span', 'cm-file-figure');
@@ -722,7 +724,9 @@ export class AudioWidget extends WidgetType {
     const meta = element('span', 'cm-file-card-meta');
     const body = element('span', 'cm-file-card-body');
     body.append(element('span', 'cm-file-card-name', name), meta);
-    row.append(iconNode('music'), body);
+    const handle = iconNode('music');
+    row.append(handle, body);
+    if (ref.path) dragOut(handle, ref.path);
     wrap.append(row);
     const caption = captionNode(captionOf(ref));
     if (caption) wrap.append(caption);
