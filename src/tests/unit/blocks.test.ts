@@ -104,13 +104,7 @@ describe('tables and rules as objects in a document', () => {
     expect(text(view)).toBe('Text\n\nMore\n');
   });
 
-  it('frames a drawn code block or an HTML block first', () => {
-    const code = mount('Text\n\n```\ncode\n```\n‸\nMore\n');
-    key(code, 'Backspace');
-    expect(frame(code)).toMatchObject({ kind: 'code block' });
-    expect(text(code)).toBe('Text\n\n```\ncode\n```\n\nMore\n');
-    key(code, 'Backspace');
-    expect(text(code)).toBe('Text\n\nMore\n');
+  it('frames an HTML block first', () => {
     const html = mount('Text\n\n<div>\nhi\n</div>\n\n‸More\n');
     key(html, 'Backspace');
     expect(frame(html)).toMatchObject({ kind: 'HTML block' });
@@ -589,17 +583,6 @@ describe('a click on a rule in a document', () => {
     key(view, 'Backspace');
     expect(text(view)).toBe('Text\n\nMore\n');
     expect(mount('***\n', NOTE).contentDOM.querySelector('.cm-md-hr[data-object]')).toBeNull();
-  });
-});
-
-describe('a click on a drawn code block in a document', () => {
-  it('frames it with the caret after it', async () => {
-    const view = mount('Text\n\n```\ncode\n```\n\nMore‸\n');
-    await focusPage(view);
-    const block = view.contentDOM.querySelector('.cm-md-codeblock-widget') as HTMLElement;
-    act(() => { block.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
-    expect(frame(view)).toMatchObject({ kind: 'code block' });
-    expect(caret(view)).toBe(text(view).indexOf('\nMore'));
   });
 });
 

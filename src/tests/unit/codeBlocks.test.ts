@@ -11,7 +11,7 @@ import { clearFormatting, clearFormattingAndCode, toggleInlineCode, toggleList, 
 import { setDiagramCode } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { blockPosition } from '@/renderer/features/disk-explorer/components/editor/livePreview';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
-import { focusObjectBar, objectFrame, setFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { focusObjectBar, objectBars, objectFrame, setFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 
@@ -838,6 +838,8 @@ describe('reaching a block from the keyboard', () => {
     bar.dataset.objectBar = 'code';
     bar.innerHTML = '<button data-bar-item="copy" tabindex="0">Copy</button>';
     document.body.append(bar);
+    // ObjectBar registers its element for the view as it draws.
+    objectBars.set(view, bar);
     try {
       expect(focusObjectBar(view)).toBe(true);
       expect((document.activeElement as HTMLElement | null)?.dataset.barItem).toBe('copy');

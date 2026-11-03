@@ -349,7 +349,9 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
       const state = tr.state;
       const block = drawnBlockAt(state, main.from);
       if (block && main.to <= block.to) return [tr, { effects: setOpenBlock.of(block), sequential: true }];
-      if (protectedIn(state, main.from, main.to).some((range) => range.from <= main.from && range.to >= main.to)) {
+      const covering = protectedIn(state, main.from, main.to).filter((range) => range.from <= main.from && range.to >= main.to);
+      // Code shows its text in place (its ranges carry `lines` or `inline`), so a match there is selected where it is.
+      if (covering.length > 0 && !covering.some((range) => range.lines || range.inline)) {
         const obj = objectAt(state, main.from, 0);
         if (obj) return [tr, { effects: setFrame.of(obj), selection: { anchor: obj.to }, sequential: true }];
       }
