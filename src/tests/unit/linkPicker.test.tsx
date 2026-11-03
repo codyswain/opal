@@ -10,6 +10,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import { setLinkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
 import { LinkPopover } from '@/renderer/features/disk-explorer/components/editor/LinkPopover';
 import { linkCompletions, pickedText } from '@/renderer/features/disk-explorer/components/editor/linkPicker';
+import { linksResolved } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
@@ -153,6 +154,15 @@ describe('the [[ picker in tables, code and odd names', () => {
     const result = await pick(view, 0);
     expect(result.options[0].label).toBe('q3.pdf');
     expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]] today');
+  });
+
+  it('names a stored file as this page already shows it, in the row and in the link', async () => {
+    const stored = '[[Library/files/2026-11/q3.a3f9c2e1.pdf|Q3 report.pdf]]';
+    const view = mount(`${stored}\nSee [[ today`, stored.length + 7);
+    act(() => { view.dispatch({ effects: linksResolved.of({ 'Library/files/2026-11/q3.a3f9c2e1.pdf': '/Vault/Library/files/2026-11/q3.a3f9c2e1.pdf' }) }); });
+    const result = await pick(view, 0);
+    expect(result.options[0].label).toBe('Q3 report.pdf');
+    expect(text(view)).toBe(`${stored}\nSee [[Library/files/2026-11/q3.a3f9c2e1.pdf|Q3 report.pdf]] today`);
   });
 
   it('writes a note whose name holds # as a Markdown link', () => {

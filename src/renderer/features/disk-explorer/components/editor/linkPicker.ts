@@ -1,6 +1,7 @@
 import { acceptCompletion, autocompletion, completionStatus, startCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { isolateHistory } from '@codemirror/commands';
-import { Prec, type Extension } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
+import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { keymap, type EditorView } from '@codemirror/view';
 import { Link2 } from 'lucide-react';
 import { classifyFile, fileTreeLabel, pageName, withoutHash } from '@/common/fileKind';
@@ -10,11 +11,11 @@ import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../../store/diskStore';
 import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
-import { iconFor, inCode, inTableAt } from './fileEmbeds';
+import { FILE_NODES, fileName, fileRefOf, iconFor, inCode, inTableAt, shownName } from './fileEmbeds';
 import { fileIcon } from './fileIcons';
 import { WIKI_UNSAFE, linkFor, wikiAlias } from './fileActions';
 import { insertFileItem, insertedText } from './imageInsert';
-import { linksResolved, pageContext } from './wikiLinks';
+import { linksResolved, pageContext, resolvedLinks } from './wikiLinks';
 
 /*
  * The link picker. Typing "[[" (or Insert > Link to note or file…) lists
@@ -62,12 +63,33 @@ export function rowLabel(entry: Pick<DiskEntry, 'name' | 'kind'>): string {
 }
 
 /**
+ * The names this page already shows its files by, by path, so a file picked
+ * again reads as it did when it went in ("Big manual.pdf", not its stored
+ * "big-manual.pdf").
+ */
+export function shownNames(state: EditorState): Map<string, string> {
+  const names = new Map<string, string>();
+  const links = state.field(resolvedLinks, false) ?? new Map<string, string | null>();
+  const page = state.facet(pageContext).path;
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (!FILE_NODES.includes(node.name)) return;
+      const ref = fileRefOf(state, node.node, links, page);
+      if (!ref?.path || ref.url || names.has(ref.path)) return;
+      const name = shownName(ref);
+      if (name !== fileName(ref)) names.set(ref.path, name);
+    },
+  });
+  return names;
+}
+
+/**
  * What a pick writes. A note: `[[Library/x/Plan|Plan]]`, a document keeping
  * ".mdo". A file: a chip in text, or on an empty line its type's look; with
  * `asLink` always a link, `[[path|Name]]`. In a table the alias pipe is
  * `\|`, and a name a wiki link can't hold is written `[name](<path>)`.
  */
-export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string, onEmptyLine: boolean, asLink: boolean, inTable = false): { text: string; target: string } {
+export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string, onEmptyLine: boolean, asLink: boolean, inTable = false, shown?: string): { text: string; target: string } {
   const relative = vaultPath(entry.path);
   if (classifyFile(entry.path) === 'markdown') {
     const target = relative.endsWith('.md') ? relative.slice(0, -3) : relative;
@@ -75,7 +97,7 @@ export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string
     if (WIKI_UNSAFE.test(target)) return { text: linkFor({ vaultPath: relative, path: entry.path, page, embed: false, slot: name, inTable }), target };
     return { text: `[[${target}${inTable ? '\\|' : '|'}${wikiAlias(name, inTable)}]]`, target };
   }
-  const file = { path: entry.path, vaultPath: relative, name: withoutHash(entry.name) };
+  const file = { path: entry.path, vaultPath: relative, name: shown ?? withoutHash(entry.name) };
   return { text: insertedText(file, page, asLink || !onEmptyLine ? 'chip' : 'default', null, inTable), target: relative };
 }
 
@@ -83,14 +105,14 @@ export function pickedText(entry: Pick<DiskEntry, 'path' | 'name'>, page: string
 let asLink = false;
 
 /** Writes the pick over the typed "[[query" (and a "]]" right after it), as one undo step. */
-function applyPick(entry: DiskEntry) {
+function applyPick(entry: DiskEntry, shown: string | undefined) {
   return (view: EditorView, _completion: Completion, from: number, to: number) => {
     const { state } = view;
     const line = state.doc.lineAt(from);
     const end = state.sliceDoc(to, to + 2) === ']]' ? to + 2 : to;
     const rest = line.text.slice(0, from - line.from) + line.text.slice(end - line.from);
     const onEmptyLine = !/[^\s>]/.test(rest);
-    const { text, target } = pickedText(entry, state.facet(pageContext).path, onEmptyLine, asLink, inTableAt(state, from));
+    const { text, target } = pickedText(entry, state.facet(pageContext).path, onEmptyLine, asLink, inTableAt(state, from), shown);
     asLink = false;
     view.dispatch({
       changes: { from, to: end, insert: text },
@@ -111,15 +133,16 @@ export async function linkCompletions(context: CompletionContext): Promise<Compl
   const query = typed.text.slice(2);
   const entries = await findLinkTargets(query);
   if (context.aborted) return null;
+  const names = shownNames(context.state);
   return {
     from,
     filter: false,
     options: entries.map((entry, index) => ({
-      label: rowLabel(entry),
+      label: names.get(entry.path) ?? rowLabel(entry),
       detail: folderOf(entry.path),
       type: entry.kind,
       boost: -index,
-      apply: applyPick(entry),
+      apply: applyPick(entry, names.get(entry.path)),
       entry,
     } as Completion & { entry: DiskEntry })),
   };
