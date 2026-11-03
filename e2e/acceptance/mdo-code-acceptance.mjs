@@ -29,9 +29,11 @@ const TYPING = path.join(vault, 'Docs', 'typing.mdo');
 const GALLERY = path.join(vault, 'Docs', 'code.mdo');
 const NOTE = path.join(vault, 'Docs', 'note.md');
 const KEYS = path.join(vault, 'Docs', 'keys.mdo');
+const EDGES = path.join(vault, 'Docs', 'edges.mdo');
 const KEYS_TEXT = 'Top\n\n> ```py\n> def f():\n>     return 1\n> ```\n\nAfter words\n';
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
 await writeFile(KEYS, KEYS_TEXT);
+await writeFile(EDGES, '```js\nlet a = 1;\n```');
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
 await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
@@ -151,6 +153,26 @@ try {
   const keysSaved = await waitForFile(KEYS, (text) => text.includes('```sql') && text.includes('`After`'));
   check('the file holds exactly what the keys wrote', keysSaved === 'Top\n\n> ```sql\n> def f():\n>     return 1Z\n>     x = 2WV\n> ```\n`After` words\n', JSON.stringify(keysSaved));
 
+  // A block that is the whole page: leaving it and typing at its edges.
+  await open(EDGES);
+  await page.locator('.cm-code-line', { hasText: 'let a' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowDown');
+  check('ArrowDown on a final block\'s last line writes nothing', (await editorText()) === '```js\nlet a = 1;\n```');
+  await page.keyboard.type('Z');
+  check('the first character typed after a final block brings its line break', (await editorText()) === '```js\nlet a = 1;\n```\nZ', JSON.stringify(await editorText()));
+  await page.keyboard.press('Meta+ArrowUp');
+  await page.keyboard.type('A');
+  check('typing before a block that starts the page writes a line break first', (await editorText()) === 'A\n```js\nlet a = 1;\n```\nZ', JSON.stringify(await editorText()));
+  await page.locator('.cm-code-line', { hasText: 'let a' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Tab');
+  check('Tab in code writes one indent', (await editorText()) === 'A\n```js\n    let a = 1;\n```\nZ', JSON.stringify(await editorText()));
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Alt+F10');
+  check('Option+F10 in a block moves focus to its header', await page.evaluate(() => document.activeElement?.classList.contains('cm-code-label') ?? false));
+  await page.keyboard.press('Escape');
+
   // The gallery document: every state, light and dark.
   await open(GALLERY);
   // Scroll until the Mermaid block is drawn, then wait for its picture.
@@ -218,6 +240,16 @@ try {
     if (await showAll.count()) await shot(`${theme}-state-collapsed`, showAll, { above: 260, below: 40 });
     const end = page.locator('.cm-code-open-end');
     if (await end.count()) await shot(`${theme}-state-unclosed`, end, { above: 120, below: 40 });
+  }
+  // Show all on a long block shows its lines and writes nothing.
+  for (let step = 0; step < 20 && (await page.locator('.cm-code-show-all').count()) === 0; step += 1) {
+    await page.locator('.cm-scroller').first().evaluate((element) => { element.scrollTop += element.clientHeight / 2; });
+    await page.waitForTimeout(200);
+  }
+  if (await page.locator('.cm-code-show-all').count()) {
+    await page.locator('.cm-code-show-all').first().click();
+    await page.waitForTimeout(200);
+    check('Show all shows a long block\'s lines', (await page.locator('.cm-code-show-all').count()) === 0 && (await page.locator('.cm-code-line', { hasText: '"line50"' }).count()) === 1);
   }
   // A note keeps the drawn block, highlighted, scrolling sideways inside the column.
   await open(NOTE);
