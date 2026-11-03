@@ -178,6 +178,8 @@ const editingKeymap = defaultKeymap.filter((binding) => !MENU_KEYS.has(binding.k
 export function markdownEditorExtensions(path: string, openNote: OpenNote = () => undefined): Extension[] {
   return [
     EditorState.lineSeparator.of('\n'),
+    // Pasted and dropped text gets "\n" line ends, the ones the file is saved with.
+    EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?/g, '\n')),
     pageContext.of({ path, openNote }),
     history(),
     markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle, mathSyntax], completeHTMLTags: false, addKeymap: false }),

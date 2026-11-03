@@ -204,6 +204,13 @@ describe('Paste and Match Style in a document', () => {
 });
 
 describe('paste in a document', () => {
+  it('pastes Windows line ends in a code block as plain line ends, so the page matches the saved file', () => {
+    const view = mount('```c\n\n```\n');
+    select(view, 5);
+    clipboardEvent(view, 'paste', clipboardData({ 'text/plain': 'int main(void) {\r\n\treturn 0;\r\n}' }));
+    expect(text(view)).toBe('```c\nint main(void) {\n\treturn 0;\n}\n```\n');
+  });
+
   it('links a selection with a pasted URL, and changes a link\'s address over its text', () => {
     const view = mount('See the site now\n');
     select(view, 4, 12);
