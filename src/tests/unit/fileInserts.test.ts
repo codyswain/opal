@@ -15,7 +15,8 @@ import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import type { FilesResult, ImportedFile } from '@/types/files';
 
 const toastError = vi.hoisted(() => vi.fn());
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: toastError }) }));
+const toastPlain = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: Object.assign(toastPlain, { error: toastError }) }));
 
 const DOC = '/Vault/Notes/Plan.mdo';
 const NOTE = '/Vault/Notes/Plan.md';
@@ -48,10 +49,12 @@ let views: EditorView[] = [];
 beforeEach(() => {
   installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })) });
   installMarkdownApi({ [DOC]: '', [NOTE]: '' });
+  // Reads every stored picture's size as 1600 by 1000 at 144 dpi, as files:info does from its first bytes.
   installFilesApi();
   toastError.mockClear();
-  // The stored files' first bytes, as opal-file:// serves them.
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => png(1600, 1000, 5669).buffer })));
+  toastPlain.mockClear();
+  // The page never fetches file bytes; this catches it if it does.
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('fetch is not allowed'); }));
 });
 
 afterEach(() => {
@@ -180,7 +183,8 @@ describe('pasting files', () => {
     const embed = '![[Library/files/2026-11/screen-shot.a3f9c2e1.png|800]]';
     await waitFor(() => expect(text(view)).toBe(`Notes here\n${embed}\nMore\n`));
     expect(window.filesAPI.import).toHaveBeenCalledWith(DOC, file);
-    expect(fetch).toHaveBeenCalledWith(toOpalFileUrl(storedFile('Screen Shot.png').path));
+    expect(window.filesAPI.info).toHaveBeenCalledWith(storedFile('Screen Shot.png').path);
+    expect(fetch).not.toHaveBeenCalled();
     expect(view.state.selection.main.head).toBe(11 + embed.length);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-md-image img')).toHaveAttribute('src', toOpalFileUrl(storedFile('Screen Shot.png').path)));
     expect(window.markdownAPI.resolveLinks).not.toHaveBeenCalledWith(DOC, ['Library/files/2026-11/screen-shot.a3f9c2e1.png']);
@@ -209,7 +213,7 @@ describe('pasting files', () => {
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
     await waitFor(() => expect(text(view)).toBe('Start\n[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]]\n'));
-    expect(fetch).not.toHaveBeenCalled();
+    expect(window.filesAPI.info).not.toHaveBeenCalled();
   });
 
   it('leaves a paste without files to CodeMirror', () => {
@@ -284,6 +288,19 @@ describe('dropping files', () => {
     await act(async () => { finish(); });
     await waitFor(() => expect(text(view)).toBe('Intro line\n![[Library/files/2026-11/image.a3f9c2e1.png|800]]\nNext thought\n'));
     expect(view.state.selection.main.head).toBe(text(view).length - 1);
+  });
+
+  it('links a dropped .webloc to its address, and says when a file linked in place is too large for GitHub', async () => {
+    installFilesApi({
+      import: vi.fn(async (_page: string, file: File) => (file.name.endsWith('.webloc')
+        ? { success: true as const, data: { path: '', vaultPath: '', name: 'Opal [PR] *13*', url: 'https://github.com/codyswain/opal/pull/13' } }
+        : { success: true as const, data: { path: '/Vault/Library/clip.mov', vaultPath: 'Library/clip.mov', name: 'clip.mov', warning: '"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.' } })),
+    });
+    const view = mount('Notes\n');
+    pointAt(view, 0, 5);
+    drag(view, 'drop', [new File(['x'], 'Opal PR.webloc'), new File(['x'], 'clip.mov')], { clientY: 30 });
+    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n[[Library/clip.mov|clip.mov]]\n'));
+    expect(toastPlain).toHaveBeenCalledWith('"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.');
   });
 
   it('links a row dragged from the tree by its path from the vault\'s top, and copies nothing', () => {

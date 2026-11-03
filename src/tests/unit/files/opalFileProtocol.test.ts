@@ -18,8 +18,8 @@ const POINTER = `version https://git-lfs.github.com/spec/v1\noid sha256:${OID}\n
 
 describe('opal-file protocol', () => {
   let temporary: string, root: string;
-  let serve: (request: { url: string }) => Promise<Response>;
-  const get = (file: string) => serve({ url: toOpalFileUrl(file) });
+  let serve: (request: Request) => Promise<Response>;
+  const get = (file: string) => serve(new Request(toOpalFileUrl(file)));
 
   beforeEach(async () => {
     temporary = await mkdtemp(path.join(os.tmpdir(), 'opal-protocol-'));

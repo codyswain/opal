@@ -193,8 +193,18 @@ const filesAPI: FilesAPI = {
   },
   // A file copied in Finder has a path; a pasted picture has none.
   hasPath: (file) => webUtils.getPathForFile(file) !== "",
-  pickAndImport: (page) => ipcRenderer.invoke("files:pick-and-import", page),
+  pickAndImport: (page, options) => ipcRenderer.invoke("files:pick-and-import", page, options),
   status: (target) => ipcRenderer.invoke("files:status", target),
   fetch: (target) => ipcRenderer.invoke("files:fetch", target),
+  info: (target) => ipcRenderer.invoke("files:info", target),
+  thumbnail: (target, px, options) => ipcRenderer.invoke("files:thumbnail", target, px, options),
+  rendition: (target, width, options) => ipcRenderer.invoke("files:rendition", target, width, options),
+  open: (target, options) => ipcRenderer.invoke("files:open", target, options),
+  appName: (target) => ipcRenderer.invoke("files:app-name", target),
+  quickLook: (target, options) => ipcRenderer.invoke("files:quick-look", target, options),
+  copyFile: (target) => ipcRenderer.invoke("files:copy-file", target),
+  saveCopy: (target, name) => ipcRenderer.invoke("files:save-copy", target, name),
+  startDrag: (target) => ipcRenderer.send("files:start-drag", target),
+  findMoved: (target) => ipcRenderer.invoke("files:find-moved", target),
 };
 contextBridge.exposeInMainWorld("filesAPI", filesAPI);

@@ -29,15 +29,19 @@ export function lfsInclude(relative: string): string {
   return `${escape(folder)}/**`;
 }
 
+/** Variables that point git at another repo; a git hook sets them for its own. */
+const REPO_VARIABLES = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX', 'GIT_OBJECT_DIRECTORY'];
+
 /**
- * The environment for git: no password prompt, and Homebrew's folder on the
- * PATH, since an app opened from the Dock lacks it and git-lfs lives there.
+ * The environment for git: no password prompt, Homebrew's folder on the
+ * PATH, since an app opened from the Dock lacks it and git-lfs lives there,
+ * and no variable that would make git answer for some other repo.
  */
-const gitEnvironment = (): NodeJS.ProcessEnv => ({
-  ...process.env,
-  GIT_TERMINAL_PROMPT: '0',
-  PATH: ['/opt/homebrew/bin', process.env.PATH].filter(Boolean).join(':'),
-});
+export const gitEnvironment = (): NodeJS.ProcessEnv => {
+  const environment: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0', PATH: ['/opt/homebrew/bin', process.env.PATH].filter(Boolean).join(':') };
+  for (const name of REPO_VARIABLES) delete environment[name];
+  return environment;
+};
 
 /**
  * A folder git sends to Git LFS. A file whose bytes have not been downloaded

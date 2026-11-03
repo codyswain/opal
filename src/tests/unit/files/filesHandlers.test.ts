@@ -26,14 +26,20 @@ describe('FilesHandlers', () => {
     await writeFile(page, '');
     handlers.clear();
     showOpenDialog.mockReset();
-    const ipc = { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler) } as unknown as IpcMain;
+    const ipc = {
+      handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, handler),
+      on: (channel: string, listener: (event: unknown, ...args: unknown[]) => Promise<unknown>) => handlers.set(channel, listener),
+    } as unknown as IpcMain;
     // PDFs need no sips, so these run anywhere.
     new FilesHandlers({ ipc, service: new FilesService({ registry, links: { invalidateDirectories: vi.fn() } }), showOpenDialog }).registerAll();
   });
   afterEach(async () => { await rm(temporary, { recursive: true, force: true }); });
 
   it('validates every request', async () => {
-    expect([...handlers.keys()].sort()).toEqual(['files:fetch', 'files:import', 'files:pick-and-import', 'files:status']);
+    expect([...handlers.keys()].sort()).toEqual([
+      'files:app-name', 'files:copy-file', 'files:fetch', 'files:find-moved', 'files:import', 'files:info', 'files:open',
+      'files:pick-and-import', 'files:quick-look', 'files:rendition', 'files:save-copy', 'files:start-drag', 'files:status', 'files:thumbnail',
+    ]);
     const invalid = { success: false, error: 'Invalid files request.' };
     expect(await invoke('files:import', 'plan.mdo', { bytes: new Uint8Array(1), name: 'a.pdf' })).toEqual(invalid);
     expect(await invoke('files:import', page, { bytes: [1, 2], name: 'a.pdf' })).toEqual(invalid);
@@ -43,6 +49,22 @@ describe('FilesHandlers', () => {
     expect(await invoke('files:fetch', '')).toEqual(invalid);
     expect(await invoke('files:pick-and-import', null)).toEqual(invalid);
     expect(await invoke('files:status', path.join(temporary, 'outside.png'))).toMatchObject({ success: false, error: /not inside/ });
+    expect(await invoke('files:info', 'relative.png')).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, 0)).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, Infinity)).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, 4097)).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, 96, { visible: 'yes' })).toEqual(invalid);
+    expect(await invoke('files:rendition', page, -1)).toEqual(invalid);
+    expect(await invoke('files:open', page, { confirmed: 1 })).toEqual(invalid);
+    expect(await invoke('files:quick-look', page, 'confirmed')).toEqual(invalid);
+    expect(await invoke('files:save-copy', page, 'a\0b')).toEqual(invalid);
+    expect(await invoke('files:find-moved', null)).toEqual(invalid);
+    expect(await invoke('files:info', path.join(temporary, 'outside.png'))).toMatchObject({ success: false, error: /not inside/ });
+  });
+
+  it('answers info for a file and for one that is gone', async () => {
+    expect(await invoke('files:info', page)).toMatchObject({ success: true, data: { path: page, kind: 'markdown', status: 'local', size: 0 } });
+    expect(await invoke('files:info', path.join(root, 'gone/clip.mp4'))).toMatchObject({ success: true, data: { kind: 'video', status: 'missing' } });
   });
 
   it('imports pasted bytes and answers where they went', async () => {
@@ -65,5 +87,12 @@ describe('FilesHandlers', () => {
     expect(picked.data.files.map((file) => file.name)).toEqual(['a.pdf', 'b.pdf']);
     expect(picked.data.skipped).toEqual(['"huge.pdf" is larger than 100 MB, so it was not added.']);
     expect(showOpenDialog).toHaveBeenLastCalledWith(expect.objectContaining({ properties: ['openFile', 'multiSelections'], filters: [expect.objectContaining({ name: 'Images' })] }));
+  });
+
+  it('asks for files of any type for Insert file', async () => {
+    showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await invoke('files:pick-and-import', page, { anyType: true });
+    expect(showOpenDialog).toHaveBeenLastCalledWith({ properties: ['openFile', 'multiSelections'] });
+    expect(await invoke('files:pick-and-import', page, { anyType: 'yes' })).toEqual({ success: false, error: 'Invalid files request.' });
   });
 });

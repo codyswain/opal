@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
+import { mkdtemp, rm, mkdir, readFile, realpath, writeFile } from 'fs/promises';
+import { createHash } from 'crypto';
 import path from 'path';
 import os from 'os';
 
@@ -91,6 +92,7 @@ beforeEach(async () => {
     reader: new DiskReader({ registry }),
     showOpenDialog,
     shell: { showItemInFolder, openPath },
+    copiesDir: path.join(tmp, 'copies'),
     watcher: { watch: watchRoot, unwatch: unwatchRoot },
     writer,
   }).registerAll();
@@ -345,6 +347,31 @@ describe('DiskHandlers', () => {
     };
     expect(result.success).toBe(true);
     expect(openPath).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a launcher in Finder instead of opening it', async () => {
+    await registry.add(root);
+    await writeFile(path.join(root, 'deploy.command'), 'echo hi');
+    const result = await stub.invoke('disk:open-external', path.join(root, 'deploy.command'));
+    expect(result).toEqual({ success: true, data: { action: 'revealed', reason: expect.stringMatching(/Finder/) } });
+    expect(openPath).not.toHaveBeenCalled();
+    expect(showItemInFolder).toHaveBeenCalledWith(path.join(await realpath(root), 'deploy.command'));
+  });
+
+  it('opens an LFS file from a read-only copy of its bytes, and reads its text, never the pointer', async () => {
+    const real = await registry.add(root);
+    const bytes = Buffer.from('a,b\n1,2\n');
+    const oid = createHash('sha256').update(bytes).digest('hex');
+    await mkdir(path.join(real, '.git/lfs/objects', oid.slice(0, 2), oid.slice(2, 4)), { recursive: true });
+    await writeFile(path.join(real, '.git/lfs/objects', oid.slice(0, 2), oid.slice(2, 4), oid), bytes);
+    await writeFile(path.join(real, 'table.csv'), `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${bytes.length}\n`);
+    const opened = await stub.invoke('disk:open-external', path.join(real, 'table.csv')) as { success: boolean; data: { notice?: string } };
+    expect(opened.data.notice).toMatch(/read-only copy/);
+    const copy = openPath.mock.calls[0][0] as string;
+    expect(copy).not.toBe(path.join(real, 'table.csv'));
+    expect(await readFile(copy)).toEqual(bytes);
+    const text = await stub.invoke('disk:read-text-file', path.join(real, 'table.csv')) as { data: { text: string; size: number } };
+    expect(text.data).toMatchObject({ text: 'a,b\n1,2\n', size: bytes.length });
   });
 
   it('refuses to open a file outside every root', async () => {

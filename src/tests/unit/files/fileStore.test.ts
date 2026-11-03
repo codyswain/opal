@@ -16,13 +16,14 @@ const PNG = Buffer.from('png bytes');
 const hash8 = (bytes: Buffer) => storedName('x', bytes).split('.')[1];
 
 describe('file names', () => {
-  it('keeps lowercase letters, digits and single hyphens in the stem', () => {
+  it('keeps lowercase letters, marks and digits from any script, joined by single hyphens', () => {
     expect(fileStem('Nest Frame.JPG')).toBe('nest-frame');
     expect(fileStem('IMG 2041 (1).HEIC')).toBe('img-2041-1');
-    expect(fileStem('Café plan, v2.png')).toBe('cafe-plan-v2');
+    expect(fileStem('Café plan, v2.png')).toBe('café-plan-v2');
     expect(fileStem('--a__b--.pdf')).toBe('a-b');
     expect(fileStem('.gitignore')).toBe('gitignore');
-    expect(fileStem('照片.png')).toBe('file');
+    expect(fileStem('照片.png')).toBe('照片');
+    expect(fileStem('🎉.png')).toBe('file');
     expect(fileStem(`${'a'.repeat(200)}.png`)).toHaveLength(80);
   });
 
@@ -133,9 +134,9 @@ describe('FolderStore', () => {
     expect(second).toBe(first);
     // Found by name before any conversion runs.
     expect(sips).not.toHaveBeenCalled();
-    const other = await store().import({ bytes: new Uint8Array(PNG), name: 'other.png' });
-    expect(other).not.toBe(first);
-    expect((await readdir(month())).sort()).toEqual([path.basename(first), path.basename(other)].sort());
+    // The same bytes under another name reuse the stored copy.
+    expect(await store().import({ bytes: new Uint8Array(PNG), name: 'other.png' })).toBe(first);
+    expect(await readdir(month())).toEqual([path.basename(first)]);
   });
 
   it('stores the same file once, even when it is dropped again in a later month', async () => {
@@ -178,7 +179,7 @@ describe('FolderStore', () => {
   });
 
   it('leaves a small photo and a file that is not a photo as they are', async () => {
-    const photo = await store().import({ bytes: new Uint8Array(PNG), name: 'small.png' });
+    const photo = await store().import({ bytes: new Uint8Array(PNG), name: 'small.jpg' });
     expect(await readFile(path.join(root, photo))).toEqual(PNG);
     expect(sips.mock.calls.map(([, args]) => args[0])).toEqual(['-g']);
     sips.mockClear();
@@ -188,7 +189,7 @@ describe('FolderStore', () => {
 
   it('refuses an image sips cannot read', async () => {
     sips.mockRejectedValueOnce(new Error('sips: not an image'));
-    await expect(store().import({ bytes: new Uint8Array(PNG), name: 'broken.png' })).rejects.toThrow('Opal could not read "broken.png" as an image.');
+    await expect(store().import({ bytes: new Uint8Array(PNG), name: 'broken.jpg' })).rejects.toThrow('Opal could not read "broken.jpg" as an image.');
   });
 
   it('waits while git rewrites the repo, then writes, and lets other writes go on meanwhile', async () => {
