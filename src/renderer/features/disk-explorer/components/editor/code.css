@@ -49,6 +49,11 @@
   bottom: calc(0.45em / 0.85);
 }
 
+/* The closing fence's line keeps its 0.4em of box above that padding, since lines are sized border-box. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last) {
+  height: calc(0.4em + 0.45em / 0.85);
+}
+
 /* The header row: the opening fence's line, 28px tall. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head {
   padding-left: calc(var(--code-box-left) + 1em);

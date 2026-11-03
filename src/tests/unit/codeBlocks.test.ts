@@ -385,6 +385,8 @@ describe('a code block in a document', () => {
     const rule = (selector: string) => new RegExp(`${selector.replace(/[.()[\]:]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
     expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/padding-bottom: calc\(0\.45em \/ 0\.85\)/);
     expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before')).toMatch(/bottom: calc\(0\.45em \/ 0\.85\)/);
+    // Lines are border-box, so the closing fence's line grows by the padding and keeps its rounded foot.
+    expect(rule('.cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/height: calc\(0\.4em \+ 0\.45em \/ 0\.85\)/);
   });
 
   it('draws diff lines', () => {
