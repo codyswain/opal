@@ -175,7 +175,8 @@ export function replaceVisible(state: EditorState, from: number, to: number, ins
   const shows = (specs: ChangeSpec[]) => {
     const set = ChangeSet.of(specs, state.doc.length);
     const trial = state.update({ changes: set, filter: false }).state;
-    ensureSyntaxTree(trial, set.mapPos(line.to, 1), 50);
+    // A line the parser has not reached yet shows nothing certain: the edit stays as first written.
+    if (!ensureSyntaxTree(trial, set.mapPos(line.to, 1), 50)) return false;
     return visibleSlice(trial, set.mapPos(line.from, -1), set.mapPos(line.to, 1)) === expected;
   };
   if (shows(changes)) return result;
