@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import type { Text } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { Bot, Bug, Check, CircleCheck, CircleHelp, ClipboardList, Flame, Info, List, Pencil, Quote, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react';
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/renderer/shared/ui';
-import { CALLOUT_FAMILIES, calloutFamily, calloutHeadAt, retypeCallout } from './callouts';
+import { Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from '@/renderer/shared/ui';
+import { CALLOUT_FAMILIES, calloutFamily, calloutHeadAt, foldSignAt, refoldCallout, retypeCallout, type FoldSign } from './callouts';
 
 const ICONS: Record<string, LucideIcon> = {
   pencil: Pencil,
@@ -25,15 +26,26 @@ interface CalloutTypeMenuProps {
   view: EditorView;
 }
 
+const FOLDS: { value: string; sign: FoldSign; label: string }[] = [
+  { value: 'none', sign: '', label: 'Always open' },
+  { value: 'open', sign: '+', label: 'Foldable, open' },
+  { value: 'folded', sign: '-', label: 'Foldable, folded' },
+];
+
 /**
  * A click on a callout's icon in a document: a menu of Obsidian's callout
- * types. Picking one rewrites only the type word, in its case, and keeps
- * the fold sign and title.
+ * types and whether it folds. Picking a type
+ * rewrites only the type word, in its case; picking a fold writes only the
+ * sign after "[!type]". The menu closes when the page changes under it.
  */
 export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
-  const [menu, setMenu] = useState<{ x: number; y: number; head: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; head: number; doc: Text } | null>(null);
 
   useEffect(() => {
+    const open = (head: number, icon: Element) => {
+      const rect = icon.getBoundingClientRect();
+      setMenu({ x: rect.left, y: rect.bottom + 4, head, doc: view.state.doc });
+    };
     const onMouseDown = (event: MouseEvent) => {
       const icon = event.button === 0 && event.target instanceof Element ? event.target.closest('[data-callout-icon]') : null;
       if (!icon || !view.contentDOM.contains(icon)) return;
@@ -41,19 +53,23 @@ export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
       if (head === null) return;
       event.preventDefault();
       event.stopPropagation();
-      const rect = icon.getBoundingClientRect();
-      setMenu({ x: rect.left, y: rect.bottom + 4, head });
+      open(head, icon);
     };
     view.contentDOM.addEventListener('mousedown', onMouseDown, true);
     return () => view.contentDOM.removeEventListener('mousedown', onMouseDown, true);
   }, [view]);
 
-  if (!menu) return null;
+  // An edit since the menu opened, such as an agent's merge, may have moved or removed the callout.
+  if (!menu || view.state.doc !== menu.doc) return null;
   const word = /\[!([\w-]+)\]/.exec(view.state.doc.lineAt(menu.head).text)?.[1] ?? 'note';
   const current = calloutFamily(word).type;
   const pick = (type: string) => {
     const change = retypeCallout(view.state, menu.head, type);
     if (change && type !== current) view.dispatch({ changes: change, userEvent: 'input' });
+  };
+  const fold = (value: string) => {
+    const change = refoldCallout(view.state, menu.head, FOLDS.find((each) => each.value === value)?.sign ?? '');
+    if (change) view.dispatch({ changes: change, userEvent: 'input' });
   };
   return (
     <Menu open onOpenChange={(open) => { if (!open) setMenu(null); }}>
@@ -71,6 +87,11 @@ export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
               </MenuRadioItem>
             );
           })}
+        </MenuRadioGroup>
+        <MenuSeparator />
+        <MenuLabel>Fold</MenuLabel>
+        <MenuRadioGroup value={FOLDS.find((each) => each.sign === foldSignAt(view.state, menu.head))?.value} onValueChange={fold}>
+          {FOLDS.map(({ value, label }) => <MenuRadioItem key={value} value={value}>{label}</MenuRadioItem>)}
         </MenuRadioGroup>
       </MenuContent>
     </Menu>

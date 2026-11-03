@@ -290,9 +290,10 @@
   text-decoration-color: hsl(var(--foreground));
 }
 
-.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.45em; font-size: 1.8em; }
-.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.4em; font-size: 1.5em; }
-.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.3em; font-size: 1.25em; }
+/* More room above a heading than below it, so it sits on its section. */
+.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.8em; padding-bottom: 0.15em; font-size: 1.8em; }
+.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.75em; padding-bottom: 0.15em; font-size: 1.5em; }
+.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.6em; padding-bottom: 0.1em; font-size: 1.25em; }
 .opal-editor .cm-editor .cm-md-h4 { padding-top: 0.25em; font-size: 1.1em; }
 .opal-editor .cm-editor .cm-md-h5 { padding-top: 0.2em; font-size: 1em; }
 .opal-editor .cm-editor .cm-md-h6 { padding-top: 0.2em; font-size: 1em; color: hsl(var(--text-secondary)); }
@@ -424,14 +425,14 @@
 }
 
 .opal-editor .cm-editor .cm-md-callout-first {
-  padding-top: 0.45em;
+  padding-top: 0.6em;
   border-top-left-radius: var(--radius-row);
   border-top-right-radius: var(--radius-row);
 }
 
 .opal-editor .cm-editor .cm-md-callout-last,
 .opal-editor .cm-editor .cm-md-in-callout-last {
-  padding-bottom: 0.45em;
+  padding-bottom: 0.75em;
   border-bottom-left-radius: var(--radius-row);
   border-bottom-right-radius: var(--radius-row);
 }
@@ -570,8 +571,13 @@
 }
 
 
+/* Rounded outer corners, as on code and callouts: the table draws its own
+   edge and each cell only its inner lines. */
 .opal-editor .cm-editor .cm-md-table table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--editor-rule);
+  border-radius: var(--radius-row);
   font-size: 0.9375em;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
@@ -581,10 +587,20 @@
 .opal-editor .cm-editor .cm-md-table td {
   min-width: 3em;
   padding: 0.3em 0.75em;
-  border: 1px solid var(--editor-rule);
+  border-right: 1px solid var(--editor-rule);
+  border-bottom: 1px solid var(--editor-rule);
   text-align: left;
   vertical-align: top;
   overflow-wrap: normal;
+}
+
+.opal-editor .cm-editor .cm-md-table tr > :last-child {
+  border-right: 0;
+}
+
+.opal-editor .cm-editor .cm-md-table tbody tr:last-child > *,
+.opal-editor .cm-editor .cm-md-table table:not(:has(tbody tr)) thead tr > * {
+  border-bottom: 0;
 }
 
 .opal-editor .cm-editor .cm-md-table th {

@@ -52,6 +52,17 @@
   max-width: 100%;
 }
 
+/* A framed table: its own rounded edge turns dark and 2px, rather than a
+   ring around the scroll box, which sits off the table's corners. */
+.opal-editor .cm-editor .cm-content > .cm-md-table[data-object-framed] {
+  box-shadow: none;
+}
+
+.opal-editor .cm-editor .cm-md-table[data-object-framed] table {
+  border-color: hsl(var(--foreground));
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground));
+}
+
 /* A document's rule is a line across a box, so a click can land on it. */
 .opal-editor .cm-editor .cm-md-hr[data-object] {
   height: 0.8em;
@@ -70,10 +81,44 @@
   box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
 }
 
-/* Cells past the header's columns: muted, behind a dashed edge, never hidden. */
+/* Cells past the header's columns: muted, behind a dashed edge, never hidden.
+   Their width adds to the scroll, so the edge fade never covers them once
+   the table is scrolled to its end. */
 .opal-editor .cm-editor .cm-md-table .cm-md-cell-extra {
+  min-width: 8em;
   border-left: 2px dashed hsl(var(--border-default));
   color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-md-table :has(+ .cm-md-cell-extra) {
+  border-right: 0;
+}
+
+/* The two halves of a wiki link its alias pipe split: muted, with the
+   unresolved link's dashed underline, and Fix link after the first half. */
+.opal-editor .cm-editor .cm-md-table .cm-md-cell-split .cm-md-cell {
+  color: hsl(var(--text-tertiary));
+  text-decoration: underline dashed;
+  text-decoration-color: hsl(var(--border-default));
+  text-underline-offset: 0.2em;
+}
+
+.opal-editor .cm-editor .cm-md-table .cm-md-fix-link {
+  margin-left: 0.5em;
+  padding: 0 0.35em;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  color: hsl(var(--text-secondary));
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-table .cm-md-fix-link:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
 }
 
 /* A nested quote: one 2px rule per level, 1em apart. */
@@ -94,15 +139,20 @@
   background-size: calc((var(--quote-depth) - 2) * 1em + 2px) 100%;
 }
 
-/* Wide tables: a cell's text is at most 24em wide, and long code and links
-   break there. break-word keeps a long path's full width as the column's
-   least, up to 24em, so a narrow page scrolls the table instead of
-   squeezing the column to a few characters. */
+/* Wide tables: the table is as wide as its columns want, each column at
+   most 24em, where its text wraps, so a wide table scrolls sideways rather
+   than squeeze its last column into a tall, narrow box. Long code and links
+   break at 24em. */
+.opal-editor .cm-editor .cm-md-table table {
+  width: max-content;
+}
+
 .opal-editor .cm-editor .cm-md-table .cm-md-cell {
   max-width: 24em;
   /* An empty cell keeps a line's height, so a new table's empty rows are rows. */
   min-height: 1.5em;
 }
+
 
 .opal-editor .cm-editor .cm-md-table .cm-md-cell code,
 .opal-editor .cm-editor .cm-md-table .cm-md-cell .cm-md-link,
@@ -200,9 +250,14 @@
   transform: rotate(90deg);
 }
 
+/* A callout's last line, and a quote nested in it, stop short of its bottom padding. */
+.opal-editor .cm-editor .cm-md-callout.cm-md-callout-last[style*="--quote-depth"] {
+  background-size: calc((var(--quote-depth) - 2) * 1em + 2px) calc(100% - 0.75em);
+}
+
 /* A folded callout's title line closes its box. */
 .opal-editor .cm-editor .cm-md-callout.cm-md-callout-folded {
-  padding-bottom: 0.45em;
+  padding-bottom: 0.6em;
   border-bottom-left-radius: var(--radius-row);
   border-bottom-right-radius: var(--radius-row);
 }

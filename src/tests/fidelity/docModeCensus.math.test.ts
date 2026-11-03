@@ -39,39 +39,16 @@ const COMMANDS: [string, StateCommand][] = [
 
 const SAMPLES = 6;
 
-/** The formulas' TeX in order, which a command must leave as it was. A block's lines may move with the list item that holds them. */
+/** The formulas' TeX in order, which a command must leave exactly as it was, spaces included. */
 function formulas(state: EditorState): string[] {
   const tree = ensureSyntaxTree(state, state.doc.length, 5_000);
-  return tree ? mathNodes(tree, 0, state.doc.length).map((node) => mathSpan(state.doc, node).tex.split('\n').map((line) => line.trim()).join('\n')) : [];
-}
-
-/**
- * Indent and the list commands rewrite every selected line, blocks included,
- * until PR 1's guards keep them off a block's lines. A command counts as
- * pending only while it still rewrites the blocks on a small page; once this
- * branch has the guard, its runs over the vault count as failures.
- */
-function pendingPr1(): Set<string> {
-  return new Set(COMMANDS.filter(([name, command]) => ['indent', 'outdent', 'bullets', 'numbers', 'tasks'].includes(name) && rewritesBlocks(command)).map(([name]) => name));
-}
-
-function rewritesBlocks(command: StateCommand): boolean {
-  const doc = 'Intro\n\n$$\n= a + b\n$$\n\n1. Item:\n   \\[\n   0.30(12\\times2.4)\n   +0.70(12\\times0.45)\n   \\]\n   More.\n\n- item\n\n  $$\n  x^2\n  $$\n\nEnd\n';
-  const state = EditorState.create({ doc, selection: EditorSelection.single(0, doc.length), extensions: markdownEditorExtensions('/Vault/Probe.mdo') });
-  ensureSyntaxTree(state, doc.length, 1_000);
-  let result: Transaction | null = null;
-  command({ state, dispatch: (tr) => { result = tr; } });
-  if (!result) return false;
-  const after = formulas((result as Transaction).state);
-  return formulas(state).some((formula) => !after.includes(formula));
+  return tree ? mathNodes(tree, 0, state.doc.length).map((node) => mathSpan(state.doc, node).tex) : [];
 }
 
 describe.skipIf(!ROOT)('doc mode math census', () => {
   it('keeps every byte inside formulas through hidden ranges, commands and the popover', async () => {
-    const PENDING_PR1 = pendingPr1();
     const vault = await vaultFiles(ROOT as string);
     const failures: string[] = [];
-    const pending: string[] = [];
     let opened = 0;
     let notes = 0;
     let checked = 0;
@@ -119,9 +96,7 @@ describe.skipIf(!ROOT)('doc mode math census', () => {
             const after = formulas((result as Transaction).state);
             const lost = before.filter((formula) => !after.includes(formula));
             if (lost.length === 0) continue;
-            const problem = `${relative} ${name} over ${selection.main.from}-${selection.main.to} changed ${JSON.stringify(lost[0].slice(0, 40))}`;
-            if (PENDING_PR1.has(name)) pending.push(problem);
-            else failures.push(problem);
+            failures.push(`${relative} ${name} over ${selection.main.from}-${selection.main.to} changed ${JSON.stringify(lost[0].slice(0, 40))}`);
           }
         }
 
@@ -151,7 +126,6 @@ describe.skipIf(!ROOT)('doc mode math census', () => {
     }
     console.info(openedLine('doc-mode math census', opened, vault));
     console.info(`[doc-mode math census] ${notes} notes with math: ${checked} formulas with no hidden range inside, ${commands} command runs, ${popovers} popover type-and-delete runs; ${failures.length} failed`);
-    if (pending.length > 0) console.info(`[doc-mode math census] pending, PR 1 (${[...PENDING_PR1].join(', ')} still rewrite a block's lines on this branch): ${pending.length} runs\n  ${pending.slice(0, 20).join('\n  ')}`);
     if (failures.length > 0) console.info(`[doc-mode math census] failures:\n  ${failures.slice(0, 40).join('\n  ')}`);
     expect(failures).toEqual([]);
   }, 1_200_000);

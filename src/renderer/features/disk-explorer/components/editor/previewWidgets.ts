@@ -401,6 +401,31 @@ function markClipped(frame: HTMLElement, scroller: HTMLElement) {
  * A GFM table, shown as a table while no selection is in it. A click puts a
  * cell caret in the clicked cell, outlined, and the table stays drawn.
  */
+// A wiki link's alias pipe, unescaped, which splits a table cell in two.
+const WIKI_PIPE = /\[\[[^\]\n|]*?(?<!\\)\|[^\]\n]*?\]\]/g;
+
+/** The text of a cell's pieces, without their marks. */
+function plainText(pieces: readonly InlinePiece[]): string {
+  return pieces.map((piece) => ('children' in piece ? plainText(piece.children) : 'text' in piece ? piece.text : '')).join('');
+}
+
+/** "Fix link" after the first half of a split link: one backslash before each such pipe in the table. */
+function fixLinkButton(view: EditorView, frame: HTMLElement, length: number): HTMLElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'cm-md-fix-link';
+  button.textContent = 'Fix link';
+  button.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const from = view.posAtDOM(frame);
+    const text = view.state.sliceDoc(from, from + length);
+    const changes = [...text.matchAll(WIKI_PIPE)].map((match) => ({ from: from + (match.index ?? 0) + match[0].indexOf('|'), insert: '\\' }));
+    if (changes.length > 0) view.dispatch({ changes, userEvent: 'input' });
+  });
+  return button;
+}
+
 export class TableWidget extends WidgetType {
   constructor(
     readonly source: string,
@@ -428,11 +453,14 @@ export class TableWidget extends WidgetType {
     const columns = Math.max(this.model.align.length, ...this.model.rows.map((cells) => cells.length));
     const row = (cells: TableCell[], tag: 'th' | 'td') => {
       const tr = document.createElement('tr');
+      // A wiki link split in two by its alias pipe: both halves read as one broken link.
+      const opens = (column: number) => /\[\[[^\]]*$/.test(plainText(cells[column]?.content ?? [])) && /^[^[]*\]\]/.test(plainText(cells[column + 1]?.content ?? []));
       Array.from({ length: columns }, (_, column) => column).forEach((column) => {
         const cell = document.createElement(tag);
         const source = cells[column];
         const align = this.model.align[column];
         if (column >= this.model.align.length) cell.classList.add('cm-md-cell-extra');
+        if (opens(column) || (column > 0 && opens(column - 1))) cell.classList.add('cm-md-cell-split');
         if (align) cell.style.textAlign = align;
         if (source) {
           cell.dataset.offset = String(source.offset);
@@ -442,6 +470,7 @@ export class TableWidget extends WidgetType {
           text.className = 'cm-md-cell';
           renderInline(source.content, text, view);
           cell.append(text);
+          if (opens(column) && !view.state.readOnly) text.append(fixLinkButton(view, frame, this.source.length));
         }
         tr.append(cell);
       });
