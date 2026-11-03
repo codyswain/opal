@@ -145,6 +145,16 @@ describe('diagrams in a document', () => {
     expect(block.querySelector('.cm-diagram-source')?.textContent).toBe('graph LR\n  a --> b');
   });
 
+  it('draw inside a callout and a list item, beside long and quoted code, without breaking the page', () => {
+    const long = Array.from({ length: 50 }, (_, line) => `  > row ${line}`).join('\n');
+    const doc = `> [!note] Diagram\n> \`\`\`mermaid\n> graph LR\n>   a --> b\n> \`\`\`\n\n- item\n  > \`\`\`\n${long}\n  > \`\`\`\n\nEnd\n`;
+    const view = mount(doc, doc.indexOf('End'));
+    expect(view.state.field(diagramField).decorations.size).toBe(1);
+    expect(view.contentDOM.querySelector('.cm-diagram.cm-md-in-callout')).not.toBeNull();
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'ArrowUp' }), 'editor'); });
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
   it('draw a Pocket flowchart as its chain', () => {
     const view = mount('```flowchart\nOne -> Two\nTwo -> Three\n```\n', 0, NOTE);
     expect([...view.contentDOM.querySelectorAll('.cm-diagram-step')].map((step) => step.textContent)).toEqual(['One', 'Two', 'Three']);
