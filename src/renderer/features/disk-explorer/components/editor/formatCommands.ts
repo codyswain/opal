@@ -13,9 +13,11 @@ import {
 } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import { calloutMarker } from './blockGuards';
+import { toast } from 'sonner';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
 import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
+import { fitMarks, keepsVisibleText } from './typing';
 import { parseWikiTarget } from './wikiLinks';
 
 /*
@@ -248,9 +250,15 @@ function ordered(changes: Change[]): Change[] {
     .map(({ change }) => change);
 }
 
-/** Formats the text with `marker`, joining the spans it touches into one. */
-function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] {
-  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), text.from, text.to);
+/**
+ * Formats the text with `marker`, joining the spans it touches into one. The
+ * marks go where Markdown reads them, inward past punctuation or out to the
+ * word (`fitMarks`); null when they parse nowhere.
+ */
+function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] | null {
+  const fitted = fitMarks(state, text.from, text.to);
+  if (!fitted) return null;
+  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
   const touching = text.spans.filter((span) => span.name === name && span.to >= from && span.from <= to);
   const left = touching.filter((span) => span.textFrom < from).sort((a, b) => a.from - b.from)[0];
   const right = touching.filter((span) => span.textTo > to).sort((a, b) => b.to - a.to)[0];
@@ -297,6 +305,7 @@ function removeStyle(state: EditorState, text: SelectedText, name: string, remov
 }
 
 export const STYLES: Record<string, string> = { '**': 'StrongEmphasis', '*': 'Emphasis', '~~': 'Strikethrough' };
+const STYLE_LABELS: Record<string, string> = { StrongEmphasis: 'Bold', Emphasis: 'Italic', Strikethrough: 'Strikethrough' };
 
 /**
  * In a document, the styles Cmd+B, Cmd+I or ⇧⌘X with nothing selected turned
@@ -367,7 +376,8 @@ export function toggleMarker(marker: string): StateCommand {
       && !(size === 1 && (state.sliceDoc(from - 1, from) === '*') !== (state.sliceDoc(to, to + 1) === '*'));
     const texts = state.selection.ranges.flatMap((range) => selectedText(state, target(range)));
     const unstyle = texts.length > 0 && texts.every((text) => allStyled(state, text, name));
-    dispatch(state.update(state.changeByRange((range) => {
+    let refused = false;
+    const tr = state.update(state.changeByRange((range) => {
       const span = target(range);
       if (span.empty) {
         if (doc) return { range };
@@ -377,13 +387,18 @@ export function toggleMarker(marker: string): StateCommand {
       }
       const parts = selectedText(state, span);
       if (parts.length === 0) return { range };
-      const changes = ChangeSet.of(ordered(parts.flatMap((text) => (unstyle ? removeStyle(state, text, name) : addStyle(state, text, name, marker)))), state.doc.length);
+      const written = parts.map((text) => (unstyle ? removeStyle(state, text, name) : addStyle(state, text, name, marker)));
+      if (written.some((part) => part === null)) refused = true;
+      const changes = ChangeSet.of(ordered(written.flatMap((part) => part ?? [])), state.doc.length);
       // The caret stays in its word.
       if (span !== range) return { changes, range: EditorSelection.cursor(changes.mapPos(range.head)) };
       const from = changes.mapPos(parts[0].from, 1);
       const to = changes.mapPos(parts[parts.length - 1].to, -1);
       return { changes, range: range.anchor > range.head ? EditorSelection.range(to, from) : EditorSelection.range(from, to) };
-    }), { scrollIntoView: true, userEvent: 'input' }));
+    }), { scrollIntoView: true, userEvent: 'input' });
+    // A document never shows a mark: formatting that would leave one is refused.
+    if (refused || (doc && !keepsVisibleText(tr))) toast(`${STYLE_LABELS[name]} can't start or end next to that punctuation.`);
+    else dispatch(tr);
     return true;
   };
 }
