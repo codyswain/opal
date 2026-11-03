@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
+import path from 'path';
+import { ensureSyntaxTree } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+
+/** The declarations of the rule with exactly this selector in one of the editor's style sheets. */
+function rule(sheet: string, selector: string): string {
+  const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor', sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const found = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, selectors]) => selectors.split(',').map((one) => one.trim()).includes(selector));
+  return found?.[2] ?? '';
+}
+
+function mount(doc: string) {
+  const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Notes/Plan.mdo') }) });
+  ensureSyntaxTree(view.state, doc.length, 5_000);
+  view.dispatch({});
+  return view;
+}
+
+describe('the look of documents', () => {
+  it('keeps a line\'s height in an empty table cell, so a new table\'s rows are not thin strips', () => {
+    const view = mount('| Owner | Column 2 |\n|---|---|\n|  |  |\n');
+    const cells = view.contentDOM.querySelectorAll('td .cm-md-cell');
+    expect(cells.length).toBe(2);
+    expect([...cells].every((cell) => cell.textContent === '')).toBe(true);
+    expect(rule('blocks.css', '.opal-editor .cm-editor .cm-md-table .cm-md-cell')).toMatch(/min-height: 1\.5em/);
+    view.destroy();
+  });
+});
