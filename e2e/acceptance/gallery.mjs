@@ -1,6 +1,7 @@
 // The look gallery: opens every fixture document in e2e/fixtures/gallery in
 // the built app and saves it light and dark, at 700 and 420 pixels wide, as
-// PNGs with one index.html to look through. Screenshots are for people;
+// PNGs with one index.html to look through. A fixture taller than the window
+// is saved in parts, one per screen. Screenshots are for people;
 // nothing compares them. Own userData and temp vault; run from the
 // repository root after the Vite bundles are built (see README.md here):
 //
@@ -57,6 +58,28 @@ async function sizeEditor(width) {
   await page.waitForTimeout(250);
 }
 
+/**
+ * Scrolls the page to screen `part` (overlapping by 80 pixels) and gives
+ * back how many screens it takes. The page scrolls in the nearest scrolling
+ * box around the editor's text.
+ */
+async function scrollToPart(part) {
+  const parts = await page.evaluate((target) => {
+    let scroller = document.scrollingElement;
+    for (let node = document.querySelector('.cm-content'); node; node = node.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) {
+        scroller = node;
+        break;
+      }
+    }
+    const step = Math.max(1, scroller.clientHeight - 80);
+    scroller.scrollTop = target * step;
+    return Math.max(1, Math.ceil((scroller.scrollHeight - scroller.clientHeight) / step) + 1);
+  }, part);
+  await page.waitForTimeout(200);
+  return parts;
+}
+
 async function setTheme(theme) {
   await page.emulateMedia({ colorScheme: theme });
   await page.evaluate((resolved) => {
@@ -79,10 +102,16 @@ try {
       await setTheme(theme);
       for (const width of WIDTHS) {
         await sizeEditor(width);
-        const png = `${name.replace(/\.mdo$/, '')}-${theme}-${width}.png`;
-        await page.locator('.opal-editor').first().screenshot({ path: path.join(outDir, png) });
-        shots.push({ name, theme, width, png });
-        console.log(`PASS ${name} ${theme} ${width}px`);
+        // A fixture taller than the window goes in parts, one per screen, so nothing below the fold is missed.
+        const parts = await scrollToPart(0);
+        for (let part = 0; part < parts; part += 1) {
+          await scrollToPart(part);
+          const png = `${name.replace(/\.mdo$/, '')}-${theme}-${width}${part > 0 ? `-${part + 1}` : ''}.png`;
+          await page.locator('.opal-editor').first().screenshot({ path: path.join(outDir, png) });
+          shots.push({ name, theme, width, png, part });
+        }
+        await scrollToPart(0);
+        console.log(`PASS ${name} ${theme} ${width}px, ${parts} part${parts === 1 ? '' : 's'}`);
       }
     }
   }
@@ -100,7 +129,7 @@ const rows = [...new Set(shots.map((shot) => shot.name))].map((name) => `
   <section>
     <h2>${escape(name)}</h2>
     <div class="row">${shots.filter((shot) => shot.name === name).map((shot) => `
-      <figure><img src="${shot.png}" width="${shot.width}" alt="${escape(`${name}, ${shot.theme}, ${shot.width}px`)}"><figcaption>${shot.theme} · ${shot.width}px</figcaption></figure>`).join('')}
+      <figure><img src="${shot.png}" width="${shot.width}" alt="${escape(`${name}, ${shot.theme}, ${shot.width}px, part ${shot.part + 1}`)}"><figcaption>${shot.theme} · ${shot.width}px${shot.part > 0 ? ` · part ${shot.part + 1}` : ''}</figcaption></figure>`).join('')}
     </div>
   </section>`).join('');
 await writeFile(path.join(outDir, 'index.html'), `<!doctype html>

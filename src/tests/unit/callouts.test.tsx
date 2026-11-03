@@ -38,6 +38,8 @@ describe('callouts', () => {
   it('draws one grey icon per Obsidian type family, in any case, with a note\'s for an unknown type', () => {
     const view = mount('> [!WARNING] Careful\n> a\n\n> [!faq] Asked\n> b\n\n> [!custom] Mine\n> c\n\n> [!ai] AI\n> d\n', NOTE);
     expect([...view.contentDOM.querySelectorAll('[data-callout-icon]')].map((icon) => (icon as HTMLElement).dataset.calloutIcon)).toEqual(['warning', 'question', 'note', 'ai']);
+    // In a note a click opens no menu, so the icon is no button.
+    expect(view.contentDOM.querySelector('[data-callout-icon]')).not.toHaveAttribute('role');
   });
 
   it('rewrites only the type word, in its case, keeping the fold sign and title', () => {
@@ -81,6 +83,9 @@ describe('callouts', () => {
     const view = EditorView.findFromDOM(editor) as EditorView;
     view.focus = vi.fn();
     const icon = view.contentDOM.querySelector('[data-callout-icon]') as Element;
+    expect(icon).toHaveAttribute('role', 'button');
+    expect(icon).toHaveAttribute('aria-haspopup', 'menu');
+    expect(icon).toHaveAttribute('aria-label', 'Callout type, Note');
     act(() => { icon.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
     const user = userEvent.setup();
     await user.click(await screen.findByRole('menuitemradio', { name: 'Warning' }));

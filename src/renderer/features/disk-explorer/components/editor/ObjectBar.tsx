@@ -4,7 +4,7 @@ import type { EditorView } from '@codemirror/view';
 import { ChevronDown } from 'lucide-react';
 import { IconButton, Menu, MenuContent, MenuItem, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/renderer/shared/ui';
 import { objectAt, objectKind, type ObjectAction, type PageObject } from './extensionPoints';
-import { objectFrame, setFrame } from './objectFrame';
+import { objectBars, objectFrame, setFrame } from './objectFrame';
 import './objects.css';
 
 const GAP = 8;
@@ -84,7 +84,7 @@ const MenuItems: React.FC<ActionsProps> = ({ view, obj, actions }) => (
         );
       }
       return (
-        <MenuItem key={action.id} disabled={action.disabled} onSelect={() => action.run?.(view, obj)}>
+        <MenuItem key={action.id} className="gap-2" disabled={action.disabled} onSelect={() => action.run?.(view, obj)}>
           {Icon ? <Icon aria-hidden className="h-4 w-4" /> : null}
           {action.label}
           {action.shortcut ? <MenuShortcut>{action.shortcut}</MenuShortcut> : null}
@@ -114,6 +114,12 @@ export const ObjectBar: React.FC<ObjectBarProps> = ({ view, frame }) => {
   const actions = kind?.actions(view.state, frame) ?? [];
   const destination = kind?.destination?.(view.state, frame) ?? null;
   const block = Boolean(kind?.block);
+
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (element) objectBars.set(view, element);
+    return () => { if (element && objectBars.get(view) === element) objectBars.delete(view); };
+  });
 
   useLayoutEffect(() => {
     let frameRequest = 0;

@@ -750,11 +750,12 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           const callout = calloutOf(doc, node);
           const kind = callout ? 'cm-md-callout' : 'cm-md-quote';
           linesOf(ref.from, lastLine(doc, node).to, (line, first, last) => {
-            // A nested quote draws one rule per level.
-            const depth = callout ? 1 : (/^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0].match(/>/g)?.length ?? 1);
+            // A nested quote draws one rule per level, in a callout too.
+            const depth = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0].match(/>/g)?.length ?? 1;
+            const nested = depth > 1 ? { style: `--quote-depth: ${depth}` } : {};
             out.push(Decoration.line({
               class: `${kind}${first ? ` ${kind}-first` : ''}${last ? ` ${kind}-last` : ''}`,
-              attributes: callout ? { 'data-callout': callout.type } : depth > 1 ? { style: `--quote-depth: ${depth}` } : undefined,
+              attributes: callout ? { 'data-callout': callout.type, ...nested } : depth > 1 ? nested : undefined,
             }).range(line.from));
           });
           if (!callout) return true;
@@ -762,7 +763,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           calloutHeads.add(head.from);
           if (callout.title) out.push(calloutTitle.range(callout.titleFrom, head.to));
           if (!reveal.lines(head.from, head.to)) {
-            out.push(Decoration.widget({ widget: new CalloutIconWidget(callout.type), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
+            out.push(Decoration.widget({ widget: new CalloutIconWidget(callout.type, state.facet(docMode)), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
             if (callout.title) hide(head.from, callout.titleFrom, true);
             else out.push(Decoration.replace({ widget: new CalloutTitleWidget(callout.type[0].toUpperCase() + callout.type.slice(1)), caretAfter: true }).range(head.from, head.to));
           }

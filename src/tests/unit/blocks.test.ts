@@ -328,12 +328,22 @@ describe('tables in a document', () => {
 });
 
 describe('Normal text on a heading next to other blocks', () => {
-  it('keeps blank lines around it, so a rule never underlines it and nothing takes it in', () => {
-    expect(onAll('# Log\n-------------\n## Notes\n', setHeading(0))).toBe('Log\n\n-------------\n\nNotes\n');
-    // Nor a table take it in as a row, nor a paragraph as a line.
+  it('adds a blank line only where a block would join it, so a rule never underlines it and nothing takes it in', () => {
+    expect(onAll('# Log\n-------------\n## Notes\n', setHeading(0))).toBe('Log\n\n-------------\nNotes\n');
+    // Nor a table, list item or quote take it in as a line, nor a table under it lose its header.
     expect(onAll(`${TABLE}\n## Next\n`, setHeading(0))).toBe(`${TABLE}\n\nNext\n`);
-    expect(onAll('Text\n## Head\nMore\n', setHeading(0))).toBe('Text\n\nHead\n\nMore\n');
-    expect(onAll('# A\n## B\n', setHeading(0))).toBe('A\n\nB\n');
+    expect(onAll('- item\n## Head\n', setHeading(0))).toBe('- item\n\nHead\n');
+    expect(onAll('> quote\n## Head\n', setHeading(0))).toBe('> quote\n\nHead\n');
+    expect(onAll(`## Head\n${TABLE}\n`, setHeading(0))).toBe(`Head\n\n${TABLE}\n`);
+    // Next to paragraphs it stays on its own line, as Enter leaves text, so trying styles adds nothing.
+    expect(onAll('Text\n## Head\nMore\n', setHeading(0))).toBe('Text\nHead\nMore\n');
+    expect(onAll('# A\n## B\n', setHeading(0))).toBe('A\nB\n');
+    const onFirst = (doc: string, command: StateCommand) => {
+      let out = doc;
+      command({ state: EditorState.create({ doc, selection: { anchor: 2 }, extensions: markdownEditorExtensions(DOC) }), dispatch: (tr) => { out = tr.newDoc.toString(); } });
+      return out;
+    };
+    expect(onFirst(onFirst('# Title\nSome text\n', setHeading(0)), setHeading(1))).toBe('# Title\nSome text\n');
   });
 });
 
@@ -484,6 +494,10 @@ describe('quotes and callouts in a document', () => {
     const view = mount('> a\n> > b\n> > > c\n');
     const depths = [...view.contentDOM.querySelectorAll('.cm-md-quote')].map((line) => (line as HTMLElement).style.getPropertyValue('--quote-depth'));
     expect(depths).toEqual(['', '2', '3']);
+    // In a callout too, under the callout's own level.
+    const callout = mount('> [!note] A callout\n> With a body line.\n> > Nested quote in callout.\n');
+    const levels = [...callout.contentDOM.querySelectorAll('.cm-md-callout')].map((line) => (line as HTMLElement).style.getPropertyValue('--quote-depth'));
+    expect(levels).toEqual(['', '', '2']);
   });
 
   it('inserts a callout and a horizontal line on lines of their own', () => {
@@ -741,5 +755,45 @@ describe('formatting in a table\'s delimiter row', () => {
     let out = doc;
     toggleMarker('**')({ state, dispatch: (tr) => { out = tr.newDoc.toString(); } });
     expect(out).toBe(doc);
+  });
+});
+
+describe('Backspace and Delete where the page hides markup next to blocks', () => {
+  it('frames a rule above a heading on Backspace at the heading\'s start', () => {
+    const view = mount('# Log\n-------------\n## ‸Notes\n-------------\n');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('# Log\n-------------\n## Notes\n-------------\n');
+    expect(frame(view)).toMatchObject({ kind: 'horizontal rule' });
+  });
+
+  it('keeps a blank line above a "---" rule when a heading over it becomes text or joins the paragraph above', () => {
+    const first = mount('# ‸Month\n-------------\n## Evening\n');
+    key(first, 'Backspace');
+    expect(text(first)).toBe('Month\n\n-------------\n## Evening\n');
+    const joined = mount('para‸\n### Heading\n---\n\nmore\n');
+    key(joined, 'Delete');
+    expect(text(joined)).toBe('paraHeading\n\n---\n\nmore\n');
+  });
+
+  it('leaves a callout\'s "[!type]" alone on Delete at the end of the line above it', () => {
+    const view = mount('## Tried‸\n> [!ai] AI\n> body\n');
+    key(view, 'Delete');
+    expect(text(view)).toBe('## Tried\n> [!ai] AI\n> body\n');
+  });
+
+  it('frames a table in a callout on Delete at the end of the callout\'s title', () => {
+    const view = mount('> [!ai] AI‸\n> | a | b |\n> |---|---|\n> | 1 | 2 |\n');
+    key(view, 'Delete');
+    expect(text(view)).toBe('> [!ai] AI\n> | a | b |\n> |---|---|\n> | 1 | 2 |\n');
+    expect(frame(view)).toMatchObject({ kind: 'table' });
+  });
+
+  it('takes a blank line on Delete, never the hidden marks of the line under it', () => {
+    const view = mount('text\n‸\n> [!info]- Title\n> body\n');
+    key(view, 'Delete');
+    expect(text(view)).toBe('text\n> [!info]- Title\n> body\n');
+    const heading = mount('text\n‸\n## Heading\n');
+    key(heading, 'Delete');
+    expect(text(heading)).toBe('text\n## Heading\n');
   });
 });

@@ -65,7 +65,7 @@ export const CalloutTypeMenu: React.FC<CalloutTypeMenuProps> = ({ view }) => {
           {CALLOUT_FAMILIES.map((family) => {
             const Icon = ICONS[family.icon];
             return (
-              <MenuRadioItem key={family.type} value={family.type}>
+              <MenuRadioItem key={family.type} value={family.type} className="gap-2">
                 <Icon aria-hidden className="h-4 w-4" />
                 {family.label}
               </MenuRadioItem>

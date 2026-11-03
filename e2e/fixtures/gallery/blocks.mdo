@@ -29,6 +29,7 @@ Setext title
 
 > [!note] An open callout
 > With a body line.
+> > A quote nested in the callout.
 
 > [!tip]- A folded callout
 > Hidden until opened.

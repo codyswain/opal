@@ -222,3 +222,26 @@ describe('the link popover', () => {
     expect(usePaletteStore.getState().open).toBe(true);
   });
 });
+
+describe('Option+F10 next to block objects and callout titles', () => {
+  it('moves focus to a framed table\'s bar, which sits outside the editor', async () => {
+    const view = await openEditor(DOC, 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nMore\n');
+    vi.spyOn(view, 'focus').mockImplementation(() => undefined);
+    const more = view.state.doc.toString().indexOf('More');
+    select(view, more);
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true })); });
+    const bar = await screen.findByRole('toolbar', { name: /table/ });
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true, cancelable: true })); });
+    expect(bar.contains(document.activeElement)).toBe(true);
+  });
+
+  it('skips the style menu while it is off, so the toolbar still takes focus on a callout title', async () => {
+    const view = await openEditor(DOC, '> [!note] A callout\n> body\n');
+    vi.spyOn(view, 'focus').mockImplementation(() => undefined);
+    select(view, '> [!note] A callout'.length);
+    expect(button('Style, Normal text')).toBeDisabled();
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', altKey: true, bubbles: true, cancelable: true })); });
+    expect(screen.getByRole('toolbar', { name: 'Formatting' }).contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(button('Style, Normal text'));
+  });
+});

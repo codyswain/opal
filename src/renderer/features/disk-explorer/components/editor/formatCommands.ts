@@ -445,6 +445,24 @@ export function rewriteSetext(state: EditorState, line: Line, node: SyntaxNode, 
   return changes;
 }
 
+/** Whether a block ending on `above` would take `line`, as plain text, in as one of its own lines. */
+function takesLine(state: EditorState, above: Line, line: Line): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(above.to, -1); node; node = node.parent) {
+    if (['ListItem', 'Table', 'HTMLBlock', 'FencedCode'].includes(node.name)) return true;
+    if (node.name === 'Blockquote') return quoteOf(above).length > quoteOf(line).length;
+  }
+  return false;
+}
+
+/** Whether `next` would join the plain text line above it: an underline, a table's first row, or a list from 2. */
+function joinsBelow(state: EditorState, next: Line): boolean {
+  if (/^[\s>]*(?:=+|-+)[ \t]*$/.test(next.text) || /^[\s>]*(?:[2-9]|\d{2,})[.)][ \t]/.test(next.text)) return true;
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(next.from + quoteOf(next).length, 1); node; node = node.parent) {
+    if (node.name === 'Table') return state.doc.lineAt(node.from).number === next.number;
+  }
+  return false;
+}
+
 /**
  * Normal text (0) or a heading level on each selected line: adds, changes or
  * removes the "#" marks. Normal also removes a closing "##". A blank line
@@ -467,13 +485,14 @@ export function setHeading(level: number): StateCommand {
       if (level > 0) return heading.level === level ? [] : [{ from: open.from, to: open.to, insert: '#'.repeat(level) }];
       const marks: ChangeSpec[] = [{ from: open.from, to: skipSpaces(state, open.to, line.to) }];
       if (close) marks.push({ from: line.from + state.sliceDoc(line.from, close.from).trimEnd().length, to: close.to });
-      // Normal text next to other text would join it: a paragraph above, a table's rows, or a
-      // "---" below that would underline it. Blank lines keep it a paragraph of its own.
+      // Normal text sits on its own line, as Enter leaves it, unless that joins it to a block:
+      // a list item, quote, table or HTML above takes it in, and a "---" or "===" below
+      // underlines it, a table below loses its header and a list from 2 below joins it.
       const previous = line.number > 1 ? state.doc.line(line.number - 1) : null;
       const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
       const converted = (other: Line) => lines.some((each) => each.number === other.number) && headingOf(state, other) !== null;
-      if (previous && /[^\s>]/.test(previous.text) && !converted(previous)) marks.unshift({ from: line.from, insert: `${blankFor(line)}\n` });
-      if (next && /[^\s>]/.test(next.text)) marks.push({ from: line.to, insert: `\n${blankFor(line)}` });
+      if (previous && /[^\s>]/.test(previous.text) && !converted(previous) && takesLine(state, previous, line)) marks.unshift({ from: line.from, insert: `${blankFor(line)}\n` });
+      if (next && /[^\s>]/.test(next.text) && joinsBelow(state, next)) marks.push({ from: line.to, insert: `\n${blankFor(line)}` });
       return marks;
     });
     dispatch(state.update({ changes, scrollIntoView: true, userEvent: 'input' }));

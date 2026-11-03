@@ -185,10 +185,13 @@ export function currentKeyEvent(view: EditorView, key: string): KeyboardEvent | 
   return event && event.key === key ? event : null;
 }
 
+/** Each view's object bar, which draws in the body, outside the editor. */
+export const objectBars = new WeakMap<EditorView, HTMLElement>();
+
 /** Moves focus to the framed object's bar. */
 export function focusObjectBar(view: EditorView): boolean {
   if (!view.state.field(objectFrame, false)) return false;
-  const button = view.dom.closest('.opal-editor')?.querySelector<HTMLElement>('[data-object-bar] [tabindex="0"]');
+  const button = objectBars.get(view)?.querySelector<HTMLElement>('[tabindex="0"]');
   button?.focus();
   return Boolean(button);
 }

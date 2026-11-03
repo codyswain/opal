@@ -29,9 +29,21 @@
   border-radius: 0;
 }
 
-/* A numbered task: its number, then its box. */
+/* A numbered task: its number, then its box. The marker is wider by the box
+   and its gap, so the number lines up with the list's other numbers and
+   wrapped lines hang under the text. */
 .opal-editor .cm-editor .cm-md-list-marker:has(.cm-md-number + .cm-md-task) {
   gap: 0.35em;
+  width: calc(var(--list-indent) + 1.3em);
+}
+
+.opal-editor .cm-editor .cm-md-list-marker .cm-md-task {
+  flex-shrink: 0;
+}
+
+.opal-editor .cm-editor .cm-line.cm-md-list:has(.cm-md-number + .cm-md-task) {
+  padding-left: calc(var(--quote-indent, 0px) + var(--list-indent) + 1.3em);
+  text-indent: calc(-1 * (var(--list-indent) + 1.3em));
 }
 
 /* A table outside a callout is as wide as it draws, so its bar centres on it. */
@@ -40,19 +52,9 @@
   max-width: 100%;
 }
 
-/* A framed table: the ring sits on the table's own edge, not across the column. */
-.opal-editor .cm-editor .cm-content > .cm-md-table[data-object-framed] {
-  box-shadow: none;
-}
-
-.opal-editor .cm-editor [data-object-framed="table"] table {
-  outline: 2px solid hsl(var(--foreground));
-  outline-offset: -1px;
-}
-
-/* A document's rule is a line across a box as tall as the text, so a click can land on it. */
+/* A document's rule is a line across a box, so a click can land on it. */
 .opal-editor .cm-editor .cm-md-hr[data-object] {
-  height: 1.2em;
+  height: 0.8em;
   border-top: none;
   border-radius: 4px;
   background-image: linear-gradient(hsl(var(--border-default)), hsl(var(--border-default)));
@@ -64,7 +66,7 @@
 
 /* A framed rule: its line takes the ring, since the rule itself is a hairline. */
 .opal-editor .cm-editor .cm-line.cm-md-hr-framed {
-  border-radius: var(--radius-row);
+  border-radius: 4px;
   box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
 }
 
@@ -83,7 +85,19 @@
   background-size: calc((var(--quote-depth) - 1) * 1em + 2px) 100%;
 }
 
-/* Wide tables: a cell's text is at most 24em wide, and long code and links break. */
+/* A quote nested in a callout: one rule per level past the callout's own, inside its grey box. */
+.opal-editor .cm-editor .cm-md-callout[style*="--quote-depth"] {
+  --quote-indent: calc(var(--quote-depth) * 1em);
+  background-image: repeating-linear-gradient(to right, hsl(var(--border-default)) 0 2px, transparent 2px 1em);
+  background-position: 1em 0;
+  background-repeat: no-repeat;
+  background-size: calc((var(--quote-depth) - 2) * 1em + 2px) 100%;
+}
+
+/* Wide tables: a cell's text is at most 24em wide, and long code and links
+   break there. break-word keeps a long path's full width as the column's
+   least, up to 24em, so a narrow page scrolls the table instead of
+   squeezing the column to a few characters. */
 .opal-editor .cm-editor .cm-md-table .cm-md-cell {
   max-width: 24em;
 }
@@ -91,7 +105,7 @@
 .opal-editor .cm-editor .cm-md-table .cm-md-cell code,
 .opal-editor .cm-editor .cm-md-table .cm-md-cell .cm-md-link,
 .opal-editor .cm-editor .cm-md-table .cm-md-cell .cm-md-wikilink {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* A clipped edge of a table that scrolls sideways fades out over 24px. */
@@ -146,8 +160,15 @@
   color: hsl(var(--text-tertiary));
 }
 
-.opal-editor:has(.opal-doc-toolbar) .cm-editor .cm-md-callout-icon {
+.opal-editor .cm-editor .cm-md-callout-icon[role="button"] {
+  border-radius: 4px;
   cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-callout-icon[role="button"]:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
 }
 
 /* The fold chevron after a callout's title: 14px, turning 90 degrees when open. */
@@ -186,7 +207,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .opal-editor .cm-editor .cm-md-callout-fold,
-  .opal-editor .cm-editor .cm-md-callout-fold svg {
+  .opal-editor .cm-editor .cm-md-callout-fold svg,
+  .opal-editor .cm-editor .cm-md-callout-icon[role="button"] {
     transition: none;
   }
 }

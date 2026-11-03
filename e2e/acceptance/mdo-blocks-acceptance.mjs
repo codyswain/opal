@@ -1,8 +1,10 @@
 // Disposable Electron acceptance for blocks in a document: typing under a
 // table keeps a blank line, Backspace frames the table and a second press
 // removes it, a typed letter at a framed table lands under it, Cmd+Z brings
-// the table back, a cell click types into the cell, Tab nests a list item,
-// Enter in a numbered list adds one line, and the framed table and rule are
+// the table back, Option+F10 reaches the table's bar, Delete on the blank
+// line under it frames it, a cell click types into the cell, Tab nests a list
+// item, Enter in a numbered list adds one line, a numbered task keeps its
+// box, a quote in a callout draws its rule, and the framed table and rule are
 // screenshotted light and dark. Own userData and temp vault; run from the
 // repository root after the Vite bundles are built (see README.md here):
 //
@@ -23,7 +25,7 @@ const check = (name, ok, detail = '') => {
 };
 
 const TABLE = '| Area | Owner |\n|---|---|\n| Blocks | PR 1 |\n| Typing | [the plan](https://example.com/plan) |';
-const BODY = `Intro paragraph.\n\n${TABLE}\n\n***\n\n> [!note] A callout\n> With a body line.\n\n1. one\n2. two\n3. three\n\n- top\n- next\n\n> [!tip]- A folded tip\n> Hidden until opened.\n\n> [!WARNING]+ An open warning\n> > A nested quote in it.\n`;
+const BODY = `Intro paragraph.\n\n${TABLE}\n\n***\n\n> [!note] A callout\n> With a body line.\n\n1. one\n2. two\n3. three\n\n- top\n- next\n\n> [!tip]- A folded tip\n> Hidden until opened.\n\n> [!WARNING]+ An open warning\n> > A nested quote in it.\n\nTasks:\n\n1. [ ] A numbered task\n2. [x] Done one\n`;
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-blocks-userdata-'));
 const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-blocks-vault-'));
@@ -96,6 +98,10 @@ try {
   check('Backspace at the start of the text under a table frames it', framed);
   check('the framed table shows its bar', await page.locator('[data-object-bar="table"]').count() === 1);
   await shoot('framed-table');
+  await page.keyboard.press('Alt+F10');
+  check('Option+F10 moves focus to the framed table\'s bar', await page.evaluate(() => Boolean(document.activeElement?.closest('[data-object-bar]'))));
+  await shoot('bar-focus');
+  await page.keyboard.press('Escape');
   await page.keyboard.type('y');
   saved = await waitForFile((text) => text.includes('yx'));
   check('a letter typed at a framed table lands under it and deletes nothing', saved.includes(`${TABLE}\n\nyx\n`));
@@ -109,6 +115,16 @@ try {
   await page.keyboard.press('Meta+z');
   saved = await waitForFile((text) => text.includes('| Area'));
   check('Cmd+Z restores the table', saved.includes(`${TABLE}\n\nyx\n`));
+
+  // Delete on the blank line between the table and the text frames the table instead of joining them.
+  await page.locator('.cm-line', { hasText: /^yx$/ }).first().click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Delete');
+  check('Delete on the blank line under a table frames it', await page.locator('[data-object-bar="table"]').count() === 1);
+  await page.waitForTimeout(800);
+  check('and joins nothing to it', (await readDoc()).includes(`${TABLE}\n\nyx\n`));
+  await page.keyboard.press('Escape');
 
   // A rule frames too.
   const rule = page.locator('.cm-md-hr').first();
@@ -150,7 +166,13 @@ try {
   await page.keyboard.type('new');
   saved = await waitForFile((text) => text.includes('2. new'));
   check('Enter in a numbered list adds one item and renumbers nothing', saved.includes('1. one\n2. new\n2. two\n3. three\n'), JSON.stringify(saved.slice(saved.indexOf('1. one'), saved.indexOf('1. one') + 40)));
-  check('the page shows 1 to 4', (await page.locator('.cm-md-number').allTextContents()).join(' ') === '1. 2. 3. 4.');
+  check('the page shows 1 to 4', (await page.locator('.cm-md-number').allTextContents()).slice(0, 4).join(' ') === '1. 2. 3. 4.');
+
+  // A numbered task shows its number, then a full box; a quote nested in a callout draws its rule.
+  const boxes = await page.locator('.cm-md-list-marker .cm-md-task').evaluateAll((tasks) => tasks.map((task) => Math.round(task.getBoundingClientRect().width)));
+  check('a numbered task\'s box is as wide as it is tall', boxes.length === 2 && boxes.every((width) => width >= 12), JSON.stringify(boxes));
+  const nested = await page.locator('.cm-line', { hasText: 'A nested quote in it.' }).first().evaluate((line) => getComputedStyle(line).backgroundImage);
+  check('a quote nested in a callout draws its rule', nested !== 'none', nested.slice(0, 60));
 
   // Tab nests a bullet under the one above; Tab in a paragraph does nothing.
   await page.locator('.cm-line', { hasText: /next$/ }).first().click();
@@ -191,7 +213,16 @@ try {
   saved = await waitForFile((text) => text.includes('| Name |'));
   check('typing goes into the first header', saved.includes('| Name | Column 2 |'));
   await shoot('insert-table');
-  await page.locator('.cm-md-callout-icon').last().scrollIntoViewIfNeeded();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    for (let node = document.querySelector('.cm-content'); node; node = node.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) {
+        node.scrollTop = node.scrollHeight;
+        return;
+      }
+    }
+  });
+  await page.waitForTimeout(300);
   await shoot('page');
   check('the editor still holds the file', (await editorText()) === null || (await editorText()) === (await readDoc()));
 } catch (error) {

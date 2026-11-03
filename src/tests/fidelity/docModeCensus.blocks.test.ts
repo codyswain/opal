@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { EditorState, type StateCommand, type Transaction } from '@codemirror/state';
+import { ChangeSet, EditorState, type StateCommand, type Transaction } from '@codemirror/state';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { MarkdownError, parseMarkdown } from '@/main/fs/MarkdownDocumentService';
 import { calloutMarker } from '@/renderer/features/disk-explorer/components/editor/blockGuards';
@@ -20,6 +21,8 @@ import { blockSeparators, expectTyped, openedLine, sampleSpots, vaultFiles } fro
  *   parses as the same block.
  * - Typing at the spots just above and below every table and rule keeps
  *   every table's rows and columns (`expectTyped`).
+ * - Backspace and Delete at the ends of the two lines above and below the
+ *   first tables and rules frame a block or leave every block whole.
  * - Tab on sampled list items raises the item's depth or changes no bytes.
  * - Enter at the end of sampled numbered items changes only the caret's line
  *   and adds one line.
@@ -73,7 +76,7 @@ function blocksOf(state: EditorState, tree = ensureSyntaxTree(state, state.doc.l
 }
 
 /** What went wrong with the blocks after `tr`: bytes changed inside one, or one no longer parses as itself. */
-function blockProblems(before: EditorState, tr: Transaction, blocks: readonly Block[]): string[] {
+function blockProblems(before: EditorState, tr: { changes: ChangeSet; state: EditorState }, blocks: readonly Block[]): string[] {
   const problems: string[] = [];
   for (const block of blocks) {
     let inside = false;
@@ -121,7 +124,7 @@ describe.skipIf(!ROOT)('doc mode blocks census', () => {
   it('keeps every block whole through toolbar commands, typing, Tab and Enter', async () => {
     const vault = await vaultFiles(ROOT as string);
     const failures: string[] = [];
-    const counts = { opened: 0, commands: 0, typed: 0, tabs: 0, enters: 0, long: 0 };
+    const counts = { opened: 0, commands: 0, typed: 0, deletes: 0, tabs: 0, enters: 0, long: 0 };
     for (const file of vault.found) {
       let body: string;
       try {
@@ -153,6 +156,51 @@ describe.skipIf(!ROOT)('doc mode blocks census', () => {
           const typed = placed.update({ changes: { from: caret, insert: 'x' }, selection: { anchor: caret + 1 }, userEvent: 'input.type' }).state;
           const problems = expectTyped(placed, typed, 'x', caret, { separators: blockSeparators(placed, caret) });
           if (problems.length > 0) failures.push(`${where}@${caret} typed ${spot.why}: ${problems.join('; ')}`);
+        }
+        // Backspace and Delete at the ends of the two lines above and below tables and rules:
+        // a first press frames a block or leaves every block's bytes and shape alone.
+        const beside = blocks.filter((block) => block.name === 'Table' || block.name === 'HorizontalRule').slice(0, 2);
+        if (beside.length > 0) {
+          const pressed: Transaction[] = [];
+          const view = new EditorView({
+            parent: document.body,
+            state,
+            dispatchTransactions: (trs, target) => {
+              pressed.push(...trs);
+              target.update(trs);
+            },
+          });
+          ensureSyntaxTree(view.state, body.length, 10_000);
+          view.dispatch({});
+          const base = view.state;
+          const inBlock = (at: number) => blocks.some((block) => block.from <= at && at <= block.to);
+          try {
+            for (const block of beside) {
+              const first = base.doc.lineAt(block.from).number;
+              const last = base.doc.lineAt(block.to).number;
+              for (const number of [first - 2, first - 1, last + 1, last + 2]) {
+                if (number < 1 || number > base.doc.lines) continue;
+                const line = base.doc.line(number);
+                if (inBlock(line.from) || inBlock(line.to)) continue;
+                for (const [key, at] of [['Backspace', line.from], ['Delete', line.to]] as const) {
+                  counts.deletes += 1;
+                  view.setState(base);
+                  view.dispatch({ selection: { anchor: at } });
+                  const placed = view.state;
+                  pressed.length = 0;
+                  runScopeHandlers(view, new KeyboardEvent('keydown', { key }), 'editor');
+                  if (view.state.doc.eq(placed.doc)) continue;
+                  const changes = pressed.reduce((all, tr) => all.compose(tr.changes), ChangeSet.empty(placed.doc.length));
+                  // Backspace at the start of a callout's title takes off its "[!type]", as it should.
+                  const titled = key === 'Backspace' && calloutMarker(placed, line) !== null;
+                  const problems = blockProblems(placed, { changes, state: view.state }, blocks).filter((problem) => !(titled && problem.startsWith('bytes changed in callout')));
+                  if (problems.length > 0) failures.push(`${where} ${key} on line ${number} beside ${block.name}: ${problems.join('; ')}`);
+                }
+              }
+            }
+          } finally {
+            view.destroy();
+          }
         }
         // Tab on list items.
         for (const number of itemLines(state, 4)) {
@@ -202,7 +250,7 @@ describe.skipIf(!ROOT)('doc mode blocks census', () => {
       }
     }
     console.info(openedLine('blocks census', counts.opened, vault));
-    console.info(`[blocks census] ${counts.commands} select-all commands, ${counts.typed} typed characters beside tables and rules, ${counts.tabs} Tabs, ${counts.enters} Enters, ${counts.long} long notes without a full parse: ${failures.length} failed`);
+    console.info(`[blocks census] ${counts.commands} select-all commands, ${counts.typed} typed characters beside tables and rules, ${counts.deletes} Backspaces and Deletes beside them, ${counts.tabs} Tabs, ${counts.enters} Enters, ${counts.long} long notes without a full parse: ${failures.length} failed`);
     if (process.env.OPAL_CENSUS_OUT) await writeFile(process.env.OPAL_CENSUS_OUT, JSON.stringify({ root: ROOT, counts, failures }, null, 2));
     expect(failures).toEqual([]);
   }, 1_800_000);

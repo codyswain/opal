@@ -1,9 +1,10 @@
-import { EditorState, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
+import { EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { deleteHandlers, latestTree, objectKinds, objectOf, objectKind, type ObjectAction, type ObjectKind, type PageObject } from './extensionPoints';
+import { calloutMarker } from './blockGuards';
+import { deleteHandlers, latestTree, objectAt, objectKinds, objectOf, objectKind, type ObjectAction, type ObjectKind, type PageObject } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
 import { objectFrame, removeObject, setFrame } from './objectFrame';
 import './blocks.css';
@@ -77,6 +78,7 @@ const ruleKind: ObjectKind = {
   nodes: ['HorizontalRule'],
   block: true,
   open: () => undefined,
+  destination: () => 'Horizontal line',
   actions: () => [remove],
 };
 
@@ -252,30 +254,89 @@ const textStarts = (line: Line) => [
   line.from + (/^(?:[ \t]*>[ \t]?)*#{1,6}(?:[ \t]+|$)/.exec(line.text)?.[0].length ?? -1),
 ];
 
+/** The block object that ends on the line before `line`, or starts on the line after it past its quote marks. */
+function blockAcross(state: EditorState, line: Line, dir: -1 | 1): PageObject | null {
+  if (dir < 0 ? line.number === 1 : line.number === state.doc.lines) return null;
+  const other = state.doc.line(line.number + dir);
+  // A block object's lines run whole, quote marks included.
+  const obj = dir < 0 ? objectAt(state, other.to, -1) : objectAt(state, other.from + (/^[\s>]*/.exec(other.text)?.[0].length ?? 0), 0);
+  return obj && objectKind(state, obj.kind)?.block && (dir < 0 || obj.from === other.from) ? obj : null;
+}
+
 /**
- * Backspace or Delete that would take out the only blank line between text
- * and a table, an HTML block or a "---" rule frames the block instead: on
- * the blank line itself, at the start of the text under it, or at the end
- * of the text above it.
+ * Backspace and Delete next to blocks in a document, where the page hides
+ * markup the key would otherwise reach:
+ *
+ * - Taking out the only blank line between text and a table, an HTML block
+ *   or a "---" rule frames the block instead: on the blank line itself, at
+ *   the start of the text under it, or at the end of the text above it.
+ * - Backspace at the start of a quoted line or a heading's text, and Delete
+ *   at the end of a line, frame a block object on the line before or after,
+ *   past the hidden quote marks and "#" marks.
+ * - Delete at the end of a line above a callout leaves the callout's
+ *   "[!type]" alone, and Delete on a blank line takes that line, never the
+ *   hidden marks at the start of the next one.
  */
-const deleteAcrossBlank = deleteHandlers.of({
+const deleteBesideBlocks = deleteHandlers.of({
   priority: 20,
   run: (view, dir) => {
     const { state } = view;
     const { main } = state.selection;
     if (!main.empty || state.selection.ranges.length > 1 || !state.facet(docMode)) return false;
     const line = state.doc.lineAt(main.head);
+    const empty = blank(line.text);
+    const atStart = dir < 0 && textStarts(line).includes(main.head);
+    const atEnd = dir > 0 && main.head === line.to;
     let gap: Line | null = null;
-    if (blank(line.text)) gap = line;
-    else if (dir < 0 && line.number > 1 && textStarts(line).includes(main.head)) gap = state.doc.line(line.number - 1);
-    else if (dir > 0 && line.number < state.doc.lines && main.head === line.to) gap = state.doc.line(line.number + 1);
+    if (empty) gap = line;
+    else if (atStart && line.number > 1) gap = state.doc.line(line.number - 1);
+    else if (atEnd && line.number < state.doc.lines) gap = state.doc.line(line.number + 1);
     const node = gap && guardedGap(state, gap);
     const kind = node && objectKind(state, KIND_OF[node.name]);
-    if (!node || !kind) return false;
-    view.dispatch({ effects: setFrame.of(objectOf(state, kind, node)), scrollIntoView: true });
-    return true;
+    const framed = node && kind ? objectOf(state, kind, node) : !node && (atStart || atEnd) ? blockAcross(state, line, dir) : null;
+    if (framed) {
+      view.dispatch({ effects: setFrame.of(framed), scrollIntoView: true });
+      return true;
+    }
+    if (!atEnd || node || line.number === state.doc.lines) return false;
+    const next = state.doc.line(line.number + 1);
+    if (empty) {
+      view.dispatch({ changes: { from: line.from, to: next.from }, selection: { anchor: line.from }, scrollIntoView: true, userEvent: 'delete.forward' });
+      return true;
+    }
+    return Boolean(calloutMarker(state, next));
   },
 });
+
+// A "---" rule, which paragraph text right above it would take as its setext underline.
+const DASH_RULE = /^(?:[ \t]*>[ \t]?)*[ \t]{0,3}(?:-[ \t]*){3,}$/;
+// A line of paragraph text: not blank, a heading, a list item, a table row or a fence.
+const textLine = (text: string) => /[^\s>]/.test(text) && !/^(?:[ \t]*>[ \t]?)*[ \t]{0,3}(?:#{1,6}(?:[ \t]|$)|[-+*][ \t]|\d{1,9}[.)](?:[ \t]|$)|\||```|~~~|<)/.test(text);
+const RULE_OR_TABLE = new Set(['HorizontalRule', 'Table']);
+
+/**
+ * An edit that leaves paragraph text right above a "---" rule or a table
+ * that had a blank line, a heading or other non-text line above it, such as
+ * Delete joining a heading to the paragraph before it, keeps a blank line
+ * between them in the same step, so the rule never becomes an underline and
+ * the table never takes the text in.
+ */
+export function keptApart(tr: Transaction): TransactionSpec | null {
+  if (!tr.docChanged || !(tr.isUserEvent('delete') || tr.isUserEvent('input')) || tr.isUserEvent('input.type.compose') || !tr.startState.facet(docMode)) return null;
+  const old = tr.startState;
+  const inserts: { from: number; insert: string }[] = [];
+  tr.changes.iterChangedRanges((_fromA, toA, _fromB, toB) => {
+    const oldLine = old.doc.lineAt(toA);
+    if (oldLine.number >= old.doc.lines) return;
+    const block = old.doc.line(oldLine.number + 1);
+    const node = blockEdge(old, block, 1, RULE_OR_TABLE);
+    if (!node || (node.name === 'HorizontalRule' && !DASH_RULE.test(block.text)) || textLine(oldLine.text)) return;
+    const joined = tr.newDoc.lineAt(toB);
+    if (joined.number >= tr.newDoc.lines || tr.newDoc.line(joined.number + 1).text !== block.text || !textLine(joined.text)) return;
+    inserts.push({ from: joined.to, insert: `\n${quoteOf(joined.text).replace(/[ \t]+$/, '')}` });
+  });
+  return inserts.length > 0 ? { changes: inserts, sequential: true } : null;
+}
 
 const framedRule = Decoration.line({ class: 'cm-md-hr-framed' });
 
@@ -329,9 +390,14 @@ export const blockObjects: Extension = [
   objectKinds.of(ruleKind),
   objectKinds.of(htmlKind),
   objectKinds.of(codeKind),
-  deleteAcrossBlank,
+  deleteBesideBlocks,
   EditorState.transactionFilter.of((tr) => {
     const fixed = separated(tr);
     return fixed ? [fixed] : tr;
   }),
+  // Highest, so it runs after the other filters and sees what they wrote.
+  Prec.highest(EditorState.transactionFilter.of((tr) => {
+    const apart = keptApart(tr);
+    return apart ? [tr, apart] : tr;
+  })),
 ];

@@ -134,7 +134,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const shown = items.slice(0, count);
   const hidden = items.slice(count).filter((item): item is Action | 'style' | 'insert' => item !== 'separator');
   // The one button in the tab order: the last one focused, or the first that can take focus.
-  const focusable = shown.flatMap((item) => (item === 'separator' ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
+  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && format.headingDisabled) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
   if (hidden.length > 0) focusable.push('more');
   const tabStop = focusable.includes(current) ? current : focusable[0];
   const tabIndex = (id: string) => (id === tabStop ? 0 : -1);
@@ -161,7 +161,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const insertMenuItems = inserts.map((item) => {
     const Icon = item.icon;
     return (
-      <MenuItem key={item.id} onSelect={() => { void item.run(view); }}>
+      <MenuItem key={item.id} className="gap-2" onSelect={() => { void item.run(view); }}>
         <Icon aria-hidden className="h-4 w-4" />
         {item.label}
         {item.shortcut ? <MenuShortcut>{item.shortcut}</MenuShortcut> : null}

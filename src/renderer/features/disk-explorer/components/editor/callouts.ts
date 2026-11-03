@@ -58,17 +58,23 @@ function svg(name: string, size: number): string {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ''}</svg>`;
 }
 
-/** The icon before a callout's title. In a document a click on it opens the type menu. */
+/** The icon before a callout's title. In a document it is a button: a click on it opens the type menu. */
 export class CalloutIconWidget extends WidgetType {
-  constructor(readonly type: string) { super(); }
+  constructor(readonly type: string, readonly menu = false) { super(); }
 
-  eq(other: CalloutIconWidget) { return other.type === this.type; }
+  eq(other: CalloutIconWidget) { return other.type === this.type && other.menu === this.menu; }
 
   toDOM() {
+    const family = calloutFamily(this.type);
     const icon = document.createElement('span');
     icon.className = 'cm-md-callout-icon';
-    icon.dataset.calloutIcon = calloutFamily(this.type).type;
-    icon.innerHTML = svg(calloutFamily(this.type).icon, 16);
+    icon.dataset.calloutIcon = family.type;
+    icon.innerHTML = svg(family.icon, 16);
+    if (this.menu) {
+      icon.setAttribute('role', 'button');
+      icon.setAttribute('aria-haspopup', 'menu');
+      icon.setAttribute('aria-label', `Callout type, ${family.label}`);
+    }
     return icon;
   }
 
