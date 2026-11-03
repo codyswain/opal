@@ -28,7 +28,10 @@ describe("VaultService", () => {
     registry: RootRegistry,
     service: VaultService;
   const date = "2026-09-08";
-  const daily = () => path.join(root, `Library/daily/${date}.md`);
+  /** The page Daily makes: a document. */
+  const daily = () => path.join(root, `Library/daily/${date}.mdo`);
+  /** The page older days and Obsidian have: a note. */
+  const note = () => path.join(root, `Library/daily/${date}.md`);
   beforeEach(async () => {
     temporary = await mkdtemp(path.join(os.tmpdir(), "opal-vault-"));
     root = path.join(temporary, "vault");
@@ -55,7 +58,7 @@ describe("VaultService", () => {
     expect((await service.discover()).map((vault) => vault.path)).toEqual([root, others[0], others[1]]);
   });
 
-  it("writes Library/daily/<date>.md from the vault template and returns its path", async () => {
+  it("writes Library/daily/<date>.mdo from the vault template and returns its path", async () => {
     await mkdir(path.join(root, "Archive/Journal"), { recursive: true });
     await writeFile(path.join(root, "Archive/Journal/Template.md"), TEMPLATE);
     expect(await service.createDay(root, date)).toEqual({ path: daily() });
@@ -90,7 +93,7 @@ describe("VaultService", () => {
     ]);
     expect(results).toEqual([{ path: daily() }, { path: daily() }]);
     expect(await readdir(path.join(root, "Library/daily"))).toEqual([
-      `${date}.md`,
+      `${date}.mdo`,
     ]);
     await writeFile(daily(), "Mine\n");
     expect(await service.createDay(root, date)).toEqual({ path: daily() });
@@ -105,10 +108,53 @@ describe("VaultService", () => {
     expect(await readdir(root)).toEqual(["Inbox", "Library"]);
     expect(await readdir(path.join(root, "Library"))).toEqual(["logs"]);
     expect(await readFile(legacy, "utf8")).toBe("## Morning\n\n---\n## Activity Log\n");
-    // Once the daily page exists, it wins.
+    // Once the daily page exists, it wins, as a note or as a document.
     await mkdir(path.dirname(daily()));
-    await writeFile(daily(), "Moved\n");
+    await writeFile(note(), "Moved\n");
+    expect(await service.createDay(root, date)).toEqual({ path: note() });
+    await writeFile(daily(), "Made here\n");
     expect(await service.createDay(root, date)).toEqual({ path: daily() });
+  });
+
+  it("opens the day's existing note and writes no document beside it", async () => {
+    await mkdir(path.dirname(note()), { recursive: true });
+    await writeFile(note(), "---\ndate: 2026-09-08\n---\nFrom Obsidian\n");
+    expect(await service.createDay(root, date)).toEqual({ path: note() });
+    expect(await readdir(path.join(root, "Library/daily"))).toEqual([`${date}.md`]);
+    expect(await readFile(note(), "utf8")).toBe("---\ndate: 2026-09-08\n---\nFrom Obsidian\n");
+    // Another date still gets a document.
+    expect(await service.createDay(root, "2026-09-09")).toEqual({ path: path.join(root, "Library/daily/2026-09-09.mdo") });
+    expect(await readdir(path.join(root, "Library/daily"))).toEqual([`${date}.md`, "2026-09-09.mdo"]);
+  });
+
+  it("opens the document when a date has both files, and changes neither", async () => {
+    await mkdir(path.dirname(note()), { recursive: true });
+    await writeFile(note(), "Note\n");
+    await writeFile(daily(), "Document\n");
+    expect(await service.createDay(root, date)).toEqual({ path: daily() });
+    expect(await readFile(note(), "utf8")).toBe("Note\n");
+    expect(await readFile(daily(), "utf8")).toBe("Document\n");
+  });
+
+  it("opens a note another app makes while the template is written, and writes no document", async () => {
+    const realOpen = (
+      await vi.importActual<typeof import("fs/promises")>("fs/promises")
+    ).open;
+    await mkdir(path.dirname(note()), { recursive: true });
+    const opening = vi
+      .mocked(filesystem.open)
+      .mockImplementationOnce(async (...args) => {
+        const handle = await realOpen(...args);
+        await writeFile(note(), "Obsidian got there first\n");
+        return handle;
+      });
+    try {
+      expect(await service.createDay(root, date)).toEqual({ path: note() });
+    } finally {
+      opening.mockImplementation(realOpen);
+    }
+    expect(await readdir(path.join(root, "Library/daily"))).toEqual([`${date}.md`]);
+    expect(await readFile(note(), "utf8")).toBe("Obsidian got there first\n");
   });
 
   it("does not claim the final daily name if writing the initial contents fails", async () => {

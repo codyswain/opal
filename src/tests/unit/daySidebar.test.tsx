@@ -20,6 +20,7 @@ import {
   useDaySidebarStore,
 } from '@/renderer/features/day-sidebar';
 import { DEFAULT_SHELL_PREFERENCES, ShellProvider, useShellStore } from '@/renderer/features/shell';
+import { linkTitle } from '@/renderer/features/day-sidebar/dayLinks';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { readPref, writePref } from '@/renderer/shared/prefs/prefs';
 import type { DayChat, DayDigestItem, DayLogEntry, VaultDay, VaultDayChange } from '@/types/day';
@@ -220,6 +221,24 @@ describe('the day rule', () => {
     expect(pageDate(`${ROOT}/docs/2026-10-29-library-daily-and-logs.md`)).toBeNull();
     expect(pageDate(`${ROOT}/Library/daily/2026-02-30.md`)).toBeNull();
     expect(pageDate(null)).toBeNull();
+  });
+
+  it('reads the day from a daily page made as a document, and from no other document', () => {
+    expect(pageDate(`${ROOT}/Library/daily/2026-11-04.mdo`)).toBe('2026-11-04');
+    expect(dailyPageDate(`${ROOT}/Library/daily/2026-11-04.mdo`)).toBe('2026-11-04');
+    expect(dailyPageDate(`${ROOT}/Library/daily/2026-11-04.md`)).toBe('2026-11-04');
+    expect(dailyPageDate(`${ROOT}/Inbox/Logs/2026-11-04.md`)).toBe('2026-11-04');
+    expect(dailyPageDate(`${ROOT}/Inbox/Logs/2026-11-04.mdo`)).toBeNull();
+    expect(pageDate(`${ROOT}/Library/logs/2026-11-04 log.mdo`)).toBeNull();
+    expect(pageDate(`${ROOT}/Library/digests/2026-11-04 digest.mdo`)).toBeNull();
+    expect(pageDate(`${ROOT}/Library/daily/2026-02-30.mdo`)).toBeNull();
+  });
+
+  it('names the file a log\'s link to a day opens, a document by its own extension', () => {
+    const link = (path: string | null) => ({ label: 'Day', target: 'Library/daily/2026-11-04', external: false, path });
+    expect(linkTitle(link(`${ROOT}/Library/daily/2026-11-04.mdo`))).toBe('Opens Library/daily/2026-11-04.mdo in this tab. Cmd-click opens a new tab.');
+    expect(linkTitle(link(`${ROOT}/Library/daily/2026-11-04.md`))).toBe('Opens Library/daily/2026-11-04.md in this tab. Cmd-click opens a new tab.');
+    expect(linkTitle(link(null))).toBe('Library/daily/2026-11-04.md is not in the vault');
   });
 
   it('shows a picked day, else the page’s day, else the last day, else today', () => {

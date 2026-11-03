@@ -3,14 +3,15 @@ import { validDate } from './vaultModel';
 
 /*
  * How the sidebar tree shows a vault's daily pages. On disk they stay
- * `Library/daily/YYYY-MM-DD.md`; the tree groups them under a folder row per
- * year, newest first, and names each one "10-30 Fri". A year row is not a
- * folder on disk: it cannot be renamed, moved or dropped on.
+ * `Library/daily/YYYY-MM-DD.md`, or `.mdo` for a day made as a document; the
+ * tree groups them under a folder row per year, newest first, and names each
+ * one "10-30 Fri". A year row is not a folder on disk: it cannot be renamed,
+ * moved or dropped on.
  */
 
 /** Where a vault's daily pages are, from the top of the opened folder. */
 export const DAILY_FOLDER = 'Library/daily';
-const DAILY_NAME = /^(\d{4}-\d\d-\d\d)\.md$/;
+const DAILY_NAME = /^(\d{4}-\d\d-\d\d)\.mdo?$/;
 const YEAR = /^\d{4}$/;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -25,7 +26,7 @@ export function isDailyFolder(path: string, roots: readonly string[]): boolean {
   return roots.some((root) => path === `${root}/${DAILY_FOLDER}`);
 }
 
-/** The date of a daily page's file name, `YYYY-MM-DD.md`, or null. */
+/** The date of a daily page's file name, `YYYY-MM-DD.md` or `YYYY-MM-DD.mdo`, or null. */
 export function dailyFileDate(name: string): string | null {
   const match = DAILY_NAME.exec(name);
   return match && validDate(match[1]) ? match[1] : null;
@@ -41,7 +42,7 @@ export interface YearGroup<T> {
   /** The row's path: the daily folder and the year, which is not a folder on disk. */
   path: string;
   year: string;
-  /** The year's pages, newest first. */
+  /** The year's pages, newest first, a date's document before its note. */
   pages: T[];
 }
 

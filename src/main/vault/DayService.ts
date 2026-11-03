@@ -27,9 +27,10 @@ import {
 import {
   DAY_LAYOUT,
   LEGACY_DAY_LAYOUT,
-  dailyName,
+  dailyNames,
   digestName,
   inVault,
+  legacyDayName,
   logName,
   missing,
   openedVault,
@@ -238,11 +239,13 @@ export class DayService {
     }
   }
 
+  /** `Library/daily/<date>.mdo`, else `<date>.md`, and until the cleanup commit `Inbox/Logs/<date>.md`. */
   private async dailyPage(root: string, date: string): Promise<string | null> {
-    return (
-      (await this.file(root, DAY_LAYOUT.daily, dailyName(date))) ??
-      (await this.file(root, LEGACY_DAY_LAYOUT.logs, dailyName(date)))
-    );
+    for (const name of dailyNames(date)) {
+      const file = await this.file(root, DAY_LAYOUT.daily, name);
+      if (file) return file;
+    }
+    return this.file(root, LEGACY_DAY_LAYOUT.logs, legacyDayName(date));
   }
 
   private async resolve(from: string, written: WrittenLink[][]): Promise<DayLink[][]> {
@@ -269,7 +272,7 @@ export class DayService {
   /** `Library/logs/<date> log.md`, and until the cleanup commit the Activity Log of `Inbox/Logs/<date>.md`. */
   private async log(root: string, date: string): Promise<Pick<VaultDay, "log" | "entries">> {
     const current = await this.file(root, DAY_LAYOUT.logs, logName(date));
-    const legacy = await this.file(root, LEGACY_DAY_LAYOUT.logs, dailyName(date));
+    const legacy = await this.file(root, LEGACY_DAY_LAYOUT.logs, legacyDayName(date));
     const currentEntries = current ? (await this.parsed(current, parseLog)) ?? [] : [];
     const legacyEntries = legacy
       ? (await this.parsed(legacy, (source) => parseLog(splitDailyLog(source).activity))) ?? []
@@ -359,7 +362,7 @@ export class DayService {
   private async digest(root: string, date: string) {
     const file =
       (await this.file(root, DAY_LAYOUT.digests, digestName(date))) ??
-      (await this.file(root, LEGACY_DAY_LAYOUT.digests, dailyName(date)));
+      (await this.file(root, LEGACY_DAY_LAYOUT.digests, legacyDayName(date)));
     if (!file) return null;
     const digest = await this.parsed(file, parseDigest);
     return digest ? { path: file, ...digest } : null;

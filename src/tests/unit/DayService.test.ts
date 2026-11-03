@@ -204,6 +204,27 @@ describe("DayService", () => {
     await expect(service.day(temporary, DATE)).rejects.toThrow();
   });
 
+  it("finds a day's page as a document first, then as a note, then in the old Inbox", async () => {
+    const date = "2026-11-04";
+    const legacy = await put(`Inbox/Logs/${date}.md`, "## Morning\n");
+    expect((await service.day(root, date)).daily).toBe(legacy);
+    const note = await put(`Library/daily/${date}.md`, "From Obsidian.\n");
+    expect((await service.day(root, date)).daily).toBe(note);
+    const document = await put(`Library/daily/${date}.mdo`, "---\ndate: 2026-11-04\n---\n");
+    expect((await service.day(root, date)).daily).toBe(document);
+  });
+
+  it("follows a log's daily link to the day's document", async () => {
+    const date = "2026-11-04";
+    const document = await put(`Library/daily/${date}.mdo`, "---\ndate: 2026-11-04\n---\n");
+    await put(`Library/logs/${date} log.md`, `---\ntype: log\ndate: ${date}\ndaily: "[[Library/daily/${date}]]"\n---\n- 09:00 Wrote the plan. · [[Library/daily/${date}|Today's page]], [[${date}|Same page]] · agent turn\n`);
+    const day = await service.day(root, date);
+    expect(day.entries[0].links.map((link) => [link.target, link.path])).toEqual([
+      [`Library/daily/${date}`, document],
+      [date, document],
+    ]);
+  });
+
   it("reads the old Inbox folders for a day that has not moved yet", async () => {
     const date = "2026-10-20";
     const legacy = await put(`Inbox/Logs/${date}.md`, "## Morning\nWrote this.\n\n---\n## Activity Log\n- 09:00 — Ran the digest\n- 08:00 — Filed [[Library/people/Robert Xu|Robert]]\n");

@@ -130,6 +130,12 @@ describe('PinnedSection', () => {
     expect(pinned(INVESTORS)).toHaveClass('h-row-compact', 'shrink-0');
   });
 
+  it('names a pinned day made as a document as the tree does', () => {
+    setPins({ [ROOT]: ['/Vault/Library/daily/2026-11-04.mdo', DAY] });
+    renderSidebar();
+    expect(shown()).toEqual(['11-04 Wed', '10-30 Fri']);
+  });
+
   it('shows a file once when the lists of an opened folder and a folder inside it both name it', () => {
     useDiskStore.setState({ roots: [ROOT, LIBRARY] });
     setPins({ [ROOT]: [INVESTORS, README], [LIBRARY]: [INVESTORS, DAY] });

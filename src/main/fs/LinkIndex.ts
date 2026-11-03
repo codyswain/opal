@@ -1,4 +1,6 @@
 import path from 'path';
+import { isDocFile } from '@/common/fileKind';
+import { dailyHeadDate } from '@/common/stackModel';
 import { isInsideRoot, normalizePath } from './paths';
 import type { RootRegistry } from './RootRegistry';
 import { listChildren, scanRootsFor, walkRoot } from './rootTraversal';
@@ -12,14 +14,18 @@ function comparable(value: string): string {
   return value.normalize('NFC').toLowerCase();
 }
 
+const isDailyDocument = (file: string) => isDocFile(file) && dailyHeadDate(file) !== null;
+const weight = (file: string) => file.length - (isDailyDocument(file) ? 1 : 0);
+
 /**
  * Where a wiki link target points, the way Obsidian resolves it: a path
  * relative to the linking note when it starts with "./" or "../", otherwise
  * a file whose name, or whose path suffix when the target has folders, is the
  * target, with or without ".md" or ".mdo". Matching ignores case. Among
  * several, the one in the linking note's folder wins, then the shortest path.
- * `keys` are the files in comparable form, for callers that resolve many
- * targets.
+ * A daily page made as a document counts as long as its note would, and a
+ * date with both opens the document, as Daily lists it first. `keys` are the
+ * files in comparable form, for callers that resolve many targets.
  */
 export function resolveLinkTarget(target: string, from: string, files: readonly string[], keys = files.map(comparable)): string | null {
   const wanted = target.trim().replace(/\\/g, '/');
@@ -31,7 +37,8 @@ export function resolveLinkTarget(target: string, from: string, files: readonly 
     [name, `${name}.md`, `${name}.mdo`].some((candidate) => (relative ? keys[index] === candidate : keys[index].endsWith(candidate))));
   matches.sort((a, b) =>
     Number(path.posix.dirname(b) === folder) - Number(path.posix.dirname(a) === folder)
-    || a.length - b.length
+    || weight(a) - weight(b)
+    || Number(isDailyDocument(b)) - Number(isDailyDocument(a))
     || a.localeCompare(b));
   return matches[0] ?? null;
 }

@@ -80,19 +80,19 @@ export class StackService {
 
   /**
    * The stream of daily pages in `Library/daily`, newest first: the days
-   * after the head above it, then the head, then the earlier days. The view
-   * opens at the head. Pages from before today with an empty body are left
-   * out; the head, today and later days always show, since a page made
-   * ahead starts blank.
+   * after the head above it, then the head, then the earlier days. A day is
+   * `<date>.md` or `<date>.mdo`, and a date with both shows both, the
+   * document first. The view opens at the head. Pages from before today with
+   * an empty body are left out; the head, today and later days always show,
+   * since a page made ahead starts blank.
    */
   private async daily(root: string, head: string): Promise<VaultStack> {
     const folder = path.join(root, DAY_LAYOUT.daily);
     if (path.dirname(head) !== folder) throw new Error("This page does not start a stack.");
-    const headDate = dailyHeadDate(head) as string;
     const today = this.deps.today?.() ?? localDate();
     const { later, earlier } = dailyStreamNames(
       (await this.entries(folder)).filter((entry) => entry.isFile()).map((entry) => entry.name),
-      headDate,
+      path.basename(head),
     );
     const shown = (names: string[]) =>
       mapLimited(names, READ_CONCURRENCY, async (name) => {

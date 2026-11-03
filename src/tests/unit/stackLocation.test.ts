@@ -91,6 +91,11 @@ describe('stack locations', () => {
     expect(locationName(stackLocation('daily', TODAY), '2026-10-30')).toBe('2026-10-29');
     expect(locationName(fileLocation(TODAY), '2026-10-29')).toBe('2026-10-29');
     expect(tabLabels([stackLocation('daily', OCT_25), fileLocation(OCT_25)], [ROOT]).map((label) => label.name)).toEqual(['2026-10-25', '2026-10-25']);
+    // A day made as a document is named the same way, never with its extension.
+    const document = TODAY.replace(/\.md$/, '.mdo');
+    expect(locationName(stackLocation('daily', document), '2026-10-29')).toBe('Daily');
+    expect(locationName(stackLocation('daily', document), '2026-10-30')).toBe('2026-10-29');
+    expect(locationName(fileLocation(document), '2026-10-29')).toBe('2026-10-29');
   });
 });
 
