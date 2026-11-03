@@ -362,18 +362,31 @@
   user-select: none;
 }
 
-/* A framed block: a ring inside the box, following its corners. */
-.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-code-framed::before {
-  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground));
+/*
+ * A framed block: the ring every block object has, a 1px gap then 2px of
+ * the foreground, outside the box and following its corners. Each line
+ * draws its part from copies of its own box moved outward: the lines in
+ * between only to the sides, the header up as well and the bottom edge
+ * down, so no part of the ring crosses the box.
+ */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-code-framed::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-framed + .cm-code-collapsed .cm-code-collapsed-box {
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground));
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-framed::before {
-  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground)), inset 0 2px 0 0 hsl(var(--foreground));
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), 0 -1px 0 0 hsl(var(--canvas)), -1px -1px 0 0 hsl(var(--canvas)), 1px -1px 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground)), 0 -3px 0 0 hsl(var(--foreground)), -2px -2px 0 0 hsl(var(--foreground)), 2px -2px 0 0 hsl(var(--foreground));
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-framed::before,
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom.cm-code-framed::before {
-  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground)), inset 0 -2px 0 0 hsl(var(--foreground));
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), 0 1px 0 0 hsl(var(--canvas)), -1px 1px 0 0 hsl(var(--canvas)), 1px 1px 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground)), 0 3px 0 0 hsl(var(--foreground)), -2px 2px 0 0 hsl(var(--foreground)), 2px 2px 0 0 hsl(var(--foreground));
+}
+
+/* The bottom edge's line clips what it holds, but not the ring. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-framed {
+  overflow: clip;
+  overflow-clip-margin: 3px;
 }
 
 .opal-editor .cm-editor .cm-code-line .cm-object-framed {
