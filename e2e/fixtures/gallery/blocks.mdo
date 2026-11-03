@@ -1,0 +1,32 @@
+Setext title
+============
+
+| Area | Fixture | Owner |
+|---|---|---|
+| Blocks | blocks.mdo | PR 1 |
+| Code | `code.mdo` with a long name | PR 3 |
+
+***
+
+- A bullet at the top
+	- A ring one level down
+		- A square two levels down
+			- A dot again
+
+1. First
+1. Numbered lazily, shows 2
+	1. Nested from one
+1. [ ] A numbered task
+1. [x] A finished one
+
+> A quote over more than one line in a narrow window, to show how it wraps.
+> > A nested quote.
+
+> [!note] An open callout
+> With a body line.
+
+> [!tip]- A folded callout
+> Hidden until opened.
+
+> [!question]
+> A callout with no title of its own.

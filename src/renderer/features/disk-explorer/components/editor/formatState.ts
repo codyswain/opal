@@ -42,8 +42,9 @@ export function formatState(state: EditorState): FormatState {
   const texts = main.empty ? null : selectedText(state, main);
   const link = linkAt(state, main.from);
   return {
-    heading: levels.size === 1 ? [...levels][0] : null,
-    headingDisabled: lines.some((line) => calloutMarker(state, line) !== null),
+    // Lines in a table or code take no heading: the menu reads Normal text and stays shut.
+    heading: levels.size === 1 ? [...levels][0] : levels.size === 0 ? 0 : null,
+    headingDisabled: lines.length === 0 || lines.some((line) => calloutMarker(state, line) !== null),
     bold: styled(state, texts, 'StrongEmphasis', '**'),
     italic: styled(state, texts, 'Emphasis', '*'),
     strikethrough: styled(state, texts, 'Strikethrough', '~~'),

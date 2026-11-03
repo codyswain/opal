@@ -1,11 +1,11 @@
 import { EditorState, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
-import type { EditorView } from '@codemirror/view';
+import { Decoration, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteHandlers, latestTree, objectKinds, objectOf, objectKind, type ObjectAction, type ObjectKind, type PageObject } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
-import { removeObject, setFrame } from './objectFrame';
+import { objectFrame, removeObject, setFrame } from './objectFrame';
 import './blocks.css';
 
 /*
@@ -224,8 +224,17 @@ const deleteAcrossBlank = deleteHandlers.of({
   },
 });
 
+const framedRule = Decoration.line({ class: 'cm-md-hr-framed' });
+
+/** A rule's frame on its line, since the rule draws as a widget a mark never reaches. */
+const ruleFrame = EditorView.decorations.compute([objectFrame], (state) => {
+  const frame = state.field(objectFrame);
+  return frame?.kind === 'horizontal rule' ? Decoration.set(framedRule.range(state.doc.lineAt(frame.from).from)) : Decoration.none;
+});
+
 /** The block objects, their separators and the Backspace rule under a table. Documents only. */
 export const blockObjects: Extension = [
+  ruleFrame,
   objectKinds.of(tableKind),
   objectKinds.of(ruleKind),
   objectKinds.of(htmlKind),
