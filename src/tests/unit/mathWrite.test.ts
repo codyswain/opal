@@ -637,7 +637,7 @@ describe('how formulas look while edited, in tables and when they draw nothing',
     const view = mount('$\\gdef\\R{\\mathbb{R}}$ defines R. Then $\\R^n$ inline.\n');
     const [definition, used] = [...view.contentDOM.querySelectorAll<HTMLElement>('.cm-math')];
     expect(definition.classList.contains('cm-math-empty')).toBe(true);
-    expect(definition.textContent).toBe('$\\gdef\\R{\\mathbb{R}}$');
+    expect(definition.textContent).toBe('\\gdef\\R{\\mathbb{R}}');
     expect(definition.title).toBe('Defines macros for this page');
     expect(used.classList.contains('cm-math-error')).toBe(false);
   });

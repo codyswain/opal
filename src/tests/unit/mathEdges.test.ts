@@ -187,3 +187,33 @@ describe('pasting into the TeX field', () => {
     expect(applyTyped('a', 'a$x$', 4, false).value).toBe('a\\$x\\$');
   });
 });
+
+describe('how formulas sit in a line', () => {
+  it('hides the space after display math in a line, so the text after it starts at the margin', () => {
+    const view = mount('The $$H_2$$ and $$O_2$$ gas.\n');
+    const line = view.contentDOM.querySelector('.cm-line:has(.cm-math)') ?? view.contentDOM.querySelectorAll('.cm-line')[0];
+    const copy = line.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.cm-math').forEach((element) => element.replaceWith('|'));
+    expect(copy.textContent).toBe('The |and |gas.');
+  });
+
+  it('keeps punctuation right after an inline formula with it, and leaves other text alone', () => {
+    const view = mount('Area $x^2$, and $y$ then $z$.\n');
+    const glued = [...view.contentDOM.querySelectorAll('.cm-math-glue')];
+    expect(glued.map((element) => [element.querySelector('.cm-math')?.getAttribute('aria-label'), element.textContent?.slice(-1)])).toEqual([['x^2', ','], ['z', '.']]);
+  });
+
+  it('draws a formula at the end of link text inside the link, so a click opens the link', async () => {
+    const { linkEditor } = await import('@/renderer/features/disk-explorer/components/editor/docMode');
+    const view = mount('See [cost $O(n)$](https://example.com) here.\n');
+    view.focus = vi.fn();
+    const formula = view.contentDOM.querySelector('.cm-math');
+    expect(formula?.closest('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
+    act(() => { formula?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 1, clientY: 1 })); });
+    expect(view.state.field(mathEditor)).toBeNull();
+    expect(view.state.field(linkEditor)).not.toBeNull();
+    const first = mount('See [$O(n)$ cost](https://example.com) here.\n');
+    expect(first.contentDOM.querySelector('.cm-math')?.closest('[data-href]')).not.toBeNull();
+  });
+});
+

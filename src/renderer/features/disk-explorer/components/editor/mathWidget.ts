@@ -39,11 +39,11 @@ export interface PageMacros {
 
 export const NO_MACROS: PageMacros = { key: '', macros: {} };
 
-// Colour commands keep their argument and lose the colour, so a formula reads the same in Opal and Obsidian.
+// Colour commands keep their argument and lose the colour, so a formula reads the same in Opal and Obsidian. A colour box keeps its box, drawn as a grey edge.
 const SHIMS: Record<string, string> = {
   '\\color': '\\@secondoftwo{#1}{}',
   '\\textcolor': '\\@secondoftwo{#1}{{#2}}',
-  '\\colorbox': '\\@secondoftwo{#1}{\\text{#2}}',
+  '\\colorbox': '\\@secondoftwo{#1}{\\fbox{#2}}',
   '\\fcolorbox': '\\@secondoftwo{#1#2}{\\fbox{#3}}',
   '\\label': '\\@secondoftwo{#1}{}',
   '\\require': '\\@secondoftwo{#1}{}',
@@ -214,14 +214,15 @@ export function emptyLabel(tex: string): string {
  * on hover. A formula that draws nothing, such as a macro definition, shows
  * its source too, so it can be seen, clicked and deleted on purpose.
  */
-function fill(root: HTMLElement, rendered: Rendered, source: string): void {
+function fill(root: HTMLElement, rendered: Rendered, source: string, tex: string): void {
   root.classList.toggle('cm-math-error', rendered.error !== null);
   root.classList.toggle('cm-math-empty', rendered.error === null && rendered.empty);
   if (rendered.error !== null) {
     root.textContent = source;
     root.title = rendered.error;
   } else if (rendered.empty) {
-    root.textContent = source;
+    // Its TeX, without the marks, which the page hides everywhere else.
+    root.textContent = tex;
     root.title = emptyLabel(source);
   } else {
     root.innerHTML = rendered.html;
@@ -234,9 +235,44 @@ function upgradeLater(view: EditorView, root: HTMLElement, tex: string, display:
   if (!needsMhchem(tex)) return;
   void loadMhchem().then(() => {
     if (!root.isConnected) return;
-    fill(root, renderTex(tex, display, page), source);
+    fill(root, renderTex(tex, display, page), source, tex);
     view.requestMeasure();
   });
+}
+
+/** The size watch of each drawn display formula, so a redraw or removal stops it. */
+const clipWatch = new WeakMap<HTMLElement, ResizeObserver>();
+
+/** Marks a wide display formula's clipped edges, where a fade shows there is more to scroll to. */
+function markClipped(box: HTMLElement): void {
+  box.classList.toggle('cm-math-clipped-left', box.scrollLeft > 0);
+  box.classList.toggle('cm-math-clipped-right', box.scrollLeft + box.clientWidth < box.scrollWidth - 1);
+}
+
+/** Keeps a display formula's clipped edges marked as it scrolls, as the column changes width and as its fonts load. */
+function watchClip(owner: HTMLElement, box: HTMLElement): void {
+  box.addEventListener('scroll', () => markClipped(box), { passive: true });
+  if (typeof ResizeObserver === 'undefined') return;
+  const observer = new ResizeObserver(() => markClipped(box));
+  observer.observe(box);
+  if (box.firstElementChild) observer.observe(box.firstElementChild);
+  clipWatch.set(owner, observer);
+}
+
+function stopClipWatch(owner: HTMLElement): void {
+  clipWatch.get(owner)?.disconnect();
+  clipWatch.delete(owner);
+}
+
+/**
+ * Whether an inline formula, drawn as one box, breaks onto a second line.
+ * Such a box is as wide as the column, so text after it would sit at the
+ * column's edge; it flows with the text instead.
+ */
+function wraps(root: HTMLElement): boolean {
+  const parts = root.querySelectorAll(':scope > .katex > .katex-html > .katex-base');
+  if (parts.length < 2) return false;
+  return parts[parts.length - 1].getBoundingClientRect().top >= parts[0].getBoundingClientRect().bottom - 1;
 }
 
 /** A formula in a line: inline, or display math (`$$…$$`) on a centred line of its own. */
@@ -253,9 +289,15 @@ export class MathWidget extends WidgetType {
     root.setAttribute('role', 'math');
     root.setAttribute('aria-label', this.tex);
     if (this.doc) root.dataset.formula = '';
-    fill(root, renderTex(this.tex, this.display, this.page), this.source);
+    fill(root, renderTex(this.tex, this.display, this.page), this.source, this.tex);
     upgradeLater(view, root, this.tex, this.display, this.page, this.source);
+    if (this.display) watchClip(root, root);
+    else view.requestMeasure({ read: () => wraps(root), write: (wrapped) => { if (wrapped) root.classList.add('cm-math-flow'); } });
     return root;
+  }
+
+  destroy(dom: HTMLElement) {
+    stopClipWatch(dom);
   }
 
   ignoreEvent(event: Event) {
@@ -284,10 +326,15 @@ export class MathBlockWidget extends WidgetType {
     root.setAttribute('role', 'math');
     root.setAttribute('aria-label', this.tex);
     if (this.doc) root.dataset.formula = '';
-    fill(root, renderTex(this.tex, true, this.page), this.source);
+    fill(root, renderTex(this.tex, true, this.page), this.source, this.tex);
     upgradeLater(view, root, this.tex, true, this.page, this.source);
     frame.append(root);
+    watchClip(frame, root);
     return frame;
+  }
+
+  destroy(dom: HTMLElement) {
+    stopClipWatch(dom);
   }
 
   get estimatedHeight() { return Math.max(1, this.tex.split('\n').length) * 24 + 16; }
@@ -307,6 +354,16 @@ function texOf(state: EditorState, span: MathSpan): string {
   return renderTex(span.tex, span.display, state.field(pageMacros)).error === null ? span.tex : editor.lastGood;
 }
 
+/** Punctuation that closes a phrase and never starts a line. `]` is left out: after a formula in link text it is the link's hidden mark. */
+const CLOSING = /^[.,;:!?)'"\u2019\u201D]{1,3}/;
+
+/**
+ * Holds an inline formula and the punctuation right after it on one line, so
+ * ", and so on" never starts a line. Inclusive at its start, so the mark
+ * wraps the formula's widget.
+ */
+const glue = Decoration.mark({ class: 'cm-math-glue', inclusiveStart: true });
+
 const inlineMath = nodeDecorators.of({
   nodes: ['InlineMath', 'DisplayMath'],
   decorate(ctx, node) {
@@ -317,6 +374,15 @@ const inlineMath = nodeDecorators.of({
     }
     const widget = new MathWidget(texOf(ctx.state, span), span.display, ctx.state.sliceDoc(node.from, node.to), ctx.state.field(pageMacros), ctx.docMode);
     ctx.out.push(Decoration.replace({ widget }).range(node.from, node.to));
+    const line = ctx.state.doc.lineAt(node.to);
+    const after = ctx.state.sliceDoc(node.to, Math.min(line.to, node.to + 3));
+    if (span.display) {
+      // Display math in a line sits on a line of its own; the space after it would start the next line one character in.
+      if (after.startsWith(' ') && /\S/.test(ctx.state.sliceDoc(node.to, line.to))) ctx.hide(node.to, node.to + 1);
+    } else {
+      const closing = CLOSING.exec(after);
+      if (closing) ctx.out.push(glue.range(node.from, node.to + closing[0].length));
+    }
     return true;
   },
 });
@@ -370,7 +436,7 @@ const tableMath = cellMath.of((written, display, source, view) => {
   root.dataset.cell = '';
   if (view.state.facet(docMode)) root.dataset.formula = '';
   const page = view.state.field(pageMacros, false) ?? NO_MACROS;
-  fill(root, renderTex(tex, display, page), source);
+  fill(root, renderTex(tex, display, page), source, written);
   upgradeLater(view, root, tex, display, page, source);
   return root;
 });

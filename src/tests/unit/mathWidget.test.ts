@@ -43,6 +43,10 @@ describe('math rendering', () => {
     expect(colours(rendered.html)).toEqual([]);
   });
 
+  it('keeps a colour box as a box', () => {
+    expect(renderUncached('\\colorbox{yellow}{boxed}', false).html).toContain('fbox');
+  });
+
   it.each([
     ['\\htmlStyle{color: red}{x}', '\\htmlStyle'],
     ['\\htmlClass{evil}{x}', '\\htmlClass'],
