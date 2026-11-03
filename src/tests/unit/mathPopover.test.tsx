@@ -208,4 +208,33 @@ describe('the formula popover on the page', () => {
     expect(display).toHaveProperty('disabled', true);
     expect(display.getAttribute('title')).toBe('A table cell holds only inline formulas');
   });
+
+  it('keeps the popover open on an input method\'s Enter and Escape', async () => {
+    const view = await openEditor('Energy $\\text{x}$ is famous.\n');
+    const popover = await clickFormula(view, '\\text{x}');
+    const field = within(popover).getByRole('textbox', { name: 'TeX' }) as HTMLTextAreaElement;
+    fireEvent.compositionStart(field);
+    fireEvent.change(field, { target: { value: '\\text{xにほん}', selectionStart: 11, selectionEnd: 11 } });
+    fireEvent.keyDown(field, { key: 'Enter', keyCode: 229, isComposing: true });
+    expect(view.state.field(mathEditor)).not.toBeNull();
+    fireEvent.keyDown(field, { key: 'Escape', keyCode: 229, isComposing: true });
+    expect(view.state.field(mathEditor)).not.toBeNull();
+    fireEvent.compositionEnd(field);
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(view.state.field(mathEditor)).toBeNull();
+  });
+
+  it('keeps room for a message only while there is one', async () => {
+    const view = await openEditor('Energy $E=mc^2$ is famous.\n');
+    const popover = await clickFormula(view, 'E=mc^2');
+    const row = () => popover.querySelector('.opal-math-problem');
+    expect(row()?.classList.contains('opal-math-problem-none')).toBe(true);
+    const field = within(popover).getByRole('textbox', { name: 'TeX' }) as HTMLTextAreaElement;
+    typeInto(field, 'E=\\frac');
+    expect(row()?.textContent).not.toBe('');
+    expect(row()?.classList.contains('opal-math-problem-none')).toBe(false);
+    typeInto(field, 'E=mc^3');
+    expect(row()?.textContent).toBe('');
+    expect(row()?.classList.contains('opal-math-problem-none')).toBe(true);
+  });
 });

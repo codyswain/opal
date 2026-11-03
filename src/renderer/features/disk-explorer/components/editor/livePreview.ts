@@ -648,7 +648,8 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           if (target === null) return true;
           const [open, close] = node.getChildren('LinkMark');
           if (close.from > open.to) {
-            out.push(Decoration.mark({ class: 'cm-md-link', attributes: target ? { 'data-href': target } : undefined }).range(open.to, close.from));
+            // Inclusive, so a formula or chip at either end of the link text is drawn inside the link and takes its clicks.
+            out.push(Decoration.mark({ class: 'cm-md-link', attributes: target ? { 'data-href': target } : undefined, inclusive: true }).range(open.to, close.from));
           }
           if (!reveal.span(ref.from, ref.to)) {
             hide(open.from, open.to);
