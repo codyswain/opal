@@ -705,12 +705,32 @@ export function linkAt(state: EditorState, at: number): LinkAt | null {
 }
 
 const linkText = (text: string) => text.replace(/[[\]]/g, '\\$&');
-/** Brackets in Markdown that is already written, escaped unless they are already. */
-const writtenLinkText = (text: string) => text.replace(/(?<!\\)[[\]]/g, '\\$&');
 const destination = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url);
 
 /** Text typed into the link form, written so it shows as typed: stars, underscores and backticks escaped. */
 export const typedLinkText = (text: string) => text.replace(/[\\*_`]/g, (character) => (character === '\\' ? '\\\\' : `\\${character}`));
+
+/**
+ * `from` to `to` without the marks it only touches: a range that starts at
+ * or inside a span's closing marks starts after them, and one that ends at
+ * or inside its opening marks ends before them. The caret after a bold word
+ * rests before its hidden closing marks, so a selection from there holds
+ * them. Unchanged when nothing would be left.
+ */
+export function withoutEdgeMarks(state: EditorState, from: number, to: number): { from: number; to: number } {
+  let start = from;
+  let end = to;
+  for (const span of inlineSpans(state, from, to)) {
+    if (span.textTo <= start && start < span.to && span.textTo > span.textFrom) start = span.to;
+    if (span.from < end && end <= span.textFrom && span.textTo > span.textFrom) end = span.from;
+  }
+  return start < end ? { from: start, to: end } : { from, to };
+}
+
+// Links whose marks a new link over them takes out: a link can't hold another.
+const LINKS = new Set(['Link', 'WikiLink']);
+// Text whose brackets stay as written inside link text: code, autolinks, HTML, images and embeds bind tighter than its brackets.
+const RAW_IN_LINK = new Set(['InlineCode', 'Autolink', 'HTMLTag', 'Comment', 'Image', 'Embed']);
 
 /**
  * A new link over `from` to `to` that keeps the formatting it half covers
@@ -718,12 +738,20 @@ export const typedLinkText = (text: string) => text.replace(/[\\*_`]/g, (charact
  * again inside, and one that runs on past the link closes inside it and
  * opens again after. `**bold** t` with "old t" linked is
  * `**b**[**old** t](url)`. Formatting the link holds whole moves inside it
- * with its marks.
+ * with its marks. A link it covers keeps only its text, and one it half
+ * covers keeps its address on the part outside: `[li](a)[nk mo](b)re`. A
+ * wiki link is one piece, so a selection that reaches into one takes it all.
  */
 function linkOver(state: EditorState, from: number, to: number, url: string): Change {
-  const spans = inlineSpans(state, from, to).filter((span) => EMPHASIS.has(span.name) || span.name === 'InlineCode');
-  for (const span of spans) {
-    if (span.textFrom >= from && span.textTo <= to) {
+  for (const span of inlineSpans(state, from, to)) {
+    if (span.name === 'WikiLink' && span.from < to && span.to > from) {
+      from = Math.min(from, span.from);
+      to = Math.max(to, span.to);
+    }
+  }
+  ({ from, to } = withoutEdgeMarks(state, from, to));
+  for (const span of inlineSpans(state, from, to)) {
+    if ((EMPHASIS.has(span.name) || span.name === 'InlineCode') && span.textFrom >= from && span.textTo <= to) {
       from = Math.min(from, span.from);
       to = Math.max(to, span.to);
     }
@@ -732,16 +760,37 @@ function linkOver(state: EditorState, from: number, to: number, url: string): Ch
   let open = '';
   let close = '';
   let after = '';
-  for (const span of spans) {
+  const dropped: { from: number; to: number }[] = [];
+  for (const span of inlineSpans(state, from, to)) {
     const opens = state.sliceDoc(span.from, span.textFrom);
     const closes = state.sliceDoc(span.textTo, span.to);
     const startsBefore = span.from < from && from < span.textTo;
     const endsAfter = span.to > to && to > span.textFrom;
+    if (LINKS.has(span.name)) {
+      if (startsBefore) before = closes + before;
+      else if (span.from >= from) dropped.push({ from: span.from, to: span.textFrom });
+      if (endsAfter) after += opens;
+      else if (span.to <= to) dropped.push({ from: span.textTo, to: span.to });
+      continue;
+    }
+    if (!EMPHASIS.has(span.name) && span.name !== 'InlineCode') continue;
     if (startsBefore && endsAfter) continue;
     if (startsBefore) { before = closes + before; open += opens; }
     if (endsAfter) { close = closes + close; after += opens; }
   }
-  return { from, to, insert: `${before}[${open}${writtenLinkText(state.sliceDoc(from, to))}${close}](${destination(url)})${after}` };
+  const raw: { from: number; to: number }[] = [];
+  latestTree(state).iterate({ from, to, enter: (ref) => { if (RAW_IN_LINK.has(ref.name)) { raw.push({ from: ref.from, to: ref.to }); return false; } return undefined; } });
+  const source = state.sliceDoc(from, to);
+  let text = '';
+  for (let index = 0; index < source.length; index += 1) {
+    const at = from + index;
+    if (dropped.some((range) => range.from <= at && at < range.to)) continue;
+    const character = source[index];
+    // Brackets in Markdown that is already written, escaped unless they are already.
+    if ((character === '[' || character === ']') && state.sliceDoc(at - 1, at) !== '\\' && !raw.some((range) => range.from <= at && at < range.to)) text += '\\';
+    text += character;
+  }
+  return { from, to, insert: `${before}[${open}${text}${close}](${destination(url)})${after}` };
 }
 
 /**

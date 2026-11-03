@@ -3,7 +3,7 @@ import { Annotation, ChangeSet, EditorSelection, EditorState, Transaction, type 
 import { EditorView, keymap } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, outsideProtected } from './extensionPoints';
-import { inlineSpans, linkAt, writeLink } from './formatCommands';
+import { inlineSpans, linkAt, withoutEdgeMarks, writeLink } from './formatCommands';
 import { docMode } from './livePreview';
 import { literalText, rawAt } from './typing';
 
@@ -32,13 +32,14 @@ function codeAround(state: EditorState, from: number, to: number): SyntaxNode | 
 export function balancedText(state: EditorState, from: number, to: number): string {
   if (codeAround(state, from, to) && rawAt(state, from) && rawAt(state, to)) return state.sliceDoc(from, to);
   ({ from, to } = outsideProtected(state, from, to));
+  ({ from, to } = withoutEdgeMarks(state, from, to));
   let before = '';
   let after = '';
   for (const span of inlineSpans(state, from, to)) {
     const opens = state.sliceDoc(span.from, span.textFrom);
     const closes = state.sliceDoc(span.textTo, span.to);
-    const startsBefore = span.from < from && from <= span.textTo;
-    const endsAfter = span.to > to && to >= span.textFrom;
+    const startsBefore = span.from < from && from < span.textTo;
+    const endsAfter = span.to > to && to > span.textFrom;
     // Outer spans come first: their opening marks go first, their closing marks last.
     if (startsBefore) before += opens;
     if (endsAfter) after = closes + after;
@@ -157,7 +158,8 @@ export function pasteSpec(state: EditorState, text: string, literal: boolean): T
   const range = state.selection.main;
   const pasted = text.replace(/\r\n?/g, '\n');
   const url = pasted.trim();
-  if (!range.empty && URL_TEXT.test(url) && !rawAt(state, range.from)) {
+  // Paste and Match Style pastes a URL as text, so both stay a key away.
+  if (!literal && !range.empty && URL_TEXT.test(url) && !rawAt(state, range.from)) {
     const link = linkAt(state, range.from);
     // Written as a link edit, not a paste, so doc mode's mark keeping leaves the address it replaces alone.
     if (link?.kind === 'link' && range.from >= link.textFrom && range.to <= link.textTo) {

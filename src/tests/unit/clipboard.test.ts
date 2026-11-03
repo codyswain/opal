@@ -86,6 +86,26 @@ describe('copy, cut and drag in a document', () => {
     expect(balancedText(view.state, doc.indexOf('Some'), doc.indexOf(' end'))).toBe('Some **bold** and a [link](https://x.com)');
   });
 
+  it('leaves out marks a selection only touches at its edges', () => {
+    const { state } = mount('Some **bold** and more\n');
+    // The caret after a bold word rests before its hidden closing marks.
+    expect(balancedText(state, 11, 17)).toBe(' and');
+    expect(balancedText(state, 0, 7)).toBe('Some ');
+    const link = mount('a [l](u) b\n').state;
+    expect(balancedText(link, 4, 10)).toBe(' b');
+    expect(balancedText(link, 0, 3)).toBe('a ');
+  });
+
+  it('copies through the clipboard filter from the end of bold without stars', () => {
+    const view = mount('Some **bold** and more\n');
+    select(view, 13);
+    expect(view.state.selection.main.head).toBe(11);
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, shiftKey: true }), 'editor'); });
+    const { from, to } = view.state.selection.main;
+    const out = view.state.facet(EditorView.clipboardOutputFilter).reduce((written, filter) => filter(written, view.state), view.state.sliceDoc(from, to));
+    expect(out).toBe(' and');
+  });
+
   it('copies a formula whole, with its dollars, when a selection ends inside it', () => {
     const formula = protectedRanges.of((state) => {
       const doc = state.doc.toString();
@@ -189,6 +209,53 @@ describe('paste in a document', () => {
     select(link, 5, 8);
     clipboardEvent(link, 'paste', clipboardData({ 'text/plain': 'https://b.com' }));
     expect(text(link)).toBe('See [the site](https://b.com) now\n');
+  });
+
+  it('splits a link a pasted URL half covers, so its address never shows', () => {
+    const view = mount('A [link](https://a.com) more text\n');
+    const doc = text(view);
+    select(view, doc.indexOf('nk'), doc.indexOf('more') + 2);
+    act(() => { view.dispatch(pasteSpec(view.state, 'https://b.com', false) ?? {}); });
+    expect(text(view)).toBe('A [li](https://a.com)[nk mo](https://b.com)re text\n');
+    const inside = mount('A [long link](https://a.com) x\n');
+    const at = text(inside).indexOf('ng li');
+    act(() => { inside.dispatch(writeLink(inside.state, { from: at, to: at + 5 }, 'ng li', 'https://b.com', null)); });
+    expect(text(inside)).toBe('A [lo](https://a.com)[ng li](https://b.com)[nk](https://a.com) x\n');
+  });
+
+  it('turns links and wiki links a pasted URL covers into its text', () => {
+    const view = mount('see [x](https://a.com) and [[Plan]]\n');
+    select(view, 0, text(view).length - 1);
+    act(() => { view.dispatch(pasteSpec(view.state, 'https://b.com', false) ?? {}); });
+    expect(text(view)).toBe('[see x and Plan](https://b.com)\n');
+  });
+
+  it('takes a whole wiki link when a pasted URL reaches into it', () => {
+    const view = mount('A [[Plan]] here\n');
+    const doc = text(view);
+    select(view, doc.indexOf('Pl'), doc.indexOf('Pl') + 2);
+    act(() => { view.dispatch(pasteSpec(view.state, 'https://b.com', false) ?? {}); });
+    expect(text(view)).toBe('A [Plan](https://b.com) here\n');
+    const alias = mount('see [[Plan|the plan]] x\n');
+    select(alias, 15, 19);
+    act(() => { alias.dispatch(pasteSpec(alias.state, 'https://x.com', false) ?? {}); });
+    expect(text(alias)).toBe('see [the plan](https://x.com) x\n');
+  });
+
+  it('leaves brackets in code, images and autolinks alone inside a new link', () => {
+    const view = mount('use `a[0]` here\n');
+    act(() => { view.dispatch(writeLink(view.state, { from: 0, to: 15 }, view.state.sliceDoc(0, 15), 'https://x.com', null)); });
+    expect(text(view)).toBe('[use `a[0]` here](https://x.com)\n');
+    const plain = mount('a [1] b\n');
+    act(() => { plain.dispatch(writeLink(plain.state, { from: 0, to: 7 }, plain.state.sliceDoc(0, 7), 'https://x.com', null)); });
+    expect(text(plain)).toBe('[a \\[1\\] b](https://x.com)\n');
+  });
+
+  it('pastes a URL over a selection as text with Paste and Match Style', () => {
+    const view = mount('See the site now\n');
+    select(view, 4, 12);
+    act(() => { view.dispatch(pasteSpec(view.state, 'https://example.com', true) ?? {}); });
+    expect(text(view)).toBe('See https://example.com now\n');
   });
 
   it('keeps three pasted lines inside a callout', () => {
