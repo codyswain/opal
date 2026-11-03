@@ -23,8 +23,14 @@ describe('code languages', () => {
 
   it('label an unknown word as written, with no colour', () => {
     expect(fenceLanguage('awk')).toMatchObject({ language: null, label: 'awk', quiet: false });
-    expect(fenceLanguage('Dockerfile')).toMatchObject({ language: null, label: 'Dockerfile' });
+    expect(fenceLanguage('Makefile')).toMatchObject({ language: null, label: 'Makefile' });
     expect(fenceLanguage('mermaid').label).toBe('Mermaid');
+  });
+
+  it('cover the common compiled and config languages', () => {
+    const labels = ['rust', 'rs', 'go', 'golang', 'swift', 'c', 'h', 'cpp', 'c++', 'java', 'kotlin', 'kt', 'ruby', 'rb', 'toml', 'lua', 'xml', 'svg', 'dockerfile']
+      .map((word) => fenceLanguage(word).language?.label ?? null);
+    expect(labels).toEqual(['Rust', 'Rust', 'Go', 'Go', 'Swift', 'C', 'C', 'C++', 'C++', 'Java', 'Kotlin', 'Kotlin', 'Ruby', 'Ruby', 'TOML', 'Lua', 'XML', 'XML', 'Dockerfile']);
   });
 
   it('read the first word of an info string with attributes', () => {

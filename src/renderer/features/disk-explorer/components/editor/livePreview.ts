@@ -273,10 +273,23 @@ function findDefinitions(doc: Text): LinkDefinitions {
   const long: { line: number; from: number; to: number }[] = [];
   let at = 0;
   let fence: string | null = null;
+  // A fence in a quote ends with the quote, and one on a list item's line with the item, as CommonMark reads them.
+  let quotes = 0;
+  let itemIndent = 0;
   for (const line of doc.iterLines()) {
+    if (fence !== null && (quotes > 0 || itemIndent > 0)) {
+      const lead = /^[ \t>]*/.exec(line)?.[0] ?? '';
+      const ended = (lead.match(/>/g)?.length ?? 0) < quotes || (itemIndent > 0 && line.trim() !== '' && lead.replace(/^.*>[ ]?/, '').length < itemIndent);
+      if (ended) fence = null;
+    }
     const marks = line.includes('``') || line.includes('~~') ? FENCE_LINE.exec(line) : null;
-    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) fence = marks[1];
-    else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
+    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) {
+      fence = marks[1];
+      const before = line.slice(0, line.indexOf(marks[1]));
+      quotes = before.match(/>/g)?.length ?? 0;
+      const inQuote = before.replace(/^.*>[ ]?/, '');
+      itemIndent = /(?:[-+*]|\d+[.)])[ \t]+$/.test(inQuote) ? inQuote.length : 0;
+    } else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
     const match = fence === null && line.includes(']:') ? DEFINITION.exec(line) : null;
     if (match) {
       const key = referenceKey(match[1]);

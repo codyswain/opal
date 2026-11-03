@@ -59,7 +59,8 @@ export function pocketSteps(source: string): string[] | null {
 
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
-const ARROW = '<svg viewBox="0 0 12 20" width="12" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v17"/><path d="m2 14 4 4 4-4"/></svg>';
+// A line and a filled head, as Mermaid draws its arrows, so both kinds of diagram match.
+const ARROW = '<svg viewBox="0 0 12 20" width="12" height="20" aria-hidden="true"><path d="M6 1v12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M2.5 12.5h7L6 19z" fill="currentColor"/></svg>';
 
 function drawPocket(steps: readonly string[], parent: HTMLElement): void {
   const chain = document.createElement('div');
@@ -205,7 +206,8 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
       theme: 'base',
       securityLevel: 'strict',
       htmlLabels: false,
-      flowchart: { htmlLabels: false },
+      // Tighter than Mermaid's own spacing and smooth edges, so a small chart stays small and a back edge has no kinks.
+      flowchart: { htmlLabels: false, curve: 'basis', nodeSpacing: 28, rankSpacing: 32, padding: 8, diagramPadding: 8 },
       maxTextSize: MAX_TEXT,
       maxEdges: MAX_EDGES,
       suppressErrorRendering: true,
@@ -215,7 +217,8 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
     });
     const id = `opal-diagram-${renders += 1}`;
     try {
-      const { svg } = await mermaid.render(id, stripColours(source));
+      // Without trailing blank lines, so an error's line number names a line that exists.
+      const { svg } = await mermaid.render(id, stripColours(source).replace(/\s+$/, ''));
       const result = sized(svg);
       return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`, width: result.width, height: result.height };
     } catch (error) {
@@ -258,8 +261,20 @@ function watchTheme(): void {
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 }
 
+/** What an empty diagram, or one with no diagram type, says under its code. */
+const START = { mermaid: 'Start with a diagram type, such as graph TD', pocket: 'Write one step per line, such as A -> B' } as const;
+
 /** Fills `canvas` with the diagram, or the code and Mermaid's message when it does not parse. */
 function drawInto(canvas: HTMLElement, kind: DiagramKind, source: string, showSourceOnError: boolean): void {
+  if (source.trim() === '') {
+    canvas.textContent = '';
+    delete canvas.dataset.state;
+    const hint = document.createElement('div');
+    hint.className = 'cm-diagram-hint';
+    hint.textContent = START[kind];
+    canvas.append(hint);
+    return;
+  }
   if (kind === 'pocket') {
     const steps = pocketSteps(source);
     canvas.textContent = '';
@@ -283,6 +298,8 @@ function drawInto(canvas: HTMLElement, kind: DiagramKind, source: string, showSo
     image.width = result.width;
     image.height = result.height;
     canvas.append(image);
+    // Pictures of widgets that are gone go when the next one is drawn.
+    for (const picture of pictures) if (!picture.image.isConnected) pictures.delete(picture);
     pictures.add({ image, source });
     watchTheme();
   });
@@ -295,6 +312,12 @@ export function sizeLimit(message: string): string | null {
   return null;
 }
 
+/** The first line of Mermaid's message, naming a line the source has: an error at the end of the text is on its last line. */
+export function errorLine(message: string, source: string): string {
+  const lines = source.replace(/\s+$/, '').split('\n').length;
+  return (message.split('\n')[0] ?? message).replace(/:\s*$/, '').replace(/\bon line (\d+)/, (text, line: string) => (Number(line) > lines ? `on line ${lines}` : text));
+}
+
 function showError(canvas: HTMLElement, source: string, message: string, showSource: boolean): void {
   if (showSource) {
     const code = document.createElement('pre');
@@ -305,8 +328,8 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
   // The first line says where; the parser's list of expected tokens goes in the tooltip. Mermaid's size limits get a plain line of their own.
   const line = document.createElement('div');
   line.className = 'cm-diagram-error';
-  const limit = sizeLimit(message);
-  line.textContent = limit ?? (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
+  const limit = sizeLimit(message) ?? (/no diagram type detected/i.test(message) ? START.mermaid : null);
+  line.textContent = limit ?? errorLine(message, source);
   if (!limit) line.title = message;
   canvas.append(line);
 }
@@ -314,8 +337,12 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
 // ---------------------------------------------------------------------------
 // Diagram and Code
 
-/** Shows a document's diagram as Code (true) or as the diagram (false), by where its fence starts. */
-export const setDiagramCode = StateEffect.define<{ at: number; code: boolean }>();
+/**
+ * Shows a document's diagram as Code (true) or as the diagram (false), by
+ * where its fence starts. `draft` marks a diagram just made: it shows as
+ * Code until the caret leaves it, then draws.
+ */
+export const setDiagramCode = StateEffect.define<{ at: number; code: boolean; draft?: boolean }>();
 
 const SEGMENT = (label: string, pressed: boolean) => {
   const segment = document.createElement('button');
@@ -472,6 +499,11 @@ class DiagramPreviewWidget extends WidgetType {
 
   get estimatedHeight() { return 200; }
 
+  destroy(dom: HTMLElement) {
+    const timer = Number(dom.querySelector<HTMLElement>('.cm-diagram-canvas')?.dataset.timer ?? 0);
+    if (timer) window.clearTimeout(timer);
+  }
+
   ignoreEvent() { return true; }
 }
 
@@ -481,6 +513,8 @@ class DiagramPreviewWidget extends WidgetType {
 interface Diagrams {
   /** Where the fences shown as Code start. */
   code: readonly number[];
+  /** Those of them just made, which draw once the caret leaves them. */
+  drafts: readonly number[];
   decorations: DecorationSet;
 }
 
@@ -514,11 +548,15 @@ export function diagramFence(state: EditorState, fence: Fence): DiagramKind | nu
 export function showsDiagram(state: EditorState, fence: Fence): boolean {
   if (!state.facet(docMode) || !diagramFence(state, fence)) return false;
   const value = state.field(diagramField, false);
-  return Boolean(value) && !value?.code.includes(fence.open.from);
+  // An empty diagram shows its code, as build() draws it.
+  return Boolean(value) && !value?.code.includes(fence.open.from) && fence.lines.some(({ line, from }) => state.sliceDoc(from, line.to).trim() !== '');
 }
 
-function build(state: EditorState, code: readonly number[]): Diagrams {
+function build(state: EditorState, shown: readonly number[], made: readonly number[]): Diagrams {
   const decorations: Range<Decoration>[] = [];
+  let code = shown;
+  let drafts = made;
+  const { head } = state.selection.main;
   syntaxTree(state).iterate({
     enter: (ref) => {
       if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
@@ -531,7 +569,13 @@ function build(state: EditorState, code: readonly number[]): Diagrams {
       const source = codeText(state, fence);
       const context = contextOf(state, ref.node);
       const indent = listIndentOf(ref.node);
-      if (code.includes(fence.open.from)) {
+      const at = fence.open.from;
+      if (drafts.includes(at) && (head < at || head > fence.close.to)) {
+        drafts = drafts.filter((draft) => draft !== at);
+        code = code.filter((open) => open !== at);
+      }
+      // An empty diagram shows its code, with a line under it saying how to start.
+      if (code.includes(at) || source.trim() === '') {
         decorations.push(Decoration.widget({ widget: new DiagramPreviewWidget(source, kind, context, indent), block: true, side: 1 }).range(fence.close.to));
       } else {
         const widget = new DiagramWidget(source, kind, kind === 'mermaid' ? 'Mermaid' : 'Flowchart', context, indent, true);
@@ -540,21 +584,25 @@ function build(state: EditorState, code: readonly number[]): Diagrams {
       return false;
     },
   });
-  return { code, decorations: Decoration.set(decorations, true) };
+  return { code, drafts, decorations: Decoration.set(decorations, true) };
 }
 
 /** A document's diagrams: drawn over their fences, or under them while shown as Code. */
 export const diagramField = StateField.define<Diagrams>({
-  create: (state) => build(state, []),
+  create: (state) => build(state, [], []),
   update(value, tr) {
-    let code = tr.docChanged ? value.code.map((at) => tr.changes.mapPos(at)) : value.code;
-    let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state);
+    // Mapped forward, so a line typed before a diagram that starts the page keeps its choice.
+    let code = tr.docChanged ? value.code.map((at) => tr.changes.mapPos(at, 1)) : value.code;
+    let drafts = tr.docChanged ? value.drafts.map((at) => tr.changes.mapPos(at, 1)) : value.drafts;
+    let changed = tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state) || (drafts.length > 0 && tr.selection !== undefined);
     for (const effect of tr.effects) {
       if (!effect.is(setDiagramCode)) continue;
-      code = effect.value.code ? [...code.filter((at) => at !== effect.value.at), effect.value.at] : code.filter((at) => at !== effect.value.at);
+      const { at } = effect.value;
+      code = effect.value.code ? [...code.filter((open) => open !== at), at] : code.filter((open) => open !== at);
+      drafts = effect.value.code && effect.value.draft ? [...drafts.filter((open) => open !== at), at] : drafts.filter((open) => open !== at);
       changed = true;
     }
-    return changed ? build(tr.state, code) : value;
+    return changed ? build(tr.state, code, drafts) : value;
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });

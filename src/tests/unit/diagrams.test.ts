@@ -5,7 +5,7 @@ import { act } from '@testing-library/react';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { diagramField, diagramKind, pocketSteps, setDiagramCode, sizeLimit, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
+import { diagramField, diagramKind, errorLine, pocketSteps, setDiagramCode, sizeLimit, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { objectAt } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
@@ -171,5 +171,10 @@ describe('diagrams in a document', () => {
   it('draw a Pocket flowchart as its chain', () => {
     const view = mount('```flowchart\nOne -> Two\nTwo -> Three\n```\n', 0, NOTE);
     expect([...view.contentDOM.querySelectorAll('.cm-diagram-step')].map((step) => step.textContent)).toEqual(['One', 'Two', 'Three']);
+  });
+  it('name a line the source has when Mermaid reports an error past its end', () => {
+    const source = 'flowchart TD\n  A[Unclosed --> B';
+    expect(errorLine('Parse error on line 3:\n...nclosed --> B\n-----^\nExpecting', source)).toBe('Parse error on line 2');
+    expect(errorLine('Parse error on line 1:\nx', source)).toBe('Parse error on line 1');
   });
 });

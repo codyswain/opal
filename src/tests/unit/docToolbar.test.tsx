@@ -244,4 +244,17 @@ describe('Option+F10 next to block objects and callout titles', () => {
     expect(screen.getByRole('toolbar', { name: 'Formatting' }).contains(document.activeElement)).toBe(true);
     expect(document.activeElement).not.toBe(button('Style, Normal text'));
   });
+  it('keeps the style menu open to Code block in a code block, so the block can be unwrapped', async () => {
+    const user = userEvent.setup();
+    const body = 'Intro\n\n```\ncode\n```\n';
+    const view = await openEditor(DOC, body);
+    vi.spyOn(view, 'focus').mockImplementation(() => undefined);
+    select(view, body.indexOf('code') + 1);
+    const style = button('Style, Code block');
+    expect(style).toBeEnabled();
+    await user.click(style);
+    expect(screen.getByRole('menuitemradio', { name: 'Heading 2' })).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /Code block/ }));
+    expect(view.state.doc.toString()).toBe('Intro\n\ncode\n');
+  });
 });

@@ -112,6 +112,8 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const inserts = view.state.facet(insertItems);
   // Formatting does not apply in a code block.
   const inCode = format.code === 'block';
+  // In a code block the menu stays open for its Code block item, which unwraps the block; the headings are off.
+  const styleDisabled = format.headingDisabled && !inCode;
 
   const items: Item[] = [
     { id: 'undo', label: 'Undo', icon: Undo2, shortcut: '⌘Z', disabled: !format.canUndo, run: command(undo) },
@@ -139,7 +141,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const shown = items.slice(0, count);
   const hidden = items.slice(count).filter((item): item is Action | 'style' | 'insert' => item !== 'separator');
   // The one button in the tab order: the last one focused, or the first that can take focus.
-  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && format.headingDisabled) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
+  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && styleDisabled) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
   if (hidden.length > 0) focusable.push('more');
   const tabStop = focusable.includes(current) ? current : focusable[0];
   const tabIndex = (id: string) => (id === tabStop ? 0 : -1);
@@ -219,7 +221,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
           return (
             <Menu key="style">
               <MenuTrigger asChild>
-                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} disabled={format.headingDisabled} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
+                <button type="button" data-toolbar-item="style" tabIndex={tabIndex('style')} aria-label={`Style, ${styleName}`} disabled={styleDisabled} onMouseDown={keepFocus} className="opal-doc-toolbar-style">
                   <span className="truncate">{styleName}</span>
                   <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0" />
                 </button>
