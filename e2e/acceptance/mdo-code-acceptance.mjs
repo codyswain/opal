@@ -28,7 +28,10 @@ const vault = await realpath(path.join(vaultParent, 'Vault'));
 const TYPING = path.join(vault, 'Docs', 'typing.mdo');
 const GALLERY = path.join(vault, 'Docs', 'code.mdo');
 const NOTE = path.join(vault, 'Docs', 'note.md');
+const KEYS = path.join(vault, 'Docs', 'keys.mdo');
+const KEYS_TEXT = 'Top\n\n> ```py\n> def f():\n>     return 1\n> ```\n\nAfter words\n';
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
+await writeFile(KEYS, KEYS_TEXT);
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
 await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
@@ -108,6 +111,45 @@ try {
   const copied = await page.evaluate(() => window.__copied);
   check('Copy puts only the code on the clipboard', copied.length === 1 && copied[0] === 'const a = 1;', JSON.stringify(copied));
   check('Copy shows Copied', (await page.locator('.cm-code-copy').first().textContent()) === 'Copied');
+
+  // Keys in a quoted block, with the real keyboard.
+  await open(KEYS);
+  const codeLine = page.locator('.cm-code-line', { hasText: 'return 1' });
+  const lineBox = await codeLine.boundingBox();
+  await page.mouse.click(lineBox.x + lineBox.width - 4, lineBox.y + lineBox.height / 2);
+  await page.keyboard.type('Z');
+  check('a click in code puts the caret where it landed, and typing goes there', (await editorText()) === KEYS_TEXT.replace('return 1', 'return 1Z'), JSON.stringify(await editorText()));
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('x = 2');
+  check('Enter in quoted code keeps the quote marks and the indent', (await editorText()).includes('>     return 1Z\n>     x = 2\n> ```'), JSON.stringify(await editorText()));
+  await page.keyboard.press('Meta+a');
+  const selected = await page.evaluate(() => { const view = document.querySelector('.cm-content')?.cmTile?.root?.view; const { from, to } = view.state.selection.main; return view.state.sliceDoc(from, to); });
+  check('Cmd+A in code selects the code first', selected === 'def f():\n>     return 1Z\n>     x = 2', JSON.stringify(selected));
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('W');
+  check('Escape leaves the block; Backspace on the blank line after it removes the line and goes back into the code', (await editorText()) === 'Top\n\n> ```py\n> def f():\n>     return 1Z\n>     x = 2W\n> ```\nAfter words\n', JSON.stringify(await editorText()));
+  await page.locator('.cm-line', { hasText: 'After words' }).click({ position: { x: 2, y: 8 } });
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('V');
+  check('Backspace at the start of a text line after a block moves into the code and deletes nothing', (await editorText()) === 'Top\n\n> ```py\n> def f():\n>     return 1Z\n>     x = 2WV\n> ```\nAfter words\n', JSON.stringify(await editorText()));
+  await page.locator('.cm-line', { hasText: 'After words' }).click({ position: { x: 20, y: 8 } });
+  await page.keyboard.press('Meta+e');
+  check('Cmd+E makes the word inline code', (await editorText()).endsWith('`After` words\n'), JSON.stringify(await editorText()));
+  await page.locator('.cm-code-head').first().hover();
+  await page.locator('.cm-code-label').first().click();
+  await page.keyboard.type('sq');
+  await page.keyboard.press('Enter');
+  check('the language menu writes only the first word', (await editorText()).startsWith('Top\n\n> ```sql\n'), JSON.stringify(await editorText()));
+  await page.locator('.cm-code-head').first().click({ position: { x: 300, y: 10 } });
+  await page.waitForTimeout(150);
+  const bar = await page.locator('[data-object-bar]').first().textContent().catch(() => '');
+  check('a click on the header frames the block and shows its bar', /SQL/.test(bar ?? ''), JSON.stringify(bar));
+  await page.keyboard.press('Escape');
+  const keysSaved = await waitForFile(KEYS, (text) => text.includes('```sql') && text.includes('`After`'));
+  check('the file holds exactly what the keys wrote', keysSaved === 'Top\n\n> ```sql\n> def f():\n>     return 1Z\n>     x = 2WV\n> ```\n`After` words\n', JSON.stringify(keysSaved));
 
   // The gallery document: every state, light and dark.
   await open(GALLERY);
