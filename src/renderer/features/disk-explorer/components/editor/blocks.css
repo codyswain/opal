@@ -1,0 +1,41 @@
+/*
+ * Blocks in documents: setext underlines, list markers by depth, numbered
+ * tasks and the style menu on a callout's title. Black and white, from the
+ * shell's tokens. Spacing is padding, never margins, since CodeMirror
+ * measures boxes.
+ */
+
+/* A document's setext underline takes no room: the heading reads as one. */
+.opal-editor .cm-editor .cm-line.cm-md-setext-hidden {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+}
+
+/* Bullets by depth: a filled dot, a ring, a square, repeating. */
+.opal-editor .cm-editor .cm-md-list-marker[data-depth="1"] .cm-md-bullet {
+  width: 0.34em;
+  height: 0.34em;
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-md-list-marker[data-depth="2"] .cm-md-bullet {
+  width: 0.28em;
+  height: 0.28em;
+  border-radius: 0;
+}
+
+/* A numbered task: its number, then its box. */
+.opal-editor .cm-editor .cm-md-list-marker:has(.cm-md-number + .cm-md-task) {
+  gap: 0.35em;
+}
+
+/* The style menu on a callout's title, which takes no heading. */
+.opal-editor .opal-doc-toolbar-style:disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}

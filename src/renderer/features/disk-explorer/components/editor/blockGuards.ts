@@ -25,6 +25,12 @@ export function guardedBlocks(state: EditorState, from: number, to: number): Tex
     from,
     to,
     enter: (ref) => {
+      // A setext heading's underline is its mark, a line of its own.
+      if (ref.name === 'SetextHeading1' || ref.name === 'SetextHeading2') {
+        const mark = ref.node.getChild('HeaderMark');
+        if (mark) ranges.push({ from: doc.lineAt(mark.from).from, to: doc.lineAt(mark.from).to });
+        return false;
+      }
       if (GUARDED.has(ref.name)) {
         // A block that ends at a line break ends on the line before it.
         const end = ref.to > ref.from && doc.lineAt(ref.to).from === ref.to ? ref.to - 1 : ref.to;

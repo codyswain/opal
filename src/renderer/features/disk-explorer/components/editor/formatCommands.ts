@@ -407,13 +407,43 @@ const skipSpaces = (state: EditorState, from: number, to: number) => {
   return at;
 };
 
-/** The heading a line is: its level and its "#" marks, or null for any other line. */
+/** The heading a line starts, "#" marks or a setext underline: its level and node, or null for any other line. */
 export function headingOf(state: EditorState, line: Line): { level: number; node: SyntaxNode } | null {
   for (let node: SyntaxNode | null = latestTree(state).resolveInner(textStart(state, line, BLOCK_MARKS), 1); node; node = node.parent) {
-    const level = /^ATXHeading(\d)$/.exec(node.name)?.[1];
+    const level = /^(?:ATX|Setext)Heading(\d)$/.exec(node.name)?.[1];
     if (level) return node.from >= line.from && node.from <= line.to ? { level: Number(level), node } : null;
   }
   return null;
+}
+
+/** Whether a line is a setext heading's second or later text line, which its first line speaks for. */
+function setextLater(state: EditorState, line: Line): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(line.to, -1); node; node = node.parent) {
+    if (node.name === 'SetextHeading1' || node.name === 'SetextHeading2') return node.from < line.from;
+  }
+  return false;
+}
+
+/**
+ * A setext heading ("Title" over "===") at another level: written in "#"
+ * form, its lines joined and the underline gone, or as normal text with a
+ * blank line where the underline was when text follows it.
+ */
+function rewriteSetext(state: EditorState, line: Line, node: SyntaxNode, level: number): ChangeSpec[] {
+  const mark = node.getChild('HeaderMark');
+  if (!mark) return [];
+  const underline = state.doc.lineAt(mark.from);
+  const lastText = state.doc.line(underline.number - 1);
+  const next = underline.number < state.doc.lines ? state.doc.line(underline.number + 1) : null;
+  const changes: ChangeSpec[] = [];
+  if (level > 0) changes.push({ from: textStart(state, line, BLOCK_MARKS), insert: `${'#'.repeat(level)} ` });
+  for (let number = line.number + 1; number < underline.number; number += 1) {
+    const later = state.doc.line(number);
+    changes.push({ from: state.doc.line(number - 1).to, to: textStart(state, later, BLOCK_MARKS), insert: ' ' });
+  }
+  if (level === 0 && next && /[^\s>]/.test(next.text)) changes.push({ from: underline.from, to: underline.to, insert: blankFor(underline) });
+  else changes.push({ from: lastText.to, to: underline.to });
+  return changes;
 }
 
 /**
@@ -426,9 +456,10 @@ export function setHeading(level: number): StateCommand {
     if (state.readOnly) return false;
     if (!treeFor(state, selectionEnd(state))) return true;
     // A callout's title line takes no heading.
-    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line));
+    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line) && !setextLater(state, line));
     const changes = lines.flatMap((line): ChangeSpec[] => {
       const heading = headingOf(state, line);
+      if (heading?.node.name.startsWith('Setext')) return heading.level === level ? [] : rewriteSetext(state, line, heading.node, level);
       if (!heading) {
         const blank = !/[^\s>]/.test(line.text);
         return level > 0 && (!blank || lines.length === 1) ? [{ from: textStart(state, line, BLOCK_MARKS), insert: `${'#'.repeat(level)} ` }] : [];

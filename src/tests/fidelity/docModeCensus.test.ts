@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { ensureSyntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState, type StateCommand, type Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { MarkdownError, parseMarkdown } from '@/main/fs/MarkdownDocumentService';
@@ -68,6 +68,9 @@ function expectedSpan(state: EditorState, span: Span): [number, number] {
       start = Math.min(start, inline.from);
       end = Math.max(end, inline.to);
     }
+  } else {
+    // A setext heading changing level takes its underline with it.
+    syntaxTree(state).iterate({ from, to, enter: (ref) => { if (ref.name.startsWith('SetextHeading')) end = Math.max(end, ref.to); } });
   }
   return [state.doc.lineAt(start).from, state.doc.lineAt(end).to];
 }

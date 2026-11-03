@@ -583,6 +583,13 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           const mark = node.getChild('HeaderMark');
           linesOf(ref.from, mark ? mark.from - 1 : ref.to, (line) => lineClass(line.from, `cm-md-heading cm-md-h${ref.name.slice(-1)}`));
           if (mark) lineClass(mark.from, 'cm-md-setext-mark');
+          // A document never shows the underline: the caret steps from the heading's end past it.
+          if (mark && state.facet(docMode)) {
+            const underline = doc.lineAt(mark.from);
+            hide(underline.from, underline.to);
+            lineClass(underline.from, 'cm-md-setext-hidden');
+            units?.push({ from: underline.from - 1, to: Math.min(doc.length, underline.to + 1) });
+          }
           return true;
         }
         case 'EmphasisMark':

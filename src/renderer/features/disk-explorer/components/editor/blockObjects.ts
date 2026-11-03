@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { deleteHandlers, latestTree, objectKinds, objectOf, objectKind, type ObjectAction, type ObjectKind, type PageObject } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
 import { removeObject, setFrame } from './objectFrame';
+import './blocks.css';
 
 /*
  * Tables, rules, HTML blocks and drawn code blocks as objects in a
