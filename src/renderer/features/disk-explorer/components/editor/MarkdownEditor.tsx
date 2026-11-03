@@ -18,6 +18,8 @@ import { setFileProperties } from './firstLine';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
 import { formatState, sameFormat, type FormatState } from './formatState';
 import { LinkPopover } from './LinkPopover';
+import { MathPopover } from './MathPopover';
+import { mathEditor, type MathEditor } from './mathWrite';
 import { showInlineTitle } from './livePreview';
 import { ObjectBar, ObjectMenu } from './ObjectBar';
 import { objectFrame } from './objectFrame';
@@ -124,6 +126,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const [format, setFormat] = useState<FormatState | null>(null);
   const [link, setLink] = useState<LinkEditor | null>(null);
   const [framed, setFramed] = useState<PageObject | null>(null);
+  const [formula, setFormula] = useState<MathEditor | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState<{ words: number; selected: number | null }>({ words: 0, selected: null });
   const counting = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,6 +182,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
               setFormat((shown) => (sameFormat(shown, next) ? shown : next));
               setLink(update.state.field(linkEditor));
               setFramed(update.state.field(objectFrame, false) ?? null);
+              setFormula(update.state.field(mathEditor, false) ?? null);
             }
           }),
         ],
@@ -261,6 +265,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
       {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
       {docView && framed ? <ObjectBar view={docView} frame={framed} /> : null}
+      {docView && formula ? <MathPopover key={formula.id} view={docView} editor={formula} /> : null}
       {docView ? <ObjectMenu view={docView} /> : null}
       {docView ? <CalloutTypeMenu view={docView} /> : null}
       <EditorStatus
