@@ -121,7 +121,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const doc = isDocFile(path);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  // A document's toolbar and link popover follow the editor's state.
+  // A document's toolbar and link popover follow the editor's state. A section has no toolbar
+  // of its own: its stack draws one for all its documents (StackToolbar.tsx).
   const [docView, setDocView] = useState<EditorView | null>(null);
   const [format, setFormat] = useState<FormatState | null>(null);
   const [link, setLink] = useState<LinkEditor | null>(null);
@@ -178,8 +179,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
             if (getChunks(update.state)?.chunks.length === 0) actions.current.resolveConflict();
             if (update.focusChanged && !update.view.hasFocus) void actions.current.flush();
             if (doc && (update.docChanged || update.selectionSet || update.transactions.some((tr) => tr.effects.length > 0))) {
-              const next = formatState(update.state);
-              setFormat((shown) => (sameFormat(shown, next) ? shown : next));
+              if (!section) {
+                const next = formatState(update.state);
+                setFormat((shown) => (sameFormat(shown, next) ? shown : next));
+              }
               setLink(update.state.field(linkEditor));
               setFramed(update.state.field(objectFrame, false) ?? null);
               setFormula(update.state.field(mathEditor, false) ?? null);
@@ -192,7 +195,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
     setWords(pageWords(created.state));
     if (doc) {
       setDocView(created);
-      setFormat(formatState(created.state));
+      if (!section) setFormat(formatState(created.state));
     }
     // A page opens at the top without taking focus; an empty one gets the caret.
     // In a stack only the section that asks for it does, so scrolling never moves the caret.
@@ -261,7 +264,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       data-properties-shown={propertiesOpen ? '' : undefined}
       onKeyDown={closePropertiesOnEscape}
     >
-      {docView && format && !section ? <DocToolbar view={docView} format={format} /> : null}
+      {docView && format ? <DocToolbar view={docView} format={format} /> : null}
       <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
       {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
       {docView && framed ? <ObjectBar view={docView} frame={framed} /> : null}

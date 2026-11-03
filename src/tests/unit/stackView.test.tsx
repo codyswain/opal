@@ -643,3 +643,106 @@ describe('recording and chat pages', () => {
     expect(useTabsStore.getState().tabs[0].history).toHaveLength(1);
   });
 });
+
+describe('the toolbar of a stack that holds documents', () => {
+  // Today as a document and as a note, as when Obsidian made the note, and an older document.
+  const TODAY_DOC = `${DAILY}/2026-10-29.mdo`;
+  const TODAY_NOTE = `${DAILY}/2026-10-29.md`;
+  const OLDER_DOC = `${DAILY}/2026-10-28.mdo`;
+  const mixed = [TODAY_DOC, TODAY_NOTE, OLDER_DOC];
+  const sectionOf = (path: string, index: number): StackSection => ({
+    path, label: path.slice(path.lastIndexOf('/') + 1).replace(/\.mdo?$/, ''), detail: null, role: index === 0 ? 'head' : 'part',
+    defaultOpen: true, readOnly: false, textHeading: null, size: 300, mtimeMs: 1,
+  });
+  const toolbar = () => screen.getByRole('toolbar', { name: 'Formatting' });
+  const tool = (name: string) => within(toolbar()).getByRole('button', { name });
+  const buttons = () => within(toolbar()).getAllByRole('button');
+  // The stack reads focus from the focus event; a real focus here would make happy-dom's selection events reenter CodeMirror.
+  const focusIn = (path: string) => {
+    const view = viewOf(path) as EditorView;
+    fireEvent.focusIn(view.contentDOM);
+    return view;
+  };
+  const text = (path: string) => (viewOf(path) as EditorView).state.doc.toString();
+
+  beforeEach(() => {
+    installMarkdownApi({ [TODAY_DOC]: 'Plan the week.\n', [TODAY_NOTE]: 'Written in Obsidian.\n', [OLDER_DOC]: 'Older plan.\n' });
+    installVault(vi.fn(async (_root: string, _kind: string, head: string) => ({
+      success: true as const,
+      data: { kind: 'daily' as const, head, sections: mixed.map(sectionOf), folders: [DAILY] },
+    })));
+    openTabs([stackLocation('daily', TODAY_DOC)]);
+  });
+
+  it('shows no toolbar on a stack of notes', async () => {
+    installMarkdownApi(Object.fromEntries(paths.map((path) => [path, `Notes from ${label(path)}.\n`])));
+    installVault();
+    openTabs([stackLocation('daily', HEAD)]);
+    renderStack();
+    await waitFor(() => expect(viewOf(paths[2])).toBeTruthy());
+    expect(screen.queryByRole('toolbar')).toBeNull();
+  });
+
+  it('shows one toolbar above the scroll, greyed out in place until a document has focus', async () => {
+    renderStack(stackLocation('daily', TODAY_DOC));
+    await waitFor(() => expect(viewOf(OLDER_DOC)).toBeTruthy());
+    expect(screen.getAllByRole('toolbar', { name: 'Formatting' })).toHaveLength(1);
+    expect(scroller().contains(toolbar())).toBe(false);
+    expect(toolbar().nextElementSibling).toBe(scroller());
+    const count = buttons().length;
+    expect(count).toBe(14);
+    expect(buttons().every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+    // The head had text, so nothing took the caret, and the toolbar took nothing either.
+    expect(document.activeElement).toBe(document.body);
+
+    focusIn(TODAY_DOC);
+    expect(tool('Bold')).toBeEnabled();
+    focusIn(TODAY_NOTE);
+    expect(tool('Bold')).toBeDisabled();
+    expect(tool('Bulleted list')).toBeDisabled();
+    expect(tool('Insert')).toBeDisabled();
+    expect(buttons()).toHaveLength(count);
+    focusIn(OLDER_DOC);
+    expect(tool('Bold')).toBeEnabled();
+  });
+
+  it('acts on the document that last had focus, each with its own undo, and never takes the caret', async () => {
+    renderStack(stackLocation('daily', TODAY_DOC));
+    await waitFor(() => expect(viewOf(OLDER_DOC)).toBeTruthy());
+    const today = focusIn(TODAY_DOC);
+    act(() => today.dispatch({ selection: { anchor: 0, head: 4 } }));
+    expect(tool('Bold')).toHaveAttribute('aria-pressed', 'false');
+    expect(fireEvent.mouseDown(tool('Bold'))).toBe(false);
+    fireEvent.click(tool('Bold'));
+    expect(text(TODAY_DOC)).toBe('**Plan** the week.\n');
+    expect(tool('Bold')).toHaveAttribute('aria-pressed', 'true');
+    expect(tool('Undo')).toBeEnabled();
+
+    const older = focusIn(OLDER_DOC);
+    // Its own history is empty.
+    expect(tool('Undo')).toBeDisabled();
+    act(() => older.dispatch({ selection: { anchor: 0, head: 5 } }));
+    fireEvent.click(tool('Italic'));
+    expect(text(OLDER_DOC)).toBe('*Older* plan.\n');
+
+    // A note in between leaves both documents alone.
+    focusIn(TODAY_NOTE);
+    fireEvent.click(tool('Bold'));
+    expect(text(TODAY_NOTE)).toBe('Written in Obsidian.\n');
+
+    focusIn(TODAY_DOC);
+    fireEvent.click(tool('Undo'));
+    expect(text(TODAY_DOC)).toBe('Plan the week.\n');
+    expect(text(OLDER_DOC)).toBe('*Older* plan.\n');
+  });
+
+  it('is reached with Option+F10 from a document and gives the caret back to it with Escape', async () => {
+    renderStack(stackLocation('daily', TODAY_DOC));
+    await waitFor(() => expect(viewOf(OLDER_DOC)).toBeTruthy());
+    const older = focusIn(OLDER_DOC);
+    act(() => { runScopeHandlers(older, new KeyboardEvent('keydown', { key: 'F10', altKey: true }), 'editor'); });
+    expect(toolbar().contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+    expect(document.activeElement).toBe(older.contentDOM);
+  });
+});

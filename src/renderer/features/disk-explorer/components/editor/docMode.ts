@@ -395,11 +395,14 @@ export const editLink: Command = (view) => {
 
 /**
  * Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the framed
- * object's bar, or else to the toolbar, since Tab indents in the text.
+ * object's bar, or else to the toolbar, since Tab indents in the text. A
+ * page has its toolbar above its text; a stack has one above its scroll.
  */
 const focusToolbar: Command = (view) => {
   if (focusObjectBar(view)) return true;
-  const button = view.dom.closest('.opal-editor')?.querySelector<HTMLElement>('[role="toolbar"] [tabindex="0"]');
+  const editor = view.dom.closest('.opal-editor');
+  const toolbar = (editor?.closest('.opal-stack-frame') ?? editor)?.querySelector('.opal-doc-toolbar');
+  const button = toolbar?.querySelector<HTMLElement>('[tabindex="0"]');
   button?.focus();
   return Boolean(button);
 };

@@ -80,17 +80,29 @@ function fitting(items: readonly Item[], width: number): number {
 const keepFocus = (event: React.MouseEvent) => event.preventDefault();
 
 interface DocToolbarProps {
-  view: EditorView;
-  format: FormatState;
+  /**
+   * The document the buttons act on, and its formatting. Null in a stack
+   * while a note has focus or before a document has had it: every button
+   * is then greyed out in place, so the row does not change.
+   */
+  view: EditorView | null;
+  format: FormatState | null;
 }
+
+/** What the row shows with no document to act on: nothing pressed. */
+const IDLE: FormatState = {
+  heading: 0, headingDisabled: true, bold: false, italic: false, strikethrough: false, list: null,
+  inList: false, link: false, code: null, canUndo: false, canRedo: false,
+};
 
 /**
  * A document's formatting toolbar, in Google Docs' order, inside the page
- * card above the text. Buttons that do not fit move into a "more" menu.
- * Arrow keys move between buttons and one of them is in the tab order;
- * Escape goes back to the text, and Option+F10 or ⌃⌥T in the text comes here.
+ * card above the text, or above a stack's scroll for the stack's documents.
+ * Buttons that do not fit move into a "more" menu. Arrow keys move between
+ * buttons and one of them is in the tab order; Escape goes back to the
+ * text, and Option+F10 or ⌃⌥T in the text comes here.
  */
-export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
+export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format: given }) => {
   const row = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [current, setCurrent] = useState('undo');
@@ -108,12 +120,14 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     return () => observer.disconnect();
   }, []);
 
-  const command = (run: StateCommand) => () => { run(view); };
-  const inserts = view.state.facet(insertItems);
+  const off = !view || !given;
+  const format = given ?? IDLE;
+  const command = (run: StateCommand) => () => { if (view) run(view); };
+  const inserts = view?.state.facet(insertItems) ?? [];
   // Formatting does not apply in a code block.
   const inCode = format.code === 'block';
   // In a code block the menu stays open for its Code block item, which unwraps the block; the headings are off.
-  const styleDisabled = format.headingDisabled && !inCode;
+  const styleDisabled = off || (format.headingDisabled && !inCode);
 
   const items: Item[] = [
     { id: 'undo', label: 'Undo', icon: Undo2, shortcut: '⌘Z', disabled: !format.canUndo, run: command(undo) },
@@ -121,28 +135,28 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     'separator',
     'style',
     'separator',
-    { id: 'bold', label: 'Bold', icon: Bold, shortcut: '⌘B', pressed: format.bold, disabled: inCode, run: command(toggleMarker('**')) },
-    { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, disabled: inCode, run: command(toggleMarker('*')) },
-    { id: 'code', label: 'Code', icon: Code, shortcut: '⌘E', pressed: format.code === 'inline', disabled: inCode, run: command(toggleInlineCode) },
+    { id: 'bold', label: 'Bold', icon: Bold, shortcut: '⌘B', pressed: format.bold, disabled: off || inCode, run: command(toggleMarker('**')) },
+    { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, disabled: off || inCode, run: command(toggleMarker('*')) },
+    { id: 'code', label: 'Code', icon: Code, shortcut: '⌘E', pressed: format.code === 'inline', disabled: off || inCode, run: command(toggleInlineCode) },
     'separator',
-    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, disabled: inCode, run: () => { if (!linkAroundCode(view)) editLink(view); } },
+    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, disabled: off || inCode, run: () => { if (view && !linkAroundCode(view)) editLink(view); } },
     'insert',
     'separator',
-    { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', disabled: inCode, run: command(toggleList('task')) },
-    { id: 'bullets', label: 'Bulleted list', icon: List, shortcut: '⇧⌘8', pressed: format.list === 'bullet', disabled: inCode, run: command(toggleList('bullet')) },
-    { id: 'numbers', label: 'Numbered list', icon: ListOrdered, shortcut: '⇧⌘7', pressed: format.list === 'number', disabled: inCode, run: command(toggleList('number')) },
+    { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', disabled: off || inCode, run: command(toggleList('task')) },
+    { id: 'bullets', label: 'Bulleted list', icon: List, shortcut: '⇧⌘8', pressed: format.list === 'bullet', disabled: off || inCode, run: command(toggleList('bullet')) },
+    { id: 'numbers', label: 'Numbered list', icon: ListOrdered, shortcut: '⇧⌘7', pressed: format.list === 'number', disabled: off || inCode, run: command(toggleList('number')) },
     'separator',
     { id: 'outdent', label: 'Decrease indent', icon: IndentDecrease, shortcut: '⇧Tab', disabled: !format.inList, run: command(indentList(false)) },
     { id: 'indent', label: 'Increase indent', icon: IndentIncrease, shortcut: 'Tab', disabled: !format.inList, run: command(indentList(true)) },
     'separator',
-    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, disabled: inCode, run: command(clearFormattingAndCode) },
+    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, disabled: off || inCode, run: command(clearFormattingAndCode) },
   ];
   const count = fitting(items, width);
   const shown = items.slice(0, count);
   const hidden = items.slice(count).filter((item): item is Action | 'style' | 'insert' => item !== 'separator');
   // The one button in the tab order: the last one focused, or the first that can take focus.
-  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && styleDisabled) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
-  if (hidden.length > 0) focusable.push('more');
+  const focusable = shown.flatMap((item) => (item === 'separator' || (item === 'style' && styleDisabled) || (item === 'insert' && off) ? [] : item === 'style' || item === 'insert' ? [item] : item.disabled ? [] : [item.id]));
+  if (hidden.length > 0 && !off) focusable.push('more');
   const tabStop = focusable.includes(current) ? current : focusable[0];
   const tabIndex = (id: string) => (id === tabStop ? 0 : -1);
 
@@ -153,7 +167,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     const next = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: buttons.length - 1 }[event.key];
     if (event.key === 'Escape') {
       event.preventDefault();
-      view.focus();
+      view?.focus();
     } else if (next !== undefined) {
       event.preventDefault();
       buttons[(next + buttons.length) % buttons.length]?.focus();
@@ -162,13 +176,13 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   // Menus give focus back to the text when they close.
   const backToText = (event: Event) => {
     event.preventDefault();
-    view.focus();
+    view?.focus();
   };
   const styleName = inCode ? 'Code block' : format.heading === null ? 'Mixed styles' : STYLES[format.heading];
   const insertMenuItems = inserts.map((item) => {
     const Icon = item.icon;
     return (
-      <MenuItem key={item.id} className="gap-2" onSelect={() => { void item.run(view); }}>
+      <MenuItem key={item.id} className="gap-2" onSelect={() => { if (view) void item.run(view); }}>
         <Icon aria-hidden className="h-4 w-4" />
         {item.label}
         {item.shortcut ? <MenuShortcut>{item.shortcut}</MenuShortcut> : null}
@@ -177,12 +191,12 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   });
   const styleItems = (
     <>
-      <MenuRadioGroup value={inCode ? '' : String(format.heading ?? '')} onValueChange={(level) => setHeading(Number(level))(view)}>
+      <MenuRadioGroup value={inCode ? '' : String(format.heading ?? '')} onValueChange={(level) => { if (view) setHeading(Number(level))(view); }}>
         {STYLES.map((name, level) => (
           <MenuRadioItem key={name} value={String(level)} disabled={inCode}>{name}</MenuRadioItem>
         ))}
       </MenuRadioGroup>
-      <MenuCheckboxItem checked={inCode} onSelect={() => { toggleCodeBlock(view); }}>
+      <MenuCheckboxItem checked={inCode} onSelect={() => { if (view) toggleCodeBlock(view); }}>
         Code block
         <MenuShortcut>⌥⌘C</MenuShortcut>
       </MenuCheckboxItem>
@@ -195,6 +209,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
       role="toolbar"
       aria-label="Formatting"
       aria-keyshortcuts="Alt+F10 Control+Alt+T"
+      aria-disabled={off || undefined}
       className="opal-doc-toolbar"
       onKeyDown={onKeyDown}
       onFocus={(event) => {
@@ -208,7 +223,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
           return (
             <Menu key="insert">
               <MenuTrigger asChild>
-                <button type="button" data-toolbar-item="insert" tabIndex={tabIndex('insert')} aria-label="Insert" title="Insert" onMouseDown={keepFocus} className="opal-doc-toolbar-insert">
+                <button type="button" data-toolbar-item="insert" tabIndex={tabIndex('insert')} aria-label="Insert" title="Insert" disabled={off} onMouseDown={keepFocus} className="opal-doc-toolbar-insert">
                   <Plus aria-hidden className="h-4 w-4" />
                   <ChevronDown aria-hidden className="h-3 w-3" />
                 </button>
@@ -250,7 +265,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
       {hidden.length > 0 ? (
         <Menu>
           <MenuTrigger asChild>
-            <IconButton label="More" data-toolbar-item="more" tabIndex={tabIndex('more')} onMouseDown={keepFocus}>
+            <IconButton label="More" data-toolbar-item="more" tabIndex={tabIndex('more')} disabled={off} onMouseDown={keepFocus}>
               <Ellipsis aria-hidden className="h-4 w-4" />
             </IconButton>
           </MenuTrigger>
