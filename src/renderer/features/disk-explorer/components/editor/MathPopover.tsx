@@ -76,6 +76,11 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
     clickedFormula.delete(view);
   }
   const anchor = useRef({ getBoundingClientRect: () => anchorRect.current ?? new DOMRect(), contextElement: view.contentDOM });
+  // Centred under a formula. A new one starts at the caret, so the popover starts there too, and a new
+  // display block grows down the page, so its popover sits above it. Both stay so as the formula is written.
+  const fresh = editor.to === editor.from && !editor.opening;
+  const align = useRef<'center' | 'start'>(fresh ? 'start' : 'center').current;
+  const side = useRef<'top' | 'bottom'>(fresh && editor.kind === 'block' ? 'top' : 'bottom').current;
 
   // An edit from elsewhere to the formula shows its new TeX.
   useEffect(() => {
@@ -169,8 +174,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
       <PopoverAnchor virtualRef={anchor} />
       <PopoverContent
         ref={content}
-        side="bottom"
-        align="center"
+        side={side}
+        align={align}
         className="w-auto max-w-none p-3"
         data-testid="math-popover"
         aria-label="Formula"
