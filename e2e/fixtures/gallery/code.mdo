@@ -1,6 +1,8 @@
 # Code
 
-Inline `code`, a padded `` `tick` `` span and a path like `Library/files/2026-11/plan.pdf` in a sentence.
+Inline `code`, a padded `` `tick` `` span and a path like `Library/files/2026-11/plan.pdf` in a sentence. A double-backtick span written over three lines, ``npm run
+build &&
+npm test``, shows on one line.
 
 ```ts
 // A TypeScript block, highlighted in greys.
@@ -153,6 +155,13 @@ flowchart TD
 
 ```flowchart
 Recording -> Transcript -> Summary
+```
+
+A diagram that does not parse shows its code and Mermaid's message:
+
+```mermaid
+flowchart TD
+  A[Unclosed --> B
 ```
 
 An unclosed block runs to the end of the page:

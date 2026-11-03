@@ -308,6 +308,14 @@
   opacity: 1;
 }
 
+/* A line break inside inline code, shown as a space between its pieces. */
+.opal-editor .cm-editor .cm-code-join {
+  padding: 0.1em 0;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
 /* An empty block's one line. */
 .opal-editor .cm-editor .cm-code-placeholder {
   color: hsl(var(--text-tertiary));

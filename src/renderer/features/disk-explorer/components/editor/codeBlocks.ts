@@ -1448,8 +1448,8 @@ const insertCodeBlock = insertItems.of({ id: 'code-block', label: 'Code block', 
 /** Code in every page: drawing, colours and protection. */
 export const codeBlocks: Extension = [codeDecorator, codeRenderer, codeRanges, highlightPlugin, copyEvents, inlineCode];
 
-/** Cmd+K on inline code: the link goes around the whole span, so the selection takes it in first. */
-function linkAroundCode(view: EditorView): boolean {
+/** Cmd+K or the Link button on inline code: the link goes around the whole span, so the selection takes it in first. True in a code block, where links do not apply. */
+export function linkAroundCode(view: EditorView): boolean {
   const { state } = view;
   if (inCodeBlock(state)) return true;
   const { main } = state.selection;

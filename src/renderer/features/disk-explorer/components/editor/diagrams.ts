@@ -288,9 +288,11 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
     code.textContent = source;
     canvas.append(code);
   }
+  // The first line says where; the parser's list of expected tokens goes in the tooltip.
   const line = document.createElement('div');
   line.className = 'cm-diagram-error';
-  line.textContent = message.split('\n').filter((part) => !/^-*\^$/.test(part.trim())).slice(0, 3).join(' ');
+  line.textContent = (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
+  line.title = message;
   canvas.append(line);
 }
 

@@ -34,7 +34,7 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from '@/renderer/shared/ui';
-import { toggleCodeBlock } from './codeBlocks';
+import { linkAroundCode, toggleCodeBlock } from './codeBlocks';
 import { editLink } from './docMode';
 import { insertItems } from './extensionPoints';
 import { clearFormattingAndCode, indentList, setHeading, toggleInlineCode, toggleList, toggleMarker } from './formatCommands';
@@ -123,7 +123,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, disabled: inCode, run: command(toggleMarker('*')) },
     { id: 'code', label: 'Code', icon: Code, shortcut: '⌘E', pressed: format.code === 'inline', disabled: inCode, run: command(toggleInlineCode) },
     'separator',
-    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, disabled: inCode, run: () => { editLink(view); } },
+    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, disabled: inCode, run: () => { if (!linkAroundCode(view)) editLink(view); } },
     'insert',
     'separator',
     { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', disabled: inCode, run: command(toggleList('task')) },

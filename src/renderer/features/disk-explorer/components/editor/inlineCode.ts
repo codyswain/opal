@@ -62,7 +62,7 @@ class SpaceWidget extends WidgetType {
 
   toDOM() {
     const space = document.createElement('span');
-    space.className = 'cm-md-code';
+    space.className = 'cm-code-join';
     space.textContent = ' ';
     return space;
   }
