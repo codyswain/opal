@@ -153,6 +153,22 @@ function listIndent(depth: number): number {
   return depth * LIST_LEVEL_EM + LIST_MARKER_EM;
 }
 
+/**
+ * A document's number for an ordered item: the list's first number plus
+ * the item's place in it, so "1.", "1.", "1." and a list with an item
+ * deleted read 1, 2, 3. The file keeps the numbers as written.
+ */
+function shownNumber(state: EditorState, item: SyntaxNode, mark: SyntaxNode): string {
+  const list = item.parent;
+  const written = state.sliceDoc(mark.from, mark.to);
+  const first = list?.getChild('ListItem')?.getChild('ListMark');
+  if (!list || !first) return written;
+  let place = 0;
+  for (let child = list.firstChild; child && child.from < item.from; child = child.nextSibling) if (child.name === 'ListItem') place += 1;
+  const start = Number.parseInt(state.sliceDoc(first.from, first.to), 10) || 0;
+  return `${start + place}${written.slice(-1)}`;
+}
+
 function listDepth(node: SyntaxNode): number {
   let depth = -1;
   for (let at: SyntaxNode | null = node; at; at = at.parent) {
@@ -690,14 +706,20 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           const box = item.getChild('Task')?.getChild('TaskMarker');
           const task = box && box.from <= line.to ? box : null;
           const textFrom = skipSpaces(doc, task ? task.to : ref.to, line.to);
-          const indent = listIndent(listDepth(node));
+          const depth = listDepth(node);
+          const indent = listIndent(depth);
           const checked = task ? /x/i.test(doc.sliceString(task.from, task.to)) : false;
+          const ordered = item.parent?.name === 'OrderedList';
+          const docs = state.facet(docMode);
+          // A document shows a lone "-" or "*" as typed until a space makes it a bullet.
+          if (docs && !ordered && ref.to === line.to) return true;
           lineClass(line.from, 'cm-md-list', `--list-indent: ${indent}em`);
           markerLines.add(line.number);
           // The marker shows as written only while the caret is in it.
           if (start <= ref.from && !reveal.span(start, textFrom - 1)) {
-            const kind = task ? 'task' : item.parent?.name === 'OrderedList' ? 'number' : 'bullet';
-            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, doc.sliceString(ref.from, ref.to), checked), caretAfter: true }).range(start, textFrom));
+            const kind = task ? 'task' : ordered ? 'number' : 'bullet';
+            const label = ordered && docs ? shownNumber(state, item, node) : doc.sliceString(ref.from, ref.to);
+            out.push(Decoration.replace({ widget: new ListMarkerWidget(kind, label, checked, depth, task && ordered ? label : null), caretAfter: true }).range(start, textFrom));
           }
           if (checked && textFrom < line.to) out.push(taskDone.range(textFrom, line.to));
           const last = lastLine(doc, item).number;

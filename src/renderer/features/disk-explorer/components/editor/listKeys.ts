@@ -1,8 +1,9 @@
 import { ChangeSet, Prec, type ChangeSpec, type EditorState, type Extension, type Line, type StateCommand, type Transaction } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import { latestTree, protectedIn } from './extensionPoints';
+import { deleteHandlers, latestTree, protectedIn } from './extensionPoints';
 import { listItemOf, selectedLines } from './formatCommands';
+import { docMode } from './livePreview';
 
 /*
  * Lists by keyboard. Tab and Shift+Tab nest a list item under the one above
@@ -153,7 +154,94 @@ function inTable(state: EditorState): boolean {
 /** A document's Tab and Shift+Tab: list levels, and nothing at all elsewhere. */
 const docTab = (more: boolean): StateCommand => (target) => nestListItems(more)(target) || inTable(target.state) || true;
 
-export const docListKeys: Extension = Prec.high(keymap.of([{ key: 'Tab', run: docTab(true), shift: docTab(false) }]));
+/** The innermost list item holding `at`. */
+function itemAround(state: EditorState, at: number): SyntaxNode | null {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, -1); node; node = node.parent) {
+    if (node.name === 'ListItem') return node;
+  }
+  return null;
+}
+
+/** What starts the item after `item`: its indent, its marker or next number, and a box for a task. */
+function nextMarker(state: EditorState, item: Item): string {
+  const written = state.sliceDoc(item.mark.from, item.mark.to);
+  const marker = ordered(item.node) ? `${number(state, item.mark) + 1}${written.slice(-1)}` : written;
+  const box = item.node.getChild('Task') ? ' [ ]' : '';
+  return `${state.sliceDoc(item.line.from, item.mark.from)}${marker}${box} `;
+}
+
+/**
+ * Enter at the end of a list item's later paragraph starts the next item,
+ * as it does at the end of the item's first line.
+ */
+const enterAfterParagraph: StateCommand = ({ state, dispatch }) => {
+  const { main } = state.selection;
+  if (state.selection.ranges.length > 1 || !main.empty) return false;
+  const line = state.doc.lineAt(main.head);
+  if (main.head !== line.to || !/[^\s>]/.test(line.text) || itemOn(state, line)) return false;
+  const node = itemAround(state, line.to);
+  const item = node && itemOf(state, node);
+  if (!item || item.line.number === line.number) return false;
+  const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+  if (next && /[^\s>]/.test(next.text) && !itemOn(state, next)) return false;
+  const insert = `\n${nextMarker(state, item)}`;
+  dispatch(state.update({ changes: { from: line.to, insert }, selection: { anchor: line.to + insert.length }, scrollIntoView: true, userEvent: 'input' }));
+  return true;
+};
+
+/** Cmd+Enter: checks or unchecks the task on the caret's line. */
+const toggleTaskHere: StateCommand = ({ state, dispatch }) => {
+  const line = state.doc.lineAt(state.selection.main.head);
+  const item = itemOn(state, line);
+  const box = item?.node.getChild('Task')?.getChild('TaskMarker');
+  if (!box || box.from > line.to) return false;
+  const at = box.from + 1;
+  dispatch(state.update({ changes: { from: at, to: at + 1, insert: /x/i.test(state.sliceDoc(at, at + 1)) ? ' ' : 'x' }, userEvent: 'input.toggle' }));
+  return true;
+};
+
+/**
+ * Backspace at the start of a numbered list's first item: the line leaves
+ * the list, and the item after it takes the removed number, so the list
+ * still reads 1, 2. A list that would then start past 1 under the line
+ * gets a blank line first, since only a list from 1 can follow text.
+ */
+const leaveNumberedList = deleteHandlers.of({
+  priority: 12,
+  run: (view, dir) => {
+    const { state } = view;
+    const { main } = state.selection;
+    if (dir > 0 || !state.facet(docMode) || !main.empty || state.selection.ranges.length > 1) return false;
+    const line = state.doc.lineAt(main.head);
+    const item = itemOn(state, line);
+    const found = item && listItemOf(state, line);
+    if (!item || !found || found.textFrom !== main.head || !ordered(item.node) || item.node.getChild('Task')) return false;
+    if (item.node.parent?.parent?.name === 'ListItem') return false;
+    let previous = item.node.prevSibling;
+    while (previous && previous.name !== 'ListItem') previous = previous.prevSibling;
+    if (previous) return false;
+    let next = item.node.nextSibling;
+    while (next && next.name !== 'ListItem') next = next.nextSibling;
+    const nextMark = next?.getChild('ListMark');
+    const removed = number(state, item.mark);
+    const changes: ChangeSpec[] = [{ from: item.mark.from, to: found.textFrom }];
+    if (nextMark) {
+      changes.push(...renumber(state, nextMark, removed));
+      if (removed !== 1) changes.push({ from: state.doc.lineAt(nextMark.from).from, insert: `${quoteOf(line.text).replace(/[ \t]+$/, '')}\n` });
+    }
+    view.dispatch({ changes, selection: { anchor: item.mark.from }, scrollIntoView: true, userEvent: 'delete.backward' });
+    return true;
+  },
+});
+
+export const docListKeys: Extension = [
+  leaveNumberedList,
+  Prec.high(keymap.of([
+    { key: 'Tab', run: docTab(true), shift: docTab(false) },
+    { key: 'Enter', run: enterAfterParagraph },
+    { key: 'Mod-Enter', run: toggleTaskHere },
+  ])),
+];
 
 const ITEM = /^([\s>]*)(\d+)([.)])/;
 
@@ -191,10 +279,14 @@ export function withoutRenumbering(tr: Transaction): Transaction {
   const match = ITEM.exec(newLine.text);
   if (match && newLine.number !== after.lineAt(set.mapPos(line.from)).number) {
     const want = String(lazy ? own : own + 1);
-    if (match[2] !== want) {
-      const at = newLine.from + match[1].length;
-      const fix = ChangeSet.of([{ from: at, to: at + match[2].length, insert: want }], after.length);
-      return state.update({ changes: set.compose(fix), selection: tr.newSelection.map(fix), scrollIntoView: true, userEvent: 'input' });
+    const at = newLine.from + match[1].length;
+    const fixes: ChangeSpec[] = match[2] === want ? [] : [{ from: at, to: at + match[2].length, insert: want }];
+    // A numbered task goes on with a box.
+    const boxAt = at + match[2].length + match[3].length;
+    if (item.node.getChild('Task') && !/^ \[[ xX]\]/.test(after.sliceString(boxAt, boxAt + 4))) fixes.push({ from: boxAt, insert: after.sliceString(boxAt, boxAt + 1) === ' ' ? ' [ ]' : ' [ ] ' });
+    if (fixes.length > 0) {
+      const fix = ChangeSet.of(fixes, after.length);
+      return state.update({ changes: set.compose(fix), selection: { anchor: fix.mapPos(head, 1) }, scrollIntoView: true, userEvent: 'input' });
     }
   }
   return dropped ? state.update({ changes: set, selection: tr.newSelection, scrollIntoView: true, userEvent: 'input' }) : tr;

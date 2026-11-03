@@ -34,20 +34,35 @@ export class InlineTitleWidget extends WidgetType {
 
 /**
  * A list item's indentation and marker: a bullet, the item's own number, or
- * a checkbox. The line is indented to match, so wrapped text hangs under the
- * text and not under the marker.
+ * a checkbox, after its number in a numbered list. The line is indented to
+ * match, so wrapped text hangs under the text and not under the marker.
+ * `depth` picks the bullet's shape: a dot, a ring, a square.
  */
 export class ListMarkerWidget extends WidgetType {
-  constructor(readonly kind: 'bullet' | 'number' | 'task', readonly label: string, readonly checked = false) { super(); }
+  constructor(
+    readonly kind: 'bullet' | 'number' | 'task',
+    readonly label: string,
+    readonly checked = false,
+    readonly depth = 0,
+    /** A numbered task's number, shown before its box. */
+    readonly ordinal: string | null = null,
+  ) { super(); }
 
   eq(other: ListMarkerWidget) {
-    return other.kind === this.kind && other.label === this.label && other.checked === this.checked;
+    return other.kind === this.kind && other.label === this.label && other.checked === this.checked && other.depth === this.depth && other.ordinal === this.ordinal;
   }
 
   toDOM() {
     const marker = document.createElement('span');
     marker.className = 'cm-md-list-marker';
     marker.dataset.kind = this.kind;
+    marker.dataset.depth = String(this.depth % 3);
+    if (this.ordinal) {
+      const number = document.createElement('span');
+      number.className = 'cm-md-number';
+      number.textContent = this.ordinal;
+      marker.append(number);
+    }
     const inner = document.createElement('span');
     if (this.kind === 'bullet') {
       inner.className = 'cm-md-bullet';

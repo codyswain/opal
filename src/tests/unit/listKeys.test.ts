@@ -108,3 +108,58 @@ describe('Enter in a document\'s numbered list', () => {
     expect(after('1. a‸\n2. b\n3. c\n', 'Enter', {}, NOTE)).toBe('1. a\n2. \n3. b\n4. c\n');
   });
 });
+
+describe('lists in a document', () => {
+  const shown = (view: EditorView, selector: string) => [...view.contentDOM.querySelectorAll(selector)].map((element) => element.textContent);
+
+  it('shows computed numbers from the list\'s start and keeps the bytes; a note shows them as written', () => {
+    const view = mount('1. a\n1. b\n1. c\n‸');
+    expect(shown(view, '.cm-md-number')).toEqual(['1.', '2.', '3.']);
+    expect(text(view)).toBe('1. a\n1. b\n1. c\n');
+    expect(shown(mount('3) a\n5) b\n‸'), '.cm-md-number')).toEqual(['3)', '4)']);
+    expect(shown(mount('1. a\n1. b\n‸', NOTE), '.cm-md-number')).toEqual(['1.', '1.']);
+  });
+
+  it('takes the first item out of a numbered list on Backspace at its start, the next item taking its number', () => {
+    expect(after('1. ‸a\n2. b\n3. c\n', 'Backspace')).toBe('a\n1. b\n3. c\n');
+    const view = mount('1. ‸a\n2. b\n3. c\n');
+    press(view, 'Backspace');
+    expect(shown(view, '.cm-md-number')).toEqual(['1.', '2.']);
+    // A list that would start past 1 under the text gets a blank line, so it stays a list.
+    expect(after('5. ‸a\n6. b\n', 'Backspace')).toBe('a\n\n5. b\n');
+  });
+
+  it('draws no bullet for a lone "-" or "*" until a space follows', () => {
+    expect(mount('-‸').contentDOM.querySelector('.cm-md-list-marker')).toBeNull();
+    expect(mount('*‸').contentDOM.querySelector('.cm-md-list-marker')).toBeNull();
+    expect(mount('- ‸').contentDOM.querySelector('.cm-md-bullet')).not.toBeNull();
+  });
+
+  it('shows a numbered task\'s number then its box, and goes on with both on Enter', () => {
+    const view = mount('1. [ ] task‸\n');
+    expect(view.contentDOM.querySelector('.cm-md-list-marker .cm-md-number')?.textContent).toBe('1.');
+    expect(view.contentDOM.querySelector('.cm-md-list-marker .cm-md-task')).not.toBeNull();
+    press(view, 'Enter');
+    expect(text(view)).toBe('1. [ ] task\n2. [ ] \n');
+    expect(view.state.selection.main.head).toBe(text(view).length - 1);
+  });
+
+  it('starts the next item on Enter at the end of an item\'s second paragraph', () => {
+    expect(after('1. a\n\n   more‸\n2. b\n', 'Enter')).toBe('1. a\n\n   more\n2. \n2. b\n');
+    expect(after('- a\n\n  more‸\n- b\n', 'Enter')).toBe('- a\n\n  more\n- \n- b\n');
+  });
+
+  it('checks and unchecks a task on Cmd+Enter', () => {
+    const mod: KeyboardEventInit = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    const view = mount('- [ ] task‸\n');
+    press(view, 'Enter', mod);
+    expect(text(view)).toBe('- [x] task\n');
+    press(view, 'Enter', mod);
+    expect(text(view)).toBe('- [ ] task\n');
+  });
+
+  it('draws bullets by depth: a dot, a ring, a square, then a dot again', () => {
+    const view = mount('- a\n  - b\n    - c\n      - d\n‸');
+    expect([...view.contentDOM.querySelectorAll('.cm-md-list-marker')].map((marker) => (marker as HTMLElement).dataset.depth)).toEqual(['0', '1', '2', '0']);
+  });
+});
