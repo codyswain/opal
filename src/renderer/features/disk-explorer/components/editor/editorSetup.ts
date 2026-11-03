@@ -12,8 +12,9 @@ import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './a
 import { blockGuards } from './blockGuards';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
+import { nestListItems, withoutRenumbering } from './listKeys';
 import { fileInserts } from './imageInsert';
-import { linkMarkStyle, livePreview } from './livePreview';
+import { docMode, linkMarkStyle, livePreview } from './livePreview';
 import { pageProperties } from './pageProperties';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
@@ -120,6 +121,7 @@ export const insertNewlineInList: StateCommand = ({ state, dispatch }) => {
     state,
     dispatch: (tr) => {
       if (tr.newDoc.eq(state.doc)) unchanged = true;
+      else if (state.facet(docMode)) dispatch(withoutRenumbering(blankLinesAroundEnd(withoutSpaceLines(tr))));
       else dispatch(blankLinesAroundEnd(withoutSpaceLines(tr)));
     },
   });
@@ -181,7 +183,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
       { key: 'Backspace', run: deleteMarkupInList },
-      { key: 'Tab', run: indentInQuote(true), shift: indentInQuote(false) },
+      { key: 'Tab', run: (view) => nestListItems(true)(view) || indentInQuote(true)(view), shift: (view) => nestListItems(false)(view) || indentInQuote(false)(view) },
       { key: 'Mod-b', run: toggleMarker('**') },
       { key: 'Mod-i', run: toggleMarker('*') },
       ...searchKeymap,

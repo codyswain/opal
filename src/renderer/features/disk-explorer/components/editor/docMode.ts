@@ -35,6 +35,7 @@ import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
 import { objectAt } from './extensionPoints';
 import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension, setFrame } from './objectFrame';
+import { docListKeys } from './listKeys';
 import { insertTableItem } from './tableInsert';
 import { opensNewTab } from './wikiLinks';
 
@@ -441,6 +442,7 @@ export function docModeExtensions(): Extension {
     objectFrameExtension,
     insertImageItem,
     insertTableItem,
+    docListKeys,
     autoformatted,
     linkEditor,
     atoms,

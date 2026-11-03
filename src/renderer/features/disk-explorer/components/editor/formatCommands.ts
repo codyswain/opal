@@ -1,4 +1,3 @@
-import { indentLess, indentMore } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import {
   ChangeSet,
@@ -15,6 +14,7 @@ import {
 import type { SyntaxNode } from '@lezer/common';
 import { calloutMarker } from './blockGuards';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
+import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
 import { parseWikiTarget } from './wikiLinks';
 
@@ -560,8 +560,7 @@ export function indentList(more: boolean): StateCommand {
   return (target) => {
     const { state } = target;
     if (!treeFor(state, selectionEnd(state))) return true;
-    if (!selectedLines(state).some((line) => listItemOf(state, line))) return false;
-    return indentInQuote(more)(target) || (more ? indentMore : indentLess)(target);
+    return nestListItems(more)(target);
   };
 }
 
