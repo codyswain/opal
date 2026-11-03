@@ -19,7 +19,7 @@ export interface Picture {
   type: 'image/png' | 'image/jpeg';
 }
 
-/** Draws a thumbnail of a file on disk no larger than `px` on its long side, or null when it can't. */
+/** Draws a thumbnail of a file on disk no larger than `px` points on its long side, at the screen's scale, or null when it can't. */
 export type ThumbnailProvider = (file: string, px: number) => Promise<Picture | null>;
 
 /** Runs a program without a shell and answers its output as bytes. */

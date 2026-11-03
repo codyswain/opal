@@ -26,9 +26,10 @@ export interface FilesAPI {
    */
   info: (target: string) => Promise<FilesResult<FileInfo>>;
   /**
-   * A data: URL of the file's picture at most `px` on its long side, or null
-   * for a type without one (HTML, SVG, text, archives). Queued a few at a
-   * time; `visible` puts it ahead of the rest.
+   * A data: URL of the file's picture at most `px` CSS pixels on its long
+   * side, drawn at the screen's scale (twice that on a Retina screen), or
+   * null for a type without one (HTML, SVG, text, archives). Queued a few at
+   * a time; `visible` puts it ahead of the rest.
    */
   thumbnail: (target: string, px: number, options?: { visible?: boolean }) => Promise<FilesResult<string | null>>;
   /**

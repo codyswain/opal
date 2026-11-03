@@ -217,9 +217,13 @@ try {
   const asked = await page.evaluate((target) => window.filesAPI.open(target), outsideFile);
   check('a file outside the vault asks first, naming the app', asked.success && asked.data.action === 'confirm' && (await app.evaluate(() => globalThis.__opened)).length === 1, JSON.stringify(asked.data));
 
+  if (shotsDir) await mkdir(shotsDir, { recursive: true });
   const started = Date.now();
   const thumbnail = await page.evaluate((target) => window.filesAPI.thumbnail(target, 128, { visible: true }), path.join(files, 'q3.a1b2c3d4.pdf'));
-  check('a PDF gets a thumbnail from macOS as a data: URL', thumbnail.success && /^data:image\/png;base64,/.test(thumbnail.data ?? ''), `${Date.now() - started} ms`);
+  const drawn = Buffer.from((thumbnail.data ?? ',').split(',')[1], 'base64');
+  const drawnWidth = drawn.length > 24 ? drawn.readUInt32BE(16) : 0;
+  check('a PDF gets a thumbnail from macOS as a data: URL', thumbnail.success && /^data:image\/png;base64,/.test(thumbnail.data ?? '') && drawnWidth > 0 && drawnWidth <= 256, `${drawnWidth} pixels wide for 128 points, in ${Date.now() - started} ms`);
+  if (shotsDir) await writeFile(path.join(shotsDir, 'pdf-thumbnail.png'), drawn);
   const htmlThumbnail = await page.evaluate((target) => window.filesAPI.thumbnail(target, 128), path.join(files, 'page.a1b2c3d4.html'));
   check('HTML gets no thumbnail', htmlThumbnail.success && htmlThumbnail.data === null);
 
