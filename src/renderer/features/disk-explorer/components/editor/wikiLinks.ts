@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { classifyFile, isDocFile, pageName, storedExtension } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import { LINK_TARGET_LIMIT } from '@/types/markdown';
-import { setLinkEditor } from './docMode';
+import { setLinkEditor } from './linkEditorEffect';
 import { nodeDecorators, objectKinds, type DecorateContext } from './extensionPoints';
 import { docMode } from './livePreview';
 

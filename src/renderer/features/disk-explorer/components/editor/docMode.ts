@@ -5,7 +5,6 @@ import {
   EditorState,
   Prec,
   RangeSet,
-  StateEffect,
   StateField,
   Transaction,
   findClusterBreak,
@@ -32,6 +31,7 @@ import {
   typingStyle,
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
+import { setLinkEditor, type LinkEditor } from './linkEditorEffect';
 import { firstLine } from './firstLine';
 import { insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
@@ -332,14 +332,7 @@ const undoAutoformat: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
-/** The link a click or Cmd+K is about, while its popover shows; `editing` once its fields are open. */
-export interface LinkEditor {
-  from: number;
-  to: number;
-  editing: boolean;
-}
-
-export const setLinkEditor = StateEffect.define<LinkEditor | null>();
+export { setLinkEditor, type LinkEditor };
 
 /** Shown on a click in a link until the caret leaves it or the text changes; edited until applied or closed. */
 export const linkEditor = StateField.define<LinkEditor | null>({

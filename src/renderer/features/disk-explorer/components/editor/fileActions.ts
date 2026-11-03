@@ -10,7 +10,7 @@ import type { FileInfo } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
 import { openPdfAtPage } from '../FileViewer';
 import { vaultRelativePath } from '../tabLabels';
-import { setLinkEditor } from './docMode';
+import { setLinkEditor } from './linkEditorEffect';
 import { objectAt, type ObjectAction, type PageObject } from './extensionPoints';
 import {
   FILE_NODES,
