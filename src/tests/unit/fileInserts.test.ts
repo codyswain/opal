@@ -213,7 +213,6 @@ describe('pasting files', () => {
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
     await waitFor(() => expect(text(view)).toBe('Start\n[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]]\n'));
-    expect(window.filesAPI.info).not.toHaveBeenCalled();
   });
 
   it('leaves a paste without files to CodeMirror', () => {

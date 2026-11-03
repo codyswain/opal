@@ -6,6 +6,7 @@ import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { widthChange } from '@/renderer/features/disk-explorer/components/editor/imageFrame';
+import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { linksResolved } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
@@ -62,17 +63,18 @@ const key = (view: EditorView, name: string) =>
   act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: name }), 'editor'); });
 
 describe('a selected image', () => {
-  it('is selected by a click and draws its frame with four corners, keeping the loaded image', async () => {
+  it('is framed by a click, with its four corners, keeping the loaded image', async () => {
     const view = await mount(`Intro\n${EMBED}\nAfter\n`);
     const loaded = image(view);
     mouse(loaded, 'mousedown');
-    expect(view.state.selection.main).toMatchObject({ from: 6, to: 6 + EMBED.length });
-    expect(view.contentDOM.querySelector('.cm-md-image-selected')).not.toBeNull();
-    expect(view.contentDOM.querySelectorAll('.cm-md-image-handle')).toHaveLength(4);
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'file', from: 6, to: 6 + EMBED.length });
+    expect(view.state.selection.main.head).toBe(7 + EMBED.length);
+    await waitFor(() => expect(view.contentDOM.querySelectorAll('[data-file-framed] .cm-md-image-handle')).toHaveLength(4));
     expect(image(view)).toBe(loaded);
     // The caret moves off and the frame goes.
     act(() => { view.dispatch({ selection: { anchor: 2 } }); });
-    expect(view.contentDOM.querySelector('.cm-md-image-handle')).toBeNull();
+    expect(view.state.field(objectFrame)).toBeNull();
+    await waitFor(() => expect(view.contentDOM.querySelector('[data-file-framed]')).toBeNull());
   });
 
   it('is stepped over whole by the arrow keys', async () => {
@@ -103,7 +105,7 @@ describe('a selected image', () => {
     expect(text(view)).toBe(`Intro\n${EMBED}\nAfter\n`);
     mouse(window, 'mouseup');
     expect(text(view)).toBe(`Intro\n![[${TARGET}|400]]\nAfter\n`);
-    expect(view.state.selection.main).toMatchObject({ from: 6, to: 6 + EMBED.length });
+    expect(view.state.field(objectFrame)).toMatchObject({ from: 6, to: 6 + EMBED.length });
     // A left corner grows the other way, and the column is the most it can take.
     mouse(frame.querySelector('[data-corner="nw"]') as Element, 'mousedown', { clientX: 100, clientY: 100 });
     mouse(window, 'mousemove', { clientX: -900, clientY: 100 });
@@ -129,20 +131,23 @@ describe('a selected image', () => {
     expect(write(doc.lastIndexOf('![['))).toBeNull();
   });
 
-  it('goes with its line on Delete, or on Backspace just after it; the file stays', async () => {
+  it('frames on Backspace or Delete beside it and goes on a second press, leaving a blank line; the file stays', async () => {
     const view = await mount(`Intro\n${EMBED}\nAfter\n`);
     mouse(image(view), 'mousedown');
     key(view, 'Delete');
-    expect(text(view)).toBe('Intro\nAfter\n');
+    expect(text(view)).toBe('Intro\n\nAfter\n');
     act(() => { undo(view); });
+    expect(text(view)).toBe(`Intro\n${EMBED}\nAfter\n`);
     act(() => { view.dispatch({ selection: { anchor: 6 + EMBED.length } }); });
     key(view, 'Backspace');
-    expect(text(view)).toBe('Intro\nAfter\n');
-    expect(view.state.selection.main.head).toBe(5);
+    expect(text(view)).toBe(`Intro\n${EMBED}\nAfter\n`);
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'file', from: 6 });
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Intro\n\nAfter\n');
     expect(window.filesAPI.fetch).not.toHaveBeenCalled();
   });
 
-  it('takes only its own Markdown when text shares its line', async () => {
+  it('goes in one press when text shares its line', async () => {
     const view = await mount(`See ${EMBED} here\n`);
     act(() => { view.dispatch({ selection: { anchor: 4 + EMBED.length } }); });
     key(view, 'Backspace');
@@ -159,7 +164,7 @@ describe('an image not on this Mac yet', () => {
     await waitFor(() => expect(frame).toHaveTextContent('Not downloaded yet'));
     expect(window.filesAPI.status).toHaveBeenCalledWith(FILE);
     const button = frame.querySelector('button') as HTMLButtonElement;
-    expect(button).toHaveTextContent('Download');
+    expect(button).toHaveTextContent('Get from Mini');
     await act(async () => { button.click(); });
     expect(window.filesAPI.fetch).toHaveBeenCalledWith(FILE);
     await waitFor(() => expect(image(view)).toHaveAttribute('src', `${toOpalFileUrl(FILE)}?v=1`));
@@ -175,7 +180,7 @@ describe('an image not on this Mac yet', () => {
     await waitFor(() => expect(image(view)).toHaveAttribute('src', `${toOpalFileUrl(FILE)}?v=1`));
   });
 
-  it('keeps Download when the download fails, and shows a missing file as before', async () => {
+  it('keeps Get from Mini when the download fails, and shows a missing file as a card with Locate… and Remove', async () => {
     installFilesApi({
       status: vi.fn(async () => ({ success: true as const, data: 'remote' as const })),
       fetch: vi.fn(async () => ({ success: false as const, error: 'The file store did not answer.' })),
@@ -186,12 +191,13 @@ describe('an image not on this Mac yet', () => {
     const button = view.contentDOM.querySelector('.cm-md-image button') as HTMLButtonElement;
     await act(async () => { button.click(); });
     expect(toastError).toHaveBeenCalledWith('The file store did not answer.');
-    expect(button).toHaveTextContent('Download');
+    expect(button).toHaveTextContent('Get from Mini');
     expect(button.disabled).toBe(false);
 
     installFilesApi({ status: vi.fn(async () => ({ success: true as const, data: 'missing' as const })) });
     const missing = await mount(`![[${TARGET}]]\n`, NOTE);
     act(() => { image(missing).dispatchEvent(new Event('error')); });
-    await waitFor(() => expect(missing.contentDOM.querySelector('.cm-md-image-missing')).toHaveTextContent(TARGET));
+    await waitFor(() => expect(missing.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('File not found'));
+    expect([...missing.contentDOM.querySelectorAll('.cm-file-card button')].map((control) => control.textContent)).toEqual(['Locate…', 'Remove']);
   });
 });

@@ -1,0 +1,305 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, waitFor } from '@testing-library/react';
+import { undo } from '@codemirror/commands';
+import { syntaxTree } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { toOpalFileUrl } from '@/common/opalFileUrl';
+import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+import {
+  captionOf,
+  clearFileInfo,
+  fileRefOf,
+  lookOf,
+  namesFile,
+  readAddress,
+  shownName,
+  type FileRef,
+} from '@/renderer/features/disk-explorer/components/editor/fileEmbeds';
+import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { linksResolved, resolvedLinks } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
+import { installDiskApi } from '@/tests/helpers/diskApi';
+import { installFilesApi } from '@/tests/helpers/filesApi';
+import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import type { FileInfo, FileInfoStatus } from '@/types/files';
+
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: toastError }) }));
+
+const DOC = '/Vault/Notes/Plan.mdo';
+const NOTE = '/Vault/Notes/Plan.md';
+const PDF = 'Library/files/2026-11/q3-report.a3f9c2e1.pdf';
+const DECK = 'Library/files/2026-11/gob-deck.a3f9c2e1.pptx';
+const CLIP = 'Library/files/2026-11/clip.a3f9c2e1.mp4';
+const MEMO = 'Library/files/2026-11/memo.a3f9c2e1.m4a';
+const SHOT = 'Library/files/2026-11/shot.a3f9c2e1.png';
+const FILES = [PDF, DECK, CLIP, MEMO, SHOT];
+
+let views: EditorView[] = [];
+let statuses: Record<string, FileInfoStatus> = {};
+
+function info(target: string): FileInfo {
+  const name = target.slice(target.lastIndexOf('/') + 1);
+  const pdf = name.endsWith('.pdf');
+  const video = name.endsWith('.mp4');
+  return {
+    path: target, name, size: 9_100_000, mtimeMs: 0, kind: pdf ? 'pdf' : video ? 'video' : 'other',
+    status: statuses[target] ?? 'local',
+    ...(pdf ? { pages: 15 } : {}),
+    ...(video ? { width: 1920, height: 1080, duration: 42 } : {}),
+  };
+}
+
+beforeEach(() => {
+  statuses = {};
+  clearFileInfo();
+  installDiskApi({ listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })) });
+  installMarkdownApi({ [DOC]: '', [NOTE]: '' }, {
+    resolveLinks: vi.fn(async (_from: string, targets: string[]) => ({
+      success: true as const,
+      data: Object.fromEntries(targets.map((target) => [target, FILES.includes(target) ? `/Vault/${target}` : null])),
+    })),
+  });
+  installFilesApi({
+    info: vi.fn(async (target: string) => ({ success: true as const, data: info(target) })),
+    appName: vi.fn(async () => ({ success: true as const, data: 'Keynote' })),
+  });
+  toastError.mockClear();
+});
+
+afterEach(() => {
+  for (const view of views) view.destroy();
+  views = [];
+  vi.restoreAllMocks();
+});
+
+const resolved = Object.fromEntries(FILES.map((target) => [target, `/Vault/${target}`]));
+
+async function mount(doc: string, page = DOC) {
+  const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdownEditorExtensions(page) }) });
+  view.focus = vi.fn();
+  views.push(view);
+  act(() => { view.dispatch({ effects: linksResolved.of(resolved) }); });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  return view;
+}
+
+const text = (view: EditorView) => view.state.doc.toString();
+const key = (view: EditorView, name: string, init: KeyboardEventInit = {}) =>
+  act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: name, ...init }), 'editor'); });
+/** A key as the browser sends it, which the frame's own handler reads. */
+const press = (view: EditorView, name: string) =>
+  act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+
+/** The file links in `doc`, read as a page at DOC with every fixture file resolved. */
+function refs(doc: string, page = DOC): FileRef[] {
+  const state = EditorState.create({ doc, extensions: markdownEditorExtensions(page) }).update({ effects: linksResolved.of(resolved) }).state;
+  const found: FileRef[] = [];
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (!['Embed', 'WikiLink', 'Image', 'Link'].includes(node.name)) return;
+      const ref = fileRefOf(state, node.node, state.field(resolvedLinks), page);
+      if (ref) found.push(ref);
+      return false;
+    },
+  });
+  return found;
+}
+
+describe('reading file links', () => {
+  it('gives each its look: a chip in text, a card alone on its line, a preview for embeds of images, PDF, video and audio', () => {
+    const doc = [
+      `See [[${PDF}|Q3 report]] today.`,
+      `[[${DECK}|Gob deck.pptx]]`,
+      `![[${PDF}|Q3 report.pdf]]`,
+      `![[${DECK}]]`,
+      `![[${CLIP}|640]]`,
+      `![[${MEMO}]]`,
+      `- [[${DECK}|In a list]]`,
+      `| a | [[${DECK}\\|cell]] |`,
+      '|---|---|',
+    ].join('\n');
+    expect(refs(doc).map((ref) => [shownName(ref), lookOf(ref)])).toEqual([
+      ['Q3 report', 'chip'],
+      ['Gob deck.pptx', 'card'],
+      ['Q3 report.pdf', 'preview'],
+      ['gob-deck.pptx', 'card'],
+      ['clip.mp4', 'preview'],
+      ['memo.m4a', 'preview'],
+      ['In a list', 'chip'],
+      ['cell', 'chip'],
+    ]);
+  });
+
+  it('reads Markdown-form video, audio and PDF with relative paths as previews, and leaves notes and web pages as links', () => {
+    const doc = [
+      '![The rig at night](assets/clip.mp4)',
+      '![](../assets/q3.pdf#page=3)',
+      '[Recording](assets/memo%20one.m4a)',
+      '[A note](plan.md)',
+      '[A site](https://example.com)',
+      '![web](https://example.com/a.png)',
+    ].join('\n');
+    const found = refs(doc);
+    expect(found.map((ref) => [ref.form, ref.kind, lookOf(ref), ref.path])).toEqual([
+      ['image', 'video', 'preview', '/Vault/Notes/assets/clip.mp4'],
+      ['image', 'pdf', 'preview', '/Vault/assets/q3.pdf'],
+      ['link', 'audio', 'card', '/Vault/Notes/assets/memo one.m4a'],
+    ]);
+    expect(found[1].fragment).toBe('page=3');
+  });
+
+  it('draws a YouTube or Loom address embedded as a picture as a video card, and as a chip in text', () => {
+    const found = refs('![](https://www.youtube.com/watch?v=abc)\nWatch [this](https://loom.com/share/x) now.\n');
+    expect(found.map((ref) => [lookOf(ref), shownName(ref)])).toEqual([['card', 'YouTube video'], ['chip', 'this']]);
+  });
+
+  it('decodes each segment of an address, so %23 is a # in a name and a bare # starts the fragment', () => {
+    expect(readAddress('<Library/files/a%2523b%23c.pdf#page=2>', DOC)).toEqual({ path: '/Vault/Notes/Library/files/a%23b#c.pdf', fragment: 'page=2' });
+    expect(readAddress('<x\\<y\\>.pdf>', DOC).path).toBe('/Vault/Notes/x<y>.pdf');
+    expect(readAddress('/Vault/a b.pdf', DOC).path).toBe('/Vault/a b.pdf');
+  });
+
+  it('shows alt text as a caption unless it is empty, "image" or a file name', () => {
+    const doc = ['![The rig at night](a.mp4)', '![](a.mp4)', '![image](a.png)', '![clip.mp4](a/clip.mp4)', '![IMG_2041.JPG](b.jpg)', '![Q3|300](q.png)'].join('\n');
+    expect(refs(doc).map(captionOf)).toEqual(['The rig at night', null, null, null, null, 'Q3']);
+  });
+
+  it('names a missing link a file by its type, so it is a file and not a note to create', () => {
+    expect(['deck.pptx', 'model.stl', 'a.zip', 'x.excalidraw', 'b.canvas', 'shot.png', 'notes.txt'].every(namesFile)).toBe(true);
+    expect(['v0.2', 'Meeting 10.30', 'Plan', 'Plan.mdo', 'Plan.md'].some(namesFile)).toBe(false);
+  });
+});
+
+describe('file widgets', () => {
+  it('draws a chip, a card with kind and size, and a PDF preview with its page count, never showing the Markdown', async () => {
+    const view = await mount(`See [[${PDF}|Q3 report]] today.\n[[${DECK}|Gob deck.pptx]]\n![[${PDF}|Q3 report.pdf]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
+    expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveTextContent('Q3 report');
+    expect(view.contentDOM.querySelector('.cm-file-chip')).toHaveAttribute('aria-label', 'PDF, Q3 report');
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf-footer')).toHaveTextContent('Q3 report.pdf15 pages · 9.1 MB'));
+    expect(view.contentDOM.textContent).not.toContain('[[');
+    expect(view.contentDOM.textContent).not.toContain('a3f9c2e1');
+  });
+
+  it('says a file is not downloaded and gets it from the Mini', async () => {
+    statuses[`/Vault/${DECK}`] = 'lfs-missing';
+    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Not downloaded yet'));
+    statuses = {};
+    const control = view.contentDOM.querySelector('.cm-file-card button') as HTMLButtonElement;
+    expect(control).toHaveTextContent('Get from Mini');
+    await act(async () => { control.click(); });
+    expect(window.filesAPI.fetch).toHaveBeenCalledWith(`/Vault/${DECK}`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
+  });
+
+  it('says a file is gone, with Locate… and Remove, and Remove takes the link off the page in one undo step', async () => {
+    const view = await mount(`Intro\n![[Library/files/2026-11/gone.a3f9c2e1.pdf]]\nAfter\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('File not found'));
+    const buttons = [...view.contentDOM.querySelectorAll<HTMLButtonElement>('.cm-file-card button')];
+    expect(buttons.map((control) => control.textContent)).toEqual(['Locate…', 'Remove']);
+    act(() => { buttons[1].click(); });
+    expect(text(view)).toBe('Intro\n\nAfter\n');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('Intro\n![[Library/files/2026-11/gone.a3f9c2e1.pdf]]\nAfter\n');
+  });
+
+  it('marks a moved file and updates its link only when Update link is picked', async () => {
+    const moved = '/Vault/Library/files/2026-10/q3.a3f9c2e1.pdf';
+    installFilesApi({
+      info: vi.fn(async (target: string) => ({ success: true as const, data: { ...info(target), status: 'missing' as const } })),
+      findMoved: vi.fn(async () => ({ success: true as const, data: moved })),
+    });
+    const view = await mount('![Q3](assets/q3.a3f9c2e1.pdf)\n');
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Moved'));
+    expect(text(view)).toBe('![Q3](assets/q3.a3f9c2e1.pdf)\n');
+    act(() => { (view.contentDOM.querySelector('.cm-file-card button') as HTMLButtonElement).click(); });
+    expect(text(view)).toBe('![Q3](<../Library/files/2026-10/q3.a3f9c2e1.pdf>)\n');
+  });
+
+  it('plays Markdown-form video at its known shape, with its caption, and says when Opal can\'t play it', async () => {
+    const view = await mount('![The rig at night](assets/clip.mp4)\n');
+    await waitFor(() => expect(view.contentDOM.querySelector('video')).not.toBeNull());
+    const video = view.contentDOM.querySelector('video') as HTMLVideoElement;
+    expect(video.getAttribute('src')).toBe(toOpalFileUrl('/Vault/Notes/assets/clip.mp4'));
+    expect((view.contentDOM.querySelector('.cm-file-video') as HTMLElement).style.aspectRatio).toBe('1920 / 1080');
+    expect(view.contentDOM.querySelector('.cm-file-caption')).toHaveTextContent('The rig at night');
+    Object.defineProperty(video, 'error', { value: { code: 4 } });
+    act(() => { video.dispatchEvent(new Event('error')); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent("Can't play this video in Opal"));
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card button')).toHaveTextContent('Open in Keynote'));
+  });
+
+  it('keeps a player across a redraw of its line', async () => {
+    const view = await mount(`![[${CLIP}|640]]\n\ntext\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('video')).not.toBeNull());
+    const first = view.contentDOM.querySelector('video');
+    // An edit elsewhere and a viewport change leave the same element.
+    act(() => { view.dispatch({ changes: { from: text(view).length, insert: 'more' } }); });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(view.contentDOM.querySelector('video')).toBe(first);
+  });
+
+  it('renders a page full of links without loading anything from the web except embedded web pictures', async () => {
+    const page = [
+      '[a](https://example.com/a.png) https://docs.google.com/document/d/1 [[https://x.com/y]]',
+      '![](https://www.youtube.com/watch?v=abc)',
+      '![web](https://example.com/b.png)',
+      '[Loom](https://www.loom.com/share/abc)',
+      `![[${PDF}]] [[${DECK}]]`,
+    ].join('\n');
+    const view = await mount(page);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const sources = [...view.contentDOM.querySelectorAll('[src], [href]')].map((node) => node.getAttribute('src') ?? node.getAttribute('href') ?? '');
+    expect(sources.filter((source) => /^https?:/i.test(source))).toEqual(['https://example.com/b.png']);
+  });
+});
+
+describe('file objects in a document', () => {
+  it('frames a card on the first Backspace and removes it on the second; a chip goes in one press', async () => {
+    const view = await mount(`Intro\n[[${DECK}|Gob deck.pptx]]\nSee [[${PDF}|Q3]] here\n`);
+    const line = text(view).indexOf('\nSee');
+    act(() => { view.dispatch({ selection: { anchor: line + 1 } }); });
+    key(view, 'Backspace');
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'file', from: 6 });
+    expect(text(view)).toContain('[[Library/files/2026-11/gob-deck');
+    key(view, 'Backspace');
+    expect(text(view)).toBe(`Intro\n\nSee [[${PDF}|Q3]] here\n`);
+    const chipEnd = text(view).indexOf(' here');
+    act(() => { view.dispatch({ selection: { anchor: chipEnd } }); });
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Intro\n\nSee  here\n');
+  });
+
+  it('never deletes part of a hidden path: Backspace after an embed in text takes the whole embed', async () => {
+    const view = await mount(`A ![[${CLIP}|300]] b\n`);
+    act(() => { view.dispatch({ selection: { anchor: 2 + `![[${CLIP}|300]]`.length } }); });
+    key(view, 'Backspace');
+    expect(text(view)).toBe('A  b\n');
+  });
+
+  it('opens Quick Look on Space when a file is framed', async () => {
+    const view = await mount(`Intro\n[[${DECK}|Gob deck.pptx]]\n`);
+    act(() => { view.dispatch({ selection: { anchor: text(view).length } }); });
+    key(view, 'Backspace');
+    press(view, ' ');
+    expect(window.filesAPI.quickLook).toHaveBeenCalledWith(`/Vault/${DECK}`, { confirmed: undefined });
+    expect(text(view)).toBe(`Intro\n[[${DECK}|Gob deck.pptx]]\n`);
+  });
+
+  it('opens a PDF in an Opal tab and a deck in its app on Enter', async () => {
+    const openNote = vi.fn();
+    const view = new EditorView({ parent: document.body, state: EditorState.create({ doc: `![[${PDF}]]\n[[${DECK}]]\n`, extensions: markdownEditorExtensions(DOC, openNote) }) });
+    views.push(view);
+    act(() => { view.dispatch({ effects: linksResolved.of(resolved) }); });
+    act(() => { view.dispatch({ selection: { anchor: `![[${PDF}]]`.length + 1 } }); });
+    key(view, 'Backspace');
+    press(view, 'Enter');
+    expect(openNote).toHaveBeenCalledWith(`/Vault/${PDF}`, true);
+    act(() => { view.dispatch({ selection: { anchor: text(view).length } }); });
+    key(view, 'Backspace');
+    press(view, 'Enter');
+    await waitFor(() => expect(window.filesAPI.open).toHaveBeenCalledWith(`/Vault/${DECK}`, { confirmed: undefined }));
+  });
+});

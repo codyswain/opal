@@ -50,6 +50,8 @@ export interface FilesAPI {
   quickLook: (target: string, options?: { confirmed?: boolean }) => Promise<FilesResult<OpenResult>>;
   /** Puts the file itself on the pasteboard, so Slack, Gmail and Finder attach it. */
   copyFile: (target: string) => Promise<FilesResult<void>>;
+  /** Puts a picture's pixels on the pasteboard, for pasting into Slack or Gmail. */
+  copyImage: (target: string) => Promise<FilesResult<void>>;
   /** Saves a copy where the person picks, named `name` when given. `saved` is null when they cancel. */
   saveCopy: (target: string, name?: string) => Promise<FilesResult<{ saved: string | null }>>;
   /** Drags the file itself out of the window. Call from dragstart after preventing its default. */

@@ -148,6 +148,20 @@ async function fileStatus(file: string): Promise<FileStatus | null> {
 
 const CORNERS = ['nw', 'ne', 'sw', 'se'];
 
+/** What a page adds to an image drawn as a file (fileWidgets.ts). */
+export interface ImageExtras {
+  /** Shown under the image, from Markdown-form alt text. */
+  caption?: string | null;
+  /** The vault file it shows. */
+  file?: string | null;
+  /** A document object: a click frames it, and its corners show while framed. */
+  object?: boolean;
+  /** Width over height, known before it loads. */
+  ratio?: number | null;
+  /** Draws a file that is gone, not downloaded, or unreadable in place of the image. */
+  fail?: (view: EditorView, frame: HTMLElement, reason: 'missing' | 'unreadable') => void;
+}
+
 /** Stops watching the folder of a picture that waits for its bytes, once its frame is gone. */
 const unwatch = new WeakMap<HTMLElement, () => void>();
 
@@ -167,10 +181,14 @@ export class ImageWidget extends WidgetType {
     readonly width: number | null,
     readonly version = 0,
     readonly selected = false,
+    readonly extras: ImageExtras = {},
   ) { super(); }
 
   eq(other: ImageWidget) {
-    return other.src === this.src && other.alt === this.alt && other.width === this.width && other.version === this.version && other.selected === this.selected;
+    const a = this.extras;
+    const b = other.extras;
+    return other.src === this.src && other.alt === this.alt && other.width === this.width && other.version === this.version && other.selected === this.selected &&
+      a.caption === b.caption && a.file === b.file && a.object === b.object && a.ratio === b.ratio && a.fail === b.fail;
   }
 
   private get url() { return this.version ? `${this.src}?v=${this.version}` : this.src; }
@@ -185,10 +203,19 @@ export class ImageWidget extends WidgetType {
     image.src = this.url;
     image.alt = this.alt;
     image.draggable = false;
+    if (this.extras.ratio) image.style.aspectRatio = String(this.extras.ratio);
     image.addEventListener('load', () => view.requestMeasure());
-    image.addEventListener('error', () => { void this.explainMissing(view, frame); });
+    image.addEventListener('error', () => { void this.explainMissing(view, frame, image); });
     box.append(image);
     frame.append(box);
+    if (this.extras.object) frame.dataset.object = 'file';
+    if (this.extras.caption) {
+      const caption = document.createElement('span');
+      caption.className = 'cm-file-caption';
+      caption.textContent = this.extras.caption;
+      frame.append(caption);
+    }
+    if (/^https?:/i.test(this.src)) frame.classList.add('cm-md-image-web');
     this.dress(frame);
     return frame;
   }
@@ -208,7 +235,8 @@ export class ImageWidget extends WidgetType {
     image.style.width = this.width ? `${this.width}px` : '';
     frame.classList.toggle('cm-md-image-selected', this.selected);
     for (const handle of box.querySelectorAll('.cm-md-image-handle')) handle.remove();
-    if (!this.selected) return;
+    // An object's corners show while it is framed.
+    if (!this.selected && !this.extras.object) return;
     box.append(...CORNERS.map((corner) => {
       const handle = document.createElement('span');
       handle.className = 'cm-md-image-handle';
@@ -218,14 +246,28 @@ export class ImageWidget extends WidgetType {
   }
 
   /** A vault file still on the file store offers Download; anything else shows its alt text, as a missing file always has. */
-  private async explainMissing(view: EditorView, frame: HTMLElement) {
-    frame.replaceChildren();
+  private async explainMissing(view: EditorView, frame: HTMLElement, image: HTMLImageElement) {
     const file = this.src.startsWith(`${OPAL_FILE_SCHEME}:`) ? opalFileUrlToPath(this.src) : null;
-    if (file && (await fileStatus(file)) === 'remote') {
+    // HEIC and TIFF show through a JPEG copy in app data; the vault file is untouched.
+    if (file && /\.(heic|heif|tiff?)$/i.test(file) && !image.dataset.rendition) {
+      image.dataset.rendition = 'asked';
+      const copy = await window.filesAPI.rendition(file, this.width ?? undefined).catch(() => null);
+      if (copy?.success && copy.data) {
+        image.src = copy.data.url;
+        return;
+      }
+    }
+    const status = file ? await fileStatus(file) : null;
+    const { fail } = this.extras;
+    if (file && status === 'remote') {
+      frame.replaceChildren();
       this.offerDownload(view, frame, file);
+    } else if (fail && file) {
+      fail(view, frame, status === 'missing' ? 'missing' : 'unreadable');
     } else {
+      frame.replaceChildren();
       frame.classList.add('cm-md-image-missing');
-      frame.textContent = this.alt || 'Image not found';
+      frame.textContent = this.alt || (file ? 'Image not found' : 'Image not available offline');
     }
     view.requestMeasure();
   }
@@ -237,21 +279,21 @@ export class ImageWidget extends WidgetType {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'cm-md-image-download';
-    button.textContent = 'Download';
+    button.textContent = 'Get from Mini';
     const reload = () => {
       if (view.dom.isConnected) view.dispatch({ effects: fileChanged.of(this.src) });
     };
     button.addEventListener('click', async () => {
       button.disabled = true;
-      button.textContent = 'Downloading…';
+      button.textContent = 'Getting…';
       const result = await window.filesAPI.fetch(file).catch(() => null);
       if (result?.success && result.data === 'here') {
         reload();
         return;
       }
-      toast.error(result && !result.success ? result.error : `Could not download ${basenameFsPath(file)}.`);
+      toast.error(result && !result.success ? result.error : `Could not get ${basenameFsPath(file)} from the Mini.`);
       button.disabled = false;
-      button.textContent = 'Download';
+      button.textContent = 'Get from Mini';
     });
     frame.append(note, button);
     // The vault's sync may bring the bytes first.
@@ -267,7 +309,7 @@ export class ImageWidget extends WidgetType {
 
   // The Download button takes its own clicks.
   ignoreEvent(event: Event) {
-    return event.target instanceof Element && event.target.closest('.cm-md-image-download') !== null;
+    return event.target instanceof Element && event.target.closest('.cm-md-image-download, button') !== null;
   }
 }
 

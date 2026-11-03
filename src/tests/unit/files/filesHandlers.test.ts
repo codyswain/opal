@@ -37,7 +37,7 @@ describe('FilesHandlers', () => {
 
   it('validates every request', async () => {
     expect([...handlers.keys()].sort()).toEqual([
-      'files:app-name', 'files:copy-file', 'files:fetch', 'files:find-moved', 'files:import', 'files:info', 'files:open',
+      'files:app-name', 'files:copy-file', 'files:copy-image', 'files:fetch', 'files:find-moved', 'files:import', 'files:info', 'files:open',
       'files:pick-and-import', 'files:quick-look', 'files:rendition', 'files:save-copy', 'files:start-drag', 'files:status', 'files:thumbnail',
     ]);
     const invalid = { success: false, error: 'Invalid files request.' };

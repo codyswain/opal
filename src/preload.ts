@@ -203,6 +203,7 @@ const filesAPI: FilesAPI = {
   appName: (target) => ipcRenderer.invoke("files:app-name", target),
   quickLook: (target, options) => ipcRenderer.invoke("files:quick-look", target, options),
   copyFile: (target) => ipcRenderer.invoke("files:copy-file", target),
+  copyImage: (target) => ipcRenderer.invoke("files:copy-image", target),
   saveCopy: (target, name) => ipcRenderer.invoke("files:save-copy", target, name),
   startDrag: (target) => ipcRenderer.send("files:start-drag", target),
   findMoved: (target) => ipcRenderer.invoke("files:find-moved", target),

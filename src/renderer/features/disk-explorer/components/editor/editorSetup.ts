@@ -16,6 +16,7 @@ import { codeBlocks } from './codeBlocks';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
 import { nestListItems, withoutRenumbering } from './listKeys';
+import { fileObjects } from './fileWidgets';
 import { fileInserts } from './imageInsert';
 import { docMode, linkMarkStyle, livePreview } from './livePreview';
 import { mathSyntax } from './math';
@@ -182,6 +183,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     syntaxHighlighting(highlight),
     wikiLinks,
     fileInserts,
+    fileObjects,
     livePreview,
     blockGuards,
     guardedLineMoves,

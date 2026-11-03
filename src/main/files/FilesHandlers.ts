@@ -81,6 +81,8 @@ export class FilesHandlers {
     });
     ipc.handle('files:copy-file', (_, target: unknown) =>
       isPath(target) ? this.respond(() => service.copyFile(target), 'Failed to copy the file') : invalid());
+    ipc.handle('files:copy-image', (_, target: unknown) =>
+      isPath(target) ? this.respond(() => service.copyImage(target), 'Failed to copy the image') : invalid());
     ipc.handle('files:save-copy', (_, target: unknown, name: unknown) =>
       isPath(target) && isName(name) ? this.respond(() => service.saveCopy(target, name), 'Failed to save a copy') : invalid());
     ipc.handle('files:find-moved', (_, target: unknown) =>

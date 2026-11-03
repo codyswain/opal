@@ -1,0 +1,383 @@
+/*
+ * Files on the page: chips in text, cards on their own line, and previews
+ * for PDF, video and audio (fileWidgets.ts). Black and white from the
+ * shell's tokens; only the files' own pictures keep their colour. Spacing
+ * is padding, never margins, since CodeMirror measures boxes.
+ */
+
+/* A file inside text: a 1px edge, an icon, then the name in the body's serif. */
+.opal-editor .cm-editor .cm-file-chip {
+  display: inline;
+  padding: 0 0.3em;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.opal-editor .cm-editor .cm-file-chip:hover {
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-file-chip-icon {
+  display: inline-block;
+  padding-right: 0.25em;
+  color: hsl(var(--text-tertiary));
+  vertical-align: -0.12em;
+}
+
+.opal-editor .cm-editor .cm-file-chip-icon svg {
+  width: 0.85em;
+  height: 0.85em;
+}
+
+/* A link or chip to a file that is gone: faded, with a dashed edge. */
+.opal-editor .cm-editor .cm-file-chip.cm-file-unresolved {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+/* A file on its own line: a row 28rem wide, 64px tall. */
+.opal-editor .cm-editor .cm-file-card {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 28rem);
+  height: 64px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-card);
+  background-color: hsl(var(--canvas));
+  cursor: default;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  transition: background-color var(--duration-hover) var(--ease-standard), border-color var(--duration-hover) var(--ease-standard);
+  vertical-align: top;
+}
+
+.opal-editor .cm-editor .cm-file-card:hover {
+  border-color: hsl(var(--border-default));
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-file-card[data-state="missing"] {
+  border-style: dashed;
+}
+
+.opal-editor .cm-editor .cm-file-card-tile {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: var(--editor-sunken);
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-file-card-tile-thumb {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-file-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.opal-editor .cm-editor .cm-file-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.opal-editor .cm-editor .cm-file-card-name {
+  overflow: hidden;
+  color: hsl(var(--foreground));
+  font-size: var(--text-ui-size);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-file-card-meta {
+  overflow: hidden;
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-metadata-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-file-card-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.opal-editor .cm-editor .cm-file-button {
+  height: var(--control-height-compact);
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: var(--text-label-size);
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-file-button:hover:not(:disabled) {
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-file-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-editor .cm-editor .cm-file-button:disabled {
+  opacity: 0.5;
+}
+
+/* A preview and its caption, on a line of their own. */
+.opal-editor .cm-editor .cm-file-figure {
+  display: block;
+  padding: 0.35em 0;
+}
+
+.opal-editor .cm-editor .cm-file-caption {
+  display: block;
+  padding-top: 6px;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-ui-size);
+  line-height: var(--text-ui-line);
+  text-align: center;
+}
+
+/* An image drawn as a file: its caption sits under it at the image's width. */
+.opal-editor .cm-editor .cm-md-image > .cm-file-caption {
+  max-width: 100%;
+}
+
+/* PDF: the first page at the column's width, cut at its height, then a 40px footer. */
+.opal-editor .cm-editor .cm-file-pdf {
+  display: block;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-card);
+  background-color: hsl(var(--canvas));
+}
+
+.opal-editor .cm-editor .cm-file-pdf-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: var(--editor-sunken);
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-file-pdf-image {
+  display: block;
+  align-self: flex-start;
+  width: 100%;
+  height: auto;
+  background-color: #ffffff;
+}
+
+.opal-editor .cm-editor .cm-file-pdf-footer {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-top: 1px solid hsl(var(--border-subtle));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-editor .cm-editor .cm-file-pdf-footer .cm-file-card-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.opal-editor .cm-editor .cm-file-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: hsl(var(--text-tertiary));
+}
+
+/* Video: native controls on black at the written width or the column's, its height from the known shape. */
+.opal-editor .cm-editor .cm-file-video {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-row);
+  background-color: #000000;
+}
+
+.opal-editor .cm-editor .cm-file-video video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The handle that selects a video, whose own clicks go to the player. */
+.opal-editor .cm-editor .cm-file-handle {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-control);
+  color: hsl(var(--text-secondary));
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-file-video:hover .cm-file-handle,
+.opal-editor .cm-editor .cm-file-video[data-file-framed] .cm-file-handle {
+  opacity: 1;
+}
+
+/* Audio: one row with the card's edge, a native player on the right. */
+.opal-editor .cm-editor .cm-file-audio {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-card);
+  background-color: hsl(var(--canvas));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-editor .cm-editor .cm-file-audio audio {
+  flex-shrink: 0;
+  width: 300px;
+  max-width: 55%;
+  height: 40px;
+}
+
+.opal-editor .cm-editor .cm-file-audio audio::-webkit-media-controls-panel {
+  background-color: hsl(var(--surface-sunken));
+}
+
+/* In dark mode a transparent picture sits on a light tile, so dark lines on it still show. */
+.dark .opal-editor .cm-editor .cm-md-image:not(.cm-md-image-web) img {
+  background-color: hsl(0 0% 96%);
+}
+
+/* A failed image is a card in the image's place. */
+.opal-editor .cm-editor .cm-file-image-failed {
+  padding: 0.35em 0;
+}
+
+/* Framed on a document's page: the ring follows the card's, preview's or image's own radius. */
+.opal-editor .cm-editor .cm-file-card[data-file-framed],
+.opal-editor .cm-editor .cm-file-preview[data-file-framed],
+.opal-editor .cm-editor .cm-md-image[data-file-framed] img {
+  box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
+}
+
+/* A framed chip: a fill and an inset edge, so no ring covers the lines above and below. */
+.opal-editor .cm-editor .cm-file-chip[data-file-framed] {
+  background-color: hsl(var(--surface-selected));
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground));
+}
+
+/* An image's corners show only while it is framed. */
+.opal-editor .cm-editor .cm-md-image[data-object] .cm-md-image-handle {
+  display: none;
+}
+
+.opal-editor .cm-editor .cm-md-image[data-file-framed] .cm-md-image-handle {
+  display: block;
+}
+
+/* A file object's own hover: the card's, not the line's fill. */
+.opal-editor .cm-editor .cm-md-image[data-object]:hover,
+.opal-editor .cm-editor .cm-file-figure [data-object]:hover:not(.cm-file-card) {
+  background-color: transparent;
+}
+
+/* Rename…, Caption…: one field on the popover surface under the file. */
+.opal-file-ask {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 320px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border-overlay));
+  border-radius: var(--radius-overlay);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-file-ask input {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-strong));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font-size: var(--text-ui-size);
+  outline: none;
+}
+
+.opal-file-ask input:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-file-ask button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  color: hsl(var(--foreground));
+  font-size: var(--text-label-size);
+}
+
+.opal-file-ask button:hover {
+  background-color: hsl(var(--surface-hover));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-file-chip,
+  .opal-editor .cm-editor .cm-file-card,
+  .opal-editor .cm-editor .cm-file-button,
+  .opal-editor .cm-editor .cm-file-handle {
+    transition: none;
+  }
+}
