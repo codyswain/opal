@@ -136,6 +136,40 @@ try {
   check('Shift+Cmd+Left then typing keeps the bullet', (await text()).includes('\n- replaced\n'), JSON.stringify((await text()).split('\n')[6]));
   await shoot('typing-page');
 
+  // Enter inside bold keeps both halves bold.
+  await page.evaluate(() => {
+    const editor = document.querySelector('.cm-content').cmTile.root.view;
+    const end = editor.state.doc.length;
+    editor.dispatch({ changes: { from: end, insert: '\n**split here**\n' } });
+  });
+  await caretAt('**split', 7);
+  await page.keyboard.press('Enter');
+  check('Enter inside bold keeps both halves bold', (await text()).includes('**split**\n**here**'), JSON.stringify((await text()).slice(-24)));
+
+  // The first undo after "# " shows the mark as text, from Cmd+Z and from Edit > Undo alike.
+  // Edit > Undo is the menu's undo role, which runs the page's undo command, as webContents.undo() does.
+  const undoFromMenu = () => app.evaluate(({ Menu, BrowserWindow }) => {
+    const find = (items) => items.flatMap((item) => [item, ...(item.submenu ? find(item.submenu.items) : [])]);
+    if (!find(Menu.getApplicationMenu().items).some((item) => item.role === 'undo')) throw new Error('no Edit > Undo');
+    BrowserWindow.getAllWindows()[0].webContents.undo();
+  });
+  for (const [name, undo] of [['Cmd+Z', () => page.keyboard.press('Meta+z')], ['Edit > Undo', undoFromMenu]]) {
+    await page.evaluate(() => {
+      const editor = document.querySelector('.cm-content').cmTile.root.view;
+      const end = editor.state.doc.length;
+      editor.dispatch({ changes: { from: end, insert: '\n' }, selection: { anchor: end + 1 } });
+    });
+    await page.waitForTimeout(600);
+    await page.keyboard.type('# ', { delay: 30 });
+    const formatted = (await text()).endsWith('\n# ');
+    await undo();
+    await page.waitForTimeout(150);
+    check(`${name} right after "# " shows the mark as text`, formatted && (await text()).endsWith('\n\\# '), JSON.stringify((await text()).slice(-8)));
+    await undo();
+    await page.waitForTimeout(150);
+    check(`a second ${name} takes the typing back`, (await text()).endsWith('\n'), JSON.stringify((await text()).slice(-8)));
+  }
+
   // Find and Replace All: "plan" in visible text only.
   await caretAt('# Typing', 0);
   await page.keyboard.press('Meta+f');
@@ -153,7 +187,7 @@ try {
 
   await page.keyboard.press('Meta+s');
   const bytes = await saved((written) => written.includes('roadmap'));
-  check('the file holds what the page shows', bytes === replaced, JSON.stringify(bytes));
+  check('the file holds what the page shows', bytes === replaced, JSON.stringify(bytes.slice(0, 120)));
 
   // The gallery fixture's lower half, with a selection so the footer counts its words.
   const fixture = `${vault}/Notes/typing-gallery.mdo`;
