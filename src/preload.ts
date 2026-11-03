@@ -4,7 +4,7 @@ import type { VaultDayChange } from "./types/day";
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { ThemeReport } from "./common/theme";
 import type { OpenPageRequest } from "./common/opalLink";
-import type { MarkdownCopyLabel, UnsavedPage } from "./types/markdown";
+import type { MarkdownCopyLabel, PageExtension, UnsavedPage } from "./types/markdown";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
@@ -146,8 +146,8 @@ contextBridge.exposeInMainWorld("markdownAPI", {
     ipcRenderer.invoke("markdown:properties", target),
   write: (target: string, body: string, expectedRevision: string) =>
     ipcRenderer.invoke("markdown:write", target, body, expectedRevision),
-  create: (parentDir: string, baseName?: string) =>
-    ipcRenderer.invoke("markdown:create", parentDir, baseName),
+  create: (parentDir: string, baseName?: string, extension?: PageExtension) =>
+    ipcRenderer.invoke("markdown:create", parentDir, baseName, extension),
   saveCopy: (target: string, body: string, label: MarkdownCopyLabel) =>
     ipcRenderer.invoke("markdown:save-copy", target, body, label),
   resolveLinks: (from: string, targets: string[]) =>

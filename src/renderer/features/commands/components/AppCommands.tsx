@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from "@/common/commandIds";
 import { parentFsPath } from "@/common/fsPaths";
 import { localDate } from "@/common/vaultModel";
+import type { PageExtension } from "@/types/markdown";
 import { addDays } from "@/renderer/features/day-sidebar/dayRule";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
 import {
@@ -64,6 +65,27 @@ export const AppCommands: React.FC = () => {
   const pagePinned = usePinsStore((state) => isPinned(state.byRoot, pagePath));
 
   useEffect(() => {
+    /** A new page next to the open page, or at the top of the vault. */
+    const createPage = (extension: PageExtension) => {
+      const opened = selectOpenedPath(tabs());
+      const folder =
+        (opened && parentFsPath(opened)) ??
+        useDiskStore.getState().roots[0] ??
+        null;
+      if (!folder) {
+        toast.error("Open a folder first.");
+        return;
+      }
+      void window.markdownAPI.create(folder, undefined, extension).then((result) => {
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        void useDiskStore.getState().loadDirectory(folder, { force: true });
+        recordOpened(result.data.path);
+        navigateFiles(focusFile(result.data.path));
+      });
+    };
     const commands: Command[] = [
       {
         id: "nav.daily",
@@ -137,32 +159,19 @@ export const AppCommands: React.FC = () => {
         },
       },
       {
-        id: COMMAND_IDS.newNote,
-        name: "New Note",
+        id: COMMAND_IDS.newDocument,
+        name: "New Document",
         type: "action",
         shortcut: ["CmdOrCtrl+N"],
-        keywords: ["create", "markdown", "write"],
-        perform: () => {
-          // Next to the open page, or at the top of the vault.
-          const opened = selectOpenedPath(tabs());
-          const folder =
-            (opened && parentFsPath(opened)) ??
-            useDiskStore.getState().roots[0] ??
-            null;
-          if (!folder) {
-            toast.error("Open a folder first.");
-            return;
-          }
-          void window.markdownAPI.create(folder).then((result) => {
-            if (!result.success) {
-              toast.error(result.error);
-              return;
-            }
-            void useDiskStore.getState().loadDirectory(folder, { force: true });
-            recordOpened(result.data.path);
-            navigateFiles(focusFile(result.data.path));
-          });
-        },
+        keywords: ["create", "doc", "write"],
+        perform: () => createPage("mdo"),
+      },
+      {
+        id: "files.newNote",
+        name: "New Markdown Note",
+        type: "action",
+        keywords: ["create", "markdown", "md", "write"],
+        perform: () => createPage("md"),
       },
       {
         id: COMMAND_IDS.newTab,

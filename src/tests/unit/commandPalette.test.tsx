@@ -19,6 +19,7 @@ import { TooltipProvider } from '@/renderer/shared/ui';
 import { installActivityApi, recentResult } from '@/tests/helpers/activityApi';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
 import { entry, installDiskApi } from '@/tests/helpers/diskApi';
+import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 import { openTabs, openedPath, resetTabs, tabPaths } from '@/tests/helpers/tabs';
 import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 
@@ -227,6 +228,21 @@ describe('CommandPalette', () => {
     expect(await screen.findByRole('group', { name: 'Commands' })).toBeInTheDocument();
   });
 
+  it('makes a document next to the open page on Cmd+N, and a note from New Markdown Note', async () => {
+    const markdown = installMarkdownApi();
+    openTabs(['/Vault/Projects/inbox.md']);
+    renderPalette();
+    const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; label: string; accelerator?: string }[];
+    expect(reported.find((command) => command.id === COMMAND_IDS.newDocument)).toMatchObject({ label: 'New Document', accelerator: 'CmdOrCtrl+N' });
+    expect(reported.find((command) => command.id === 'files.newNote')).toEqual(expect.objectContaining({ label: 'New Markdown Note', accelerator: undefined }));
+
+    act(() => commandRegistry.executeCommand(COMMAND_IDS.newDocument));
+    await waitFor(() => expect(openedPath()).toBe('/Vault/Projects/Untitled.mdo'));
+    expect(markdown.create).toHaveBeenLastCalledWith('/Vault/Projects', undefined, 'mdo');
+    act(() => commandRegistry.executeCommand('files.newNote'));
+    await waitFor(() => expect(openedPath()).toBe('/Vault/Projects/Untitled.md'));
+  });
+
   it('opens the folder picker from Go to File while no folder is open', async () => {
     const original = useDiskStore.getState().openFolder;
     const openFolder = vi.fn(async () => undefined);
@@ -308,7 +324,7 @@ describe('CommandPalette', () => {
   it('reports every command to main and shows shortcuts', async () => {
     renderPalette();
     const reported = (window.systemAPI.reportCommands as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { id: string; accelerator?: string }[];
-    expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newNote', 'pane.toggleLeft', 'app.openSettings']));
+    expect(reported.map((command) => command.id)).toEqual(expect.arrayContaining(['palette.open', 'files.newDocument', 'files.newNote', 'pane.toggleLeft', 'app.openSettings']));
     // Theme lives in Settings only.
     expect(reported.map((command) => command.id)).not.toContain('theme.toggle');
     expect(reported.map((command) => command.id)).not.toContain('privacy.toggle');

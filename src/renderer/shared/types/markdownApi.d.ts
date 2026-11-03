@@ -1,4 +1,4 @@
-import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownProperties, MarkdownWriteResult, UnsavedPage } from '@/types/markdown';
+import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownProperties, MarkdownWriteResult, PageExtension, UnsavedPage } from '@/types/markdown';
 
 export type MarkdownResult<T> =
   | { success: true; data: T; error?: undefined; conflict?: undefined; gitBusy?: undefined }
@@ -9,8 +9,9 @@ export interface MarkdownAPI {
   /** The page's frontmatter as text and its file's path, times and size. */
   properties: (target: string) => Promise<MarkdownResult<MarkdownProperties>>;
   write: (target: string, body: string, expectedRevision: string) => Promise<MarkdownResult<MarkdownWriteResult>>;
-  create: (parentDir: string, baseName?: string) => Promise<MarkdownResult<{ path: string }>>;
-  /** Writes a page's text to a new copy next to the note, or in the recovery folder when that fails. */
+  /** Creates "<baseName>.<extension>", a note (`md`) unless asked for a document (`mdo`). */
+  create: (parentDir: string, baseName?: string, extension?: PageExtension) => Promise<MarkdownResult<{ path: string }>>;
+  /** Writes a page's text to a new copy next to the page, with its extension, or in the recovery folder when that fails. */
   saveCopy: (target: string, body: string, label: MarkdownCopyLabel) => Promise<MarkdownResult<{ path: string }>>;
   /** Resolves wiki link targets written in `from` to files under the opened roots. */
   resolveLinks: (from: string, targets: string[]) => Promise<MarkdownResult<MarkdownLinks>>;

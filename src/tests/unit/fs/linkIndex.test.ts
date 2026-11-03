@@ -17,6 +17,9 @@ describe('resolveLinkTarget', () => {
     '/Vault/Archive/catalog.md',
     '/Vault/Archive/v1.2 notes.md',
     '/Vault/Library/Café.md',
+    '/Vault/Library/x/Roadmap.mdo',
+    '/Vault/Library/x/Plan.mdo',
+    '/Vault/Library/x/Plan.md',
   ];
   const from = '/Vault/Library/logs/2026-10-28 log.md';
 
@@ -28,6 +31,13 @@ describe('resolveLinkTarget', () => {
     expect(resolveLinkTarget('v1.2 notes', from, files)).toBe('/Vault/Archive/v1.2 notes.md');
     expect(resolveLinkTarget('Café', from, files)).toBe('/Vault/Library/Café.md');
     expect(resolveLinkTarget('base-layout.png', from, files)).toBe('/Vault/Library/parametric/base-layout.png');
+  });
+
+  it('finds a document by name or full path, with or without .mdo, and a note before a document of the same name', () => {
+    expect(resolveLinkTarget('Roadmap', from, files)).toBe('/Vault/Library/x/Roadmap.mdo');
+    expect(resolveLinkTarget('Library/x/Roadmap.mdo', from, files)).toBe('/Vault/Library/x/Roadmap.mdo');
+    expect(resolveLinkTarget('Plan', from, files)).toBe('/Vault/Library/x/Plan.md');
+    expect(resolveLinkTarget('Plan.mdo', from, files)).toBe('/Vault/Library/x/Plan.mdo');
   });
 
   it('prefers the linking note\'s folder, then the shortest path', () => {

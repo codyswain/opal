@@ -110,19 +110,19 @@ try {
   await page.waitForTimeout(1500);
   check('an empty note takes typing at once and autosaves', (await readFile(EMPTY, 'utf8')) === '# Fresh note');
 
-  // New note, from the File menu: it lands next to the open note and gets the caret.
+  // New document, from the File menu: it lands next to the open note and gets the caret.
   await app.evaluate(({ Menu }) => {
     for (const menu of Menu.getApplicationMenu()?.items ?? []) {
-      const item = menu.submenu?.items.find((candidate) => candidate.label === 'New Note');
+      const item = menu.submenu?.items.find((candidate) => candidate.label === 'New Document');
       if (item) return item.click();
     }
   });
-  await page.waitForFunction(() => window.location.hash.includes('Untitled.md'), null, { timeout: 10_000 });
-  check('New note creates Untitled.md and opens it', (await readdir(`${vault}/Notes`)).includes('Untitled.md'));
+  await page.waitForFunction(() => window.location.hash.includes('Untitled.mdo'), null, { timeout: 10_000 });
+  check('New document creates Untitled.mdo and opens it', (await readdir(`${vault}/Notes`)).includes('Untitled.mdo'));
   await page.waitForFunction(() => document.activeElement?.closest('.cm-editor') !== null, null, { timeout: 10_000 });
-  await page.keyboard.type('# Another note');
+  await page.keyboard.type('# Another page');
   await page.waitForTimeout(1500);
-  check('a new note autosaves', (await readFile(`${vault}/Notes/Untitled.md`, 'utf8')) === '# Another note');
+  check('a new document autosaves', (await readFile(`${vault}/Notes/Untitled.mdo`, 'utf8')) === '# Another page');
 } catch (error) {
   check('flow threw', false, String(error));
 }

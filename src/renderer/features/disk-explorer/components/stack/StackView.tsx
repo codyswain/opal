@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { pageName } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import { dailyDetail, dailyHeadDate, readOnlyRule } from '@/common/stackModel';
 import { localDate } from '@/common/vaultModel';
@@ -37,14 +38,12 @@ const RESTORE_TIMEOUT_MS = 1500;
 /** The place is saved on the tab this long after scrolling stops, so a relaunch finds it. */
 const SAVE_AFTER_MS = 400;
 
-const noteName = (path: string) => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-
 /** The head as a section before the main process has answered, so it can render at once. */
 function provisionalHead(location: FilesStackLocation): StackSection {
   const date = location.kind === 'daily' ? dailyHeadDate(location.file) : null;
   return {
     path: location.file,
-    label: noteName(location.file),
+    label: pageName(location.file),
     detail: date ? dailyDetail(date, localDate()) : null,
     role: 'head',
     defaultOpen: true,
@@ -1154,7 +1153,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       onFocus={onFocus}
       onBlur={onBlur}
     >
-      <div ref={content} role="feed" aria-busy={loadingMore} aria-label={kind === 'daily' ? 'Daily pages' : noteName(head)} className="opal-stack-content">
+      <div ref={content} role="feed" aria-busy={loadingMore} aria-label={kind === 'daily' ? 'Daily pages' : pageName(head)} className="opal-stack-content">
         {shown.map((section, position) => {
           const open = lone || sectionOpen(folds, section.path, section.defaultOpen);
           const isLive = open && live.has(section.path);

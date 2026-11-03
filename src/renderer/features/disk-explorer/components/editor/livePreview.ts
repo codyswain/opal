@@ -4,8 +4,8 @@ import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate
 import type { SyntaxNode } from '@lezer/common';
 import { Tag, styleTags } from '@lezer/highlight';
 import type { MarkdownConfig } from '@lezer/markdown';
-import { classifyFile } from '@/common/fileKind';
-import { basenameFsPath, normalizeFsPath, parentFsPath } from '@/common/fsPaths';
+import { classifyFile, pageName } from '@/common/fileKind';
+import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
 import {
@@ -421,7 +421,7 @@ function findBlocks(state: EditorState): PreviewBlock[] {
 }
 
 function pageTitle(state: EditorState): string {
-  return basenameFsPath(state.facet(pageContext).path).replace(/\.md$/i, '');
+  return pageName(state.facet(pageContext).path);
 }
 
 /**

@@ -191,6 +191,20 @@ describe('useMarkdownDocument', () => {
     expect(error).toHaveBeenCalledWith('Could not save brief. Your changes are in brief (unsaved copy).');
   });
 
+  it('names a document without .mdo and keeps its unsaved copy a document', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const plan = '/Vault/Notes/plan.mdo';
+    const api = installMarkdownApi({ [plan]: '# Plan\n' });
+    const { result, unmount } = renderHook(() => useMarkdownDocument(plan));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const editor = fakeEditor(result);
+    (api.write as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false, error: 'Permission denied' });
+    editor.type('# Plan\n\nTyped.\n');
+    unmount();
+    expect(await act(() => flushPendingSaves())).toEqual([{ name: 'plan', copy: '/Vault/Notes/plan (unsaved copy).mdo' }]);
+    expect(error).toHaveBeenCalledWith('Could not save plan. Your changes are in plan (unsaved copy).');
+  });
+
   it('reports an open page whose text reached no file to a quit, which asks before dropping it', async () => {
     const error = vi.spyOn(toast, 'error');
     const { api, result, editor } = await openDocument('# Brief\n');

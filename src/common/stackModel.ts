@@ -1,5 +1,6 @@
 import { STACK_KINDS, type StackKind, type StackSection } from '@/types/stack';
 import { recordingName, splitFrontmatter } from './dayModel';
+import { pageName } from './fileKind';
 import { validDate } from './vaultModel';
 
 /*
@@ -83,7 +84,7 @@ export function sessionLabel(fields: Record<string, unknown>, name: string): str
   const date = sessionStarted(fields, name).slice(0, 10);
   const tool = text(fields.tool);
   const shown = tool ? TOOLS[tool.toLowerCase()] ?? tool : null;
-  if (!date || !shown) return name.replace(/\.md$/i, '');
+  if (!date || !shown) return pageName(name);
   return `${date} · ${shown}`;
 }
 

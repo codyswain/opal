@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { isDocFile, pageName } from '@/common/fileKind';
 import type { MarkdownAPI } from '@/renderer/shared/types/markdownApi';
 
 /**
@@ -6,17 +7,17 @@ import type { MarkdownAPI } from '@/renderer/shared/types/markdownApi';
  * changes on every write, and `conflictOn` makes the next write of a path
  * fail like an external edit would. `setGitBusy(true)` stands for git
  * rewriting the repo: reads say so and writes are refused. Wiki links
- * resolve to documents by name.
+ * resolve to notes and documents by name.
  */
 export function installMarkdownApi(initial: Record<string, string> = {}, overrides: Partial<MarkdownAPI> = {}) {
   const documents = new Map(Object.entries(initial).map(([path, body]) => [path, { body, revision: `rev-${path}-1` }]));
   const conflicts = new Set<string>();
   let counter = 1;
   let gitBusy = false;
-  const unusedPath = (folder: string, name: string) => {
+  const unusedPath = (folder: string, name: string, extension = 'md') => {
     let index = 1;
-    let candidate = `${folder}/${name}.md`;
-    while (documents.has(candidate)) { index += 1; candidate = `${folder}/${name} ${index}.md`; }
+    let candidate = `${folder}/${name}.${extension}`;
+    while (documents.has(candidate)) { index += 1; candidate = `${folder}/${name} ${index}.${extension}`; }
     return candidate;
   };
   const api: MarkdownAPI & {
@@ -64,14 +65,14 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
       documents.set(target, { body, revision });
       return { success: true as const, data: { revision } };
     }),
-    create: vi.fn(async (parentDir: string, baseName = 'Untitled') => {
-      const candidate = unusedPath(parentDir, baseName);
+    create: vi.fn(async (parentDir: string, baseName = 'Untitled', extension = 'md') => {
+      const candidate = unusedPath(parentDir, baseName, extension);
       documents.set(candidate, { body: '', revision: `rev-${candidate}-1` });
       return { success: true as const, data: { path: candidate } };
     }),
     // A copy goes next to the note; the recovery folder is the main process's concern.
     saveCopy: vi.fn(async (target: string, body: string, label: string) => {
-      const candidate = unusedPath(target.slice(0, target.lastIndexOf('/')), `${target.slice(target.lastIndexOf('/') + 1).replace(/\.md$/, '')} (${label})`);
+      const candidate = unusedPath(target.slice(0, target.lastIndexOf('/')), `${pageName(target)} (${label})`, isDocFile(target) ? 'mdo' : 'md');
       documents.set(candidate, { body, revision: `rev-${candidate}-1` });
       return { success: true as const, data: { path: candidate } };
     }),
@@ -80,7 +81,7 @@ export function installMarkdownApi(initial: Record<string, string> = {}, overrid
       success: true as const,
       data: Object.fromEntries(targets.map((target) => [
         target,
-        [...documents.keys()].find((path) => path.toLowerCase().endsWith(`/${target.toLowerCase()}.md`)) ?? null,
+        [...documents.keys()].find((path) => ['md', 'mdo'].some((extension) => path.toLowerCase().endsWith(`/${target.toLowerCase()}.${extension}`))) ?? null,
       ])),
     })),
     setFlushHandler: vi.fn(),

@@ -2,6 +2,7 @@ import React, { memo, useId } from 'react';
 import type { Extension } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { ChevronRight, FileText } from 'lucide-react';
+import { pageName } from '@/common/fileKind';
 import type { StackSection } from '@/types/stack';
 import { cn } from '@/renderer/shared/utils/cn';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
@@ -47,8 +48,6 @@ const PROBLEM: Partial<Record<MarkdownSaveState, string>> = {
   error: 'Not saved',
 };
 
-const fileName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
-
 /**
  * Marks the article while the pointer is on the section's start, its rule
  * and its first line, where a quiet header's tools sit. A quiet header has no
@@ -79,8 +78,7 @@ export const StackSectionView = memo(function StackSectionView({
   const id = useId();
   const titleId = `${id}-title`;
   const problem = status ? PROBLEM[status] : undefined;
-  const name = fileName(section.path);
-  const shownName = name.replace(/\.md$/i, '');
+  const shownName = pageName(section.path);
   const quiet = open && !lone && section.textHeading !== null;
   const lead = quiet ? ({ '--stack-lead': section.textHeading?.line ?? 0 } as React.CSSProperties) : undefined;
 

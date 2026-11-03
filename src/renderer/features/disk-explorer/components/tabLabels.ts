@@ -5,7 +5,7 @@ import { localDate } from '@/common/vaultModel';
 import { locationPath, type FilesLocation } from '../navigation/filesLocation';
 
 export interface TabLabel {
-  /** The page name: the file's name, Markdown without `.md`, or Recent. */
+  /** The page name: the file's name, Markdown without `.md` or `.mdo`, or Recent. */
   name: string;
   /** The parent folders that tell same-name tabs apart, or null. */
   hint: string | null;

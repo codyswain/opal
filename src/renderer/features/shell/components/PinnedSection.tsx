@@ -34,7 +34,7 @@ interface PinnedSectionProps {
   onNavigate?: () => void;
 }
 
-/** The name the tree gives a file: "10-30 Fri" for a daily page, Markdown without `.md`. */
+/** The name the tree gives a file: "10-30 Fri" for a daily page, Markdown without `.md` or `.mdo`. */
 export function pinLabel(path: string, roots: readonly string[]): string {
   const name = basenameFsPath(path);
   const folder = parentFsPath(path);

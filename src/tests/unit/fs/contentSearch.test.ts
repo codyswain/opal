@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { contentExcerpt } from '@/main/fs/contentSearch';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { contentExcerpt, searchCurrentText } from '@/main/fs/contentSearch';
+import { RootRegistry } from '@/main/fs/RootRegistry';
 
 const page = (text: string) => Buffer.from(text, 'utf8');
 
@@ -19,5 +23,22 @@ describe('contentExcerpt', () => {
 
   it('finds nothing when the query is absent', () => {
     expect(contentExcerpt(page('---\na: b\n---\nbody'), 'zzz')).toBeNull();
+  });
+});
+
+describe('searchCurrentText', () => {
+  it('searches notes and documents, and skips other files', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'opal-search-'));
+    try {
+      const registry = new RootRegistry({ storePath: path.join(tmp, 'roots.json') });
+      await writeFile(path.join(tmp, 'note.md'), 'foxglove in a note');
+      await writeFile(path.join(tmp, 'plan.mdo'), 'foxglove in a document');
+      await writeFile(path.join(tmp, 'data.csv'), 'foxglove,in,a,table');
+      await registry.add(tmp);
+      const { hits } = await searchCurrentText(registry, 'foxglove');
+      expect(hits.map((hit) => hit.name).sort()).toEqual(['note.md', 'plan.mdo']);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 });

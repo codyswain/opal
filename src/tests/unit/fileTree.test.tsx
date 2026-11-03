@@ -253,6 +253,25 @@ describe('FileTree', () => {
     );
   });
 
+  it('shows a document without .mdo and renames it keeping the hidden .mdo', async () => {
+    const user = userEvent.setup();
+    const plan = `${LIBRARY}/Plan.mdo`;
+    useDiskStore.setState({
+      listings: { [ROOT]: LISTINGS[ROOT], [LIBRARY]: [entry({ path: plan, name: 'Plan.mdo', kind: 'markdown' })] },
+      expanded: { [LIBRARY]: true },
+    });
+    renderTree();
+    expect(row(plan)).toHaveTextContent(/^Plan$/);
+
+    await user.pointer({ keys: '[MouseRight]', target: row(plan) });
+    await user.click(within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'Rename' }));
+    const input = await screen.findByTestId('file-tree-rename');
+    expect(input).toHaveValue('Plan');
+    await user.clear(input);
+    await user.type(input, 'Roadmap{Enter}');
+    await waitFor(() => expect(window.diskAPI.rename).toHaveBeenCalledWith(plan, 'Roadmap.mdo'));
+  });
+
   it('shows daily pages by year, renames one by its file name, and gives a year row its folder’s menu', async () => {
     const user = userEvent.setup();
     const daily = `${LIBRARY}/daily`;
@@ -274,7 +293,7 @@ describe('FileTree', () => {
     await user.pointer({ keys: '[MouseRight]', target: row(`${daily}/2026`) });
     const yearMenu = await screen.findByTestId('file-tree-menu');
     expect(within(yearMenu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'New note',
+      'New document',
       'New folder',
       'Reveal in Finder',
     ]);
@@ -328,7 +347,7 @@ describe('FileTree', () => {
     ).toEqual([
       'Open in new tab',
       'Pin',
-      'New note',
+      'New document',
       'New folder',
       'Rename',
       'Move to…',
@@ -369,18 +388,18 @@ describe('FileTree', () => {
     await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(README, LIBRARY));
   });
 
-  it('creates a note in the row folder and opens it', async () => {
+  it('creates a document in the row folder and opens it', async () => {
     const user = userEvent.setup();
     renderTree();
 
     await user.pointer({ keys: '[MouseRight]', target: row(LIBRARY) });
     await user.click(
-      within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'New note' })
+      within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'New document' })
     );
 
-    await waitFor(() => expect(window.markdownAPI.create).toHaveBeenCalledWith(LIBRARY));
+    await waitFor(() => expect(window.markdownAPI.create).toHaveBeenCalledWith(LIBRARY, undefined, 'mdo'));
     await waitFor(() =>
-      expect(openedPath()).toBe(`${LIBRARY}/Untitled.md`)
+      expect(openedPath()).toBe(`${LIBRARY}/Untitled.mdo`)
     );
     expect(useDiskStore.getState().expanded[LIBRARY]).toBe(true);
   });
@@ -393,7 +412,7 @@ describe('FileTree', () => {
     const menu = await screen.findByTestId('file-tree-menu');
     expect(
       within(menu).getAllByRole('menuitem').map((item) => item.textContent)
-    ).toEqual(['New note', 'New folder', 'Reveal in Finder']);
+    ).toEqual(['New document', 'New folder', 'Reveal in Finder']);
     await user.click(within(menu).getByRole('menuitem', { name: 'New folder' }));
     expect(useDiskStore.getState().pendingAction).toEqual({
       kind: 'new-folder',
@@ -548,7 +567,7 @@ describe('FileTree', () => {
       fireEvent.contextMenu(sticky(BOOKS));
       const menu = await screen.findByTestId('file-tree-menu');
       expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-        'New note',
+        'New document',
         'New folder',
         'Rename',
         'Move to…',
@@ -771,7 +790,7 @@ describe('FileTree', () => {
       fireEvent.contextMenu(sticky(year));
       const menu = await screen.findByTestId('file-tree-menu');
       expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-        'New note',
+        'New document',
         'New folder',
         'Reveal in Finder',
       ]);

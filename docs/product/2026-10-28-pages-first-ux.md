@@ -92,10 +92,11 @@ first: a file tree on the left and one clean page.
   (Daily, Recent, search, a link), its folders expand and it scrolls into view.
 - Expanded folders persist across launches.
 - File actions live on the tree now that the folder view is gone: a right-click
-  menu on rows (New note, New folder, Rename, Move to…, Reveal in Finder, Copy
-  path, Move to Trash with confirmation), inline rename, drag a row onto a
-  folder to move it, and Cmd+N for a new note in the active file's folder
-  (the vault root when nothing is open).
+  menu on rows (New document, New folder, Rename, Move to…, Reveal in Finder,
+  Copy path, Move to Trash with confirmation), inline rename, drag a row onto a
+  folder to move it, and Cmd+N for a new document (`.mdo`) in the active file's
+  folder (the vault root when nothing is open). New Markdown Note in the
+  palette makes a `.md` note there (2026-11-02, the .mdo spec).
 - Footer: Settings only (no theme toggle; theme lives in Settings).
 - Default width about 260px, resizable from 216px, which keeps the top row
   whole.

@@ -5,6 +5,7 @@ import type { RootRegistry } from "@/main/fs/RootRegistry";
 import { mapLimited } from "@/main/mapLimited";
 import { normalizePath } from "@/main/fs/paths";
 import { splitFrontmatter } from "@/common/dayModel";
+import { pageName } from "@/common/fileKind";
 import {
   PEEK_BYTES,
   TRANSCRIPTS_FOLDER,
@@ -49,8 +50,6 @@ interface FileFacts {
   size: number;
   mtimeMs: number;
 }
-
-const noteName = (file: string) => path.basename(file).replace(/\.md$/i, "");
 
 /**
  * The files a stack shows, in order. The renderer never lists vault folders
@@ -106,7 +105,7 @@ export class StackService {
       const date = dailyHeadDate(file) as string;
       return {
         path: file,
-        label: noteName(file),
+        label: pageName(file),
         detail: dailyDetail(date, today),
         role,
         defaultOpen: true,
@@ -164,7 +163,7 @@ export class StackService {
   private async chat(root: string, head: string): Promise<VaultStack> {
     const folder = path.join(root, DAY_LAYOUT.chats);
     if (path.dirname(head) !== folder) throw new Error("This page does not start a stack.");
-    const thread = path.join(folder, noteName(head));
+    const thread = path.join(folder, pageName(head));
     const card = await this.peek(head);
     const sections = [this.head(head, card)];
     if (card?.fields.type !== "thread") return { kind: "chat", head, sections, folders: [folder] };
@@ -199,7 +198,7 @@ export class StackService {
   private head(file: string, facts: FileFacts | null): StackSection {
     return {
       path: file,
-      label: noteName(file),
+      label: pageName(file),
       detail: null,
       role: "head",
       defaultOpen: true,

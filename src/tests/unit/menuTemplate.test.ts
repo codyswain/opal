@@ -6,7 +6,7 @@ import { COMMAND_IDS, TAB_POSITION_COMMAND_IDS } from '@/common/commandIds';
 const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.openSettings, label: 'Settings…', accelerator: 'CmdOrCtrl+,' },
   { id: COMMAND_IDS.goToFile, label: 'Go to File…', accelerator: 'CmdOrCtrl+O' },
-  { id: COMMAND_IDS.newNote, label: 'New Note', accelerator: 'CmdOrCtrl+N' },
+  { id: COMMAND_IDS.newDocument, label: 'New Document', accelerator: 'CmdOrCtrl+N' },
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
   { id: COMMAND_IDS.toggleProperties, label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' },
@@ -81,7 +81,7 @@ describe('buildMenuTemplate', () => {
   it('gives File the tab commands, with Cmd+W for the tab and Shift+Cmd+W for the window', () => {
     expect(shown(menu(build(), 'File'))).toEqual([
       'New Tab CmdOrCtrl+T',
-      'New Note CmdOrCtrl+N',
+      'New Document CmdOrCtrl+N',
       'Go to File… CmdOrCtrl+O',
       '-',
       'Close Tab CmdOrCtrl+W',

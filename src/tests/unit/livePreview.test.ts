@@ -235,7 +235,22 @@ describe('live preview', () => {
     const { view, openNote } = mount('Meet [[New Person]].\n');
     press(view.contentDOM.querySelector('.cm-md-wikilink') as Element);
     await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/New Person.md', false));
-    expect(window.markdownAPI.create).toHaveBeenCalledWith('/Vault', 'New Person');
+    expect(window.markdownAPI.create).toHaveBeenCalledWith('/Vault', 'New Person', 'md');
+  });
+
+  it('creates a document only when the link names one with .mdo', async () => {
+    const { view, openNote } = mount('See [[Roadmap.mdo]].\n');
+    press(view.contentDOM.querySelector('.cm-md-wikilink') as Element);
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/Roadmap.mdo', false));
+    expect(window.markdownAPI.create).toHaveBeenCalledWith('/Vault', 'Roadmap', 'mdo');
+  });
+
+  it('titles a document by its name without .mdo, and finds [[Name]] in Name.mdo', async () => {
+    installMarkdownApi({ '/Vault/Notes/Plan.mdo': '', '/Vault/Library/Roadmap.mdo': '' });
+    const { view, openNote } = mount('See [[Roadmap]].\n', vi.fn(), '/Vault/Notes/Plan.mdo');
+    expect(view.contentDOM.querySelector('.cm-md-inline-title')).toHaveTextContent(/^Plan$/);
+    press(view.contentDOM.querySelector('.cm-md-wikilink') as Element);
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/Library/Roadmap.mdo', false));
   });
 
   it('opens web and mail links in the default app on a click, and only on Cmd+click while they show as written', async () => {

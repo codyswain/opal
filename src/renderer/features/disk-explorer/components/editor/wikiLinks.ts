@@ -4,7 +4,7 @@ import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import type { MarkdownConfig } from '@lezer/markdown';
 import { toast } from 'sonner';
-import { classifyFile } from '@/common/fileKind';
+import { classifyFile, isDocFile, pageName } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
 import { LINK_TARGET_LIMIT } from '@/types/markdown';
 
@@ -163,7 +163,8 @@ export async function openWikiLink(view: EditorView, target: string, newTab = fa
     toast.error(`Could not find ${target}.`);
     return;
   }
-  const created = await window.markdownAPI.create(folder, basenameFsPath(target).replace(/\.md$/i, ''));
+  // A note, unless the link names a document.
+  const created = await window.markdownAPI.create(folder, pageName(basenameFsPath(target)), isDocFile(target) ? 'mdo' : 'md');
   if (!created.success) {
     toast.error(created.error);
     return;

@@ -39,7 +39,7 @@ export async function searchCurrentText(registry: RootRegistry, query: string): 
     await walkRoot(registry, root, {
       onDirectory: () => undefined,
       onFile: async (file) => {
-        if (!/\.(?:md|markdown|txt)$/i.test(file)) return;
+        if (!/\.(?:md|mdo|markdown|txt)$/i.test(file)) return;
         if (filesRead >= 5000 || bytesRead >= 25 * 1024 * 1024 || result.hits.length >= 50) { result.incomplete = true; return; }
         try {
           await assertNoSymlinks(registry, file);

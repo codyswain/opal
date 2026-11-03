@@ -111,8 +111,8 @@ async function moveInto(source: string, destination: string): Promise<void> {
 }
 
 /**
- * Renames in place. Markdown rows edit the label and keep the hidden `.md`;
- * other files preselect the name before the extension, as Finder does.
+ * Renames in place. Page rows edit the label and keep the hidden `.md` or
+ * `.mdo`; other files preselect the name before the extension, as Finder does.
  */
 function RenameField({
   node,
@@ -734,8 +734,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
     }
   };
 
-  const createNote = async (folder: string) => {
-    const result = await window.markdownAPI.create(folder);
+  const createDocument = async (folder: string) => {
+    const result = await window.markdownAPI.create(folder, undefined, 'mdo');
     if (!result.success) {
       toast.error(result.error);
       return;
@@ -831,8 +831,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                 <ContextMenuSeparator />
               </>
             ) : null}
-            <ContextMenuItem onSelect={() => void createNote(menuTarget.folder)}>
-              New note
+            <ContextMenuItem onSelect={() => void createDocument(menuTarget.folder)}>
+              New document
             </ContextMenuItem>
             <ContextMenuItem onSelect={afterMenu(() => createFolder(menuTarget.folder))}>
               New folder
