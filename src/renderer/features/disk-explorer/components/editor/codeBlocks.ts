@@ -1749,7 +1749,7 @@ export const toggleCodeBlock: Command = (view) => {
 };
 
 // Insert only makes a block; in a block it leaves the code as it is.
-const insertCodeBlock = insertItems.of({ id: 'code-block', label: 'Code block', icon: SquareCode, shortcut: '⌥⌘C', order: 30, run: (view) => { if (!inCodeBlock(view.state)) toggleCodeBlock(view); view.focus(); } });
+const insertCodeBlock = insertItems.of({ id: 'code-block', label: 'Code block', icon: SquareCode, shortcut: '⌥⌘C', order: 22, run: (view) => { if (!inCodeBlock(view.state)) toggleCodeBlock(view); view.focus(); } });
 
 // ---------------------------------------------------------------------------
 // Extensions

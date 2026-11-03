@@ -68,8 +68,9 @@ export function selectedLines(state: EditorState): Line[] {
 
 /**
  * `text` kept out of protected ranges: its ends move out of one inside its
- * line, so formatting goes around a formula, and it is cut short of one
- * that spans lines or covers its lines whole, such as a table or a rule.
+ * line, so formatting goes around a formula or inline code even when it
+ * fills its line, and it is cut short of one that spans lines or covers its
+ * lines whole, such as a table or a rule.
  * Null when nothing is left.
  */
 function unprotected(state: EditorState, text: { from: number; to: number }): { from: number; to: number } | null {
@@ -77,7 +78,7 @@ function unprotected(state: EditorState, text: { from: number; to: number }): { 
   for (const range of protectedIn(state, from, to)) {
     const first = state.doc.lineAt(range.from);
     const last = state.doc.lineAt(range.to);
-    if (!range.lines && first.number === last.number && !(range.from === first.from && range.to === last.to)) {
+    if (!range.lines && first.number === last.number && (range.inline || !(range.from === first.from && range.to === last.to))) {
       if (range.from < from && from < range.to) from = range.from;
       if (range.from < to && to < range.to) to = range.to;
     } else {
