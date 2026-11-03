@@ -57,12 +57,25 @@ export function storedExtension(name: string): string {
   return extensionOf(name);
 }
 
-/** A stored file's name without the hash Opal adds: `q3-report.a3f9c2e1.pdf` shows as `q3-report.pdf`. */
-export function withoutHash(name: string): string {
+/**
+ * A stored name's stem, hash and extension (lowercase): `q3-report.a3f9c2e1.pdf`
+ * is `q3-report`, `a3f9c2e1` and `pdf`. A file with no extension is stored as
+ * `<stem>.<hash>`. The hash is null when the name has none.
+ */
+export function storedParts(name: string): { stem: string; hash: string | null; extension: string } {
   const extension = storedExtension(name);
   const stem = extension ? name.slice(0, -extension.length - 1) : name;
-  const bare = stem.replace(/\.[0-9a-f]{8}$/, '');
-  return extension ? `${bare}.${name.slice(-extension.length)}` : bare;
+  const hashed = /\.([0-9a-f]{8})$/.exec(stem);
+  if (hashed && hashed.index > 0) return { stem: stem.slice(0, hashed.index), hash: hashed[1], extension };
+  if (/^[0-9a-f]{8}$/.test(extension)) return { stem, hash: extension, extension: '' };
+  return { stem, hash: null, extension };
+}
+
+/** A stored file's name without the hash Opal adds: `q3-report.a3f9c2e1.pdf` shows as `q3-report.pdf`. */
+export function withoutHash(name: string): string {
+  const { stem, hash, extension } = storedParts(name);
+  if (!hash) return name;
+  return extension ? `${stem}.${name.slice(-extension.length)}` : stem;
 }
 
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);

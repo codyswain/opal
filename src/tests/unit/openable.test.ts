@@ -120,7 +120,7 @@ describe('openable', () => {
     expect(result).toEqual({ action: 'opened', app: 'Preview', notice: READ_ONLY_NOTICE });
     const opened = vi.mocked(platform.openPath).mock.calls[0][0];
     expect(opened.startsWith(path.join(temporary, 'app-data'))).toBe(true);
-    expect(path.basename(opened)).toBe('q3.a1b2c3d4.pdf');
+    expect(path.basename(opened)).toBe('q3.pdf');
     expect(await readFile(opened)).toEqual(BYTES);
     expect((await stat(opened)).mode & 0o777).toBe(0o444);
     expect(await readFile(deck, 'utf8')).toBe(POINTER);
@@ -133,8 +133,9 @@ describe('openable', () => {
   it('says an LFS file whose bytes are not here must be downloaded, and opens nothing', async () => {
     const deck = path.join(root, 'Library/files/q3.a1b2c3d4.pdf');
     await writeFile(deck, POINTER);
-    await expect(service.open(deck)).rejects.toThrow(/not on this Mac yet/);
+    await expect(service.open(deck)).rejects.toThrow('"q3.pdf" is not on this Mac yet. Download it first.');
     expect(platform.openPath).not.toHaveBeenCalled();
+    await expect(service.open(path.join(root, 'Library/files/gone.b2c3d4e5.pdf'))).rejects.toThrow('Could not find "gone.pdf".');
   });
 });
 
@@ -181,7 +182,7 @@ describe('copies out of the vault', () => {
   it('puts the real bytes on the pasteboard and drags them, never the placeholder', async () => {
     const deck = path.join(root, 'q3.a1b2c3d4.pdf');
     await writeFile(deck, POINTER);
-    await expect(service.copyFile(deck)).rejects.toThrow(/not on this Mac yet/);
+    await expect(service.copyFile(deck)).rejects.toThrow('"q3.pdf" is not on this Mac yet. Download it first.');
     const object = path.join(root, '.git/lfs/objects', OID.slice(0, 2), OID.slice(2, 4), OID);
     await mkdir(path.dirname(object), { recursive: true });
     await writeFile(object, BYTES);
@@ -189,7 +190,35 @@ describe('copies out of the vault', () => {
     const copied = vi.mocked(platform.copyFileToClipboard).mock.calls[0][0];
     expect(await readFile(copied)).toEqual(BYTES);
     await service.startDrag({} as never, deck);
-    expect(vi.mocked(platform.startDrag).mock.calls[0][1]).toBe(copied);
+    const dragged = vi.mocked(platform.startDrag).mock.calls[0][1];
+    expect(await readFile(dragged)).toEqual(BYTES);
     await expect(service.copyFile(path.join(temporary, 'Downloads'))).rejects.toThrow(/not inside/);
+  });
+
+  it('hands Copy file and drag out a writable copy named without the hash, which outlives quitting', async () => {
+    const deck = path.join(root, 'q3.a1b2c3d4.pdf');
+    await writeFile(deck, POINTER);
+    const object = path.join(root, '.git/lfs/objects', OID.slice(0, 2), OID.slice(2, 4), OID);
+    await mkdir(path.dirname(object), { recursive: true });
+    await writeFile(object, BYTES);
+    const plain = path.join(root, 'notes.b2c3d4e5.txt');
+    await writeFile(plain, 'plain text');
+    await service.copyFile(deck);
+    await service.startDrag({} as never, plain);
+    const copied = vi.mocked(platform.copyFileToClipboard).mock.calls[0][0];
+    const dragged = vi.mocked(platform.startDrag).mock.calls[0][1];
+    expect(path.basename(copied)).toBe('q3.pdf');
+    expect(path.basename(dragged)).toBe('notes.txt');
+    // A copy, never the vault file, which a drag to Finder on the same disk could move.
+    expect(dragged).not.toBe(plain);
+    for (const file of [copied, dragged]) {
+      expect(file.startsWith(path.join(temporary, 'app-data'))).toBe(true);
+      expect((await stat(file)).mode & 0o777).toBe(0o644);
+    }
+    // Pasting after Opal quits still finds the file.
+    service.removeCopies();
+    expect(await readFile(copied)).toEqual(BYTES);
+    expect(await readFile(dragged, 'utf8')).toBe('plain text');
+    expect(await readFile(plain, 'utf8')).toBe('plain text');
   });
 });

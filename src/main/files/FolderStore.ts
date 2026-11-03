@@ -87,6 +87,13 @@ async function sameBytes(file: string, digest: string, size: number): Promise<bo
   if (info.size !== size) return false;
   return createHash('sha256').update(await readFile(file)).digest('hex') === digest;
 }
+
+/** A stored file's size, through its Git LFS placeholder when it has one. */
+async function storedSize(file: string): Promise<number> {
+  const info = await stat(file);
+  const placeholder = info.size < 1024 ? await readPlaceholder(file).catch(() => null) : null;
+  return placeholder?.size ?? info.size;
+}
 const MONTH = /^\d{4}-\d{2}$/;
 
 /** Imported files as plain files in a folder of the opened folder. Git, if any, carries them like any file. */
@@ -155,7 +162,8 @@ export class FolderStore implements FileStore {
    * again, under any name, is stored once. The same name and hash is the
    * same file. Under another name, a file with the same hash counts when its
    * bytes, or its LFS placeholder's object id, match in full; a photo that
-   * was converted or scaled can't be compared, so its hash and type decide.
+   * was converted or scaled (its size differs) can't be compared, so its
+   * hash and type decide.
    */
   private async copyOf(filename: string, bytes: Buffer): Promise<string | null> {
     const months = (await readdir(this.folder).catch(() => [] as string[])).filter((entry) => MONTH.test(entry)).sort();
@@ -173,7 +181,8 @@ export class FolderStore implements FileStore {
         if (!entry.endsWith(suffix) || entry.startsWith('.')) continue;
         const file = path.join(this.folder, month, entry);
         if (!(await isFile(file))) continue;
-        if (changed || (await sameBytes(file, digest, bytes.length))) return file;
+        if (await sameBytes(file, digest, bytes.length)) return file;
+        if (changed && (await storedSize(file)) !== bytes.length) return file;
       }
     }
     return null;

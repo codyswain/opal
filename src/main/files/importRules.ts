@@ -22,20 +22,23 @@ export interface LinkedInPlace {
 /**
  * A dropped file that is already in the vault is linked where it is, so
  * notes and files are never copied into the files folder a second time.
- * Not when git ignores it (`.trash/`, `.claude/state/`), since its link
- * would break on the other Macs, and never git's own files. A file over
- * 100 MB that git will not send to LFS gets a warning, since GitHub refuses
- * blobs that large.
+ * Not when git ignores its folder (`.trash/`, `.claude/state/`), since its
+ * link would break on the other Macs. A file git ignores by its own name
+ * (`.env`) is linked where it is, since a copy would land where git tracks
+ * it. git's own files are refused. A file over 100 MB that git will not
+ * send to LFS gets a warning, since GitHub refuses blobs that large.
  */
 export async function linkInPlace(root: string, file: string, git: RunFile = runFile): Promise<LinkedInPlace | null> {
   const real = await realpath(file).catch(() => null);
   if (!real || real === root || !isInsideRoot(root, real)) return null;
   const segments = path.relative(root, real).split(path.sep);
-  if (segments.includes('.git')) return null;
+  // .git/config can hold a remote address with a token in it.
+  if (segments.includes('.git')) throw new FilesError("Files inside .git can't be added.");
   const info = await lstat(real);
   if (!info.isFile()) return null;
-  const repo = await repoOf(path.dirname(real));
-  if (repo && (await askGit(git, repo.top, ['check-ignore', '-q', '--', real])) === 0) return null;
+  const folder = path.dirname(real);
+  const repo = await repoOf(folder);
+  if (repo && folder !== repo.top && (await askGit(git, repo.top, ['check-ignore', '-q', '--', folder])) === 0) return null;
   const linked: LinkedInPlace = { path: real, vaultPath: segments.join('/') };
   if (repo && info.size > FILE_IMPORT_LIMIT) {
     const attributes = await gitOutput(git, repo.top, ['check-attr', 'filter', '--', real]);

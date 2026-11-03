@@ -3,7 +3,7 @@ import { chmod, copyFile, lstat, readdir, realpath, stat } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { WebContents } from 'electron';
-import { extensionOf, storedExtension, withoutHash } from '@/common/fileKind';
+import { extensionOf, storedExtension, storedParts, withoutHash } from '@/common/fileKind';
 import { jobQueue, type JobQueue } from '@/main/mapLimited';
 import { isInsideRoot } from '@/main/fs/paths';
 import { PathNotAllowedError, type RootRegistry } from '@/main/fs/RootRegistry';
@@ -14,7 +14,7 @@ import { FileInfoReader } from './fileInfo';
 import { readFilesSettings } from './filesSettings';
 import { FolderStore } from './FolderStore';
 import { GitLfsStore } from './GitLfsStore';
-import { materialize, sweepCopies, COPY_MAX_AGE_MS } from './materialize';
+import { handOut, materialize, sweepCopies, COPY_MAX_AGE_MS } from './materialize';
 import { openable, openFile } from './openable';
 import { Renditions } from './renditions';
 import { DiskCache, Thumbnails, type ThumbnailProvider } from './thumbnails';
@@ -49,6 +49,11 @@ export interface FilesServiceDependencies extends Omit<StoreDependencies, 'root'
 /** Thumbnails, display copies and mdls share this many places. */
 export const JOBS_AT_ONCE = 3;
 
+/** Documents some apps save as a folder, as older Keynote, Pages and Numbers files are. */
+const SAVED_AS_FOLDER = new Set(['key', 'pages', 'numbers', 'rtfd']);
+
+const notHere = (resolved: string) => `"${withoutHash(path.basename(resolved))}" is not on this Mac yet. Download it first.`;
+
 /**
  * Finds the store for a path from its opened folder's `.opal/files.json`,
  * read again on every call so a pull's change applies at once, and answers
@@ -62,10 +67,13 @@ export class FilesService {
   private thumbnails: Thumbnails;
   private renditions: Renditions;
   readonly copiesDir: string;
+  /** Copies handed to the pasteboard and to drags, kept after quitting. */
+  private outgoingDir: string;
 
   constructor(private deps: FilesServiceDependencies) {
     const appData = deps.appData ?? path.join(os.tmpdir(), 'opal-files');
     this.copiesDir = path.join(appData, 'open-copies');
+    this.outgoingDir = path.join(appData, 'outgoing');
     this.limiter = deps.limiter ?? jobQueue(JOBS_AT_ONCE);
     this.reader = new FileInfoReader({ limiter: this.limiter, run: deps.run });
     const cache = new DiskCache(path.join(appData, 'file-pictures'));
@@ -79,9 +87,9 @@ export class FilesService {
     return this.deps.platform;
   }
 
-  /** Removes read-only copies older than a day, as at launch. */
-  cleanup(): Promise<void> {
-    return sweepCopies(this.copiesDir, COPY_MAX_AGE_MS);
+  /** Removes read-only and outgoing copies older than a day, as at launch. */
+  async cleanup(): Promise<void> {
+    await Promise.all([sweepCopies(this.copiesDir, COPY_MAX_AGE_MS), sweepCopies(this.outgoingDir, COPY_MAX_AGE_MS)]);
   }
 
   /** Removes every read-only copy at once, for quit, which does not wait for promises. */
@@ -98,8 +106,10 @@ export class FilesService {
     const { root, store } = await this.storeFor(await this.deps.registry.assertAllowed(page));
     if ('path' in source) {
       const name = path.basename(source.path);
-      if ((await stat(source.path).catch(() => null))?.isDirectory()) throw new FilesError("Folders can't be added yet.");
       const extension = extensionOf(name);
+      if ((await stat(source.path).catch(() => null))?.isDirectory()) {
+        throw new FilesError(SAVED_AS_FOLDER.has(extension) ? `"${name}" is saved as a folder. Zip it first.` : "Folders can't be added yet.");
+      }
       if (extension === 'webloc' || extension === 'url') {
         return { path: '', vaultPath: '', name: name.slice(0, -extension.length - 1), url: await shortcutUrl(source.path, this.deps.run) };
       }
@@ -168,7 +178,7 @@ export class FilesService {
 
   /** Puts the file itself on the pasteboard, from its real bytes, so Slack, Gmail and Finder attach it. */
   async copyFile(target: string): Promise<void> {
-    this.platform.copyFileToClipboard(await this.real(await this.deps.registry.assertAllowed(target)));
+    this.platform.copyFileToClipboard(await this.outgoing(await this.deps.registry.assertAllowed(target)));
   }
 
   /** Saves a copy where the person picks, named `name` or the stored name without its hash. The vault file is untouched. */
@@ -190,7 +200,7 @@ export class FilesService {
 
   /** Starts a drag of the file itself out of the window, to Finder, Slack or Gmail. */
   async startDrag(sender: WebContents, target: string): Promise<void> {
-    const file = await this.real(await this.deps.registry.assertAllowed(target));
+    const file = await this.outgoing(await this.deps.registry.assertAllowed(target));
     await this.platform.startDrag(sender, file);
   }
 
@@ -203,8 +213,7 @@ export class FilesService {
     const resolved = await this.locate(target);
     if (await lstat(resolved).catch(() => null)) return null;
     const name = path.basename(resolved);
-    const extension = storedExtension(name);
-    const hash = /\.([0-9a-f]{8})$/.exec(extension ? name.slice(0, -extension.length - 1) : name)?.[1];
+    const { hash, extension } = storedParts(name);
     if (!hash) return null;
     const root = this.rootOf(resolved);
     const { folder } = await readFilesSettings(root);
@@ -215,7 +224,10 @@ export class FilesService {
         if (entry.name.startsWith('.')) continue;
         const full = path.join(directory, entry.name);
         if (entry.isDirectory() && depth < 4) await walk(full, depth + 1);
-        else if (entry.isFile() && entry.name.includes(`.${hash}.`) && storedExtension(entry.name) === extension) found.push(full);
+        else if (entry.isFile() && entry.name.includes(`.${hash}`)) {
+          const parts = storedParts(entry.name);
+          if (parts.hash === hash && parts.extension === extension) found.push(full);
+        }
       }
     };
     await walk(top, 0);
@@ -225,8 +237,15 @@ export class FilesService {
   /** The real bytes' path: the file, or a read-only copy of its LFS object. */
   private async real(resolved: string): Promise<string> {
     const real = await materialize(resolved, this.copiesDir);
-    if (!real) throw new FilesError(`"${withoutHash(path.basename(resolved))}" is not on this Mac yet. Download it first.`);
+    if (!real) throw new FilesError(notHere(resolved));
     return real.path;
+  }
+
+  /** A writable copy of the real bytes, named without the hash, for the pasteboard and drags. */
+  private async outgoing(resolved: string): Promise<string> {
+    const copy = await handOut(resolved, this.copiesDir, this.outgoingDir);
+    if (!copy) throw new FilesError(notHere(resolved));
+    return copy;
   }
 
   /**
@@ -259,7 +278,7 @@ export class FilesService {
     } catch (error) {
       if (!(error instanceof PathNotAllowedError)) throw error;
       const resolved = await realpath(target).catch(() => null);
-      if (!resolved) throw new FilesError(`Could not find "${path.basename(target)}".`);
+      if (!resolved) throw new FilesError(`Could not find "${withoutHash(path.basename(target))}".`);
       return { resolved, inside: false };
     }
   }

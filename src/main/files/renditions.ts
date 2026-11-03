@@ -15,6 +15,8 @@ const RENDITION_TIMEOUT_MS = 20_000;
 const CONVERTED = new Set(['heic', 'heif', 'tif', 'tiff']);
 /** Pictures that get a smaller display copy when they are much wider than the column. GIFs keep their frames. */
 const SCALABLE = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp']);
+/** Display widths are rounded up to a multiple of this, so a resized window or the split view reuses a copy. */
+const WIDTH_STEP = 400;
 
 export interface RenditionDependencies {
   cache: DiskCache;
@@ -28,8 +30,9 @@ export interface RenditionDependencies {
 /**
  * Display copies of pictures, made with sips in a scratch folder and kept
  * in app data, never in the vault: HEIC and TIFF as JPEG, and a picture
- * more than twice as wide as `width` scaled to twice it, so a 5K
- * screenshot is not decoded at full size for a 700-pixel column. PNG stays
+ * more than twice as wide as `width` scaled to about twice it (rounded up
+ * to a step of 400), so a 5K screenshot is not decoded at full size for a
+ * 700-pixel column. PNG stays
  * PNG so text in screenshots stays sharp. Null when the original shows as
  * it is, or when sips fails or times out (not tried again until the file
  * changes).
@@ -42,7 +45,7 @@ export class Renditions {
   async rendition(info: FileInfo, width?: number, options: { visible?: boolean } = {}): Promise<Rendition | null> {
     const extension = extensionOf(info.name);
     const convert = CONVERTED.has(extension);
-    const target = width && width > 0 ? Math.round(width * 2) : null;
+    const target = width && width > 0 ? Math.ceil((width * 2) / WIDTH_STEP) * WIDTH_STEP : null;
     const shrink = SCALABLE.has(extension) && target !== null && (info.width ?? 0) > target;
     if (!convert && !shrink) return null;
     if (info.status === 'missing' || info.status === 'lfs-missing') return null;

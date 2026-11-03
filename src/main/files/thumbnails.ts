@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'fs/promises';
 import path from 'path';
 import { extensionOf } from '@/common/fileKind';
-import type { JobQueue } from '@/main/mapLimited';
+import { JobTimeoutError, type JobQueue } from '@/main/mapLimited';
 import type { FileInfo } from '@/types/files';
 
 /** The cache of thumbnails and display copies in app data stays under this. */
@@ -121,11 +121,14 @@ const isPng = (bytes: Buffer) => bytes.length > 8 && bytes[0] === 0x89 && bytes[
  * a timeout each, visible cards first. They are cached in app data, keyed
  * by the file's path, size and modified time, or by its LFS object id, so
  * the same object anywhere in the vault is drawn once. A file that failed
- * is not tried again until it changes. The page gets a data: URL.
+ * is not tried again until it changes. A picture that arrives after its
+ * timeout is still cached, for the next ask. The page gets a data: URL.
  */
 export class Thumbnails {
   private failed = new Set<string>();
   private pending = new Map<string, Promise<string | null>>();
+  /** Drawings that outlived their timeout and are still running. */
+  private late = new Set<string>();
 
   constructor(private deps: ThumbnailDependencies) {}
 
@@ -133,24 +136,32 @@ export class Thumbnails {
     if (!PICTURED.has(extensionOf(info.name)) || info.status === 'missing' || info.status === 'lfs-missing') return null;
     const size = BUCKETS.find((bucket) => bucket >= px) ?? BUCKETS[BUCKETS.length - 1];
     const key = DiskCache.keyFor(info, `thumbnail-${size}`);
-    if (this.failed.has(key)) return null;
+    if (this.failed.has(key) || this.late.has(key)) return null;
     const cached = await this.deps.cache.get(key);
     if (cached) return dataUrl({ bytes: cached, type: isPng(cached) ? 'image/png' : 'image/jpeg' });
     const running = this.pending.get(key);
     if (running) return running;
 
-    const job = this.deps.limiter.run(() => this.draw(info, size), {
-      visible: options.visible,
-      timeoutMs: this.deps.timeoutMs ?? THUMBNAIL_TIMEOUT_MS,
-      label: `Thumbnail of ${info.name}`,
-    }).then(async (picture) => {
+    const keep = async (picture: Picture | null) => {
       if (!picture) {
         this.failed.add(key);
         return null;
       }
       await this.deps.cache.set(key, picture.bytes).catch(() => undefined);
       return dataUrl(picture);
-    }, () => {
+    };
+    let drawing: Promise<Picture | null> | undefined;
+    const job = this.deps.limiter.run(() => (drawing = this.draw(info, size)), {
+      visible: options.visible,
+      timeoutMs: this.deps.timeoutMs ?? THUMBNAIL_TIMEOUT_MS,
+      label: `Thumbnail of ${info.name}`,
+    }).then(keep, (error) => {
+      if (error instanceof JobTimeoutError && drawing) {
+        // A cold Quick Look of a large deck can take longer; its picture is kept when it comes.
+        this.late.add(key);
+        void drawing.then(keep, () => this.failed.add(key)).finally(() => this.late.delete(key));
+        return null;
+      }
       this.failed.add(key);
       return null;
     }).finally(() => this.pending.delete(key));

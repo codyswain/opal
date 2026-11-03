@@ -47,6 +47,10 @@ describe('stored names', () => {
     expect(withoutHash(`bracket-v3.${hash8(bytes)}.gcode.3mf`)).toBe('bracket-v3.gcode.3mf');
     expect(withoutHash('q3-report.a3f9c2e1.pdf')).toBe('q3-report.pdf');
     expect(withoutHash('plain.pdf')).toBe('plain.pdf');
+    // A name with no extension is stored as `<stem>.<hash>`.
+    expect(storedName('Makefile', bytes)).toBe(`makefile.${hash8(bytes)}`);
+    expect(withoutHash(`makefile.${hash8(bytes)}`)).toBe('makefile');
+    expect(withoutHash('.a1b2c3d4')).toBe('.a1b2c3d4');
   });
 
   it('knows jsonl and ndjson as text and aiff as audio', () => {
@@ -70,7 +74,7 @@ describe('importing files', () => {
     await writeFile(path.join(temporary, 'vault/.opal/files.json'), '{ "version": 1, "folder": "Library/files", "store": "folder" }');
     root = await registry.add(path.join(temporary, 'vault'));
     await git(root, 'init', '-q');
-    await writeFile(path.join(root, '.gitignore'), '.trash/\n.claude/state/\n');
+    await writeFile(path.join(root, '.gitignore'), '.trash/\n.claude/state/\n.env\n**/tokens.json\n');
     page = path.join(root, 'Library/notes/plan.mdo');
     await writeFile(page, '');
     outside = path.join(temporary, 'Desktop');
@@ -102,6 +106,15 @@ describe('importing files', () => {
     const imported = await service.import(page, { path: path.join(root, '.claude/state/render.png') });
     expect(imported.vaultPath).toBe(`Library/files/2026-11/render.${hash8(Buffer.from('png bytes'))}.png`);
     expect(await readFile(imported.path, 'utf8')).toBe('png bytes');
+  });
+
+  it('links a file git ignores by its own name where it is, so a secret is never copied where git tracks it', async () => {
+    await writeFile(path.join(root, '.env'), 'OPENAI_API_KEY=sk-live-secret\n');
+    expect(await service.import(page, { path: path.join(root, '.env') })).toEqual({ path: path.join(root, '.env'), vaultPath: '.env', name: '.env' });
+    await mkdir(path.join(root, '.claude/connectors'), { recursive: true });
+    await writeFile(path.join(root, '.claude/connectors/tokens.json'), '{"token":"secret"}');
+    expect((await service.import(page, { path: path.join(root, '.claude/connectors/tokens.json') })).vaultPath).toBe('.claude/connectors/tokens.json');
+    await expect(readdir(path.join(root, 'Library/files'))).rejects.toThrow();
   });
 
   it('copies a file from outside the vault', async () => {
@@ -140,6 +153,33 @@ describe('importing files', () => {
     const other = await service.import(page, { bytes: new Uint8Array(Buffer.from('%PDF other')), name: 'other.pdf' });
     expect(path.basename(other.vaultPath)).toBe(`other.${hash8(Buffer.from('%PDF other'))}.pdf`);
     expect(await readdir(month())).toHaveLength(3);
+  });
+
+  it('takes a photo with the same hash for the same one only when its bytes match, unless it was scaled', async () => {
+    // Two different photos whose SHA-256 starts with the same 8 hex digits.
+    const seen = new Map<string, Buffer>();
+    let pair: [Buffer, Buffer] | null = null;
+    for (let index = 0; !pair; index += 1) {
+      const bytes = Buffer.from(`\xff\xd8photo-${index}`, 'latin1');
+      const prefix = hash8(bytes);
+      const earlier = seen.get(prefix);
+      if (earlier) pair = [earlier, bytes];
+      else seen.set(prefix, bytes);
+    }
+    // Both are small enough to be stored as they are.
+    sips.mockImplementation(async () => ({ stdout: '  pixelWidth: 1200\n  pixelHeight: 800\n', stderr: '' }));
+    const first = await service.import(page, { bytes: new Uint8Array(pair[0]), name: 'Beach.jpg' });
+    const second = await service.import(page, { bytes: new Uint8Array(pair[1]), name: 'Invoice scan.jpg' });
+    expect(second.vaultPath).not.toBe(first.vaultPath);
+    expect(await readFile(second.path)).toEqual(pair[1]);
+    // A photo that was scaled can't be compared: the same bytes dropped again find it by hash.
+    sips.mockImplementation(async (_file, args) => {
+      if (args[0] === '-g') return { stdout: '  pixelWidth: 5000\n  pixelHeight: 3000\n', stderr: '' };
+      if (args[0] === '-Z') await writeFile(args[2], 'scaled');
+      return { stdout: '', stderr: '' };
+    });
+    const big = await service.import(page, { bytes: new Uint8Array(Buffer.from('big photo')), name: 'IMG_9.jpg' });
+    expect((await service.import(page, { bytes: new Uint8Array(Buffer.from('big photo')), name: 'Copy of IMG_9.jpg' })).vaultPath).toBe(big.vaultPath);
   });
 
   it('names stored files in their own script', async () => {
@@ -192,13 +232,21 @@ describe('importing files', () => {
     await import('fs/promises').then((fs) => fs.rename(moved, renamed));
     expect(await service.findMoved(stored.path)).toBe(renamed);
     expect(await service.findMoved(path.join(root, 'Library/files/2026-11/plain-name.pdf'))).toBeNull();
+    // A file with no extension.
+    const makefile = await service.import(page, { bytes: new Uint8Array(Buffer.from('all: build')), name: 'Makefile' });
+    const movedMakefile = path.join(root, 'Library/files/archive/2026', path.basename(makefile.path));
+    await import('fs/promises').then((fs) => fs.rename(makefile.path, movedMakefile));
+    expect(await service.findMoved(makefile.path)).toBe(movedMakefile);
     await expect(service.findMoved(path.join(temporary, 'elsewhere/q3.a1b2c3d4.pdf'))).rejects.toThrow(/not inside/);
   });
 
-  it('refuses a folder and never links git\'s own files', async () => {
+  it('refuses a folder, asks for a zip of a document saved as a folder, and never adds git\'s own files', async () => {
     await expect(service.import(page, { path: path.join(root, 'Library') })).rejects.toThrow("Folders can't be added yet.");
-    await writeFile(path.join(root, '.git/description'), 'repo');
-    const copied = await service.import(page, { path: path.join(root, '.git/description') });
-    expect(copied.vaultPath).toMatch(/^Library\/files\/2026-11\/description\.[0-9a-f]{8}$/);
+    await mkdir(path.join(outside, 'Gob deck.key/Data'), { recursive: true });
+    await expect(service.import(page, { path: path.join(outside, 'Gob deck.key') })).rejects.toThrow('"Gob deck.key" is saved as a folder. Zip it first.');
+    // git's config can hold a remote address with a token in it.
+    await writeFile(path.join(root, '.git/config'), '[remote "origin"]\n\turl = https://token@github.com/codyswain/vault\n', { flag: 'a' });
+    await expect(service.import(page, { path: path.join(root, '.git/config') })).rejects.toThrow("Files inside .git can't be added.");
+    await expect(readdir(path.join(root, 'Library/files'))).rejects.toThrow();
   });
 });

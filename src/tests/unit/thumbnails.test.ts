@@ -84,6 +84,20 @@ describe('thumbnails', () => {
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a picture macOS finishes after the timeout, and draws it only once', async () => {
+    provider.mockImplementation(async (file) => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return fixture(file);
+    });
+    const pictures = thumbnails({ timeoutMs: 20 });
+    expect(await pictures.thumbnail(info('/vault/deck.key'), 96)).toBeNull();
+    // Still drawing: no second Quick Look for the same file.
+    expect(await pictures.thumbnail(info('/vault/deck.key'), 96)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(decode(await pictures.thumbnail(info('/vault/deck.key'), 96))).toBe('deck.key');
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
   it('caches a failure until the file changes', async () => {
     provider.mockResolvedValueOnce(null);
     const pictures = thumbnails();
@@ -161,11 +175,19 @@ describe('display copies', () => {
   it('makes a smaller copy of a picture more than twice the column, and none otherwise', async () => {
     const shot = info('/vault/5k.png', { kind: 'image', width: 5120, height: 2880 });
     const copy = await renditions().rendition(shot, 700);
-    expect(copy).toMatchObject({ url: expect.stringMatching(/^data:image\/png;base64,/), width: 1400 });
-    expect(sips.mock.calls[0][1]).toEqual(['-s', 'format', 'png', '--resampleWidth', '1400', '/vault/5k.png', '--out', expect.stringMatching(/copy\.png$/)]);
+    // Twice the column, rounded up to a step of 400 so a window a few pixels wider reuses the copy.
+    expect(copy).toMatchObject({ url: expect.stringMatching(/^data:image\/png;base64,/), width: 1600 });
+    expect(sips.mock.calls[0][1]).toEqual(['-s', 'format', 'png', '--resampleWidth', '1600', '/vault/5k.png', '--out', expect.stringMatching(/copy\.png$/)]);
     expect(await renditions().rendition(info('/vault/small.png', { kind: 'image', width: 1200 }), 700)).toBeNull();
     expect(await renditions().rendition(info('/vault/anim.gif', { kind: 'image', width: 5000 }), 700)).toBeNull();
     expect(await renditions().rendition(shot)).toBeNull();
+  });
+
+  it('makes one copy for nearby column widths, not one per pixel', async () => {
+    const pictures = renditions();
+    const shot = info('/vault/5k.png', { kind: 'image', width: 5120, height: 2880 });
+    for (const width of [700, 699, 698, 650, 420, 421]) await pictures.rendition(shot, width);
+    expect(sips.mock.calls.map((call) => call[1][call[1].indexOf('--resampleWidth') + 1])).toEqual(['1600', '1200']);
   });
 
   it('answers null when sips fails, and does not run it again for that file', async () => {
@@ -194,7 +216,7 @@ describe('the files service', () => {
   });
   afterEach(async () => { await rm(temporary, { recursive: true, force: true }); });
 
-  it('draws an LFS file from a read-only copy named as the file, so Quick Look knows its type, and never from the placeholder', async () => {
+  it('draws an LFS file from a read-only copy named as the page shows it, so Quick Look knows its type, and never from the placeholder', async () => {
     const bytes = Buffer.from('PK deck');
     const oid = createHash('sha256').update(bytes).digest('hex');
     await writeFile(path.join(root, 'Library/files/deck.a1b2c3d4.pptx'), `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${bytes.length}\n`);
@@ -203,7 +225,7 @@ describe('the files service', () => {
     await mkdir(path.dirname(object), { recursive: true });
     await writeFile(object, bytes);
     const url = await service.thumbnail(path.join(root, 'Library/files/deck.a1b2c3d4.pptx'), 96);
-    expect(decode(url)).toBe('deck.a1b2c3d4.pptx');
+    expect(decode(url)).toBe('deck.pptx');
     const drawn = vi.mocked(platform.thumbnail).mock.calls[0][0];
     expect(drawn.startsWith(path.join(temporary, 'app-data'))).toBe(true);
     expect(await readFile(drawn)).toEqual(bytes);

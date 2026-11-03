@@ -1,6 +1,6 @@
 import { stat } from 'fs/promises';
 import path from 'path';
-import { classifyFile, extensionOf } from '@/common/fileKind';
+import { classifyFile, extensionOf, withoutHash } from '@/common/fileKind';
 import type { OpenResult } from '@/types/files';
 import { FilesError } from './FileStore';
 import { materialize, READ_ONLY_NOTICE } from './materialize';
@@ -39,7 +39,7 @@ export async function openable(resolved: string, options: { inside: boolean }): 
   const extension = extensionOf(name);
   if (LAUNCHERS.has(extension)) return { action: 'reveal', reason: REVEAL_REASON };
   const info = await stat(resolved).catch(() => null);
-  if (!info) throw new FilesError(`Could not find "${name}".`);
+  if (!info) throw new FilesError(`Could not find "${withoutHash(name)}".`);
   if (info.isFile() && (info.mode & 0o111) !== 0 && classifyFile(name) === 'other' && !DOCUMENTS.has(extension)) {
     return { action: 'reveal', reason: REVEAL_REASON };
   }
@@ -70,7 +70,7 @@ export async function openFile(resolved: string, options: { inside: boolean; con
   const app = (await deps.appName?.(resolved).catch(() => null)) ?? null;
   if (check.action === 'confirm' && !options.confirmed) return { action: 'confirm', app };
   const real = await materialize(resolved, deps.copiesDir);
-  if (!real) throw new FilesError(`"${path.basename(resolved)}" is not on this Mac yet. Download it first.`);
+  if (!real) throw new FilesError(`"${withoutHash(path.basename(resolved))}" is not on this Mac yet. Download it first.`);
   const failure = await deps.openPath(real.path);
   if (failure) throw new FilesError(failure);
   return { action: 'opened', app, ...(real.copy ? { notice: READ_ONLY_NOTICE } : {}) };
