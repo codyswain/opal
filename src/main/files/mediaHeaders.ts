@@ -29,6 +29,10 @@ export const PDF_WHOLE = 32 * 1024 * 1024;
 const PDF_END = 8 * 1024 * 1024;
 
 const MP4 = new Set(['mp4', 'm4v', 'mov', 'm4a', '3gp', 'qt']);
+/** WebM and MKV keep Info and Tracks before the first cluster, near the start. */
+const MATROSKA_HEAD = 512 * 1024;
+/** An Ogg file's first page names the codec and rate; its last page, within this much of the end, the length. */
+const OGG_END = 64 * 1024;
 
 /**
  * Page count, duration and size from the bytes alone: PDF `/Count`, MP4 and
@@ -44,6 +48,8 @@ export async function readMediaHeaders(name: string, size: number, read: ReadAt)
       return pdfHeaders(Buffer.concat([await read(0, PDF_END), Buffer.from('\n'), await read(size - PDF_END, PDF_END)]));
     }
     if (MP4.has(extension)) return await mp4Headers(size, read);
+    if (extension === 'webm' || extension === 'mkv') return matroskaHeaders(await read(0, MATROSKA_HEAD));
+    if (extension === 'ogg' || extension === 'opus') return oggHeaders(await read(0, OGG_END), await read(Math.max(0, size - OGG_END), OGG_END));
     if (extension === 'wav') return wavHeaders(await read(0, IMAGE_HEAD));
     if (extension === 'aif' || extension === 'aiff') return aiffHeaders(await read(0, IMAGE_HEAD));
     if (extension === 'flac') return flacHeaders(await read(0, 64));
@@ -282,4 +288,112 @@ async function mp3Headers(size: number, head: Uint8Array, read: ReadAt): Promise
     return { duration: ((size - start - at) * 8) / (kbps * 1000) };
   }
   return {};
+}
+
+/** An EBML variable-length number at `at`: its length, and its value with the marker bit kept (an ID) or removed (a size). */
+function vint(data: DataView, at: number, keepMarker: boolean): { length: number; value: number; unknown: boolean } | null {
+  const first = data.getUint8(at);
+  let length = 1;
+  while (length <= 8 && !(first & (0x80 >> (length - 1)))) length += 1;
+  if (length > 8 || at + length > data.byteLength) return null;
+  let value = keepMarker ? first : first & (0xff >> length);
+  let ones = value === (0xff >> length);
+  for (let index = 1; index < length; index += 1) {
+    const byte = data.getUint8(at + index);
+    value = value * 256 + byte;
+    ones &&= byte === 0xff;
+  }
+  return { length, value, unknown: !keepMarker && ones };
+}
+
+const SEGMENT = 0x18538067;
+const CLUSTER = 0x1f43b675;
+const INFO = 0x1549a966;
+const TRACKS = 0x1654ae6b;
+const TRACK_ENTRY = 0xae;
+const VIDEO = 0xe0;
+
+/** The elements from `from` to `to`, each with its ID and where its body starts and ends. */
+function elements(data: DataView, from: number, to: number): { id: number; body: number; end: number }[] {
+  const found: { id: number; body: number; end: number }[] = [];
+  for (let at = from; at < to;) {
+    const id = vint(data, at, true);
+    if (!id) break;
+    const size = vint(data, at + id.length, false);
+    if (!size) break;
+    const body = at + id.length + size.length;
+    const end = size.unknown ? to : Math.min(body + size.value, to);
+    found.push({ id: id.value, body, end });
+    if (id.value === CLUSTER) break;
+    at = end;
+  }
+  return found;
+}
+
+const uint = (data: DataView, from: number, to: number) => {
+  let value = 0;
+  for (let at = from; at < to; at += 1) value = value * 256 + data.getUint8(at);
+  return value;
+};
+
+/**
+ * Duration from Info (Duration in TimecodeScale units, nanoseconds each by
+ * default) and the first video track's PixelWidth and PixelHeight. A file
+ * recorded live may have no Duration; then Spotlight answers.
+ */
+export function matroskaHeaders(bytes: Uint8Array): MediaHeaders {
+  const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const segment = elements(data, 0, data.byteLength).find((element) => element.id === SEGMENT);
+  if (!segment) return {};
+  const result: MediaHeaders = {};
+  for (const element of elements(data, segment.body, segment.end)) {
+    if (element.id === INFO) {
+      let scale = 1_000_000;
+      let duration: number | null = null;
+      for (const field of elements(data, element.body, element.end)) {
+        if (field.id === 0x2ad7b1) scale = uint(data, field.body, field.end);
+        if (field.id === 0x4489) duration = field.end - field.body === 4 ? data.getFloat32(field.body) : data.getFloat64(field.body);
+      }
+      if (duration && duration > 0) result.duration = (duration * scale) / 1e9;
+    }
+    if (element.id === TRACKS && result.width === undefined) {
+      for (const entry of elements(data, element.body, element.end).filter((child) => child.id === TRACK_ENTRY)) {
+        const video = elements(data, entry.body, entry.end).find((child) => child.id === VIDEO);
+        if (!video) continue;
+        const fields = elements(data, video.body, video.end);
+        const width = fields.find((field) => field.id === 0xb0);
+        const height = fields.find((field) => field.id === 0xba);
+        if (width && height) {
+          result.width = uint(data, width.body, width.end);
+          result.height = uint(data, height.body, height.end);
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * An Ogg file's duration: the last page's granule position, in samples,
+ * over the sample rate. Opus always counts at 48 kHz and starts after its
+ * pre-skip; Vorbis names its rate in the identification header.
+ */
+export function oggHeaders(head: Uint8Array, tail: Uint8Array): MediaHeaders {
+  const first = Buffer.from(head.buffer, head.byteOffset, head.byteLength);
+  const last = Buffer.from(tail.buffer, tail.byteOffset, tail.byteLength);
+  if (first.toString('latin1', 0, 4) !== 'OggS') return {};
+  const body = 27 + first[26];
+  let rate = 0;
+  let skip = 0;
+  if (first.toString('latin1', body, body + 8) === 'OpusHead') {
+    rate = 48000;
+    skip = first.readUInt16LE(body + 10);
+  } else if (first.toString('latin1', body + 1, body + 7) === 'vorbis') {
+    rate = first.readUInt32LE(body + 12);
+  }
+  const page = last.lastIndexOf('OggS');
+  if (!rate || page === -1 || page + 14 > last.length) return {};
+  const granule = Number(last.readBigUInt64LE(page + 6));
+  return granule > skip ? { duration: (granule - skip) / rate } : {};
 }

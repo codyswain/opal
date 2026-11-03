@@ -131,3 +131,47 @@ export function bmp(width: number, height: number): Buffer {
   header.writeInt32LE(-height, 22);
   return header;
 }
+
+/** An EBML element: its ID bytes, a one-to-eight-byte size and the body. */
+const ebml = (id: number[], body: Buffer, unknownSize = false) => {
+  const size = unknownSize ? Buffer.from([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]) : (() => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(body.length)); b[0] = 0x01; return b; })();
+  return Buffer.concat([Buffer.from(id), size, body]);
+};
+
+/** A WebM with Info (TimecodeScale 1 ms, Duration as a float) and an audio and a video track, then a cluster. */
+export function webm(options: { seconds?: number; width: number; height: number; liveSegment?: boolean }): Buffer {
+  const { seconds, width, height, liveSegment = false } = options;
+  const duration = Buffer.alloc(8);
+  duration.writeDoubleBE((seconds ?? 0) * 1000);
+  const info = ebml([0x15, 0x49, 0xa9, 0x66], Buffer.concat([
+    ebml([0x2a, 0xd7, 0xb1], Buffer.from([0x0f, 0x42, 0x40])),
+    ...(seconds === undefined ? [] : [ebml([0x44, 0x89], duration)]),
+  ]));
+  const audio = ebml([0xae], Buffer.concat([ebml([0x83], Buffer.from([2])), ebml([0xe1], Buffer.alloc(4))]));
+  const video = ebml([0xae], Buffer.concat([
+    ebml([0x83], Buffer.from([1])),
+    ebml([0xe0], Buffer.concat([ebml([0xb0], u16(width)), ebml([0xba], u16(height))])),
+  ]));
+  const tracks = ebml([0x16, 0x54, 0xae, 0x6b], Buffer.concat([audio, video]));
+  const cluster = ebml([0x1f, 0x43, 0xb6, 0x75], Buffer.alloc(64), true);
+  const header = ebml([0x1a, 0x45, 0xdf, 0xa3], ebml([0x42, 0x82], Buffer.from('webm')));
+  return Buffer.concat([header, ebml([0x18, 0x53, 0x80, 0x67], Buffer.concat([info, tracks, cluster]), liveSegment)]);
+}
+
+/** One Ogg page holding `body` at granule position `granule`. */
+const oggPage = (granule: number, body: Buffer) => {
+  const header = Buffer.alloc(27);
+  header.write('OggS', 0, 'latin1');
+  header.writeBigUInt64LE(BigInt(granule), 6);
+  header[26] = 1;
+  return Buffer.concat([header, Buffer.from([body.length]), body]);
+};
+
+/** An Ogg Opus file of `seconds`, with a 312-sample pre-skip, or an Ogg Vorbis file at `rate`. */
+export function ogg(codec: 'opus' | 'vorbis', seconds: number, rate = 44100): Buffer {
+  const head = codec === 'opus'
+    ? Buffer.concat([Buffer.from('OpusHead'), Buffer.from([1, 2]), u16le(312), u32le(48000), Buffer.alloc(3)])
+    : Buffer.concat([Buffer.from([1]), Buffer.from('vorbis'), u32le(0), Buffer.from([2]), u32le(rate), Buffer.alloc(13)]);
+  const samples = codec === 'opus' ? seconds * 48000 + 312 : seconds * rate;
+  return Buffer.concat([oggPage(0, head), Buffer.alloc(2048, 1), oggPage(samples, Buffer.alloc(32))]);
+}

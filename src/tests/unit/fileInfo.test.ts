@@ -10,7 +10,7 @@ import type { RunFile } from '@/main/files/FileStore';
 import { IMAGE_HEAD, PDF_WHOLE, pdfHeaders, readMediaHeaders } from '@/main/files/mediaHeaders';
 import { jobQueue } from '@/main/mapLimited';
 import { makePdf } from '../../../e2e/helpers/pdfFixture';
-import { aiff, bmp, compressedPdf, flac, heif, linearizedPdf, movie, mp3, mp3Xing, wav, webp } from '../helpers/mediaFixtures';
+import { aiff, bmp, compressedPdf, flac, heif, linearizedPdf, movie, mp3, mp3Xing, ogg, wav, webm, webp } from '../helpers/mediaFixtures';
 
 describe('file info from headers', () => {
   let temporary: string, root: string;
@@ -60,13 +60,21 @@ describe('file info from headers', () => {
     expect(await reader.info(await put('long.m4v', movie({ seconds: 7200, width: 640, height: 360, version1: true })))).toMatchObject({ duration: 7200 });
   });
 
-  it('reads audio durations from WAV, AIFF, FLAC, M4A and MP3 headers', async () => {
+  it('reads a WebM\'s duration and video size, also from a recording with no length', async () => {
+    expect(await reader.info(await put('talk.webm', webm({ seconds: 95.5, width: 1280, height: 720 })))).toMatchObject({ kind: 'video', duration: 95.5, width: 1280, height: 720 });
+    expect(await reader.info(await put('live.mkv', webm({ width: 640, height: 480, liveSegment: true })))).toMatchObject({ width: 640, height: 480 });
+    expect((await reader.info(await put('live.mkv', webm({ width: 640, height: 480, liveSegment: true })))).duration).toBeUndefined();
+  });
+
+  it('reads audio durations from WAV, AIFF, FLAC, M4A, MP3, Opus and Vorbis headers', async () => {
     expect((await reader.info(await put('memo.wav', wav(90)))).duration).toBeCloseTo(90, 5);
     expect((await reader.info(await put('take.aiff', aiff(44100 * 30)))).duration).toBeCloseTo(30, 5);
     expect((await reader.info(await put('song.flac', flac(48000 * 200)))).duration).toBeCloseTo(200, 5);
     expect(await reader.info(await put('memo.m4a', movie({ seconds: 61, width: 0, height: 0 })))).toMatchObject({ kind: 'audio', duration: 61 });
     expect((await reader.info(await put('talk.mp3', mp3(160_000)))).duration).toBeCloseTo(10, 5);
     expect((await reader.info(await put('vbr.mp3', mp3Xing(1000)))).duration).toBeCloseTo((1000 * 1152) / 44100, 5);
+    expect(await reader.info(await put('memo.opus', ogg('opus', 42)))).toMatchObject({ kind: 'audio', duration: 42 });
+    expect(await reader.info(await put('song.ogg', ogg('vorbis', 180, 48000)))).toMatchObject({ kind: 'audio', duration: 180 });
   });
 
   it('reads widths for WebP, AVIF, HEIC, SVG and BMP', async () => {
