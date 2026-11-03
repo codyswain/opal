@@ -123,6 +123,8 @@ export function buildMenuTemplate(
         { role: "cut", label: "Cut" },
         { role: "copy", label: "Copy" },
         { role: "paste", label: "Paste" },
+        // The renderer's command, so a click pastes literally just as Cmd+Shift+V does.
+        ...item(COMMAND_IDS.pasteAndMatchStyle),
         { role: "selectAll", label: "Select All" },
       ],
     },

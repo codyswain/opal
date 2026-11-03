@@ -6,6 +6,7 @@ import { localDate } from "@/common/vaultModel";
 import type { PageExtension } from "@/types/markdown";
 import { addDays } from "@/renderer/features/day-sidebar/dayRule";
 import { recordOpened } from "@/renderer/features/disk-explorer/activity/recordActivity";
+import { pasteAndMatchStyle } from "@/renderer/features/disk-explorer/components/editor/clipboard";
 import {
   browseRecent,
   focusFile,
@@ -311,6 +312,15 @@ export const AppCommands: React.FC = () => {
           } satisfies Command,
         ]
         : []),
+      {
+        id: COMMAND_IDS.pasteAndMatchStyle,
+        name: "Paste and Match Style",
+        type: "action",
+        shortcut: ["CmdOrCtrl+Shift+V"],
+        keywords: ["paste", "plain", "text", "literal", "clipboard"],
+        hidden: true,
+        perform: () => { void pasteAndMatchStyle(); },
+      },
       {
         id: COMMAND_IDS.toggleProperties,
         name: propertiesOpen ? "Hide Properties" : "Show Properties",

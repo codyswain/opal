@@ -7,6 +7,8 @@ interface EditorStatusProps {
   error: string | null;
   properties: number;
   words: number;
+  /** Words in the selection, shown as "12 of 340 words" while there is one. */
+  selectedWords?: number | null;
   /** A log page, which only the vault's scripts write. */
   readOnly?: boolean;
   propertiesOpen: boolean;
@@ -38,7 +40,7 @@ const count = (value: number, one: string, many: string) => `${value.toLocaleStr
  * text until the pointer is on it; on a log page it starts with "Read-only".
  */
 export const EditorStatus: React.FC<EditorStatusProps> = ({
-  saveState, error, properties, words, readOnly = false, propertiesOpen, onToggleProperties, onKeepMine, onKeepDisk, onRetry,
+  saveState, error, properties, words, selectedWords = null, readOnly = false, propertiesOpen, onToggleProperties, onKeepMine, onKeepDisk, onRetry,
 }) => (
   <div className="opal-editor-status flex shrink-0 flex-col gap-1 px-4 pb-2 pt-1 font-sans text-control tabular-nums text-foreground-tertiary">
     <div className="flex items-center justify-end gap-1.5">
@@ -59,7 +61,11 @@ export const EditorStatus: React.FC<EditorStatusProps> = ({
             onClick={onToggleProperties}
             className="-mx-1.5 -my-0.5 rounded-[4px] px-1.5 py-0.5 outline-none transition-hover hover:bg-surface-hover hover:text-foreground-secondary focus-visible:ring-2 focus-visible:ring-focus aria-pressed:text-foreground"
           >
-            {[readOnly ? 'Read-only' : null, properties > 0 ? count(properties, 'property', 'properties') : null, count(words, 'word', 'words')]
+            {[
+              readOnly ? 'Read-only' : null,
+              properties > 0 ? count(properties, 'property', 'properties') : null,
+              selectedWords === null ? count(words, 'word', 'words') : `${selectedWords.toLocaleString()} of ${count(words, 'word', 'words')}`,
+            ]
               .filter(Boolean)
               .join(' · ')}
           </button>

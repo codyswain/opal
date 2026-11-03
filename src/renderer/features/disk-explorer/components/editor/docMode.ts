@@ -40,7 +40,12 @@ import { headingKeys } from './headingKeys';
 import { docListKeys } from './listKeys';
 import { quoteKeys } from './quoteKeys';
 import { insertTableItem } from './tableInsert';
+import { clipboard } from './clipboard';
+import { typingExtension } from './typing';
+import { hiddenOn } from './visibleText';
+import { visibleSearch } from './visibleSearch';
 import { opensNewTab } from './wikiLinks';
+import { wordMotion } from './wordMotion';
 
 /*
  * Doc mode, for documents (.mdo): the page editor with its Markdown always
@@ -50,10 +55,10 @@ import { opensNewTab } from './wikiLinks';
  * Nothing here moves text or the caret while an input method is composing.
  */
 
-/** The hidden ranges on the lines around `from` to `to`. */
+/** The hidden ranges on the lines around `from` to `to`, read once per state for the same lines. */
 function hiddenNear(state: EditorState, from: number, to = from): HiddenRange[] {
   const { doc } = state;
-  return hiddenRanges(state, doc.lineAt(Math.max(0, from - 1)).from, doc.lineAt(Math.min(doc.length, to + 1)).to);
+  return hiddenOn(state, doc.lineAt(Math.max(0, from - 1)).from, doc.lineAt(Math.min(doc.length, to + 1)).to);
 }
 
 const around = (hidden: readonly HiddenRange[], at: number) => hidden.find((range) => range.from < at && at < range.to);
@@ -115,7 +120,7 @@ function settle(state: EditorState, selection: EditorSelection): EditorSelection
  * Formatting whose text is all removed goes, marks and all, unless the
  * inserted text lands in it, which is how typing over bold text stays bold.
  */
-function replaceVisible(state: EditorState, from: number, to: number, insert: string): { changes: ChangeSpec[]; caret: number } {
+export function replaceVisible(state: EditorState, from: number, to: number, insert: string): { changes: ChangeSpec[]; caret: number } {
   const spans = inlineSpans(state, from, to).sort((a, b) => (a.to - a.from) - (b.to - b.from));
   const start = from;
   for (const span of spans) {
@@ -502,6 +507,7 @@ export function docModeExtensions(): Extension {
     }),
     Prec.highest(docClicks),
     imageFrame,
+    [typingExtension(replaceVisible), visibleSearch(replaceVisible), wordMotion(replaceVisible), clipboard(replaceVisible)],
     Prec.high(keymap.of([
       { key: 'ArrowLeft', run: moveVisibly(false, false), shift: moveVisibly(false, true) },
       { key: 'ArrowRight', run: moveVisibly(true, false), shift: moveVisibly(true, true) },

@@ -13,9 +13,11 @@ import {
 } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
 import { calloutMarker } from './blockGuards';
+import { toast } from 'sonner';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
 import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
+import { closesAt, fitMarks, keepsVisibleText, opensAt } from './typing';
 import { parseWikiTarget } from './wikiLinks';
 
 /*
@@ -248,9 +250,15 @@ function ordered(changes: Change[]): Change[] {
     .map(({ change }) => change);
 }
 
-/** Formats the text with `marker`, joining the spans it touches into one. */
-function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] {
-  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), text.from, text.to);
+/**
+ * Formats the text with `marker`, joining the spans it touches into one. The
+ * marks go where Markdown reads them, inward past punctuation or out to the
+ * word (`fitMarks`); null when they parse nowhere.
+ */
+function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] | null {
+  const fitted = fitMarks(state, text.from, text.to);
+  if (!fitted) return null;
+  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
   const touching = text.spans.filter((span) => span.name === name && span.to >= from && span.from <= to);
   const left = touching.filter((span) => span.textFrom < from).sort((a, b) => a.from - b.from)[0];
   const right = touching.filter((span) => span.textTo > to).sort((a, b) => b.to - a.to)[0];
@@ -284,12 +292,17 @@ function removeStyle(state: EditorState, text: SelectedText, name: string, remov
     while (closeAt > span.textFrom && skip(closeAt - 1)) closeAt -= 1;
     let openAt = to;
     while (openAt < span.textTo && skip(openAt)) openAt += 1;
+    // Marks go where Markdown reads them: punctuation they would touch is left without the style.
+    if (span.name !== 'InlineCode') {
+      while (closeAt > span.textFrom && !closesAt(state, closeAt)) closeAt -= 1;
+      while (openAt < span.textTo && !opensAt(state, openAt)) openAt += 1;
+    }
     const size = span.to - span.from;
     return [
-      textBounds(state, text.spans, span.textFrom, from)
+      closeAt > span.textFrom && textBounds(state, text.spans, span.textFrom, closeAt)
         ? { from: closeAt, to: closeAt, insert: state.sliceDoc(span.textTo, span.to), nesting: size }
         : { from: span.from, to: span.textFrom, insert: '' },
-      textBounds(state, text.spans, to, span.textTo)
+      openAt < span.textTo && textBounds(state, text.spans, openAt, span.textTo)
         ? { from: openAt, to: openAt, insert: state.sliceDoc(span.from, span.textFrom), nesting: -size }
         : { from: span.textTo, to: span.to, insert: '' },
     ];
@@ -297,6 +310,7 @@ function removeStyle(state: EditorState, text: SelectedText, name: string, remov
 }
 
 export const STYLES: Record<string, string> = { '**': 'StrongEmphasis', '*': 'Emphasis', '~~': 'Strikethrough' };
+const STYLE_LABELS: Record<string, string> = { StrongEmphasis: 'Bold', Emphasis: 'Italic', Strikethrough: 'Strikethrough' };
 
 /**
  * In a document, the styles Cmd+B, Cmd+I or ⇧⌘X with nothing selected turned
@@ -367,7 +381,8 @@ export function toggleMarker(marker: string): StateCommand {
       && !(size === 1 && (state.sliceDoc(from - 1, from) === '*') !== (state.sliceDoc(to, to + 1) === '*'));
     const texts = state.selection.ranges.flatMap((range) => selectedText(state, target(range)));
     const unstyle = texts.length > 0 && texts.every((text) => allStyled(state, text, name));
-    dispatch(state.update(state.changeByRange((range) => {
+    let refused = false;
+    const tr = state.update(state.changeByRange((range) => {
       const span = target(range);
       if (span.empty) {
         if (doc) return { range };
@@ -377,26 +392,41 @@ export function toggleMarker(marker: string): StateCommand {
       }
       const parts = selectedText(state, span);
       if (parts.length === 0) return { range };
-      const changes = ChangeSet.of(ordered(parts.flatMap((text) => (unstyle ? removeStyle(state, text, name) : addStyle(state, text, name, marker)))), state.doc.length);
+      const written = parts.map((text) => (unstyle ? removeStyle(state, text, name) : addStyle(state, text, name, marker)));
+      if (written.some((part) => part === null)) refused = true;
+      const changes = ChangeSet.of(ordered(written.flatMap((part) => part ?? [])), state.doc.length);
       // The caret stays in its word.
       if (span !== range) return { changes, range: EditorSelection.cursor(changes.mapPos(range.head)) };
       const from = changes.mapPos(parts[0].from, 1);
       const to = changes.mapPos(parts[parts.length - 1].to, -1);
       return { changes, range: range.anchor > range.head ? EditorSelection.range(to, from) : EditorSelection.range(from, to) };
-    }), { scrollIntoView: true, userEvent: 'input' }));
+    }), { scrollIntoView: true, userEvent: 'input' });
+    // A document never shows a mark: formatting that would leave one is refused.
+    if (refused || (doc && !keepsVisibleText(tr))) toast(`${STYLE_LABELS[name]} can't start or end next to that punctuation.`);
+    else dispatch(tr);
     return true;
   };
 }
 
 const CLEARED = ['StrongEmphasis', 'Emphasis', 'Strikethrough', 'InlineCode'];
+// Characters that would read as Markdown once code around them is gone.
+const MARKDOWN_IN_CODE = /[*_~`[\]<\\]/;
 
-/** Takes bold, italic, strikethrough and code off the selection: only marks the syntax tree reads as formatting. */
+/**
+ * Takes bold, italic, strikethrough and code off the selection: only marks
+ * the syntax tree reads as formatting. In a document, code whose text would
+ * turn into Markdown stays code, and a change that would show a mark is refused.
+ */
 export const clearFormatting: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
   if (!treeFor(state, selectionEnd(state))) return true;
   const changes = state.selection.ranges.flatMap((range) => selectedText(state, range))
+    .map((text) => ({ ...text, spans: text.spans.filter((span) => span.name !== 'InlineCode' || !state.facet(docMode) || !MARKDOWN_IN_CODE.test(state.sliceDoc(span.textFrom, span.textTo))) }))
     .flatMap((text) => CLEARED.flatMap((name) => removeStyle(state, text, name, CLEARED)));
-  if (changes.length > 0) dispatch(state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' }));
+  if (changes.length === 0) return true;
+  const tr = state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' });
+  if (state.facet(docMode) && !keepsVisibleText(tr)) toast('Clear formatting would leave marks showing here, so nothing changed.');
+  else dispatch(tr);
   return true;
 };
 
@@ -677,6 +707,92 @@ export function linkAt(state: EditorState, at: number): LinkAt | null {
 const linkText = (text: string) => text.replace(/[[\]]/g, '\\$&');
 const destination = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url);
 
+/** Text typed into the link form, written so it shows as typed: stars, underscores and backticks escaped. */
+export const typedLinkText = (text: string) => text.replace(/[\\*_`]/g, (character) => (character === '\\' ? '\\\\' : `\\${character}`));
+
+/**
+ * `from` to `to` without the marks it only touches: a range that starts at
+ * or inside a span's closing marks starts after them, and one that ends at
+ * or inside its opening marks ends before them. The caret after a bold word
+ * rests before its hidden closing marks, so a selection from there holds
+ * them. Unchanged when nothing would be left.
+ */
+export function withoutEdgeMarks(state: EditorState, from: number, to: number): { from: number; to: number } {
+  let start = from;
+  let end = to;
+  for (const span of inlineSpans(state, from, to)) {
+    if (span.textTo <= start && start < span.to && span.textTo > span.textFrom) start = span.to;
+    if (span.from < end && end <= span.textFrom && span.textTo > span.textFrom) end = span.from;
+  }
+  return start < end ? { from: start, to: end } : { from, to };
+}
+
+// Links whose marks a new link over them takes out: a link can't hold another.
+const LINKS = new Set(['Link', 'WikiLink']);
+// Text whose brackets stay as written inside link text: code, autolinks, HTML, images and embeds bind tighter than its brackets.
+const RAW_IN_LINK = new Set(['InlineCode', 'Autolink', 'HTMLTag', 'Comment', 'Image', 'Embed']);
+
+/**
+ * A new link over `from` to `to` that keeps the formatting it half covers
+ * balanced: a span that starts before the link closes before it and opens
+ * again inside, and one that runs on past the link closes inside it and
+ * opens again after. `**bold** t` with "old t" linked is
+ * `**b**[**old** t](url)`. Formatting the link holds whole moves inside it
+ * with its marks. A link it covers keeps only its text, and one it half
+ * covers keeps its address on the part outside: `[li](a)[nk mo](b)re`. A
+ * wiki link is one piece, so a selection that reaches into one takes it all.
+ */
+function linkOver(state: EditorState, from: number, to: number, url: string): Change {
+  for (const span of inlineSpans(state, from, to)) {
+    if (span.name === 'WikiLink' && span.from < to && span.to > from) {
+      from = Math.min(from, span.from);
+      to = Math.max(to, span.to);
+    }
+  }
+  ({ from, to } = withoutEdgeMarks(state, from, to));
+  for (const span of inlineSpans(state, from, to)) {
+    if ((EMPHASIS.has(span.name) || span.name === 'InlineCode') && span.textFrom >= from && span.textTo <= to) {
+      from = Math.min(from, span.from);
+      to = Math.max(to, span.to);
+    }
+  }
+  let before = '';
+  let open = '';
+  let close = '';
+  let after = '';
+  const dropped: { from: number; to: number }[] = [];
+  for (const span of inlineSpans(state, from, to)) {
+    const opens = state.sliceDoc(span.from, span.textFrom);
+    const closes = state.sliceDoc(span.textTo, span.to);
+    const startsBefore = span.from < from && from < span.textTo;
+    const endsAfter = span.to > to && to > span.textFrom;
+    if (LINKS.has(span.name)) {
+      if (startsBefore) before = closes + before;
+      else if (span.from >= from) dropped.push({ from: span.from, to: span.textFrom });
+      if (endsAfter) after += opens;
+      else if (span.to <= to) dropped.push({ from: span.textTo, to: span.to });
+      continue;
+    }
+    if (!EMPHASIS.has(span.name) && span.name !== 'InlineCode') continue;
+    if (startsBefore && endsAfter) continue;
+    if (startsBefore) { before = closes + before; open += opens; }
+    if (endsAfter) { close = closes + close; after += opens; }
+  }
+  const raw: { from: number; to: number }[] = [];
+  latestTree(state).iterate({ from, to, enter: (ref) => { if (RAW_IN_LINK.has(ref.name)) { raw.push({ from: ref.from, to: ref.to }); return false; } return undefined; } });
+  const source = state.sliceDoc(from, to);
+  let text = '';
+  for (let index = 0; index < source.length; index += 1) {
+    const at = from + index;
+    if (dropped.some((range) => range.from <= at && at < range.to)) continue;
+    const character = source[index];
+    // Brackets in Markdown that is already written, escaped unless they are already.
+    if ((character === '[' || character === ']') && state.sliceDoc(at - 1, at) !== '\\' && !raw.some((range) => range.from <= at && at < range.to)) text += '\\';
+    text += character;
+  }
+  return { from, to, insert: `${before}[${open}${text}${close}](${destination(url)})${after}` };
+}
+
 /**
  * Writes a link to `url` with `text`: over `range` for a new one, or in place
  * of `link`. A Markdown link whose text is unchanged keeps its text as
@@ -694,6 +810,8 @@ export function writeLink(state: EditorState, range: { from: number; to: number 
     const node = written.name === 'Link' ? written : written.parent;
     const at = node?.getChild('URL');
     change = at ? { from: at.from, to: at.to, insert: destination(url) } : { from: link.textTo, to: link.to, insert: `](${destination(url)})` };
+  } else if (!link && text && text === state.sliceDoc(range.from, range.to)) {
+    change = linkOver(state, range.from, range.to, url);
   } else {
     const { from, to } = link ?? range;
     change = { from, to, insert: `[${linkText(shown)}](${destination(url)})` };

@@ -1,0 +1,37 @@
+# Typing
+
+Every line here is written the way Opal writes what you type, so the page shows it as typed.
+
+## Escaped literals
+
+Arithmetic: 2*3\*4 and 2 * 3 = 6.
+
+A path: C:\\*.txt, and snake_case_names stay as they are.
+
+1984\. A great year, written so it never starts a list.
+
+\<!-- not a comment, the rest of the page stays text.
+
+Stars kept as text: \*\*not bold\*\*, and a \`tick\` that is not code.
+
+## Hard breaks
+
+First line of an address, ending in a backslash\
+Second line, ending in two spaces
+Third line.
+
+## Links over half-bold text
+
+**b**[**old** t](https://example.com) is one link over half of a bold word.
+
+A [plan link](https://example.com/plan), [[Plan]] and https://plan.example.com/plan: only the first is text that Replace changes.
+
+## Formatting next to punctuation
+
+file.**txt** · これは「**太字**」です · Opal(*beta*) · *every point it* makes, with
+
+## Lists and headings that keep their marks
+
+- A bullet whose text was replaced
+- [ ] A task whose text was replaced
+> A quote whose text was replaced

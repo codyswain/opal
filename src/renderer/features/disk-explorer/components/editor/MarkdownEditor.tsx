@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getChunks, unifiedMergeView } from '@codemirror/merge';
-import { Compartment, EditorState, Transaction, type Extension, type Text } from '@codemirror/state';
+import { Compartment, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { isDocFile } from '@/common/fileKind';
 import { recordOpened } from '../../activity/recordActivity';
@@ -12,6 +12,7 @@ import { linkEditor, type LinkEditor } from './docMode';
 import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
+import { pageWordCount, pageWords, selectedWordCount } from './wordMotion';
 import type { PageObject } from './extensionPoints';
 import { setFileProperties } from './firstLine';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
@@ -60,10 +61,8 @@ function openNoteInTab(path: string, newTab: boolean): void {
   useTabsStore.getState().open(fileLocation(path), { newTab });
 }
 
-/** Words are runs of text with a letter or digit, so list markers, `#` and `|` do not count. */
-function countWords(doc: Text): number {
-  return doc.toString().match(/\S*[\p{L}\p{N}]\S*/gu)?.length ?? 0;
-}
+// The word count waits for typing to pause, since it reads the whole page.
+const COUNT_DELAY_MS = 250;
 
 /**
  * While a conflict is open, the page shows the disk's side of each
@@ -126,7 +125,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const [link, setLink] = useState<LinkEditor | null>(null);
   const [framed, setFramed] = useState<PageObject | null>(null);
   const conflict = useMemo(() => new Compartment(), []);
-  const [words, setWords] = useState(0);
+  const [words, setWords] = useState<{ words: number; selected: number | null }>({ words: 0, selected: null });
+  const counting = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The page's total is read again only after the text changed; a caret move counts the selection alone.
+  const recount = useRef(false);
   // The hook's state changes identity across renders; the editor reads the latest.
   const actions = useRef(document);
   actions.current = document;
@@ -149,8 +151,22 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
           keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
           conflict.of([]),
           EditorView.updateListener.of((update) => {
+            if (update.docChanged || update.selectionSet) {
+              if (update.docChanged) recount.current = true;
+              if (counting.current) clearTimeout(counting.current);
+              counting.current = setTimeout(() => {
+                counting.current = null;
+                const whole = recount.current;
+                recount.current = false;
+                const total = whole ? pageWordCount(created.state) : null;
+                const selected = selectedWordCount(created.state);
+                setWords((shown) => {
+                  const words = total ?? shown.words;
+                  return words === shown.words && selected === shown.selected ? shown : { words, selected };
+                });
+              }, COUNT_DELAY_MS);
+            }
             if (update.docChanged) {
-              setWords(countWords(update.state.doc));
               if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(Transaction.remote))) {
                 actions.current.onChange(update.state.doc.toString());
               }
@@ -169,7 +185,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       }),
     });
     view.current = created;
-    setWords(countWords(created.state.doc));
+    setWords(pageWords(created.state));
     if (doc) {
       setDocView(created);
       setFormat(formatState(created.state));
@@ -183,6 +199,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
     });
     onViewRef.current?.(created);
     return () => {
+      if (counting.current) clearTimeout(counting.current);
       onViewRef.current?.(null);
       detach();
       created.destroy();
@@ -250,7 +267,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
         saveState={document.saveState}
         error={document.error}
         properties={document.properties}
-        words={words}
+        words={words.words}
+        selectedWords={words.selected}
         readOnly={isLogPage(path)}
         propertiesOpen={propertiesOpen}
         onToggleProperties={section && onToggleProperties ? onToggleProperties : togglePageProperties}
