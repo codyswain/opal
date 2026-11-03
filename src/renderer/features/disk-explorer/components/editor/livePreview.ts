@@ -18,6 +18,7 @@ import {
   InlineTitleWidget,
   ListMarkerWidget,
   TableWidget,
+  fileVersions,
   type BlockContext,
   type CodeLine,
   type InlinePiece,
@@ -502,6 +503,11 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
   const reveal = revealer(state);
   const page = state.facet(pageContext).path;
   const links = state.field(resolvedLinks);
+  const versions = state.field(fileVersions);
+  // A document frames the image the selection covers.
+  const picked = state.facet(docMode) ? state.selection.main : null;
+  const image = (src: string, alt: string, width: number | null, from: number, to: number) =>
+    new ImageWidget(src, alt, width, versions.get(src), picked?.from === from && picked.to === to);
   const { shown } = state.field(blockPreview);
   const covered = (at: number) => shown.some((block) => block.from <= at && block.to >= at);
   const out: Range<Decoration>[] = [];
@@ -610,7 +616,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           const target = linkTarget(state, node);
           if (!target) return false;
           const [alt, size] = doc.sliceString(open.to, close.from).split('|');
-          const widget = new ImageWidget(imageSource(target, page), alt, imageWidth(size));
+          const widget = image(imageSource(target, page), alt, imageWidth(size), ref.from, ref.to);
           if (reveal.span(ref.from, ref.to)) {
             out.push(Decoration.widget({ widget, side: 1 }).range(ref.to), syntax.range(open.from, open.to), syntax.range(close.from, ref.to));
           } else if (!doc.sliceString(ref.from, ref.to).includes('\n')) {
@@ -631,7 +637,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
           const file = links.get(link.target);
           const shownAsText = !reveal.span(ref.from, ref.to);
           if (ref.name === 'Embed' && file && classifyFile(file) === 'image') {
-            const widget = new ImageWidget(toOpalFileUrl(file), link.target, imageWidth(link.aliasAt === null ? undefined : inner.slice(link.aliasAt)));
+            const widget = image(toOpalFileUrl(file), link.target, imageWidth(link.aliasAt === null ? undefined : inner.slice(link.aliasAt)), ref.from, ref.to);
             out.push(shownAsText ? Decoration.replace({ widget }).range(ref.from, ref.to) : Decoration.widget({ widget, side: 1 }).range(ref.to));
             return false;
           }
@@ -734,7 +740,8 @@ const linePreview = ViewPlugin.fromClass(class {
       update.docChanged || update.viewportChanged ||
       syntaxTree(update.startState) !== syntaxTree(update.state) ||
       update.startState.field(revealState) !== update.state.field(revealState) ||
-      update.startState.field(resolvedLinks) !== update.state.field(resolvedLinks)
+      update.startState.field(resolvedLinks) !== update.state.field(resolvedLinks) ||
+      update.startState.field(fileVersions) !== update.state.field(fileVersions)
     ) {
       this.decorations = lineDecorations(update.state, update.view.viewport.from, update.view.viewport.to);
     }
@@ -883,4 +890,4 @@ const previewClicks = EditorView.domEventHandlers({
   keydown: revealCell,
 });
 
-export const livePreview: Extension = [revealState, trackFocus, linkDefinitions, shortTargets, blockPreview, linePreview, Prec.high(previewClicks)];
+export const livePreview: Extension = [revealState, trackFocus, fileVersions, linkDefinitions, shortTargets, blockPreview, linePreview, Prec.high(previewClicks)];

@@ -19,7 +19,6 @@ import {
   Undo2,
   type LucideIcon,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import {
   IconButton,
   Menu,
@@ -36,7 +35,7 @@ import {
 import { editLink } from './docMode';
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from './formatCommands';
 import type { FormatState } from './formatState';
-import { insertEmbed } from './imageInsert';
+import { addPickedImages } from './imageInsert';
 
 const STYLES = ['Normal text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'];
 
@@ -79,8 +78,6 @@ const keepFocus = (event: React.MouseEvent) => event.preventDefault();
 interface DocToolbarProps {
   view: EditorView;
   format: FormatState;
-  /** The document, whose vault takes inserted images. */
-  path: string;
 }
 
 /**
@@ -89,7 +86,7 @@ interface DocToolbarProps {
  * Arrow keys move between buttons and one of them is in the tab order;
  * Escape goes back to the text, and Option+F10 in the text comes here.
  */
-export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format, path }) => {
+export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
   const row = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [current, setCurrent] = useState('undo');
@@ -109,13 +106,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format, path }) =>
 
   const command = (run: StateCommand) => () => { run(view); };
   const insertImage = async () => {
-    const result = await window.filesAPI.pickAndImport(path);
-    if (!result.success) {
-      toast.error(result.error);
-      return;
-    }
-    for (const file of result.data.files) insertEmbed(view, file, 'image');
-    for (const message of result.data.skipped) toast.error(message);
+    await addPickedImages(view);
     view.focus();
   };
 

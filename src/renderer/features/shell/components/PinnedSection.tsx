@@ -7,7 +7,7 @@ import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
 import { recordOpened } from '@/renderer/features/disk-explorer/activity/recordActivity';
 import {
   clearActiveDragSourcePath,
-  getActiveDragSourcePath,
+  draggedTreeFile,
 } from '@/renderer/features/disk-explorer/components/dragMoveState';
 import { vaultRelativePath } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { focusFile } from '@/renderer/features/disk-explorer/navigation';
@@ -40,14 +40,6 @@ export function pinLabel(path: string, roots: readonly string[]): string {
   const folder = parentFsPath(path);
   const date = folder && isDailyFolder(folder, roots) ? dailyFileDate(name) : null;
   return date ? dailyTreeLabel(date) : fileTreeLabel(name, classifyFile(name));
-}
-
-/** A file row of the tree being dragged, which pins it when dropped here. */
-function draggedTreeFile(): string | null {
-  const source = getActiveDragSourcePath();
-  const folder = source ? parentFsPath(source) : null;
-  const listed = folder ? useDiskStore.getState().listings[folder] : undefined;
-  return listed?.some((entry) => entry.path === source && !entry.isDirectory) ? source : null;
 }
 
 /**

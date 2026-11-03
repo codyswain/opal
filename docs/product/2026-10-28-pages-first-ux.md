@@ -267,6 +267,12 @@ Tokens follow the design brief from Bastion and Linear:
   2026-11-02): its Markdown never shows, a formatting toolbar sits in the
   card above the text, and Docs' shortcuts apply. There Cmd+K edits a link;
   Cmd+P and Cmd+O still search.
+- Files dropped or pasted on any page, a note or a document, are copied into
+  the vault's files folder and go in on a line of their own: an image as an
+  embed sized to fit one screen, any other file as a link. A line shows
+  where a drop will land. A tree row dropped on a page is linked, not
+  copied. In a document a click selects an image, its corners resize it,
+  and Delete removes it from the page.
 - Callouts, including `> [!ai] AI`, render as neutral grey boxes (a light
   grey fill or a grey left rule and a bold title), never tinted, whatever the
   vault's Obsidian snippet uses.

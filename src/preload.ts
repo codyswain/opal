@@ -191,6 +191,8 @@ const filesAPI: FilesAPI = {
     const bytes = new Uint8Array(await file.arrayBuffer());
     return ipcRenderer.invoke("files:import", page, { bytes, name: file.name });
   },
+  // A file copied in Finder has a path; a pasted picture has none.
+  hasPath: (file) => webUtils.getPathForFile(file) !== "",
   pickAndImport: (page) => ipcRenderer.invoke("files:pick-and-import", page),
   status: (target) => ipcRenderer.invoke("files:status", target),
   fetch: (target) => ipcRenderer.invoke("files:fetch", target),

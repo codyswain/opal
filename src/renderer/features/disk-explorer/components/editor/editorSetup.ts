@@ -11,6 +11,7 @@ import { isDocFile } from '@/common/fileKind';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
+import { fileInserts } from './imageInsert';
 import { linkMarkStyle, livePreview } from './livePreview';
 import { pageProperties } from './pageProperties';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
@@ -171,6 +172,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle], completeHTMLTags: false, addKeymap: false }),
     syntaxHighlighting(highlight),
     wikiLinks,
+    fileInserts,
     livePreview,
     pageProperties,
     search({ top: true }),

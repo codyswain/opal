@@ -7,6 +7,8 @@ export interface FilesAPI {
    * from a browser) by its bytes.
    */
   import: (page: string, file: File) => Promise<FilesResult<ImportedFile>>;
+  /** Whether a File stands for a file on disk, as one dropped or copied in Finder does, rather than for bytes alone. */
+  hasPath: (file: File) => boolean;
   /** Insert image: asks for images with the open dialog and copies each in. Nothing when the dialog is canceled. */
   pickAndImport: (page: string) => Promise<FilesResult<PickedFiles>>;
   /** Whether a stored file's bytes are on this Mac, on the file store only, or gone. */

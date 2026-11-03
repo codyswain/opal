@@ -50,7 +50,9 @@ not exist.
   HEIC and TIFF into JPEG and scaling large photos with `sips`. Its `git-lfs`
   store reads Git LFS placeholders: `opal-file://` serves their bytes from
   git's object store, and Download runs `git lfs fetch` for one file. Opal
-  never writes LFS files into the working tree
+  never writes LFS files into the working tree. In the editor,
+  `imageInsert.ts` takes files dropped or pasted on any page and
+  `imageFrame.ts` selects and resizes a document's images
 - **Documents:** a `.mdo` opens in doc mode (`docMode.ts` in the editor
   folder): the page editor with its Markdown always hidden, the caret kept
   out of hidden marks, and a toolbar (`DocToolbar.tsx`). The formatting

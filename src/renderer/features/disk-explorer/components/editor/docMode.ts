@@ -17,6 +17,7 @@ import {
 } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, keymap, type Command, type ViewUpdate } from '@codemirror/view';
 import { inlineSpans, linkAt, setHeading, toggleList, toggleMarker } from './formatCommands';
+import { imageFrame } from './imageFrame';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
 import { opensNewTab } from './wikiLinks';
 
@@ -371,6 +372,7 @@ export function docModeExtensions(): Extension {
       compositionend: () => { input.composing = false; },
     }),
     Prec.highest(docClicks),
+    imageFrame,
     Prec.high(keymap.of([
       { key: 'ArrowLeft', run: moveVisibly(false, false), shift: moveVisibly(false, true) },
       { key: 'ArrowRight', run: moveVisibly(true, false), shift: moveVisibly(true, true) },
