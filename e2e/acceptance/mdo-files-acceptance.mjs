@@ -308,6 +308,17 @@ try {
   check('a dropped movie goes in as a preview with a width', /^!\[\[Library\/files\/\d{4}-\d{2}\/clip\.[0-9a-f]{8}\.mp4(\|\d+)?\]\]$/.test(lines[2] ?? ''), lines[2]);
   check('a dropped deck goes in as a card link with its name', /^\[\[Library\/files\/\d{4}-\d{2}\/pitch-deck\.[0-9a-f]{8}\.pptx\|Pitch deck\.pptx\]\]$/.test(lines[3] ?? ''), lines[3]);
   if (shotsDir) await page.locator('.opal-editor').first().screenshot({ path: path.join(shotsDir, 'drop-light.png') });
+  // The deck's stored file deleted while the page is open, as a sync or Finder would: its card says so.
+  const deckTarget = /\[\[([^|\]]+)\|/.exec(lines[3] ?? '')?.[1];
+  let gone = false;
+  if (deckTarget) {
+    await rm(path.join(vault, deckTarget), { force: true });
+    for (let tries = 0; tries < 30 && !gone; tries += 1) {
+      await page.waitForTimeout(250);
+      gone = await page.evaluate(() => [...document.querySelectorAll('.cm-file-card[data-state="missing"]')].some((card) => card.textContent.includes('Pitch deck.pptx')));
+    }
+  }
+  check('a stored file deleted while its page is open turns its card into File not found', gone, deckTarget ?? 'no deck line');
   // Input methods next to a chip are checked in ime-acceptance.mjs.
 } catch (error) {
   check('the run finished', false, String(error));
