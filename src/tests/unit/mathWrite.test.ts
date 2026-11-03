@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
@@ -17,6 +17,7 @@ import {
   openMathEditor,
   switchDisplay,
   texWrite,
+  toggleKind,
   typedForFormula,
   writeLive,
 } from '@/renderer/features/disk-explorer/components/editor/mathWrite';
@@ -432,5 +433,177 @@ describe('formulas in tables, headings, links, lists and callouts', () => {
     expect(inList?.style.getPropertyValue('--list-indent')).toMatch(/em$/);
     const callout = mount('> [!note] Title\n> $$\n> x^2\n> $$\n');
     expect(callout.contentDOM.querySelector('.cm-math-block')?.classList.contains('cm-md-in-callout')).toBe(true);
+  });
+});
+
+describe('closing, switching and edits from elsewhere', () => {
+  function editor(view: EditorView) {
+    const found = view.state.field(mathEditor);
+    if (!found) throw new Error('no editor');
+    return found;
+  }
+
+  it('writes a selection holding a $ as \\$, and an empty close of a new formula leaves the text as it was', () => {
+    const view = mount('It costs $5 now');
+    act(() => { view.dispatch({ selection: { anchor: 3, head: 11 } }); });
+    act(() => { editFormula(view); });
+    expect(text(view)).toBe('It $costs \\$5$ now');
+    act(() => { closeMathEditor(view, '', false); });
+    expect(text(view)).toBe('It costs $5 now');
+  });
+
+  it('shows a selection that cannot become a formula in the field, and closing changes nothing', () => {
+    const view = mount('a b$c$ d');
+    act(() => { view.dispatch({ selection: { anchor: 2, head: 3 } }); });
+    act(() => { editFormula(view); });
+    expect(editor(view)).toMatchObject({ tex: 'b' });
+    expect(editor(view).problem).not.toBeNull();
+    expect(text(view)).toBe('a b$c$ d');
+    act(() => { closeMathEditor(view, '', false); });
+    expect(text(view)).toBe('a b$c$ d');
+    act(() => { view.dispatch({ selection: { anchor: 2, head: 3 } }); });
+    act(() => { editFormula(view); });
+    act(() => { closeMathEditor(view, 'b', false); });
+    expect(text(view)).toBe('a b$c$ d');
+  });
+
+  it('switches a new formula between inline and display before anything is typed, writing nothing', () => {
+    const view = mount('abc def');
+    act(() => { view.dispatch({ selection: { anchor: 4 } }); });
+    act(() => { editFormula(view); });
+    act(() => { toggleKind(view, true); });
+    expect(text(view)).toBe('abc def');
+    expect(editor(view)).toMatchObject({ kind: 'display', open: '$$' });
+    act(() => { closeMathEditor(view, '', false); });
+    expect(text(view)).toBe('abc def');
+    const block = mount('Above\n\n');
+    act(() => { block.dispatch({ selection: { anchor: 7 } }); });
+    act(() => { editFormula(block); });
+    act(() => { toggleKind(block, false); });
+    expect(text(block)).toBe('Above\n\n');
+    writeLive(block, editor(block), 'x', () => true);
+    expect(text(block)).toBe('Above\n\n$x$');
+  });
+
+  it('keeps an escaping backslash typed before $ or, in a table, before |', () => {
+    expect(applyTyped('\\', '\\$', 2, false).value).toBe('\\$');
+    expect(applyTyped('a\\', 'a\\|', 3, true).value).toBe('a\\Vert');
+    expect(applyTyped('a\\', 'a\\|x', 3, true)).toEqual({ value: 'a\\Vert x', caret: 7 });
+    expect(applyTyped('\\\\', '\\\\$', 3, false).value).toBe('\\\\\\$');
+  });
+
+  it('puts $$ back as text when a block opened by $$ and Enter closes empty', () => {
+    const view = mount('Text\n\n$$');
+    act(() => { view.dispatch({ selection: { anchor: 8 } }); });
+    key(view, 'Enter');
+    expect(text(view)).toBe('Text\n\n$$\n\n$$');
+    expect(editor(view).dollars).toBe(true);
+    act(() => { closeMathEditor(view, '', false); });
+    expect(text(view)).toBe('Text\n\n$$');
+    key(view, 'Enter');
+    writeLive(view, editor(view), 'x', () => true);
+    writeLive(view, editor(view), '', () => true);
+    act(() => { closeMathEditor(view, '', false); });
+    expect(text(view)).toBe('Text\n\n$$');
+  });
+
+  it('keeps the space before a following digit in the one undo step', () => {
+    const view = mount('abc5');
+    act(() => { view.dispatch({ selection: { anchor: 3 } }); });
+    act(() => { editFormula(view); });
+    writeLive(view, editor(view), 'x', () => true);
+    expect(text(view)).toBe('abc$x$ 5');
+    act(() => { closeMathEditor(view, 'x', false); });
+    expect(text(view)).toBe('abc$x$ 5');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('abc5');
+    const cleared = mount('Area 5 m\n');
+    act(() => { cleared.dispatch({ selection: { anchor: 5 } }); });
+    act(() => { editFormula(cleared); });
+    writeLive(cleared, editor(cleared), 'x', () => true);
+    writeLive(cleared, editor(cleared), '', () => true);
+    act(() => { closeMathEditor(cleared, '', false); });
+    expect(text(cleared)).toBe('Area 5 m\n');
+  });
+
+  it('reads a block in a CRLF file without its line ends, and writes only the typed character', () => {
+    const view = mount('Intro\r\n$$\r\nx\r\n$$\r\n');
+    const node = mathNodes(syntaxTree(view.state), 0, text(view).length)[0];
+    openMathEditor(view, node);
+    expect(editor(view).tex).toBe('x');
+    writeLive(view, editor(view), 'Bx', () => true);
+    expect(text(view)).toBe('Intro\r\n$$\r\nBx\r\n$$\r\n');
+  });
+
+  it('undoes the popover\'s own writes after an edit from elsewhere inside the formula', () => {
+    const view = mount('a $x$ b\n\nOther');
+    openMathEditor(view, mathNodeAt(syntaxTree(view.state), 2, 1) as never);
+    writeLive(view, editor(view), 'y+1', () => true);
+    act(() => { view.dispatch({ changes: { from: 5, to: 6, insert: '2' }, annotations: [Transaction.remote.of(true), Transaction.addToHistory.of(false)] }); });
+    expect(text(view)).toBe('a $y+2$ b\n\nOther');
+    act(() => { closeMathEditor(view, editor(view).tex, false); });
+    expect(text(view)).toBe('a $y+2$ b\n\nOther');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('a $x2$ b\n\nOther');
+  });
+
+  it('adds a line under a block when Enter follows its closing $$', () => {
+    const view = mount('Intro\n\n');
+    act(() => { view.dispatch({ changes: { from: 7, insert: '$$\nx = 1\n$$' }, selection: { anchor: 18 }, userEvent: 'input.paste' }); });
+    key(view, 'Enter');
+    expect(view.state.field(mathEditor)).toBeNull();
+    expect(text(view).startsWith('Intro\n\n$$\nx = 1\n$$\n')).toBe(true);
+  });
+
+  it('maps the field onto a block\'s lines after its opener or closer line is emptied', () => {
+    const doc = 'Intro\n\n$$\\begin{x}\na\n\\end{x}$$\n';
+    const view = mount(doc);
+    openMathEditor(view, mathNodes(syntaxTree(view.state), 0, doc.length)[0]);
+    for (const value of ['\na\n\\end{x}', 'z\na\n\\end{x}']) writeLive(view, editor(view), value, () => true);
+    expect(text(view)).toBe('Intro\n\n$$z\na\n\\end{x}$$\n');
+    const closer = mount('$$\na\nb$$\n');
+    openMathEditor(closer, mathNodes(syntaxTree(closer.state), 0, 9)[0]);
+    for (const value of ['a\n', 'a\nc']) writeLive(closer, editor(closer), value, () => true);
+    expect(text(closer)).toBe('$$\na\nc$$\n');
+  });
+
+  it('writes "Not a formula" for \\(…\\), \\[…\\] and $$…$$, and for a formula right after another', () => {
+    const run = (doc: string, from: number, to: number) => {
+      const state = EditorState.create({ doc, extensions: markdownEditorExtensions(DOC) });
+      ensureSyntaxTree(state, doc.length, 1_000);
+      const changes = notAFormula(state, from, to);
+      if (!changes) return null;
+      const next = state.update({ changes }).state;
+      ensureSyntaxTree(next, next.doc.length, 1_000);
+      expect(mathNodes(syntaxTree(next), 0, next.doc.length).filter((node) => node.from >= changes.mapPos(from) && node.to <= changes.mapPos(to, 1))).toEqual([]);
+      return next.doc.toString();
+    };
+    expect(run('See \\(x+1\\) here\n', 4, 12)).toBe('See \\\\(x+1\\\\) here\n');
+    expect(run('Intro\n\n\\[\nx\n\\]\n', 7, 14)).toBe('Intro\n\n\\\\[\nx\n\\\\]\n');
+    expect(run('Cost $$x$$ here\n', 5, 10)).toBe('Cost \\$\\$x$$ here\n');
+    expect(run('\\(a\\)$x$ b', 5, 8)).toBe('\\(a\\)\\$x$ b');
+  });
+
+  it('follows an edit from elsewhere at a new formula\'s caret without breaking the next keystroke', () => {
+    const view = mount('Area here\n');
+    act(() => { view.dispatch({ selection: { anchor: 5 } }); });
+    act(() => { editFormula(view); });
+    act(() => { view.dispatch({ changes: { from: 5, insert: 'ab' } }); });
+    expect(editor(view)).toMatchObject({ from: 5, to: 5 });
+    writeLive(view, editor(view), 'x', () => true);
+    expect(text(view)).toBe('Area $x$abhere\n');
+  });
+
+  it('keeps a caret the page put elsewhere when the popover closes from a click outside', () => {
+    const view = mount('Energy $E=mc^2$ and more.\n\nA lower line.\n');
+    openMathEditor(view, mathNodeAt(syntaxTree(view.state), 7, 1) as never);
+    writeLive(view, editor(view), 'E=mc^3', () => true);
+    const clicked = text(view).indexOf('lower');
+    act(() => { view.dispatch({ selection: { anchor: clicked } }); });
+    act(() => { closeMathEditor(view, 'E=mc^3', false, 'keep'); });
+    expect(caret(view)).toBe(clicked);
+    expect(text(view)).toBe('Energy $E=mc^3$ and more.\n\nA lower line.\n');
+    act(() => { undo(view); });
+    expect(text(view)).toBe('Energy $E=mc^2$ and more.\n\nA lower line.\n');
   });
 });

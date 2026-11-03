@@ -1,26 +1,27 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { syntaxTree } from '@codemirror/language';
-import { Transaction } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { Button, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
-import { mathNodeAt } from './math';
 import { pageMacros, renderTex } from './mathWidget';
 import {
   applyTyped,
   clickedFormula,
+  closeAsText,
   closeMathEditor,
-  editorFor,
   mathEditor,
-  mathWrite,
-  notAFormula,
   restoreDollars,
-  setMathEditor,
-  switchDisplay,
+  TABLE_INLINE_ONLY,
+  toggleKind,
   writeLive,
   type MathEditor,
 } from './mathWrite';
 
 const MAX_ROWS = 8;
+
+/** A length the field's computed style gives, in pixels; a bare line height is a multiple of the font size. */
+function pixels(style: CSSStyleDeclaration, value: string): number {
+  const number = parseFloat(value) || 0;
+  return value.endsWith('px') ? number : number * (parseFloat(style.fontSize) || 13);
+}
 
 /** Where the formula is on screen: its drawn element, or its first and last characters. */
 function formulaRect(view: EditorView, editor: MathEditor): DOMRect {
@@ -69,16 +70,26 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   const display = editor.kind !== 'inline';
   const macros = view.state.field(pageMacros, false) ?? undefined;
   const rendered = useMemo(() => (field.trim() ? renderTex(field.trim(), display, macros) : null), [field, display, macros]);
-  // Fixed where it opened, so the popover never jumps while the formula's size changes.
-  const anchorRect = useRef<DOMRect | null>(null);
+  // Fixed where it opened on the page, so the popover never jumps while the formula's size changes; it moves only as the page scrolls.
+  const anchorRect = useRef<{ rect: DOMRect; top: number; left: number } | null>(null);
   if (!anchorRect.current) {
-    anchorRect.current = clickedFormula.get(view) ?? formulaRect(view, editor);
+    anchorRect.current = { rect: clickedFormula.get(view) ?? formulaRect(view, editor), top: view.scrollDOM.scrollTop, left: view.scrollDOM.scrollLeft };
     clickedFormula.delete(view);
   }
-  const anchor = useRef({ getBoundingClientRect: () => anchorRect.current ?? new DOMRect(), contextElement: view.contentDOM });
+  const anchor = useRef({
+    getBoundingClientRect: () => {
+      const opened = anchorRect.current;
+      if (!opened) return new DOMRect();
+      const { rect } = opened;
+      return new DOMRect(rect.x - (view.scrollDOM.scrollLeft - opened.left), rect.y - (view.scrollDOM.scrollTop - opened.top), rect.width, rect.height);
+    },
+    contextElement: view.contentDOM,
+  });
+  // A close by a click on the page leaves the caret where the click put it.
+  const outside = useRef(false);
   // Centred under a formula. A new one starts at the caret, so the popover starts there too, and a new
   // display block grows down the page, so its popover sits above it. Both stay so as the formula is written.
-  const fresh = editor.to === editor.from && !editor.opening;
+  const fresh = editor.fresh && editor.to === editor.from;
   const align = useRef<'center' | 'start'>(fresh ? 'start' : 'center').current;
   const side = useRef<'top' | 'bottom'>(fresh && editor.kind === 'block' ? 'top' : 'bottom').current;
 
@@ -89,14 +100,23 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
 
   useLayoutEffect(() => {
     const element = fieldRef.current;
-    if (!element || caret.current === null) return;
+    if (!element) return;
+    // One to eight rows, counting the lines long TeX wraps onto.
+    element.style.height = 'auto';
+    if (element.scrollHeight > 0) {
+      const style = getComputedStyle(element);
+      const borders = pixels(style, style.borderTopWidth) + pixels(style, style.borderBottomWidth);
+      const most = MAX_ROWS * pixels(style, style.lineHeight) + pixels(style, style.paddingTop) + pixels(style, style.paddingBottom) + borders;
+      element.style.height = `${Math.min(element.scrollHeight + borders, most)}px`;
+    }
+    if (caret.current === null) return;
     element.setSelectionRange(caret.current, caret.current);
     caret.current = null;
   });
 
   const close = (keepFocus = true) => {
     if (!view.state.field(mathEditor, false)) return;
-    closeMathEditor(view, value.current, keepFocus);
+    closeMathEditor(view, value.current, keepFocus && !outside.current, outside.current ? 'keep' : 'after');
   };
 
   // Closes keeping what was written when the window loses focus, the formula scrolls out of view, or the page goes.
@@ -137,31 +157,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
 
   const toggleDisplay = (toDisplay: boolean) => {
     if (toDisplay === display) return;
-    const current = view.state.field(mathEditor, false);
-    if (!current) return;
-    const result = switchDisplay(view.state, current);
-    if (result.problem) {
-      view.dispatch({ effects: setMathEditor.of({ ...current, problem: result.problem }) });
-      return;
-    }
-    view.dispatch({ changes: result.changes, annotations: [mathWrite.of('live'), Transaction.addToHistory.of(false)] });
-    const node = mathNodeAt(syntaxTree(view.state), result.anchor, -1);
-    if (!node) return;
-    const next = editorFor(view.state, node);
-    view.dispatch({ effects: setMathEditor.of({ ...next, id: current.id, opening: current.opening, version: current.version }) });
-    setField(next.tex);
-  };
-
-  const notFormula = () => {
-    const current = view.state.field(mathEditor, false);
-    if (!current) return;
-    const live = view.state.sliceDoc(current.from, current.to);
-    if (live !== current.opening) {
-      view.dispatch({ changes: { from: current.from, to: current.to, insert: current.opening }, annotations: [mathWrite.of('restore'), Transaction.addToHistory.of(false)] });
-    }
-    const changes = notAFormula(view.state, current.from, current.from + current.opening.length);
-    view.dispatch({ changes: changes ?? [], effects: setMathEditor.of(null), annotations: [mathWrite.of('final')], userEvent: 'math.write' });
-    view.focus();
+    const next = toggleKind(view, toDisplay);
+    if (next && !next.problem && next.tex !== field) setField(next.tex);
   };
 
   const rows = Math.min(MAX_ROWS, Math.max(1, field.split('\n').length));
@@ -170,7 +167,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   const spot = at !== null && editor.problem === null ? lineColumn(field.trim(), at) : null;
 
   return (
-    <Popover open onOpenChange={(open) => { if (!open) close(); }}>
+    <Popover open onOpenChange={(open) => { if (!open) close(); outside.current = false; }}>
       <PopoverAnchor virtualRef={anchor} />
       <PopoverContent
         ref={content}
@@ -185,6 +182,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
           fieldRef.current?.setSelectionRange(field.length, field.length);
         }}
         onCloseAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => { outside.current = view.dom.contains(event.target as Node); }}
       >
         <div className="opal-math-popover">
           <div className="opal-math-preview" aria-hidden>
@@ -221,10 +219,10 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
           <div className="opal-math-footer">
             <div className="opal-math-segments" role="group" aria-label="Formula layout">
               <button type="button" className="opal-math-segment" aria-pressed={!display} onClick={() => toggleDisplay(false)}>Inline</button>
-              <button type="button" className="opal-math-segment" aria-pressed={display} disabled={editor.table} onClick={() => toggleDisplay(true)}>Display</button>
+              <button type="button" className="opal-math-segment" aria-pressed={display} disabled={editor.table} title={editor.table ? TABLE_INLINE_ONLY : undefined} onClick={() => toggleDisplay(true)}>Display</button>
             </div>
             <span className="flex-1" />
-            {editor.opening ? <button type="button" className="opal-math-quiet" onClick={notFormula}>Not a formula</button> : null}
+            {editor.fresh ? null : <button type="button" className="opal-math-quiet" onClick={() => closeAsText(view)}>Not a formula</button>}
             <Button size="compact" onClick={() => close()}>Done</Button>
           </div>
         </div>

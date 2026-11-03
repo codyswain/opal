@@ -203,8 +203,9 @@ function parseBlockMath(cx: BlockContext, line: BlockLine): boolean {
   const text = (textFrom: number, textTo: number) => {
     if (textTo > textFrom) children.push(cx.elt('MathText', textFrom, textTo));
   };
-  // The TeX keeps each line's spaces, so a write maps onto the file's bytes exactly.
-  if (opener === 'dollar') text(cx.lineStart + line.skipSpace(line.pos + 2), cx.lineStart + line.text.length);
+  // The TeX keeps each line's spaces, so a write maps onto the file's bytes exactly. A CRLF line's "\r" is its line end, not TeX.
+  const lineEnd = () => cx.lineStart + line.text.length - (line.text.endsWith('\r') ? 1 : 0);
+  if (opener === 'dollar') text(cx.lineStart + line.skipSpace(line.pos + 2), lineEnd());
   let end = cx.lineStart + line.text.length;
   while (cx.nextLine() && (line as unknown as LineInternals).depth >= cx.depth) {
     children.push(...line.markers);
@@ -216,7 +217,7 @@ function parseBlockMath(cx: BlockContext, line: BlockLine): boolean {
       cx.nextLine();
       break;
     }
-    text(cx.lineStart + line.basePos, cx.lineStart + line.text.length);
+    text(cx.lineStart + line.basePos, lineEnd());
   }
   children.sort((a, b) => a.from - b.from);
   cx.addElement(cx.elt('BlockMath', from, end, children));
@@ -303,7 +304,7 @@ export function mathNodes(tree: Tree, from: number, to: number): SyntaxNode[] {
 }
 
 // A line's start, past quote marks, a list marker and spaces, then a block opener.
-const OPENER_LINE = /^([ \t>]*(?:(?:[-+*]|\d{1,9}[.)])[ \t]+)?[ \t]*)(?:\$\$|\\\[[ \t]*$)/;
+const OPENER_LINE = /^([ \t>]*(?:(?:[-+*]|\d{1,9}[.)])[ \t]+)?[ \t]*)(?:\$\$|\\\[[ \t\r]*$)/;
 const BLANK = /^[ \t>]*$/;
 const RUN_LINES = 2_000;
 
