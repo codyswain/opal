@@ -9,6 +9,7 @@ import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
 import { followLink } from './linkSchemes';
+import { mathSpan } from './math';
 import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type TextRange } from './extensionPoints';
 import { CalloutIconWidget } from './callouts';
 import {
@@ -362,6 +363,8 @@ function inlinePieces(state: EditorState, node: SyntaxNode, from: number, to: nu
     } else if (child.name === 'URL') {
       const written = state.sliceDoc(child.from, child.to);
       pieces.push({ kind: 'link', children: [{ kind: 'text', text: written }], href: autolinkHref(written) });
+    } else if (child.name === 'InlineMath' || child.name === 'DisplayMath') {
+      pieces.push({ kind: 'math', tex: mathSpan(state.doc, child).tex, display: child.name === 'DisplayMath', source: state.sliceDoc(child.from, child.to) });
     } else if (child.name === 'Escape') {
       pieces.push({ kind: 'text', text: state.sliceDoc(child.from + 1, child.to) });
     } else if (child.name === 'HTMLTag' && /^<br\s*\/?>$/i.test(state.sliceDoc(child.from, child.to))) {

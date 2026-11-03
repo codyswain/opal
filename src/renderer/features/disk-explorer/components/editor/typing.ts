@@ -267,6 +267,14 @@ function finishesLink(state: EditorState, at: number): boolean {
   return false;
 }
 
+/** Whether the "$" typed at `at` closes an inline or display formula. */
+function finishesFormula(state: EditorState, at: number): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at + 1, -1); node; node = node.parent) {
+    if (node.name === 'InlineMath' || node.name === 'DisplayMath') return node.to === at + 1;
+  }
+  return false;
+}
+
 /** An extra change that keeps a typed character as typed, or null when it shows as typed already. */
 function escapeTyped(tr: Transaction): TransactionSpec | null {
   const typed = typedCharacter(tr);
@@ -353,6 +361,8 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if (LINE_SHORTCUTS.has(mark.name) && mark.from === at && !/\S/.test(after.sliceDoc(at + text.length, line.to))) return null;
   // The last bracket of a link or wiki link, or the ">" of an autolink, finishes a link typed by hand.
   if ((text === ']' || text === ')' || text === '>') && finishesLink(after, at)) return null;
+  // A typed "$" that closes a formula draws it.
+  if (text === '$' && finishesFormula(after, at)) return null;
   const shown = visibleLine(before, caret);
   const expected = shown.text.slice(0, visibleOffset(shown, caret)) + text + shown.text.slice(visibleOffset(shown, typed.to));
   if (visibleLine(after, at).text === expected) return null;

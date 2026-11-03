@@ -24,6 +24,7 @@ node e2e/acceptance/git-autostash-acceptance.mjs # Autosave during vault-pull.sh
 node e2e/acceptance/gallery.mjs [area] [--out dir] # The look gallery: each e2e/fixtures/gallery/*.mdo light and dark at 700 and 420px, into e2e/out/gallery/index.html
 node e2e/acceptance/mdo-typing-acceptance.mjs [--shots dir] # Typing in a document with the real keyboard: 2*3*4, a wiki link, 3.14, Option+Arrow, Shift+Cmd+Left, Replace All with the floating Find bar; saved bytes and screenshots
 node e2e/acceptance/ime-acceptance.mjs        # Input methods: a Japanese composition and a dead key at each caret cell land where a typed letter does; prints a result table
+node e2e/acceptance/mdo-math-acceptance.mjs [--out dir] # Math in documents: drawing, the formula popover, one undo step, Backspace, ⇧⌘E, notes' source, light and dark screenshots
 ```
 
 The gallery writes to `--out`, then `OPAL_GALLERY_OUT`, then `e2e/out/gallery`.

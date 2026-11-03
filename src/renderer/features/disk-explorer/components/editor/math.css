@@ -1,0 +1,246 @@
+/*
+ * Formulas on the page, drawn by KaTeX in the text colour. Spacing is
+ * padding, never margins, since CodeMirror measures boxes.
+ */
+
+.opal-editor .cm-editor .cm-math .katex {
+  font-size: 1.1em;
+  line-height: 1.2;
+  text-indent: 0;
+}
+
+/*
+ * An inline-block takes the line's text-indent, which a list item's line sets to hang its marker.
+ * A formula wider than the column breaks after its relations and operators, where KaTeX allows.
+ */
+.opal-editor .cm-editor .cm-math-inline {
+  display: inline-block;
+  text-indent: 0;
+  max-width: 100%;
+  border-radius: 4px;
+  vertical-align: baseline;
+  white-space: normal;
+}
+
+/* Display math: centred on its own line, scrolling sideways in its own box when wide. */
+.opal-editor .cm-editor .cm-math-display {
+  display: block;
+  text-indent: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5em 0;
+  border-radius: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-math .katex-display {
+  margin: 0;
+}
+
+.opal-editor .cm-editor .cm-math a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary));
+  text-underline-offset: 2px;
+}
+
+/* A formula in link text carries the link's underline, which text-decoration can't reach inside an inline-block. */
+.opal-editor .cm-editor .cm-md-link .cm-math-inline {
+  box-shadow: inset 0 -1px 0 hsl(var(--text-tertiary) / 0.55);
+}
+
+/* A block over whole lines: inside a quote or callout it takes the box's ground, inside a list it lines up with the item's text. */
+.opal-editor .cm-editor .cm-math-block {
+  box-sizing: border-box;
+  padding-left: calc(var(--quote-indent, 0px) + var(--list-indent, 0px));
+  white-space: normal;
+}
+
+/* TeX KaTeX can't read: the source, muted, with KaTeX's message on hover. Never red. */
+.opal-editor .cm-editor .cm-math-error {
+  color: var(--editor-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  text-decoration: underline dotted 1px;
+  text-decoration-color: var(--editor-muted);
+  text-underline-offset: 3px;
+  white-space: pre-wrap;
+}
+
+/* A formula that draws nothing, such as a macro definition: its source, quiet, so it can be clicked and deleted on purpose. */
+.opal-editor .cm-editor .cm-math-empty {
+  padding: 0 0.2em;
+  color: var(--editor-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+
+.opal-editor .cm-editor .cm-math-display.cm-math-error,
+.opal-editor .cm-editor .cm-math-display.cm-math-empty {
+  text-align: left;
+}
+
+/* A note shows a formula's TeX while the caret is in it. */
+.opal-editor .cm-editor .cm-math-source {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Documents: a formula takes the hover fill and a pointer, and opens its popover on a click. Not data-object, since a click on one in link text belongs to the link. */
+.opal-editor .cm-editor .cm-math[data-formula] {
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-math[data-formula]:hover {
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-object-framed-inline .cm-math {
+  background-color: hsl(var(--surface-selected));
+}
+
+/* The formula the popover edits is selected: a fill and an inset edge in a line or a cell, the object frame on a block. */
+.opal-editor .cm-editor .cm-math-editing > .cm-math,
+.opal-editor .cm-editor .cm-math[data-math-editing] {
+  background-color: hsl(var(--surface-selected));
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-content > [data-math-editing] {
+  border-radius: var(--radius-row);
+  box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
+}
+
+/* The formula popover: the shared popover surface, 360px wide. It draws outside the editor, so it sets the editor's sunken grey itself. */
+.opal-math-popover {
+  --editor-sunken: hsl(var(--foreground) / 0.045);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-math-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 56px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--radius-row);
+  background-color: var(--editor-sunken);
+  color: hsl(var(--foreground));
+}
+
+.opal-math-preview .katex {
+  font-size: 1.2em;
+}
+
+.opal-math-preview .katex-display {
+  margin: 0;
+}
+
+.opal-math-preview-empty {
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-label-size);
+}
+
+.opal-math-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid hsl(var(--border-strong));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  resize: none;
+}
+
+.opal-math-field:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+/* Room for the caret line and the message, so the footer stays put as errors come and go. */
+.opal-math-problem {
+  min-height: calc(1.4em + 13px);
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+}
+
+.opal-math-problem-caret {
+  display: block;
+  padding-left: 9px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  white-space: pre;
+}
+
+.opal-math-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opal-math-segments {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-math-segment {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: calc(var(--radius-control) - 2px);
+  color: hsl(var(--text-secondary));
+  font-size: var(--text-label-size);
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-math-segment:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.opal-math-segment[aria-pressed='true'] {
+  background-color: hsl(var(--surface-raised));
+  box-shadow: 0 0 0 1px hsl(var(--border-subtle));
+  color: hsl(var(--foreground));
+}
+
+.opal-math-segment:focus-visible,
+.opal-math-quiet:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-math-quiet {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-label-size);
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-math-quiet:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--text-secondary));
+}

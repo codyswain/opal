@@ -135,6 +135,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^10.0.0",
     "fs-extra": "^11.3.0",
+    "katex": "0.18.11",
     "keytar": "^7.9.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.436.0",

@@ -18,6 +18,8 @@ import { indentInQuote, toggleMarker } from './formatCommands';
 import { nestListItems, withoutRenumbering } from './listKeys';
 import { fileInserts } from './imageInsert';
 import { docMode, linkMarkStyle, livePreview } from './livePreview';
+import { mathSyntax } from './math';
+import { math } from './mathWidget';
 import { pageProperties } from './pageProperties';
 import { tableKeys } from './tableKeys';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
@@ -176,7 +178,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     EditorState.lineSeparator.of('\n'),
     pageContext.of({ path, openNote }),
     history(),
-    markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle], completeHTMLTags: false, addKeymap: false }),
+    markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle, mathSyntax], completeHTMLTags: false, addKeymap: false }),
     syntaxHighlighting(highlight),
     wikiLinks,
     fileInserts,
@@ -185,6 +187,8 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     guardedLineMoves,
     tableKeys,
     callouts,
+    // Before code blocks, so a math fence draws as a formula.
+    math,
     codeBlocks,
     pageProperties,
     search({ top: true }),
