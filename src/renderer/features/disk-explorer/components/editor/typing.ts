@@ -307,7 +307,14 @@ function splitAtBreak(tr: Transaction): TransactionSpec | null {
   // Enter takes the spaces around the caret with it.
   const [edit] = edits;
   if (edits.length !== 1 || edit.from > main.head || edit.to < main.head || !edit.insert.startsWith('\n') || /\S/.test(state.sliceDoc(edit.from, edit.to))) return null;
-  const spans = inlineSpans(state, main.head, main.head).filter((span) => SPLIT.has(span.name) && span.textFrom < edit.from && edit.to < span.textTo);
+  const around = inlineSpans(state, main.head, main.head).filter((span) => SPLIT.has(span.name));
+  // At the start of formatting's text, the break goes before its marks, so the formatting moves down whole.
+  const starting = around.filter((span) => span.from < edit.from && span.textFrom === edit.from && edit.to === edit.from);
+  if (starting.length > 0 && !around.some((span) => span.textFrom < edit.from && edit.from < span.textTo)) {
+    const at = Math.min(...starting.map((span) => span.from));
+    return { changes: { from: at, insert: edit.insert }, selection: { anchor: at + edit.insert.length + (main.head - at) }, scrollIntoView: true, userEvent: event };
+  }
+  const spans = around.filter((span) => span.textFrom < edit.from && edit.to < span.textTo);
   if (spans.length === 0) return null;
   // Marks never sit against a space: the spaces on either side of the break go.
   let from = edit.from;

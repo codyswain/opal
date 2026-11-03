@@ -86,6 +86,10 @@ describe('Find and Replace in a document', () => {
     query(view, 'plan', '*not italic*');
     run(view, replaceAll);
     expect(text(view)).toBe('a \\*not italic\\* here\n');
+    const under = mount('a plan here\n');
+    query(under, 'plan', '_x_ and snake_case');
+    run(under, replaceAll);
+    expect(text(under)).toBe('a \\_x\\_ and snake_case here\n');
     const table = mount('| a | b |\n|---|---|\n| plan | x |\n');
     query(table, 'plan', 'a|b');
     run(table, replaceAll);

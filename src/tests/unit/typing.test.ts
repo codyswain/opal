@@ -126,6 +126,14 @@ describe('typing in a document', () => {
     at(one, 0);
     type(one, '1. go');
     expect(text(one)).toBe('1. go\n');
+    const paren = mount('\n');
+    at(paren, 0);
+    type(paren, '1) go');
+    expect(text(paren)).toBe('1) go\n');
+    const two = mount('Intro\n\n');
+    at(two, 7);
+    type(two, '2) x');
+    expect(text(two)).toBe('Intro\n\n2\\) x');
   });
 
   it('keeps a bullet, task, quote or heading typed at a line start, and escapes a mark typed before text', () => {
@@ -261,6 +269,19 @@ describe('Enter inside formatting in a document', () => {
     for (const [doc, before, written] of cases) {
       const view = mount(`${doc}\n`);
       at(view, doc.indexOf(before) + before.length);
+      enter(view);
+      expect(text(view)).toBe(`${written}\n`);
+    }
+  });
+
+  it('makes two paragraphs, each still bold or linked, from Enter twice', () => {
+    for (const [doc, before, written] of [
+      ['**bold text**', 'bold', '**bold**\n\n**text**'],
+      ['[link text](https://x.com)', 'link', '[link](https://x.com)\n\n[text](https://x.com)'],
+    ]) {
+      const view = mount(`${doc}\n`);
+      at(view, doc.indexOf(before) + before.length);
+      enter(view);
       enter(view);
       expect(text(view)).toBe(`${written}\n`);
     }

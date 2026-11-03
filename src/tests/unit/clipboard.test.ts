@@ -86,6 +86,16 @@ describe('copy, cut and drag in a document', () => {
     expect(balancedText(view.state, doc.indexOf('Some'), doc.indexOf(' end'))).toBe('Some **bold** and a [link](https://x.com)');
   });
 
+  it('copies a formula whole, with its dollars, when a selection ends inside it', () => {
+    const formula = protectedRanges.of((state) => {
+      const doc = state.doc.toString();
+      const at = doc.indexOf('$');
+      return at === -1 ? [] : [{ from: at, to: doc.indexOf('$', at + 1) + 1 }];
+    });
+    const view = mount('Area $a^2 + b$ end\n', [formula]);
+    expect(balancedText(view.state, 0, text(view).indexOf('+'))).toBe('Area $a^2 + b$');
+  });
+
   it('copies code as it is from a selection inside it', () => {
     const view = mount('Use `a*b*c` here\n');
     const from = text(view).indexOf('a*b');
