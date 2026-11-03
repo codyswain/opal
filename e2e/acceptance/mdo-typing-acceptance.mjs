@@ -241,6 +241,20 @@ try {
   await page.waitForTimeout(150);
   for (let index = 0; index < 3; index += 1) await page.keyboard.press('Tab');
   await shoot('typing-find-toggles');
+  // In a narrow window the bar's controls wrap inside it.
+  const size = await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; const [width, height] = win.getSize(); win.setSize(760, height); return [width, height]; });
+  await page.waitForTimeout(300);
+  const fits = await page.evaluate(() => {
+    const bar = document.querySelector('.cm-panel.cm-search').getBoundingClientRect();
+    return [...document.querySelectorAll('.cm-search input, .cm-search button, .cm-search label')].every((control) => {
+      const box = control.getBoundingClientRect();
+      return box.width === 0 || (box.left >= bar.left - 1 && box.right <= bar.right + 1);
+    });
+  });
+  check('in a narrow window every Find bar control stays inside the bar', fits);
+  await shoot('typing-find-narrow');
+  await app.evaluate(({ BrowserWindow }, [width, height]) => { BrowserWindow.getAllWindows()[0].setSize(width, height); }, size);
+  await page.waitForTimeout(300);
   await page.locator('.cm-search input[name="case"]').uncheck();
   await page.keyboard.press('Escape');
 
@@ -276,7 +290,7 @@ try {
   const fixture = `${vault}/Notes/typing-gallery.mdo`;
   await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'typing.mdo'), fixture);
   await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, fixture);
-  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('Links over half-bold text'), null, { timeout: 15_000 });
+  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('Escaped literals'), null, { timeout: 15_000 });
   await caretAt('**b**[**old** t]', 0);
   await page.evaluate(() => {
     const editor = document.querySelector('.cm-content').cmTile.root.view;
