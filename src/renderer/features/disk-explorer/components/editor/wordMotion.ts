@@ -2,7 +2,7 @@ import { EditorSelection, EditorState, Prec, type ChangeSpec, type EditorSelecti
 import { keymap, type Command } from '@codemirror/view';
 import { EMPHASIS, inlineSpans } from './formatCommands';
 import { docMode } from './livePreview';
-import { rawAfter, rawRange, visibleLine, visibleOffset } from './visibleText';
+import { rawAfter, rawRange, visibleLine, visibleOffset, visibleSlice } from './visibleText';
 
 /*
  * Word and line keys in a document, by the text the page shows. Option+Arrow
@@ -22,6 +22,21 @@ function words(text: string): { from: number; to: number }[] {
     if (segment.isWordLike) found.push({ from: segment.index, to: segment.index + segment.segment.length });
   }
   return found;
+}
+
+/** How many words `text` holds, as the system segments them: CJK text counts by its words, not by spaces. */
+export function countWords(text: string): number {
+  let count = 0;
+  for (const segment of segmenter.segment(text)) if (segment.isWordLike) count += 1;
+  return count;
+}
+
+/** The words the page shows, and those in the selection when there is one. */
+export function pageWords(state: EditorState): { words: number; selected: number | null } {
+  const words = countWords(visibleSlice(state, 0, state.doc.length));
+  const ranges = state.selection.ranges.filter((range) => !range.empty);
+  const selected = ranges.length > 0 ? ranges.reduce((sum, range) => sum + countWords(visibleSlice(state, range.from, range.to)), 0) : null;
+  return { words, selected };
 }
 
 /** The offset Option+Right reaches from `offset`: the end of the word at or after it, else the line's end. */
