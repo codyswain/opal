@@ -42,4 +42,10 @@ describe('the look of documents', () => {
     expect(declarations).toMatch(/box-shadow: inset 0 -1px 0/);
     expect(declarations).toMatch(/border-radius: 0;/);
   });
+
+  it('edges a card\'s picture of a page with a hairline, so a white page shows its shape on a white card', () => {
+    const declarations = rule('files.css', '.opal-editor .cm-editor .cm-file-card-tile-thumb.cm-file-card-tile-page::after');
+    expect(declarations).toMatch(/box-shadow: inset 0 0 0 1px hsl\(var\(--border-subtle\)\)/);
+    expect(declarations).toMatch(/pointer-events: none/);
+  });
 });

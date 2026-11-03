@@ -460,6 +460,9 @@ function hoverPreview(card: HTMLElement, path: string): void {
   card.addEventListener('mouseleave', hide);
 }
 
+/** Files whose thumbnail is a page or a slide. */
+const PAGE_PICTURE = /\.(pdf|docx?|pptx?|xlsx?|key|pages|numbers)$/i;
+
 async function thumbnailInto(view: EditorView, tile: HTMLElement, path: string, px = THUMB_PX): Promise<void> {
   const url = await thumbnailUrl(path, px);
   if (!url) return;
@@ -470,6 +473,8 @@ async function thumbnailInto(view: EditorView, tile: HTMLElement, path: string, 
   // Over the type's icon, which shows through a thumbnail with a transparent ground.
   tile.append(image);
   tile.classList.add('cm-file-card-tile-thumb');
+  // A page's picture is mostly white, so its tile draws an edge (files.css).
+  if (PAGE_PICTURE.test(path)) tile.classList.add('cm-file-card-tile-page');
   view.requestMeasure();
 }
 
