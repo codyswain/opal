@@ -1,7 +1,8 @@
 // Disposable Electron acceptance for input methods in a document. At each
 // caret cell (both edges of bold, after a link, inline code and a wiki
 // link, the text start of a list item, task, heading and quote, after Cmd+B,
-// and over a selection that crosses a mark) it types one letter with the
+// over a selection that crosses a mark, and on both sides of an inline
+// formula, at a line's start and end too) it types one letter with the
 // real keyboard, then sends the same place an input method's composition
 // through the DevTools protocol (Input.imeSetComposition, then
 // Input.insertText), and a dead key (´ then é). The composed text must land
@@ -36,6 +37,10 @@ const CELLS = [
   { name: 'quote start', doc: '> ‸quoted' },
   { name: 'after Cmd+B', doc: 'Some text ‸', bold: true },
   { name: 'selection across a mark', doc: 'Some **bo«ld** te»xt' },
+  { name: 'after an inline formula', doc: 'Energy $E=mc^2$‸ and more.' },
+  { name: 'before an inline formula', doc: 'Energy ‸$E=mc^2$ and more.' },
+  { name: 'line start, before a formula', doc: '‸$x$ starts this line.' },
+  { name: 'line end, after a formula', doc: 'This line ends with $y$‸' },
 ];
 
 const COMPOSITIONS = [
