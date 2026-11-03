@@ -65,6 +65,64 @@
   background-size: calc((var(--quote-depth) - 1) * 1em + 2px) 100%;
 }
 
+/* Wide tables: a cell's text is at most 24em wide, and long code and links break. */
+.opal-editor .cm-editor .cm-md-table .cm-md-cell {
+  max-width: 24em;
+}
+
+.opal-editor .cm-editor .cm-md-table .cm-md-cell code,
+.opal-editor .cm-editor .cm-md-table .cm-md-cell .cm-md-link,
+.opal-editor .cm-editor .cm-md-table .cm-md-cell .cm-md-wikilink {
+  overflow-wrap: anywhere;
+}
+
+/* A clipped edge of a table that scrolls sideways fades out over 24px. */
+.opal-editor .cm-editor .cm-md-table {
+  --table-fade: hsl(var(--canvas));
+  --table-fade-right: 0px;
+  position: relative;
+}
+
+.opal-editor .cm-editor .cm-md-table.cm-md-in-callout {
+  --table-fade: var(--editor-sunken);
+  --table-fade-right: 1em;
+}
+
+.opal-editor .cm-editor .cm-md-table::before,
+.opal-editor .cm-editor .cm-md-table::after {
+  content: "";
+  position: absolute;
+  top: 0.35em;
+  bottom: 0.35em;
+  z-index: 1;
+  width: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-table::before {
+  left: calc(var(--quote-indent, 0px) + var(--list-indent, 0px));
+  background: linear-gradient(to right, var(--table-fade), transparent);
+}
+
+.opal-editor .cm-editor .cm-md-table::after {
+  right: var(--table-fade-right);
+  background: linear-gradient(to left, var(--table-fade), transparent);
+}
+
+.opal-editor .cm-editor .cm-md-table.cm-md-clipped-left::before,
+.opal-editor .cm-editor .cm-md-table.cm-md-clipped-right::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-md-table::before,
+  .opal-editor .cm-editor .cm-md-table::after {
+    transition: none;
+  }
+}
+
 /* The style menu on a callout's title, which takes no heading. */
 .opal-editor .opal-doc-toolbar-style:disabled {
   pointer-events: none;

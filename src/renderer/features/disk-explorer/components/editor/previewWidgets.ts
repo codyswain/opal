@@ -331,6 +331,17 @@ function renderInline(pieces: InlinePiece[], parent: HTMLElement) {
   }
 }
 
+/** The resize watch of each drawn table, so a redraw or removal stops it. */
+const clipWatch = new WeakMap<HTMLElement, ResizeObserver>();
+
+/** Marks a wide table's clipped edges, where a fade shows there is more to scroll to. */
+function markClipped(frame: HTMLElement, scroller: HTMLElement) {
+  const left = scroller.scrollLeft > 0;
+  const right = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+  frame.classList.toggle('cm-md-clipped-left', left);
+  frame.classList.toggle('cm-md-clipped-right', right);
+}
+
 /**
  * A GFM table, shown as a table while no selection is in it. A click puts a
  * cell caret in the clicked cell, outlined, and the table stays drawn.
@@ -371,7 +382,11 @@ export class TableWidget extends WidgetType {
         if (source) {
           cell.dataset.offset = String(source.offset);
           if (source.offset === this.cellCaret) cell.classList.add('cm-md-cell-caret');
-          renderInline(source.content, cell);
+          // The cell's text sits in a box no wider than 24em, which a table cell cannot cap by itself.
+          const text = document.createElement('div');
+          text.className = 'cm-md-cell';
+          renderInline(source.content, text);
+          cell.append(text);
         }
         tr.append(cell);
       });
@@ -383,8 +398,46 @@ export class TableWidget extends WidgetType {
     for (const cells of this.model.rows) body.append(row(cells, 'td'));
     table.append(head, body);
     scroller.append(table);
+    scroller.addEventListener('scroll', () => markClipped(frame, scroller), { passive: true });
     frame.append(scroller);
+    clipWatch.get(frame)?.disconnect();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => markClipped(frame, scroller));
+      observer.observe(scroller);
+      observer.observe(table);
+      clipWatch.set(frame, observer);
+    }
     return frame;
+  }
+
+  /** An edit, an agent's included, redraws the table in place and keeps its sideways scroll. */
+  updateDOM(frame: HTMLElement) {
+    const left = frame.querySelector('.cm-md-table-scroll')?.scrollLeft ?? 0;
+    const fresh = this.toDOM();
+    frame.className = fresh.className;
+    frame.style.cssText = fresh.style.cssText;
+    frame.replaceChildren(...fresh.childNodes);
+    clipWatch.get(frame)?.disconnect();
+    const scroller = frame.querySelector<HTMLElement>('.cm-md-table-scroll');
+    const table = scroller?.querySelector('table');
+    if (scroller && table) {
+      scroller.scrollLeft = left;
+      scroller.addEventListener('scroll', () => markClipped(frame, scroller), { passive: true });
+      const moved = clipWatch.get(fresh);
+      moved?.disconnect();
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => markClipped(frame, scroller));
+        observer.observe(scroller);
+        observer.observe(table);
+        clipWatch.set(frame, observer);
+      }
+      markClipped(frame, scroller);
+    }
+    return true;
+  }
+
+  destroy(frame: HTMLElement) {
+    clipWatch.get(frame)?.disconnect();
   }
 
   get estimatedHeight() { return (this.model.rows.length + 1) * 34 + 16; }

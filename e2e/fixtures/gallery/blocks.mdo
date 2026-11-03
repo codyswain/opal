@@ -6,6 +6,11 @@ Setext title
 | Blocks | blocks.mdo | PR 1 |
 | Code | `code.mdo` with a long name | PR 3 |
 
+| File | Path | Size | Kind | Owner | Notes |
+|---|---|---|---|---|---|
+| Report | `Library/parametric/pr-process-audit-2026-10-30/checklist.md` | 12 KB | Markdown | Cody | A long note that wraps inside its cell at 24em instead of stretching the table |
+| Deck | [[Library/files/2026-11/deck.4f2a|Board deck]] | 26 MB | PowerPoint | Liam | One<br>two |
+
 ***
 
 - A bullet at the top

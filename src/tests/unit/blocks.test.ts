@@ -4,7 +4,7 @@ import { undo } from '@codemirror/commands';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState, type StateCommand } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+import { markdownEditorExtensions, replaceText } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { linkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
@@ -479,5 +479,20 @@ describe('quotes and callouts in a document', () => {
     const rule = mount('Text‸\n');
     act(() => { void rule.state.facet(insertItems).find((item) => item.id === 'rule')?.run(rule); });
     expect(marked(rule)).toBe('Text\n\n***\n‸\n');
+  });
+});
+
+describe('wide tables', () => {
+  it('caps each cell\'s text in a box and redraws in place on an agent\'s edit, keeping the sideways scroll', () => {
+    const view = mount(`Intro\n\n${TABLE}\n`);
+    const frameBefore = view.contentDOM.querySelector('.cm-md-table') as HTMLElement;
+    expect(frameBefore.querySelectorAll('td .cm-md-cell')).toHaveLength(2);
+    const scroller = frameBefore.querySelector('.cm-md-table-scroll') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollLeft', { configurable: true, value: 120, writable: true });
+    act(() => { replaceText(view, `Intro\n\n${TABLE.replace('| 1 |', '| one |')}\n`); });
+    const frameAfter = view.contentDOM.querySelector('.cm-md-table') as HTMLElement;
+    expect(frameAfter).toBe(frameBefore);
+    expect(frameAfter.querySelector('td')?.textContent).toBe('one');
+    expect((frameAfter.querySelector('.cm-md-table-scroll') as HTMLElement).scrollLeft).toBe(120);
   });
 });
