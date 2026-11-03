@@ -30,7 +30,9 @@ import {
   typingStyle,
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
+import { insertImageItem } from './imageInsert';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
+import { currentKeyEvent, deleteObject, focusObjectBar, objectFrameExtension } from './objectFrame';
 import { opensNewTab } from './wikiLinks';
 
 /*
@@ -252,13 +254,15 @@ function moveVisibly(forward: boolean, extend: boolean): Command {
  * the selection. The marks around it stay, unless its formatting is left
  * with no text. At the start of a heading Backspace joins it to the line
  * above, or makes it text on the first line. Right after a list or quote
- * marker it leaves the key to the list commands.
+ * marker it leaves the key to the list commands. A framed object, the
+ * delete handlers and the objects beside the caret come first.
  */
 function deleteVisibly(forward: boolean): Command {
   return (view) => {
     const { state } = view;
     const range = state.selection.main;
     if (state.readOnly || state.selection.ranges.length > 1) return false;
+    if (deleteObject(view, forward ? 1 : -1, currentKeyEvent(view, forward ? 'Delete' : 'Backspace'))) return true;
     let { from, to } = range;
     if (range.empty) {
       const line = state.doc.lineAt(range.head);
@@ -346,8 +350,12 @@ export const editLink: Command = (view) => {
   return true;
 };
 
-/** Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the toolbar, since Tab indents in the text. */
+/**
+ * Option+F10, or ⌃⌥T where F10 is the Mute key, moves focus to the framed
+ * object's bar, or else to the toolbar, since Tab indents in the text.
+ */
 const focusToolbar: Command = (view) => {
+  if (focusObjectBar(view)) return true;
   const button = view.dom.closest('.opal-editor')?.querySelector<HTMLElement>('[role="toolbar"] [tabindex="0"]');
   button?.focus();
   return Boolean(button);
@@ -421,6 +429,8 @@ export function docModeExtensions(): Extension {
   const input = { composing: false };
   return [
     docMode.of(true),
+    objectFrameExtension,
+    insertImageItem,
     autoformatted,
     linkEditor,
     atoms,

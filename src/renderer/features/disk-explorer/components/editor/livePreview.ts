@@ -8,6 +8,7 @@ import { classifyFile, pageName } from '@/common/fileKind';
 import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
+import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type TextRange } from './extensionPoints';
 import {
   CalloutIconWidget,
   CalloutTitleWidget,
@@ -101,12 +102,6 @@ const revealState = StateField.define<RevealState>({
 });
 
 const trackFocus = EditorView.focusChangeEffect.of((_state, focusing) => setFocused.of(focusing));
-
-/** Which ranges show as source: `lines` when a selection touches one of their lines, `span` only when it touches the range itself. */
-interface Reveal {
-  lines: (from: number, to?: number) => boolean;
-  span: (from: number, to?: number) => boolean;
-}
 
 const NOTHING_REVEALED: Reveal = { lines: () => false, span: () => false };
 
@@ -425,8 +420,21 @@ const LEAF_BLOCKS = new Set([
 
 function findBlocks(state: EditorState): PreviewBlock[] {
   const blocks: PreviewBlock[] = [];
+  const renderers = state.facet(blockRenderers);
   syntaxTree(state).iterate({
     enter: (ref) => {
+      const registered = renderers.get(ref.name);
+      if (registered) {
+        const node = ref.node;
+        const from = state.doc.lineAt(node.from).from;
+        const to = lastLine(state.doc, node).to;
+        for (const renderer of registered) {
+          const widget = renderer.widget(state, node, from, to, blockLayout(state.doc, node, to));
+          if (widget === undefined) continue;
+          if (widget) blocks.push({ from, to, widget });
+          return false;
+        }
+      }
       if (LEAF_BLOCKS.has(ref.name)) return false;
       if (ref.name !== 'Table' && ref.name !== 'FencedCode') return;
       const node = ref.node;
@@ -497,8 +505,11 @@ const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
 const horizontalRule = new HorizontalRuleWidget();
 
-/** Decorations for the lines from `top` to `bottom`: everything but tables and fenced code. */
-function lineDecorations(state: EditorState, top: number, bottom: number): DecorationSet {
+/**
+ * Decorations for the lines from `top` to `bottom`: everything but tables and
+ * fenced code. Ranges node decorators mark as units go into `units`.
+ */
+function lineDecorations(state: EditorState, top: number, bottom: number, units?: TextRange[]): DecorationSet {
   const { doc } = state;
   const reveal = revealer(state);
   const page = state.facet(pageContext).path;
@@ -529,12 +540,18 @@ function lineDecorations(state: EditorState, top: number, bottom: number): Decor
   const continued = new Map<number, { indent: number; quoted: boolean }>();
   const markerLines = new Set<number>();
   const calloutHeads = new Set<number>();
+  const decorators = state.facet(nodeDecorators);
+  const ctx: DecorateContext = {
+    state, reveal, docMode: state.facet(docMode), page, links, versions, picked, out, hide, lineClass, covered,
+    unit: (from, to) => { if (to > from) units?.push({ from, to }); },
+  };
 
   syntaxTree(state).iterate({
     from: top,
     to: bottom,
     enter: (ref) => {
       const node = ref.node;
+      if (decorators.get(ref.name)?.some((decorator) => decorator.decorate(ctx, node) === true)) return false;
       switch (ref.name) {
         case 'Table':
         case 'FencedCode':
@@ -771,11 +788,15 @@ export function hiddenRanges(state: EditorState, from: number, to: number): Hidd
     if (node.name === 'ListItem') start = Math.min(start, node.from);
   }
   const found: HiddenRange[] = [];
-  lineDecorations(state, start, to).between(from, to, (rangeFrom, rangeTo, decoration) => {
+  const units: TextRange[] = [];
+  lineDecorations(state, start, to, units).between(from, to, (rangeFrom, rangeTo, decoration) => {
     if (!decoration.point || rangeTo <= rangeFrom) return;
     const caretAfter = Boolean(decoration.spec.caretAfter);
     found.push({ from: rangeFrom, to: rangeTo, caretAfter, unit: Boolean(decoration.spec.widget) && !caretAfter });
   });
+  for (const unit of units) {
+    if (unit.to >= from && unit.from <= to) found.push({ ...unit, caretAfter: false, unit: true });
+  }
   const reveal = revealer(state);
   for (const target of state.field(linkDefinitions).long) {
     if (target.to >= from && target.from <= to && !reveal.lines(target.line)) found.push({ from: target.from, to: target.to, caretAfter: false, unit: true });

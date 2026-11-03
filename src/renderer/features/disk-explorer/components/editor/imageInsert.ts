@@ -3,6 +3,7 @@ import { syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { classifyFile, pageName } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
@@ -11,6 +12,7 @@ import type { FilesResult, ImportedFile } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
 import { draggedTreeFile } from '../dragMoveState';
 import { vaultRelativePath } from '../tabLabels';
+import { insertItems } from './extensionPoints';
 import { embedWidth, imageSize } from './imageSize';
 import { linksResolved, pageContext } from './wikiLinks';
 
@@ -292,3 +294,15 @@ const filePaste = EditorView.domEventHandlers({
 });
 
 export const fileInserts: Extension = [places, dropLine, fileDrops, filePaste];
+
+/** Insert > Image…: the system picker, then the picked images at the caret. */
+export const insertImageItem = insertItems.of({
+  id: 'image',
+  label: 'Image…',
+  icon: ImagePlus,
+  order: 0,
+  run: async (view) => {
+    await addPickedImages(view);
+    view.focus();
+  },
+});
