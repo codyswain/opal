@@ -118,13 +118,44 @@ describe('the bar', () => {
       const line = view.state.doc.lineAt(at);
       return fileActions(view.state, { kind: 'file', from: line.from, to: line.to, node: '' }).map((item) => item.label);
     };
-    expect(ids(PDF)).toEqual(['Open', 'Open in App', 'Show as', 'Size', 'More']);
+    // Until main names the app, a plain Open and no placeholder.
+    expect(ids(PDF)).toEqual(['Open', 'Show as', 'Size', 'More']);
     // A deck draws as a card either way, so Show as is left out.
-    expect(ids(PPTX)).toEqual(['Open in App', 'Edit link', 'More']);
-    expect(ids(PNG)).toEqual(['Open', 'Open in App', 'Show as', 'Size', 'More']);
+    expect(ids(PPTX)).toEqual(['Open', 'Edit link', 'More']);
+    expect(ids(PNG)).toEqual(['Open', 'Show as', 'Size', 'More']);
     const more = action(view, PNG, 'more').items?.map((item) => item.label);
     expect(more).toEqual(['Quick Look', 'Reveal in Finder', 'Copy image', 'Copy file', 'Copy as Markdown', 'Copy path', 'Save a copy…', 'Replace…', 'Remove']);
     expect(action(view, PPTX, 'more').items?.map((item) => item.label)).toContain('Rename…');
+  });
+
+  it('names the app once main has said it, and never shows a placeholder for it', async () => {
+    const view = mount(`![[${PDF}|Q3 report.pdf]]\n\n[[${PPTX}|Gob deck.pptx]]\n`);
+    await flush();
+    const labels = (needle: string) => {
+      const line = view.state.doc.lineAt(text(view).indexOf(needle));
+      return fileActions(view.state, { kind: 'file', from: line.from, to: line.to, node: '' }).map((item) => item.label);
+    };
+    expect(labels(PDF)).toEqual(['Open', 'Open in Keynote', 'Show as', 'Size', 'More']);
+    expect(labels(PPTX)).toEqual(['Open in Keynote', 'Edit link', 'More']);
+    expect(labels(PDF).join(' ')).not.toContain('Open in App');
+  });
+
+  it('opens a file outside the vault in its app after asking, never in a tab', async () => {
+    const open = vi.fn(async () => ({ success: true as const, data: { action: 'confirm' as const, app: 'Preview' } }));
+    installFilesApi({ open, info: vi.fn(async () => ({ success: false as const, error: 'outside' })), appName: vi.fn(async () => ({ success: true as const, data: 'Preview' })) });
+    const doc = 'See [Outside report](file:///Users/alex/Downloads/outside%20report.pdf) for detail.\n';
+    const view = mount(doc);
+    const ref = refAt(view.state, { from: doc.indexOf('Outside'), to: doc.indexOf('Outside') });
+    expect(ref).toMatchObject({ path: '/Users/alex/Downloads/outside report.pdf', kind: 'pdf', form: 'link' });
+    fileActions(view.state, { kind: 'file-inline', from: ref?.from ?? 0, to: ref?.to ?? 0, node: '' });
+    await flush();
+    const actions = fileActions(view.state, { kind: 'file-inline', from: ref?.from ?? 0, to: ref?.to ?? 0, node: '' });
+    expect(actions.map((item) => item.id)).not.toContain('open');
+    expect(actions[0].label).toBe('Open in Preview');
+    await act(async () => { actions[0].run?.(view, { kind: 'file-inline', from: 0, to: 0, node: '' }); });
+    await flush();
+    expect(open).toHaveBeenCalledWith('/Users/alex/Downloads/outside report.pdf', { confirmed: undefined });
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('is outside the vault. Open it in Preview?'), expect.anything());
   });
 
   it('writes each Show as both ways in one undo step, never leaving a size as a name or an empty link', async () => {

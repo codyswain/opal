@@ -216,7 +216,7 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
       case 'unreadable': {
         const what = ref.kind === 'video' ? "Can't play this video in Opal" : ref.kind === 'audio' ? "Can't play this audio in Opal" : ref.kind === 'pdf' ? "Can't read this PDF" : "Can't read this file";
         meta.textContent = what;
-        actions.append(button(app ? `Open in ${app}` : 'Open in App', () => { const at = refFrom(view, card); if (at) void openFile(view, at, 'app'); }));
+        actions.append(button(app ? `Open in ${app}` : 'Open', () => { const at = refFrom(view, card); if (at) void openFile(view, at, 'app'); }));
         break;
       }
       default:
@@ -592,6 +592,8 @@ export class PdfPreviewWidget extends WidgetType {
     const known = knownInfo(path);
     if (known !== undefined) show(known);
     else void fileInfo(path).then((info) => { show(info); view.requestMeasure(); });
+    // The bar's Open in Preview names the app; ask now so it is known by the first click.
+    void appFor(path);
     return wrap;
   }
 

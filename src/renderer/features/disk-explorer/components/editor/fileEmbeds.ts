@@ -225,6 +225,14 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
     if (!videoService(address)) return null;
     return { ...base, target: address, fragment: null, path: null, url: address, kind: 'video' };
   }
+  // A file outside the vault, `[Report](file:///Users/…/report.pdf)`: a file link with its own path, opened only after a confirm.
+  if (!image && /^<?file:\/\//i.test(written.trim())) {
+    let path: string;
+    try { path = normalizeFsPath(decodeURIComponent(new URL(written.trim().replace(/^<|>$/g, '')).pathname).normalize('NFC')); } catch { return null; }
+    const kind = classifyFile(path);
+    if (kind === 'markdown' || !extensionOf(basenameFsPath(path))) return null;
+    return { ...base, target: path, fragment: null, path, url: null, kind };
+  }
   if (SCHEME.test(written.trim())) return null;
   // A heading on this page, or a folder, is no file.
   const bare = written.trim().replace(/^<|>$/g, '');
