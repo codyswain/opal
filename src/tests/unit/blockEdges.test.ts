@@ -12,7 +12,7 @@ import { refoldCallout } from '@/renderer/features/disk-explorer/components/edit
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { insertItems } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { setOpenBlock } from '@/renderer/features/disk-explorer/components/editor/livePreview';
-import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { objectFrame, setFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { setHeading, toggleList } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { mathNodes, mathSpan } from '@/renderer/features/disk-explorer/components/editor/math';
@@ -332,6 +332,18 @@ describe('typing after a table that ends the file', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(text(view)).toBe(`${doc}\n\nA`);
     expect(view.state.field(objectFrame)).toBeNull();
+  });
+
+  it('removes the block Cmd+Down framed on Backspace, even after the browser put its caret above it', async () => {
+    const doc = 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |';
+    const view = mount(`‸${doc}`);
+    await focusPage(view);
+    press(view, 'End', /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
+    act(() => { view.dispatch({ selection: { anchor: 5 }, effects: setFrame.of(null), userEvent: 'select' }); });
+    const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    expect(text(view)).toBe('Intro');
   });
 });
 

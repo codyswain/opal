@@ -444,12 +444,19 @@ const compositionSeparators = EditorView.domEventObservers({
 // The page each view's last block was framed on by Cmd+Down.
 const endFrames = new WeakMap<EditorView, EditorState['doc']>();
 
-const toEndBlock: Command = (view) => {
-  const { state } = view;
-  if (!state.facet(docMode) || state.doc.length === 0) return false;
+/** The drawn block object that ends a document's page, or null. */
+function endBlock(state: EditorState): PageObject | null {
+  if (!state.facet(docMode) || state.doc.length === 0) return null;
   const last = state.doc.line(state.doc.lines);
   const obj = objectAt(state, last.to, -1);
-  if (!obj || !objectKind(state, obj.kind)?.block || state.doc.lineAt(obj.to).number !== last.number || (obj.kind === 'table' && !drawnBlockAt(state, obj.from))) return false;
+  if (!obj || !objectKind(state, obj.kind)?.block || state.doc.lineAt(obj.to).number !== last.number || (obj.kind === 'table' && !drawnBlockAt(state, obj.from))) return null;
+  return obj;
+}
+
+const toEndBlock: Command = (view) => {
+  const { state } = view;
+  const obj = endBlock(state);
+  if (!obj) return false;
   view.dispatch({ selection: { anchor: state.doc.length }, effects: setFrame.of(obj), scrollIntoView: true, userEvent: 'select' });
   endFrames.set(view, view.state.doc);
   return true;
@@ -461,15 +468,24 @@ const MODIFIER_KEYS = new Set(['Shift', 'Meta', 'Control', 'Alt', 'CapsLock']);
  * A letter typed after Cmd+Down framed the block that ends the page: no
  * line under the block holds the browser's caret, which may have gone back
  * above it, so the letter is written at the page's end here, where the
- * separators put it on a paragraph of its own under the block. A click or
- * any other key ends this.
+ * separators put it on a paragraph of its own under the block. Backspace
+ * or Delete removes the block. A click or any other key ends this.
  */
 const typedAfterEnd = EditorView.domEventHandlers({
   keydown(event, view) {
     const doc = endFrames.get(view);
     if (!doc || MODIFIER_KEYS.has(event.key)) return false;
     endFrames.delete(view);
-    if (doc !== view.state.doc || event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
+    if (doc !== view.state.doc || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
+    // Backspace or Delete takes the framed block off, as at any framed object, wherever the browser put its caret.
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !event.repeat) {
+      const obj = endBlock(view.state);
+      if (!obj) return false;
+      event.preventDefault();
+      removeObject(view, obj, event.key === 'Delete' ? 1 : -1);
+      return true;
+    }
+    if (event.key.length !== 1) return false;
     event.preventDefault();
     if (view.state.field(objectFrame, false)) view.dispatch({ effects: setFrame.of(null) });
     const end = view.state.doc.length;
