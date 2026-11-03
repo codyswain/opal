@@ -29,4 +29,11 @@ describe('the look of documents', () => {
     expect(rule('blocks.css', '.opal-editor .cm-editor .cm-md-table .cm-md-cell')).toMatch(/min-height: 1\.5em/);
     view.destroy();
   });
+
+  it('closes each line\'s piece of inline code that wraps, as a chip\'s are', () => {
+    const declarations = rule('code.css', '.opal-editor .cm-editor .cm-md-code');
+    expect(declarations).toMatch(/-webkit-box-decoration-break: clone/);
+    expect(declarations).toMatch(/(^|[^-])box-decoration-break: clone/);
+    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/-webkit-box-decoration-break: clone/);
+  });
 });

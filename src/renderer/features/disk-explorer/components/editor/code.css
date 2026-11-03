@@ -341,6 +341,12 @@
   opacity: 1;
 }
 
+/* Inline code that wraps draws its piece on each line as a closed span. */
+.opal-editor .cm-editor .cm-md-code {
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* A line break inside inline code, shown as a space between its pieces. */
 .opal-editor .cm-editor .cm-code-join {
   padding: 0.1em 0;
