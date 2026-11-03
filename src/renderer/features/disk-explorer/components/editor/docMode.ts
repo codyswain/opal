@@ -43,6 +43,7 @@ import { insertTableItem } from './tableInsert';
 import { hiddenOn } from './visibleText';
 import { visibleSearch } from './visibleSearch';
 import { opensNewTab } from './wikiLinks';
+import { wordMotion } from './wordMotion';
 
 /*
  * Doc mode, for documents (.mdo): the page editor with its Markdown always
@@ -504,7 +505,7 @@ export function docModeExtensions(): Extension {
     }),
     Prec.highest(docClicks),
     imageFrame,
-    visibleSearch(replaceVisible),
+    [visibleSearch(replaceVisible), wordMotion(replaceVisible)],
     Prec.high(keymap.of([
       { key: 'ArrowLeft', run: moveVisibly(false, false), shift: moveVisibly(false, true) },
       { key: 'ArrowRight', run: moveVisibly(true, false), shift: moveVisibly(true, true) },
