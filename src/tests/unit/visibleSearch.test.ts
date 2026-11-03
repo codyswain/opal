@@ -161,6 +161,17 @@ describe('Find and Replace in a document', () => {
     expect(text(words)).toBe('z znd $a + b$ znd z\n');
   });
 
+  it('escapes a money sign when the number after it is replaced by text that would open a formula', () => {
+    const view = mount('About $300k per unit, or $300k a year\n');
+    query(view, '300k', '*300k* each');
+    run(view, replaceAll);
+    expect(text(view)).toBe('About \\$\\*300k\\* each per unit, or \\$\\*300k\\* each a year\n');
+    const kept = mount('About $300k per unit\n');
+    query(kept, '300k', '400k');
+    run(kept, replaceAll);
+    expect(text(kept)).toBe('About $400k per unit\n');
+  });
+
   it('opens a drawn table\'s source with the match selected', async () => {
     const view = mount('Intro\n\n| a | b |\n|---|---|\n| needle | x |\n\nEnd\n');
     await focusPage(view);

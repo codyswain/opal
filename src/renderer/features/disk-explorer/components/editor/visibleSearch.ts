@@ -254,8 +254,17 @@ export function replaceEdits(
     && !(/[[\]|\n]/.test(edit.insert) && inWikiLink(state, edit.from)));
   const texts = literalTexts(state, replaced.map((edit) => ({ ...edit, table: inNode(state, edit.from, 'Table') })));
   const specs: ChangeSpec[] = [];
-  replaced.forEach((edit, index) => specs.push(...replace(state, edit.from, edit.to, texts[index]).changes));
+  replaced.forEach((edit, index) => {
+    // A dollar sign before a number is money; a replacement that starts otherwise would let it open a formula, so it is escaped.
+    if (moneyBefore(state, edit.from, edit.to) && !/^[\d\s]/.test(texts[index])) specs.push({ from: edit.from - 1, insert: '\\' });
+    specs.push(...replace(state, edit.from, edit.to, texts[index]).changes);
+  });
   return ChangeSet.of(specs, state.doc.length);
+}
+
+/** Whether an unescaped `$` right before `from` reads as money because the text from `from` to `to` starts with a digit. */
+function moneyBefore(state: EditorState, from: number, to: number): boolean {
+  return state.sliceDoc(from - 1, from) === '$' && state.sliceDoc(from - 2, from - 1) !== '\\' && /^\d/.test(state.sliceDoc(from, to));
 }
 
 /** How many matches Replace All found and left as they are, for the status message after it. */
