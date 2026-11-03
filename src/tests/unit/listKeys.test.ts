@@ -163,3 +163,12 @@ describe('lists in a document', () => {
     expect([...view.contentDOM.querySelectorAll('.cm-md-list-marker')].map((marker) => (marker as HTMLElement).dataset.depth)).toEqual(['0', '1', '2', '0']);
   });
 });
+
+describe('Enter in code inside a list item or quote', () => {
+  it('leaves a code line in a list item, and an empty code line in a quote, to the code', () => {
+    // As the source of a code block shows after a double-click.
+    expect(after('- item\n\n  ```\n  code‸\n  ```\n', 'Enter')).not.toContain('- \n');
+    expect(after('> ```\n> one\n> ‸\n> ```\n', 'Enter')).toContain('> ```\n> one\n');
+    expect(after('> ```\n> one\n> ‸\n> ```\n', 'Enter')).not.toBe('> ```\n> one\n\n\n> ```\n');
+  });
+});

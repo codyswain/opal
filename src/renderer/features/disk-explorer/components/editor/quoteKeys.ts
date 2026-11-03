@@ -1,5 +1,7 @@
+import { syntaxTree } from '@codemirror/language';
 import { EditorState, Prec, Transaction, type Extension, type TransactionSpec } from '@codemirror/state';
 import { keymap, type Command, type EditorView } from '@codemirror/view';
+import type { SyntaxNode } from '@lezer/common';
 import { Minus, MessageSquareQuote } from 'lucide-react';
 import { calloutMarker } from './blockGuards';
 import { deleteHandlers, insertItems } from './extensionPoints';
@@ -24,6 +26,10 @@ const leaveQuote: Command = (view) => {
   const line = state.doc.lineAt(main.head);
   const marks = QUOTE.exec(line.text)?.[1];
   if (!marks || marks.length !== line.length || line.number === 1) return false;
+  // An empty line of code in a quote is code.
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.to, -1); node; node = node.parent) {
+    if (node.name === 'FencedCode' || node.name === 'CodeBlock') return false;
+  }
   const levels = marks.match(/>/g)?.length ?? 0;
   const outer = levels > 1 ? `${'> '.repeat(levels - 1)}` : '';
   const insert = `${outer.trimEnd()}\n${outer}`;

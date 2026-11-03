@@ -179,6 +179,8 @@ const enterAfterParagraph: StateCommand = ({ state, dispatch }) => {
   if (state.selection.ranges.length > 1 || !main.empty) return false;
   const line = state.doc.lineAt(main.head);
   if (main.head !== line.to || !/[^\s>]/.test(line.text) || itemOn(state, line)) return false;
+  // Only a paragraph's line: Enter in code, a table or HTML inside an item stays theirs.
+  if (latestTree(state).resolveInner(line.to, -1).name !== 'Paragraph') return false;
   const node = itemAround(state, line.to);
   const item = node && itemOf(state, node);
   if (!item || item.line.number === line.number) return false;
