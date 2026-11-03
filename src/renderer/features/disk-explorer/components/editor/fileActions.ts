@@ -84,12 +84,12 @@ export function wikiAlias(name: string, inTable = false): string {
 
 /**
  * A path as a Markdown address in angle brackets: `%` first as `%25`, then
- * `#` as `%23`, and `<` and `>` as `%3C` and `%3E`, since the Markdown parser
- * ends the brackets at the first `>` even after a backslash. Readers decode
- * each segment.
+ * `#` as `%23`, `<` and `>` as `%3C` and `%3E`, since the Markdown parser
+ * ends the brackets at the first `>` even after a backslash, and `|` as
+ * `%7C`, which would end a table cell. Readers decode each segment.
  */
 export function encodeAddress(path: string): string {
-  return `<${path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/</g, '%3C').replace(/>/g, '%3E')}>`;
+  return `<${path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/</g, '%3C').replace(/>/g, '%3E').replace(/\|/g, '%7C')}>`;
 }
 
 /** `to` from the folder holding `from`, as "../files/x.pdf". */

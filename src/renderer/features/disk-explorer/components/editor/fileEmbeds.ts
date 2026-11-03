@@ -118,6 +118,20 @@ export function inTableAt(state: EditorState, at: number): boolean {
   return false;
 }
 
+/**
+ * A Markdown link's or image's address as written, and its URL node: the one
+ * after "](", not an address the link's own text holds, as in
+ * `[henry@x.com](mailto:henry@x.com)`. A reference link's comes from its
+ * definition.
+ */
+function addressOf(state: EditorState, node: SyntaxNode, marks: readonly SyntaxNode[]): { written: string | null; url: SyntaxNode | null } {
+  if (marks.length > 2) {
+    const url = node.getChildren('URL').find((child) => child.from >= marks[1].to) ?? null;
+    return { written: url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, '') : null, url };
+  }
+  return { written: linkTarget(state, node), url: null };
+}
+
 /** The line holds this node and nothing else but quote marks and spaces, outside lists and tables. */
 export function aloneOnLine(state: EditorState, node: SyntaxNode): { alone: boolean; inTable: boolean } {
   let inTable = false;
@@ -181,9 +195,8 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
   if (node.name !== 'Image' && node.name !== 'Link') return null;
   const marks = node.getChildren('LinkMark');
   if (marks.length < 2) return null;
-  const written = linkTarget(state, node);
+  const { written, url } = addressOf(state, node, marks);
   if (!written) return null;
-  const url = node.getChild('URL');
   const textFrom = marks[0].to;
   const textTo = marks[1].from;
   const label = state.sliceDoc(textFrom, textTo);
@@ -233,7 +246,7 @@ export interface WebPicture {
 export function webPictureOf(state: EditorState, node: SyntaxNode): WebPicture | null {
   if (node.name !== 'Image') return null;
   const marks = node.getChildren('LinkMark');
-  const written = marks.length >= 2 ? linkTarget(state, node) : null;
+  const written = marks.length >= 2 ? addressOf(state, node, marks).written : null;
   if (!written) return null;
   const address = written.trim().replace(/^<|>$/g, '');
   if (!WEB.test(address) || videoService(address)) return null;

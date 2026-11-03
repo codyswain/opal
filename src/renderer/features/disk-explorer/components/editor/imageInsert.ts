@@ -162,7 +162,7 @@ export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'na
 }
 
 /** A chip at `at` inside text, with a space between it and a word it would touch. */
-function chipAt(state: EditorState, at: number, chip: string): { from: number; insert: string } {
+export function chipAt(state: EditorState, at: number, chip: string): { from: number; insert: string } {
   const before = state.sliceDoc(Math.max(0, at - 1), at);
   const after = state.sliceDoc(at, at + 1);
   return { from: at, insert: `${before && /\S/.test(before) ? ' ' : ''}${chip}${after && /[^\s.,;:!?)\]]/.test(after) ? ' ' : ''}` };

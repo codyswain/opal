@@ -239,13 +239,13 @@ describe('writing links', () => {
   it('writes a wiki link for plain paths and a Markdown link for paths a wiki link can\'t hold', () => {
     expect(linkFor({ vaultPath: PDF, path: `/Vault/${PDF}`, page: DOC, embed: true, slot: 'Q3 report.pdf' })).toBe(`![[${PDF}|Q3 report.pdf]]`);
     expect(linkFor({ vaultPath: 'Docs/a#b|c.pdf', path: '/Vault/Docs/a#b|c.pdf', page: DOC, embed: false, slot: 'a#b|c.pdf' }))
-      .toBe('[a#b|c.pdf](<../Docs/a%23b|c.pdf>)');
+      .toBe('[a#b|c.pdf](<../Docs/a%23b%7Cc.pdf>)');
     expect(linkFor({ vaultPath: 'Docs/[x]^1.pdf', path: '/Vault/Docs/[x]^1.pdf', page: DOC, embed: false, slot: '[x]^1.pdf', inTable: true }))
       .toBe('[\\[x\\]^1.pdf](<../Docs/[x]^1.pdf>)');
   });
 
   it('round-trips names with %, #, < and > through the address and back', () => {
-    for (const name of ['50% off.pdf', 'a#b.pdf', 'x<y>.pdf', '%23 literal.pdf', 'Rapport été.pdf']) {
+    for (const name of ['50% off.pdf', 'a#b.pdf', 'x<y>.pdf', 'a|b.pdf', '%23 literal.pdf', '%7C literal.pdf', 'Rapport été.pdf']) {
       const written = encodeAddress(`Docs/${name}`);
       expect(readAddress(written, '/Vault/page.md').path).toBe(`/Vault/Docs/${name}`);
     }
@@ -270,6 +270,14 @@ describe('writing links', () => {
     const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Library/bit-0.2/Plan.md') });
     expect(refAt(state, { from: 4, to: 19 })).toBeNull();
     expect(refAt(state, { from: doc.indexOf('[v1'), to: doc.indexOf(' below') })).toBeNull();
+  });
+
+  it('reads a link\'s address after its text, so a mail link whose text is an address is no file', () => {
+    const doc = '[henry@parametric.company](mailto:henry@parametric.company) and [Q3](<../Docs/q3 report.pdf>)\n';
+    const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Notes/Plan.md') });
+    expect(refAt(state, { from: 0, to: 0 })).toBeNull();
+    const at = doc.indexOf('[Q3');
+    expect(refAt(state, { from: at, to: at })?.path).toBe('/Vault/Docs/q3 report.pdf');
   });
 
   it('escapes link text, with a pipe escaped only in a table', () => {
