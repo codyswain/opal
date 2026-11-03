@@ -525,43 +525,70 @@ const editingWidgets = ViewPlugin.fromClass(class {
 
 const matchMark = Decoration.mark({ class: 'cm-math-match', inclusive: true });
 
-/** The formulas in view whose TeX holds a match for the open Find bar's query. */
-function formulasMatching(view: EditorView): DecorationSet {
+/** The formulas in view whose TeX holds a match for the open Find bar's query: marks for those in a line, and the blocks' lines. */
+function formulasMatching(view: EditorView): { marks: DecorationSet; blocks: TextRange[] } {
+  const none = { marks: Decoration.none, blocks: [] as TextRange[] };
   const { state } = view;
-  if (!state.facet(docMode) || !searchPanelOpen(state)) return Decoration.none;
+  if (!state.facet(docMode) || !searchPanelOpen(state)) return none;
   const query = getSearchQuery(state);
-  if (!query.valid) return Decoration.none;
+  if (!query.valid) return none;
   // The TeX as written: Find's own query reads the page's visible text, where a formula is one character.
   const raw = new SearchQuery({ search: query.search, caseSensitive: query.caseSensitive, literal: query.literal, regexp: query.regexp, wholeWord: query.wholeWord });
   const tree = syntaxTree(state);
   const marks = [];
+  const blocks: TextRange[] = [];
   for (const { from, to } of view.visibleRanges) {
     for (const node of mathNodes(tree, from, to)) {
-      if (node.name === 'BlockMath') continue;
       const span = mathSpan(state.doc, node);
-      if (!raw.getCursor(state, span.texFrom, span.texTo).next().done) marks.push(matchMark.range(node.from, node.to));
+      if (raw.getCursor(state, span.texFrom, span.texTo).next().done) continue;
+      if (node.name === 'BlockMath') blocks.push({ from: state.doc.lineAt(node.from).from, to: node.to });
+      else marks.push(matchMark.range(node.from, node.to));
     }
   }
-  return Decoration.set(marks, true);
+  return { marks: Decoration.set(marks, true), blocks };
 }
 
 /**
  * A formula draws its TeX as one object, so Find's highlight can't show a
  * match inside it; while the Find bar is open, a formula that holds one
- * takes the match fill. An outer mark, so it wraps the formula's widget.
+ * takes the match fill. In a line an outer mark wraps the formula's widget;
+ * a block's widget, which no mark reaches, gets `data-math-match`.
  */
 const searchMatches = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
+  blocks: TextRange[];
+  marked: Element[] = [];
 
   constructor(view: EditorView) {
-    this.decorations = formulasMatching(view);
+    ({ marks: this.decorations, blocks: this.blocks } = formulasMatching(view));
   }
 
   update(update: ViewUpdate) {
     const { startState, state } = update;
     if (update.docChanged || update.viewportChanged || getSearchQuery(startState) !== getSearchQuery(state) || searchPanelOpen(startState) !== searchPanelOpen(state)) {
-      this.decorations = formulasMatching(update.view);
+      const had = this.blocks.length > 0;
+      ({ marks: this.decorations, blocks: this.blocks } = formulasMatching(update.view));
+      if (had || this.blocks.length > 0) update.view.requestMeasure({ key: this, read: () => null, write: () => this.markBlocks(update.view) });
     }
+  }
+
+  markBlocks(view: EditorView) {
+    for (const element of this.marked) element.removeAttribute('data-math-match');
+    this.marked = [];
+    if (this.blocks.length === 0) return;
+    for (const child of view.contentDOM.children) {
+      if (child.classList.contains('cm-line')) continue;
+      let at: number;
+      try { at = view.posAtDOM(child); } catch { continue; }
+      const drawn = this.blocks.some((block) => at >= block.from && at <= block.to) ? child.querySelector('.cm-math') : null;
+      if (!drawn) continue;
+      drawn.setAttribute('data-math-match', '');
+      this.marked.push(drawn);
+    }
+  }
+
+  destroy() {
+    for (const element of this.marked) element.removeAttribute('data-math-match');
   }
 }, { provide: (plugin) => EditorView.outerDecorations.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none) });
 

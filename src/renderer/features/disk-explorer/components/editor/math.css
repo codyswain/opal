@@ -140,7 +140,8 @@
 }
 
 /* While Find is open, a formula whose TeX holds a match takes the match fill. */
-.opal-editor .cm-editor .cm-math-match .cm-math {
+.opal-editor .cm-editor .cm-math-match .cm-math,
+.opal-editor .cm-editor .cm-math[data-math-match] {
   background-color: hsl(var(--foreground) / 0.12);
 }
 

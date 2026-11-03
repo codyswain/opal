@@ -254,4 +254,17 @@ describe('Find on a page with formulas', () => {
     act(() => { view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: 'point' })) }); });
     expect(view.contentDOM.querySelectorAll('.cm-math-match').length).toBe(0);
   });
+
+  it('shows a display block that holds a match too, and clears it when the query moves on', async () => {
+    const { openSearchPanel, setSearchQuery, SearchQuery } = await import('@codemirror/search');
+    const measured = () => act(async () => { await new Promise((resolve) => { setTimeout(resolve, 30); }); });
+    const view = mount('Intro\n\n$$\n\\mathbb{R}^n\n$$\n\nMore\n');
+    act(() => { openSearchPanel(view); });
+    act(() => { view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: 'mathbb' })) }); });
+    await measured();
+    expect([...view.contentDOM.querySelectorAll('.cm-math[data-math-match]')].map((element) => element.getAttribute('aria-label'))).toEqual(['\\mathbb{R}^n']);
+    act(() => { view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: 'More' })) }); });
+    await measured();
+    expect(view.contentDOM.querySelectorAll('[data-math-match]').length).toBe(0);
+  });
 });
