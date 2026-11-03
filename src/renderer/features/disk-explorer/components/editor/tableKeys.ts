@@ -1,8 +1,8 @@
-import { EditorSelection, Prec, type EditorState, type Extension, type Line } from '@codemirror/state';
+import { EditorSelection, EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
 import { keymap, type Command } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree } from './extensionPoints';
-import { drawnBlockAt } from './livePreview';
+import { docMode, drawnBlockAt } from './livePreview';
 
 /*
  * Keys in a table's Markdown, as in a spreadsheet: Tab and Shift+Tab go to
@@ -130,8 +130,44 @@ const newRow: Command = (view) => {
   return addRow(state, table, under, view.dispatch);
 };
 
-/** A table's keys, for notes and documents. */
-export const tableKeys: Extension = Prec.high(keymap.of([
-  { key: 'Tab', run: moveCell(1), shift: moveCell(-1) },
-  { key: 'Enter', run: newRow },
-]));
+/**
+ * In a document, text typed into an empty cell is written with one space
+ * on each side, like the rest of the row, and text typed past a row's last
+ * pipe, where a cell is missing, gets its spaces and closing pipe too.
+ */
+export function spacedCell(tr: Transaction): TransactionSpec | null {
+  const state = tr.startState;
+  if (!tr.isUserEvent('input.type') || !state.facet(docMode)) return null;
+  const { main } = state.selection;
+  if (!main.empty || state.selection.ranges.length > 1) return null;
+  let typed = '';
+  let single = true;
+  tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+    if (from !== main.head || to !== from) single = false;
+    typed += inserted.toString();
+  });
+  if (!single || !/^[^\s|]/.test(typed) || typed.includes('\n')) return null;
+  const table = tableAt(state, main.head);
+  const row = table && rowsOf(table).find((each) => each.name !== 'TableDelimiter' && each.from <= main.head && main.head <= each.to + 1);
+  if (!row) return null;
+  const line = state.doc.lineAt(main.head);
+  const cell = cellsOf(state, row).find((each) => each.start <= main.head && main.head <= each.end);
+  const userEvent = tr.annotation(Transaction.userEvent);
+  if (cell && cell.to === cell.from) {
+    const insert = ` ${typed} `;
+    return { changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + typed.length }, scrollIntoView: true, userEvent };
+  }
+  if (!cell && main.head === line.to && state.sliceDoc(line.to - 1, line.to) === '|') {
+    return { changes: { from: main.head, insert: ` ${typed} |` }, selection: { anchor: main.head + 1 + typed.length }, scrollIntoView: true, userEvent };
+  }
+  return null;
+}
+
+/** A table's keys, for notes and documents, and a document's cell spacing. */
+export const tableKeys: Extension = [
+  Prec.high(keymap.of([
+    { key: 'Tab', run: moveCell(1), shift: moveCell(-1) },
+    { key: 'Enter', run: newRow },
+  ])),
+  EditorState.transactionFilter.of((tr) => spacedCell(tr) ?? tr),
+];

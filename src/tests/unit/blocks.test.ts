@@ -407,7 +407,14 @@ describe('what a drawn table shows', () => {
     click(view.contentDOM.querySelectorAll('.cm-md-table td')[3]);
     key(view, 'y');
     type(view, 'y');
-    expect(text(view)).toBe('| a | b |\n|---|---|\n| 1 | x |\n| 2 |y\n\nEnd\n');
+    expect(text(view)).toBe('| a | b |\n|---|---|\n| 1 | x |\n| 2 | y |\n\nEnd\n');
+    // One space or none in an empty cell: the text still gets a space on each side.
+    const tight = mount('| a | b |\n|---|---|\n| 1 ||\n\nEnd\n');
+    await focusPage(tight);
+    click(tight.contentDOM.querySelectorAll('.cm-md-table td')[1]);
+    key(tight, 'z');
+    type(tight, 'z');
+    expect(text(tight)).toBe('| a | b |\n|---|---|\n| 1 | z |\n\nEnd\n');
   });
 
   it('draws <br> as a line break and an escaped pipe in code as a plain pipe', () => {
