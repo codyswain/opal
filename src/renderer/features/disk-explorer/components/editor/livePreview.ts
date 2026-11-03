@@ -40,8 +40,9 @@ import { openPathLink, openWikiLink, opensNewTab, pageContext, parseWikiTarget, 
  * Everything else is drawn per line for the viewport. Code blocks register
  * through the extension points (codeBlocks.ts).
  *
- * A document (.mdo) never reveals its marks: only a table or code block
- * opened with a double-click shows its Markdown, until the caret leaves it.
+ * A document (.mdo) never reveals its marks: only a table opened with a
+ * double-click shows its Markdown, until the caret leaves it. Its code is
+ * edited in place.
  */
 
 /** On for a document, which always reads as rendered. */
