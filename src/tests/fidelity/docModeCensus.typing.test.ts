@@ -9,7 +9,6 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import { replaceVisible } from '@/renderer/features/disk-explorer/components/editor/docMode';
 import { clearFormatting, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { hiddenRanges } from '@/renderer/features/disk-explorer/components/editor/livePreview';
-import { keepsVisibleText } from '@/renderer/features/disk-explorer/components/editor/typing';
 import { VisibleQuery, replaceEdits } from '@/renderer/features/disk-explorer/components/editor/visibleSearch';
 import { visibleLines, visibleOffset, visibleSlice } from '@/renderer/features/disk-explorer/components/editor/visibleText';
 import { wordStep } from '@/renderer/features/disk-explorer/components/editor/wordMotion';
@@ -25,10 +24,13 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), succe
  *   visible word at a time.
  * - Replace All of a word sampled from the page's visible text changes no
  *   byte inside hidden text (marks, link addresses, targets) or bare URLs.
+ * - Replace All writes the word inside stars, brackets and an underscore,
+ *   and the changed lines show exactly that, with the escapes hidden.
  * - Bold, italic, strikethrough and Clear on a sampled word leave the page
- *   showing the same text: no marker character shows. Headings and lists
- *   may add a drawn box or blank lines; where they show a mark, the run is
- *   counted as pending for PR 1, which owns those commands.
+ *   showing the same words and no new marker character. A command that
+ *   refuses is counted by name. Headings and lists may add a drawn box or
+ *   blank lines; where they show a mark, the run is counted as pending for
+ *   PR 1, which owns those commands.
  * - Typing `*`, `_`, `\`, `1984. ` and `<!--` at sampled places shows
  *   exactly what was typed (`expectTyped`), with escapes as the only extra
  *   bytes.
@@ -36,6 +38,8 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), succe
  *   OPAL_CENSUS_ROOT=/path/to/vault [OPAL_CENSUS_OUT=report.json] npx vitest run src/tests/fidelity/docModeCensus.typing.test.ts
  */
 const ROOT = process.env.OPAL_CENSUS_ROOT;
+// OPAL_CENSUS_ONLY=<regular expression> limits the run to matching paths, to look at failures again.
+const ONLY = process.env.OPAL_CENSUS_ONLY ? new RegExp(process.env.OPAL_CENSUS_ONLY) : null;
 
 const TYPED = ['*', '_', '\\', '1984. ', '<!--'];
 const FORMATS: [string, StateCommand][] = [
@@ -158,6 +162,49 @@ function sameWords(tr: Transaction): boolean {
   return words(before) === words(after);
 }
 
+/** Marker characters in visible text: a command that adds one shows a mark. */
+const markers = (text: string) => text.match(/[*_~`#[\]]/g)?.length ?? 0;
+
+// Replace All writes the word inside punctuation that would read as Markdown, so the escapes are exercised.
+const REPLACEMENT = (search: string) => `*${search}* [Zq]_`;
+
+/**
+ * What Replace All showed wrong on the lines it changed, or null: each line
+ * must show its old visible text with every match's shown text replaced by
+ * the replacement as written.
+ */
+function shownReplaced(state: EditorState, matches: readonly { from: number; to: number }[], insert: string, changes: ChangeSet): string | null {
+  if (matches.length === 0 || changes.empty) return null;
+  const next = state.update({ changes, filter: false }).state;
+  ensureSyntaxTree(next, next.doc.length, 10_000);
+  const settled = next.update({}).state;
+  const byLine = new Map<number, { from: number; to: number }[]>();
+  for (const match of matches) {
+    const number = state.doc.lineAt(match.from).number;
+    byLine.set(number, [...(byLine.get(number) ?? []), match]);
+  }
+  for (const [number, found] of byLine) {
+    const line = state.doc.line(number);
+    const [visible] = visibleLines(state, line.from, line.from);
+    let expected = '';
+    let at = 0;
+    for (const match of found) {
+      expected += visible.text.slice(at, visibleOffset(visible, match.from)) + insert;
+      at = visibleOffset(visible, match.to);
+    }
+    expected += visible.text.slice(at);
+    const from = changes.mapPos(line.from, -1);
+    const got = visibleSlice(settled, from, changes.mapPos(line.to, 1));
+    if (got !== expected) {
+      let at = 0;
+      while (at < got.length && got[at] === expected[at]) at += 1;
+      const around = (text: string) => JSON.stringify(text.slice(Math.max(0, at - 40), at + 60));
+      return `line ${number} shows ${around(got)}, not ${around(expected)}`;
+    }
+  }
+  return null;
+}
+
 const shownChange = (tr: Transaction) => shownAround(tr).map((text) => JSON.stringify(text.slice(0, 80))).join(' became ');
 
 /** Whether the line above `at` is in an ordered list, where a typed `N. ` continues it. */
@@ -182,6 +229,7 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
     const failures: string[] = [];
     const pending = new Map<string, string[]>();
     const counts = { lines: 0, replaced: 0, formats: 0, typed: 0 };
+    const refused = new Map<string, number>();
     let opened = 0;
     for (const file of vault.found) {
       let body: string;
@@ -191,8 +239,9 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
         if (error instanceof MarkdownError) continue;
         throw error;
       }
-      opened += 1;
       const relative = path.relative(ROOT as string, file);
+      if (ONLY && !ONLY.test(relative)) continue;
+      opened += 1;
       const state = open(file, body);
       const { doc } = state;
 
@@ -221,12 +270,16 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
           counts.replaced += 1;
           const search = state.sliceDoc(word.from, word.to);
           const matches = new VisibleQuery({ search, caseSensitive: true, wholeWord: true }).create().matchAll(state, 1e9) ?? [];
-          const changes: ChangeSet = replaceEdits(state, matches.filter((match) => match.precise).map((match) => ({ from: match.from, to: match.to, insert: `${search}Zq` })), replaceVisible);
+          const replaced = matches.filter((match) => match.precise);
+          const changes: ChangeSet = replaceEdits(state, replaced.map((match) => ({ from: match.from, to: match.to, insert: REPLACEMENT(search) })), replaceVisible);
           const kept = keptRanges(state);
           changes.iterChangedRanges((from, to) => {
             const inside = kept.find((range) => (from > range.from && from < range.to) || (to > range.from && to < range.to) || (from <= range.from && to >= range.to && to > from));
             if (inside) failures.push(`${where} Replace All "${search}" changed ${JSON.stringify(state.sliceDoc(inside.from, inside.to))}`);
           });
+          // The page shows the replacement as written where Replace changed a match, with nothing else on those lines changed.
+          const shownAfter = shownReplaced(state, replaced.filter((match) => changes.touchesRange(match.from, match.to)), REPLACEMENT(search), changes);
+          if (shownAfter) failures.push(`${where} Replace All "${search}": ${shownAfter}`);
         }
 
         // Formatting the word never shows a mark.
@@ -240,7 +293,11 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
             failures.push(`${where} ${name} threw ${(error as Error).message}`);
             continue;
           }
-          if (!result || keepsVisibleText(result) || sameWords(result)) continue;
+          if (!result) {
+            refused.set(name, (refused.get(name) ?? 0) + 1);
+            continue;
+          }
+          if (sameWords(result) && markers(shownAround(result)[1]) <= markers(shownAround(result)[0])) continue;
           // Headings and lists are PR 1's commands: what they show over blocks and inside items is counted for it.
           if (LINE_COMMANDS.has(name)) {
             const owner = touchesBlock(selected) ? BLOCK_OWNER : ITEM_OWNER;
@@ -273,6 +330,7 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
     }
     console.info(openedLine('typing census', opened, vault));
     console.info(`[typing census] Option+Right on ${counts.lines} lines, Replace All of ${counts.replaced} words, ${counts.formats} format commands, ${counts.typed} typed runs: ${failures.length} failed`);
+    console.info(`[typing census] refused with a status message: ${[...refused].map(([name, count]) => `${name} ${count}`).join(', ') || 'none'}`);
     for (const [owner, cases] of pending) console.info(`[typing census] pending, ${owner}: ${cases.length} runs`);
     if (process.env.OPAL_CENSUS_OUT) await writeFile(process.env.OPAL_CENSUS_OUT.replace(/\.json$/, '.typing.json'), JSON.stringify({ counts, failed: failures, pending: Object.fromEntries(pending) }, null, 2));
     expect(failures.slice(0, 50)).toEqual([]);

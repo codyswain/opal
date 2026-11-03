@@ -186,6 +186,16 @@ function markWindow(state: EditorState, at: number): { from: number; to: number 
 
 const strip = (text: string, characters: string) => [...text].filter((character) => !characters.includes(character)).join('');
 
+/** Whether `got` is `expected` with only characters from `allowed` added: escapes and separators, never a typed character lost. */
+export function addsOnly(expected: string, got: string, allowed: string): boolean {
+  let at = 0;
+  for (const character of got) {
+    if (at < expected.length && character === expected[at]) at += 1;
+    else if (!allowed.includes(character)) return false;
+  }
+  return at === expected.length;
+}
+
 /**
  * What a typed edit got wrong, or an empty list. Typing `typed` at `caret`
  * in `before`, giving `after`: the visible text of the caret's line gains
@@ -206,20 +216,10 @@ export function expectTyped(before: EditorState, after: EditorState, typed: stri
   if (!now.startsWith(raw.slice(0, window.from)) || !now.endsWith(raw.slice(window.to)) || now.length - tail < window.from) {
     problems.push('bytes changed away from the caret');
   } else {
-    // The typed text may sit anywhere among the marks; one place must leave the rest as it was.
+    // The typed text may sit anywhere among the marks, with only separators and escapes added around or inside it.
     let fits = false;
-    for (let at = middleAfter.indexOf(typed); at !== -1 && !fits; at = middleAfter.indexOf(typed, at + 1)) {
-      const rest = middleAfter.slice(0, at) + middleAfter.slice(at + typed.length);
-      fits = strip(rest, allowed) === strip(middleBefore, allowed) && rest.length >= middleBefore.length;
-    }
-    // Escapes may sit inside the typed text too, as in `1984\. `.
-    if (!fits && declared.escapes) {
-      const bare = strip(typed, allowed);
-      const after = strip(middleAfter, allowed);
-      const before = strip(middleBefore, allowed);
-      for (let at = after.indexOf(bare); at !== -1 && !fits; at = after.indexOf(bare, at + 1)) {
-        fits = after.slice(0, at) + after.slice(at + bare.length) === before;
-      }
+    for (let at = 0; at <= middleBefore.length && !fits; at += 1) {
+      fits = addsOnly(middleBefore.slice(0, at) + typed + middleBefore.slice(at), middleAfter, allowed);
     }
     if (!fits) problems.push(`bytes at the caret: ${JSON.stringify(middleBefore)} became ${JSON.stringify(middleAfter)}`);
   }
@@ -230,8 +230,8 @@ export function expectTyped(before: EditorState, after: EditorState, typed: stri
   const expected = shown.text.slice(0, offset) + typed + shown.text.slice(offset);
   const afterTo = Math.min(after.doc.length, line.to + (now.length - raw.length));
   const got = visibleText(after, line.from, Math.max(line.from, afterTo)).text;
-  // A list item's indent shows on a blank line and hides once it holds text.
-  const visible = (text: string) => strip(text, allowed).trimStart();
+  // A list item's indent shows on a blank line and hides once it holds text. Escapes never show.
+  const visible = (text: string) => strip(text, declared.separators ?? '').trimStart();
   if (visible(got) !== visible(expected)) {
     const around = (text: string) => JSON.stringify(text.slice(Math.max(0, offset - 30), offset + 30));
     problems.push(`visible text ${around(expected)} became ${around(got)}`);
