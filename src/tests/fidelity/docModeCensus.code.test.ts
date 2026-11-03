@@ -7,6 +7,7 @@ import type { SyntaxNode } from '@lezer/common';
 import { MarkdownError, parseMarkdown } from '@/main/fs/MarkdownDocumentService';
 import { fenceOf, type Fence } from '@/renderer/features/disk-explorer/components/editor/codeBlocks';
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
+import { diagramKind, setDiagramCode } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { codeContent, codeSpan, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { openedLine, vaultFiles } from './censusHelpers';
@@ -86,7 +87,8 @@ describe.skipIf(!ROOT)('code census', () => {
       if (!body.includes('```') && !body.includes('~~~') && !body.includes('`')) continue;
       const state = EditorState.create({ doc: body, extensions: markdownEditorExtensions(file.replace(/\.md$/i, '.mdo')) });
       ensureSyntaxTree(state, state.doc.length, 10_000);
-      const ready = state.update({}).state;
+      const shown = state.update({}).state;
+      const ready = shown;
       const relative = path.relative(ROOT as string, file);
       const all = fencesOf(ready);
       const before = fenceLines(ready);
@@ -95,6 +97,10 @@ describe.skipIf(!ROOT)('code census', () => {
 
       for (const fence of all.slice(0, FENCES_PER_FILE)) {
         if (fence.lines.length === 0) continue;
+        // A diagram is a picture until shown as Code, which writes nothing.
+        const ready = fence.close && diagramKind(fence.info.text)
+          ? shown.update({ effects: setDiagramCode.of({ at: fence.open.from, code: true }) }).state
+          : shown;
         const first = fence.lines[0];
         const last = fence.lines[fence.lines.length - 1];
         const middle = fence.lines[Math.floor(fence.lines.length / 2)];
