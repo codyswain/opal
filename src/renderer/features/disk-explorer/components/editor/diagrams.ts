@@ -547,7 +547,8 @@ export function diagramFence(state: EditorState, fence: Fence): DiagramKind | nu
 export function showsDiagram(state: EditorState, fence: Fence): boolean {
   if (!state.facet(docMode) || !diagramFence(state, fence)) return false;
   const value = state.field(diagramField, false);
-  return Boolean(value) && !value?.code.includes(fence.open.from);
+  // An empty diagram shows its code, as build() draws it.
+  return Boolean(value) && !value?.code.includes(fence.open.from) && fence.lines.some(({ line, from }) => state.sliceDoc(from, line.to).trim() !== '');
 }
 
 function build(state: EditorState, shown: readonly number[], made: readonly number[]): Diagrams {

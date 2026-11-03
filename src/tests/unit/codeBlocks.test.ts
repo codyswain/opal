@@ -1127,4 +1127,11 @@ describe('code edge cases, second pass', () => {
       expect(view.contentDOM.querySelector('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
     }
   });
+  it('shows an empty diagram as code, with its fences hidden and a line saying how to start', () => {
+    const doc = 'Above\n\n```mermaid\n\n```\n\nBelow\n';
+    const view = mount(doc);
+    expect(view.contentDOM.textContent).not.toContain('```');
+    expect(view.contentDOM.querySelector('.cm-code-placeholder')).not.toBeNull();
+    expect(view.contentDOM.querySelector('.cm-diagram-preview .cm-diagram-hint')?.textContent).toBe('Start with a diagram type, such as graph TD');
+  });
 });
