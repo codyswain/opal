@@ -738,7 +738,8 @@ const framedFiles = ViewPlugin.fromClass(class {
   }
 
   update(update: ViewUpdate) {
-    this.schedule(update.view);
+    const frame = (state: EditorState) => state.field(objectFrame, false) ?? null;
+    if (update.docChanged || update.viewportChanged || update.geometryChanged || frame(update.startState) !== frame(update.state)) this.schedule(update.view);
   }
 
   schedule(view: EditorView) {
@@ -756,8 +757,9 @@ const framedFiles = ViewPlugin.fromClass(class {
         if (at >= frame.from && at <= frame.to) next.push(candidate);
       }
     }
+    // Only real changes: each one is a mutation CodeMirror reads.
     for (const element of this.marked) if (!next.includes(element)) element.removeAttribute('data-file-framed');
-    for (const element of next) element.setAttribute('data-file-framed', '');
+    for (const element of next) if (!element.hasAttribute('data-file-framed')) element.setAttribute('data-file-framed', '');
     this.marked = next;
   }
 

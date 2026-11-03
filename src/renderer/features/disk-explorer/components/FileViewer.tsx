@@ -1,15 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { DiskEntry } from '@/types/disk';
+import type { FileInfoStatus } from '@/types/files';
 import { Button } from '@/renderer/shared/ui';
 import { useTextFile } from '../hooks/useTextFile';
 
 /**
  * The page for a file that is not Markdown: images inline, PDFs in
- * Chromium's own viewer, text as plain text, and anything else handed to the
- * app macOS opens it with.
+ * Chromium's own viewer, video and audio in native players, text as plain
+ * text, and anything else handed to the app macOS opens it with. A file whose
+ * bytes are still on the Mini says so first, with Get from Mini.
  */
 export const FileViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
+  const [status, setStatus] = useState<FileInfoStatus | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setStatus(null);
+    if (!window.filesAPI?.info) return undefined;
+    void Promise.resolve()
+      .then(() => window.filesAPI.info(entry.path))
+      .then((info) => { if (live) setStatus(info.success ? info.data.status : null); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [entry.path, version]);
+  if (status === 'lfs-missing') return <NotDownloaded key={entry.path} entry={entry} onHere={() => setVersion((value) => value + 1)} />;
+  return <Shown key={`${entry.path}:${version}`} entry={entry} />;
+};
+
+const Shown: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
   switch (entry.kind) {
     case 'image':
       return (
@@ -36,11 +55,61 @@ export const FileViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {
           className="h-full w-full"
         />
       );
+    case 'video':
+      return <MediaViewer entry={entry} kind="video" />;
+    case 'audio':
+      return <MediaViewer entry={entry} kind="audio" />;
     case 'text':
       return <TextViewer key={entry.path} entry={entry} />;
     default:
       return <OpenInDefaultApp entry={entry} message="Opal can't show this file." />;
   }
+};
+
+/** A movie or a recording in the browser's own player; one Opal can't play offers its app instead. */
+const MediaViewer: React.FC<{ entry: DiskEntry; kind: 'video' | 'audio' }> = ({ entry, kind }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <OpenInDefaultApp entry={entry} message={kind === 'video' ? "Can't play this video in Opal." : "Can't play this audio in Opal."} />;
+  const fail = (event: React.SyntheticEvent<HTMLMediaElement>) => {
+    // Code 1 is a load that was stopped, which is no failure.
+    if (event.currentTarget.error && event.currentTarget.error.code !== 1) setFailed(true);
+  };
+  if (kind === 'video') {
+    return (
+      <div className="flex h-full items-center justify-center bg-canvas p-8">
+        <video key={entry.path} src={toOpalFileUrl(entry.path)} controls preload="metadata" onError={fail} data-testid="video-viewer" className="max-h-full max-w-full rounded-row bg-[#000000]" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+      <p className="text-ui font-medium text-foreground">{entry.name}</p>
+      <audio key={entry.path} src={toOpalFileUrl(entry.path)} controls preload="metadata" onError={fail} data-testid="audio-viewer" className="w-full max-w-md" />
+    </div>
+  );
+};
+
+/** A file whose bytes are still on the Mini: Get from Mini fetches that one file, then it shows. */
+const NotDownloaded: React.FC<{ entry: DiskEntry; onHere: () => void }> = ({ entry, onHere }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const get = async () => {
+    setBusy(true);
+    const result = await window.filesAPI.fetch(entry.path).catch(() => null);
+    setBusy(false);
+    if (result?.success && result.data === 'here') onHere();
+    else setError(result && !result.success ? result.error : `Could not get ${entry.name} from the Mini.`);
+  };
+  return (
+    <div data-testid="not-downloaded" className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-ui text-foreground">{entry.name}</p>
+      <p className="text-ui text-foreground-tertiary">Not downloaded yet</p>
+      <Button variant="outline" size="compact" disabled={busy} onClick={() => void get()}>
+        {busy ? 'Getting…' : 'Get from Mini'}
+      </Button>
+      {error ? <p role="alert" className="text-ui text-foreground">{error}</p> : null}
+    </div>
+  );
 };
 
 const TextViewer: React.FC<{ entry: DiskEntry }> = ({ entry }) => {

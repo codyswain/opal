@@ -45,6 +45,11 @@ await app.evaluate(({ shell }) => {
   shell.openPath = async () => '';
   shell.showItemInFolder = () => undefined;
 });
+// A run that stops answering fails rather than holding the Electron lock.
+const watchdog = setTimeout(() => {
+  console.log('FAIL the run stopped answering after 5 minutes');
+  void app.close().finally(() => process.exit(1));
+}, 300_000);
 const page = await app.firstWindow();
 await page.waitForLoadState('domcontentloaded');
 const errors = [];
@@ -292,6 +297,7 @@ try {
 } catch (error) {
   check('the run finished', false, String(error));
 } finally {
+  clearTimeout(watchdog);
   await app.close();
   await rm(userData, { recursive: true, force: true });
   await rm(vaultParent, { recursive: true, force: true });
