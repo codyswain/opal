@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { ensureSyntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { findNext, getSearchQuery, replaceAll, replaceNext, SearchQuery, setSearchQuery } from '@codemirror/search';
 import { undo } from '@codemirror/commands';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
-import { protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { objectKinds, protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { drawnBlockAt } from '@/renderer/features/disk-explorer/components/editor/livePreview';
 import { VisibleQuery } from '@/renderer/features/disk-explorer/components/editor/visibleSearch';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -123,6 +124,23 @@ describe('Find and Replace in a document', () => {
     query(view, 'a', 'z');
     run(view, replaceAll);
     expect(text(view)).toBe('z znd $a + b$ znd z\n');
+  });
+
+  it('frames the object a match inside a protected range belongs to', () => {
+    // Inline code stands in for a formula: one object, protected from Replace.
+    const asObject = [
+      objectKinds.of({ kind: 'formula', nodes: ['InlineCode'], block: false, open: () => undefined, actions: () => [] }),
+      protectedRanges.of((state, from, to) => {
+        const found: { from: number; to: number }[] = [];
+        syntaxTree(state).iterate({ from, to, enter: (ref) => { if (ref.name === 'InlineCode') found.push({ from: ref.from, to: ref.to }); } });
+        return found;
+      }),
+    ];
+    const view = mount('See `frac x` here\n', DOC, asObject);
+    query(view, 'frac');
+    run(view, findNext);
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'formula', from: 4, to: 12 });
+    expect(view.state.selection.main.head).toBe(12);
   });
 
   it('opens a drawn table\'s source with the match selected', async () => {
