@@ -107,6 +107,27 @@ function moveCellCaret(view: EditorView, dir: 1 | -1): boolean {
   return true;
 }
 
+/**
+ * Home (-1) or End (1) in a table's cell goes to the start or end of the
+ * cell's text, as in Docs: in a drawn table's cell, and in a document's
+ * table source. Pressed again at that edge, it goes on to the row's edge.
+ */
+function cellEdge(dir: 1 | -1): Command {
+  return (view) => {
+    const { state } = view;
+    const caret = cellCaretOf(state);
+    const at = caret ?? state.selection.main.head;
+    const table = caret !== null ? anyTableAt(state, caret) : state.facet(docMode) && state.selection.ranges.length === 1 && state.selection.main.empty ? tableAt(state, at) : null;
+    if (!table) return false;
+    const cell = rowsOf(table).filter((row) => row.name !== 'TableDelimiter').flatMap((row) => cellsOf(state, row)).find((one) => one.start <= at && at <= one.end);
+    if (!cell) return false;
+    const anchor = cell.to > cell.from ? (dir > 0 ? cell.to : cell.from) : Math.min(cell.end, cell.start + 1);
+    if (caret === null && anchor === at) return false;
+    view.dispatch({ selection: { anchor }, effects: caret === null ? [] : setCellCaret.of(anchor), scrollIntoView: true, userEvent: 'select' });
+    return true;
+  };
+}
+
 /** Tab (1) or Shift+Tab (-1) in a table's Markdown. */
 function moveCell(dir: 1 | -1): Command {
   return (view) => {
@@ -215,6 +236,10 @@ export const tableKeys: Extension = [
   Prec.high(keymap.of([
     { key: 'Tab', run: moveCell(1), shift: moveCell(-1) },
     { key: 'Enter', run: newRow },
+    { key: 'Home', run: cellEdge(-1) },
+    { key: 'End', run: cellEdge(1) },
+    { mac: 'Mod-ArrowLeft', run: cellEdge(-1) },
+    { mac: 'Mod-ArrowRight', run: cellEdge(1) },
   ])),
   EditorState.transactionFilter.of((tr) => spacedCell(tr) ?? tr),
   composedCells,

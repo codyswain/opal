@@ -690,6 +690,31 @@ describe('Insert with the caret in a block or a container', () => {
   });
 });
 
+describe('Home and End in a drawn table\'s cell', () => {
+  it('go to the edges of the cell\'s text, so text typed after End stays in the cell', () => {
+    const doc = '| Name | Speed |\n|---|---|\n| Car | 10 |\n\nSee below\n';
+    const view = mount(doc);
+    const at = doc.indexOf('10');
+    act(() => { view.dispatch({ selection: { anchor: at }, effects: setCellCaret.of(at) }); });
+    expect(key(view, 'End')).toBe(true);
+    expect(caret(view)).toBe(at + 2);
+    key(view, 'Home');
+    expect(caret(view)).toBe(at);
+    key(view, 'End');
+    type(view, ' fast');
+    expect(text(view)).toBe('| Name | Speed |\n|---|---|\n| Car | 10 fast |\n\nSee below\n');
+  });
+
+  it('go to the cell\'s edges in a document\'s table source, then on to the row\'s', () => {
+    const view = mount('| Name | Speed |\n|---|---|\n| Car | 1‸0 |\n\nSee below\n');
+    act(() => { view.dispatch({ effects: setOpenBlock.of({ from: 0, to: 39 }) }); });
+    expect(key(view, 'End')).toBe(true);
+    expect(marked(view)).toBe('| Name | Speed |\n|---|---|\n| Car | 10‸ |\n\nSee below\n');
+    key(view, 'End');
+    expect(marked(view)).toBe('| Name | Speed |\n|---|---|\n| Car | 10 |‸\n\nSee below\n');
+  });
+});
+
 describe('input methods in table cells and callout titles', () => {
   const end = async (view: EditorView) => {
     act(() => { view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); });
