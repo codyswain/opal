@@ -1,5 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { ChangeSet, EditorSelection, EditorState, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Line, type StateCommand, type Text, type TransactionSpec } from '@codemirror/state';
+import { ChangeSet, EditorSelection, EditorState, Prec, countColumn, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Line, type StateCommand, type Text, type TransactionSpec } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type Command, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, SquareCode, Trash2 } from 'lucide-react';
@@ -739,6 +739,9 @@ function fenceUnits(doc: Text, fence: Fence): TextRange[] {
   return units;
 }
 
+/** A wrapped code line hangs from its own indent up to this many columns, so deep code still leaves room on a narrow page. */
+const MAX_HANG = 16;
+
 /** A document's fenced block, in place. */
 function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   const { state } = ctx;
@@ -784,7 +787,9 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
       classes.push(kind);
       if (kind === 'cm-code-diff-add') ctx.out.push(diffSign.range(from, from + 1));
     }
-    ctx.lineClass(line.from, classes.join(' ').trim(), style);
+    // A wrapped line hangs two characters in from its own indent, not from the box's edge.
+    const hang = Math.min(MAX_HANG, countColumn(/^[ \t]*/.exec(doc.sliceString(from, line.to))?.[0] ?? '', state.tabSize));
+    ctx.lineClass(line.from, classes.join(' ').trim(), hang > 0 ? [style, `--code-hang: ${hang}ch`].filter(Boolean).join('; ') : style);
     ctx.hide(line.from, from, true);
     if (lines.length === 1 && from === line.to && close) ctx.out.push(placeholder.range(line.to));
     if (last && !close) ctx.out.push(openEnd.range(line.to));

@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState } from '@codemirror/state';
@@ -361,6 +363,18 @@ describe('a code block in a document', () => {
     expect(view.contentDOM.querySelector('.cm-code-unclosed')).not.toBeNull();
     act(() => { (view.contentDOM.querySelector('.cm-code-end-here') as HTMLElement).click(); });
     expect(text(view)).toBe('```\none\n```\ntwo');
+  });
+
+  it('hangs a wrapped line two characters in from its own indent, counting from the code in a list item', () => {
+    const deep = ' '.repeat(20);
+    const view = mount(`\`\`\`py\ndef f():\n    return 1\n\tpass\n${deep}x\n\`\`\`\n\n- item\n  \`\`\`js\n  a\n    b\n  \`\`\`\n`);
+    const hangs = [...view.contentDOM.querySelectorAll('.cm-code-line:not(.cm-code-head):not(.cm-code-foot)')]
+      .map((line) => /--code-hang:\s*(\d+ch)/.exec(line.getAttribute('style') ?? '')?.[1] ?? '');
+    expect(hangs).toEqual(['', '4ch', '4ch', '16ch', '', '2ch']);
+    const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/code.css'), 'utf8');
+    const line = /\.cm-line\.cm-code-line \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(line).toMatch(/padding-left:[^;]*var\(--code-hang, 0ch\)/);
+    expect(line).toMatch(/text-indent: calc\(-2ch - var\(--code-hang, 0ch\)\)/);
   });
 
   it('draws diff lines', () => {
