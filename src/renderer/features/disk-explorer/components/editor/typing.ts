@@ -336,10 +336,30 @@ function splitAtBreak(tr: Transaction): TransactionSpec | null {
 }
 
 /** The typing filter, after doc mode's own, so it sees where the typed text landed. */
+/**
+ * Enter right after a backslash would make it a hard break once the next
+ * line has text, and a document hides hard breaks: the backslash is written
+ * `\\` so it stays on the page.
+ */
+function keepBackslash(tr: Transaction): TransactionSpec | null {
+  const event = tr.annotation(Transaction.userEvent);
+  if (event !== 'input' && event !== 'input.type') return null;
+  let found: TransactionSpec | null = null;
+  tr.changes.iterChanges((fromA, _toA, fromB, _toB, inserted) => {
+    if (found || !inserted.toString().startsWith('\n')) return;
+    const before = tr.startState;
+    if (before.sliceDoc(fromA - 1, fromA) !== '\\' || before.sliceDoc(fromA - 2, fromA - 1) === '\\' || rawAt(before, fromA)) return;
+    found = { changes: { from: fromB - 1, insert: '\\' }, sequential: true };
+  });
+  return found;
+}
+
 const typingFilter = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !tr.startState.facet(docMode)) return tr;
   const split = splitAtBreak(tr);
   if (split) return split;
+  const backslash = keepBackslash(tr);
+  if (backslash) return [tr, backslash];
   const extra = escapeTyped(tr);
   if (!extra) return tr;
   // An extra change goes after the typing; a whole new edit, as `otherSide` writes, replaces it.

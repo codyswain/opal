@@ -314,6 +314,15 @@ describe('the word count', () => {
 });
 
 describe('hard breaks in a document', () => {
+  it('keeps a typed backslash at a line\'s end on the page when Enter follows', () => {
+    const view = mount('see C:\\');
+    at(view, 7);
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter' }), 'editor'); });
+    type(view, 'next');
+    expect(text(view)).toBe('see C:\\\\\nnext');
+    expect(visibleLine(view.state, 0).text).toBe('see C:\\');
+  });
+
   it('hide the backslash or spaces, and typing at the line\'s end lands before them', () => {
     for (const [doc, typedDoc] of [['one\\\ntwo\n', 'onex\\\ntwo\n'], ['one  \ntwo\n', 'onex  \ntwo\n']]) {
       const view = mount(doc);
