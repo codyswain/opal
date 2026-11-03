@@ -422,7 +422,8 @@ export function closeMathEditor(view: EditorView, field: string | null = null, f
       view.dispatch({
         changes: written,
         effects: setMathEditor.of(null),
-        ...at(editor.to),
+        // After the formula in the page as written again, not the page put back, which is shorter when the formula ends it.
+        ...(keep ? {} : { selection: { anchor: Math.min(editor.to, written.newLength) } }),
         annotations: [mathWrite.of('final'), Transaction.userEvent.of('math.write')],
         scrollIntoView: !keep,
       });

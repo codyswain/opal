@@ -217,3 +217,17 @@ describe('how formulas sit in a line', () => {
   });
 });
 
+
+describe('typing after a new formula', () => {
+  it('puts the caret after a new formula that ends the page, so text typed next goes after it', () => {
+    const view = mount('Intro\nRule: ');
+    at(view, view.state.doc.length);
+    act(() => { editFormula(view); });
+    const tex = 'f(x)=\\begin{cases} 1 & x>0 \\\\ 0 & \\text{else} \\end{cases}';
+    act(() => { writeLive(view, editor(view), tex, () => true); });
+    act(() => { closeMathEditor(view, tex, false); });
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    type(view, ' done.');
+    expect(text(view)).toBe(`Intro\nRule: $${tex}$ done.`);
+  });
+});
