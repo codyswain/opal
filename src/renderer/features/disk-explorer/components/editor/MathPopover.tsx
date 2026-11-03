@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { Button, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
-import { pageMacros, renderTex } from './mathWidget';
+import { emptyLabel, pageMacros, renderTex } from './mathWidget';
 import {
   applyTyped,
   clickedFormula,
@@ -106,7 +106,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
     if (element.scrollHeight > 0) {
       const style = getComputedStyle(element);
       const borders = pixels(style, style.borderTopWidth) + pixels(style, style.borderBottomWidth);
-      const most = MAX_ROWS * pixels(style, style.lineHeight) + pixels(style, style.paddingTop) + pixels(style, style.paddingBottom) + borders;
+      const line = pixels(style, style.lineHeight) || 1.45 * (parseFloat(style.fontSize) || 13);
+      const most = MAX_ROWS * line + pixels(style, style.paddingTop) + pixels(style, style.paddingBottom) + borders;
       element.style.height = `${Math.min(element.scrollHeight + borders, most)}px`;
     }
     if (caret.current === null) return;
@@ -188,6 +189,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
           <div className="opal-math-preview" aria-hidden>
             {rendered === null ? (
               <span className="opal-math-preview-empty">Type TeX below</span>
+            ) : rendered.error === null && rendered.empty ? (
+              <span className="opal-math-preview-empty">{emptyLabel(field)}</span>
             ) : rendered.error === null ? (
               <span dangerouslySetInnerHTML={{ __html: rendered.html }} />
             ) : editor.lastGood ? (

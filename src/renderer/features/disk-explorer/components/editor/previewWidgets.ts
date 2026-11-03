@@ -282,7 +282,8 @@ export type InlinePiece =
   | { kind: 'math'; tex: string; display: boolean; source: string };
 
 /** Draws a formula in a table cell; the math extension provides it, and without it the cell shows the formula's source. */
-export const cellMath = Facet.define<(tex: string, display: boolean, source: string) => HTMLElement, ((tex: string, display: boolean, source: string) => HTMLElement) | null>({
+type DrawCellMath = (tex: string, display: boolean, source: string, view: EditorView) => HTMLElement;
+export const cellMath = Facet.define<DrawCellMath, DrawCellMath | null>({
   combine: (values) => values[0] ?? null,
 });
 
@@ -306,7 +307,7 @@ function renderInline(pieces: InlinePiece[], parent: HTMLElement, math: EditorVi
       parent.append(piece.text);
     } else if (piece.kind === 'math') {
       const draw = math?.state.facet(cellMath);
-      parent.append(draw ? draw(piece.tex, piece.display, piece.source) : piece.source);
+      parent.append(draw && math ? draw(piece.tex, piece.display, piece.source, math) : piece.source);
     } else if (piece.kind === 'code') {
       const code = document.createElement('code');
       code.className = 'cm-md-code';

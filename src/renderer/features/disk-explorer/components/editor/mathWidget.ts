@@ -1,7 +1,7 @@
 import { renderToString } from 'katex';
 import { syntaxTree } from '@codemirror/language';
 import { StateField, type EditorState, type Extension, type Text } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { blockRenderers, latestTree, nodeDecorators, protectedRanges, type BlockLayout, type TextRange } from './extensionPoints';
 import { cellMath } from './previewWidgets';
@@ -26,6 +26,8 @@ export interface Rendered {
   error: string | null;
   /** Where in the TeX KaTeX stopped reading, when it says. */
   errorAt: number | null;
+  /** KaTeX drew nothing, as for a formula that only defines macros. */
+  empty: boolean;
 }
 
 /** Macros the page defines, with `\gdef` or `\newcommand`, and a key that changes when they do. */
@@ -120,7 +122,8 @@ export function renderUncached(tex: string, display: boolean, page: PageMacros =
   let source = rewrite(tex, display);
   for (let tries = 0; tries < 8; tries += 1) {
     try {
-      return { html: renderOnce(source, display, { ...SHIMS, ...page.macros }), error: null, errorAt: null };
+      const html = renderOnce(source, display, { ...SHIMS, ...page.macros });
+      return { html, error: null, errorAt: null, empty: /<span class="katex-html" aria-hidden="true"><\/span>/.test(html) };
     } catch (error) {
       const text = message(error);
       // "\newcommand{\R}" over KaTeX's own \R: the page's definition wins, as in LaTeX with a package that defines it.
@@ -130,10 +133,10 @@ export function renderUncached(tex: string, display: boolean, page: PageMacros =
         continue;
       }
       const position = (error as { position?: unknown }).position;
-      return { html: '', error: needsMhchem(tex) ? 'Loading chemistry…' : text, errorAt: typeof position === 'number' ? position : null };
+      return { html: '', error: needsMhchem(tex) ? 'Loading chemistry…' : text, errorAt: typeof position === 'number' ? position : null, empty: false };
     }
   }
-  return { html: '', error: 'Too many definitions', errorAt: null };
+  return { html: '', error: 'Too many definitions', errorAt: null, empty: false };
 }
 
 const CACHE_SIZE = 4_000;
@@ -201,12 +204,25 @@ export const pageMacros = StateField.define<PageMacros>({
   },
 });
 
-/** Draws `rendered` into `root`: KaTeX's HTML, or the source with the message on hover. */
+/** What a formula that draws nothing does. */
+export function emptyLabel(tex: string): string {
+  return DEFINES.test(tex) ? 'Defines macros for this page' : 'Draws nothing';
+}
+
+/**
+ * Draws `rendered` into `root`: KaTeX's HTML, or the source with the message
+ * on hover. A formula that draws nothing, such as a macro definition, shows
+ * its source too, so it can be seen, clicked and deleted on purpose.
+ */
 function fill(root: HTMLElement, rendered: Rendered, source: string): void {
   root.classList.toggle('cm-math-error', rendered.error !== null);
+  root.classList.toggle('cm-math-empty', rendered.error === null && rendered.empty);
   if (rendered.error !== null) {
     root.textContent = source;
     root.title = rendered.error;
+  } else if (rendered.empty) {
+    root.textContent = source;
+    root.title = emptyLabel(source);
   } else {
     root.innerHTML = rendered.html;
     root.removeAttribute('title');
@@ -341,16 +357,85 @@ export function mathRanges(state: EditorState, from: number, to: number): TextRa
 
 const protectedMath = protectedRanges.of(mathRanges);
 
-/** A formula in a table cell. */
-const tableMath = cellMath.of((tex, display, source) => {
+/**
+ * A formula in a table cell, with the page's macros. GFM reads `\|` in a
+ * cell as a pipe before anything else, so KaTeX does too; the file keeps it.
+ */
+const tableMath = cellMath.of((written, display, source, view) => {
+  const tex = written.replace(/\\\|/g, '|');
   const root = document.createElement('span');
   root.className = display ? 'cm-math cm-math-display' : 'cm-math cm-math-inline';
   root.setAttribute('role', 'math');
   root.setAttribute('aria-label', tex);
   root.dataset.cell = '';
-  fill(root, renderTex(tex, display), source);
+  if (view.state.facet(docMode)) root.dataset.formula = '';
+  const page = view.state.field(pageMacros, false) ?? NO_MACROS;
+  fill(root, renderTex(tex, display, page), source);
+  upgradeLater(view, root, tex, display, page, source);
   return root;
 });
 
+/** The formula the popover edits shows as selected: a mark around one drawn in a line. Only an outer mark wraps the widgets of other decorations. */
+const editingMark = Decoration.mark({ class: 'cm-math-editing', inclusive: true });
+
+const editingMarks = EditorView.outerDecorations.compute([mathEditor], (state) => {
+  const editor = state.field(mathEditor);
+  if (!editor || editor.to <= editor.from || editor.kind === 'block' || editor.table) return Decoration.none;
+  return Decoration.set(editingMark.range(editor.from, editor.to));
+});
+
+/**
+ * A mark never reaches a block widget, so a block or a table cell formula
+ * being edited gets `data-math-editing` on its own element, as the object
+ * frame does. CodeMirror ignores attribute changes on widgets.
+ */
+const editingWidgets = ViewPlugin.fromClass(class {
+  marked: Element[] = [];
+
+  update(update: ViewUpdate) {
+    const was = update.startState.field(mathEditor, false);
+    const now = update.state.field(mathEditor, false);
+    if (was !== now && (was || now)) update.view.requestMeasure({ key: this, read: () => null, write: () => this.apply(update.view) });
+  }
+
+  apply(view: EditorView) {
+    this.clear();
+    const editor = view.state.field(mathEditor, false);
+    if (!editor || editor.to <= editor.from || (editor.kind !== 'block' && !editor.table)) return;
+    const tree = syntaxTree(view.state);
+    const start = view.state.doc.lineAt(editor.from).from;
+    for (const child of view.contentDOM.children) {
+      if (child.classList.contains('cm-line')) continue;
+      let at: number;
+      try { at = view.posAtDOM(child); } catch { continue; }
+      if (!editor.table) {
+        if (at >= start && at <= editor.to) this.mark(child);
+        continue;
+      }
+      // A table cell's formula, by its order among the table's formulas.
+      let table: SyntaxNode | null = tree.resolveInner(Math.min(at + 1, view.state.doc.length), 1);
+      while (table && table.name !== 'Table') table = table.parent;
+      if (!table || editor.from < table.from || editor.to > table.to) continue;
+      const index = mathNodes(tree, table.from, table.to).findIndex((node) => node.from === editor.from);
+      const drawn = index < 0 ? null : child.querySelectorAll('.cm-math')[index];
+      if (drawn) this.mark(drawn);
+    }
+  }
+
+  mark(element: Element) {
+    element.setAttribute('data-math-editing', '');
+    this.marked.push(element);
+  }
+
+  clear() {
+    for (const element of this.marked) element.removeAttribute('data-math-editing');
+    this.marked = [];
+  }
+
+  destroy() {
+    this.clear();
+  }
+});
+
 /** Math in the page editor: the parser's reparse guard, drawing, the page's macros and, in documents, editing. */
-export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, mathEditing, insertEquationItem];
+export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, editingMarks, editingWidgets, mathEditing, insertEquationItem];

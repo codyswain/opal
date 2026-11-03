@@ -128,3 +128,70 @@ describe('the formula popover', () => {
     expect(view.state.doc.toString()).toBe('Price $5,$ total.\n');
   });
 });
+
+describe('the formula popover on the page', () => {
+  it('leaves the caret where a click on the page put it when that click closes the popover', async () => {
+    const original = 'Energy $E=mc^2$ and more.\n\nA lower line.\n';
+    const view = await openEditor(original);
+    const popover = await clickFormula(view, 'E=mc^2');
+    typeInto(within(popover).getByRole('textbox', { name: 'TeX' }) as HTMLTextAreaElement, 'E=mc^3');
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); });
+    const clicked = original.indexOf('lower');
+    // The popover hears of a click outside only once it ends; CodeMirror has put the caret where it landed by then.
+    const line = [...view.contentDOM.querySelectorAll('.cm-line')].find((element) => element.textContent?.includes('lower'));
+    act(() => { line?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' })); });
+    act(() => { view.dispatch({ selection: { anchor: clicked } }); });
+    act(() => { line?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 })); });
+    await waitFor(() => expect(screen.queryByTestId('math-popover')).toBeNull());
+    expect(view.state.selection.main.head).toBe(clicked);
+    expect(view.state.doc.toString()).toBe('Energy $E=mc^3$ and more.\n\nA lower line.\n');
+    act(() => { undo(view); });
+    expect(view.state.doc.toString()).toBe(original);
+  });
+
+  it('moves with the page as it scrolls', async () => {
+    const view = await openEditor('Energy $E=mc^2$ is famous.\n');
+    const formula = await waitFor(() => {
+      const found = view.contentDOM.querySelector<HTMLElement>('.cm-math');
+      if (!found) throw new Error('no formula');
+      return found;
+    });
+    formula.getBoundingClientRect = () => new DOMRect(100, 300, 60, 20);
+    view.scrollDOM.getBoundingClientRect = () => new DOMRect(0, 0, 800, 1000);
+    const popover = await clickFormula(view, 'E=mc^2');
+    const wrapper = popover.closest<HTMLElement>('[data-radix-popper-content-wrapper]');
+    const top = () => Number(/translate\([^,]+,\s*(-?[\d.]+)px\)/.exec(wrapper?.style.transform ?? '')?.[1] ?? NaN);
+    await waitFor(() => expect(top()).toBeGreaterThan(0));
+    const before = top();
+    Object.defineProperty(view.scrollDOM, 'scrollTop', { configurable: true, value: 120 });
+    act(() => {
+      view.scrollDOM.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('scroll'));
+    });
+    await waitFor(() => expect(top()).toBe(before - 120));
+  });
+
+  it('grows the TeX field to fit long TeX, up to eight lines', async () => {
+    const view = await openEditor('Long $x$ here.\n');
+    const popover = await clickFormula(view, 'x');
+    const field = within(popover).getByRole('textbox', { name: 'TeX' }) as HTMLTextAreaElement;
+    Object.defineProperty(field, 'scrollHeight', { configurable: true, get: () => (field.value.length > 40 ? 87 : 31) });
+    typeInto(field, 'f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 + a_5 x^5');
+    expect(field.style.height).toBe('87px');
+  });
+
+  it('says why Display is off in a table cell', async () => {
+    const view = await openEditor('| a | b |\n|---|---|\n| $x^2$ | c |\n');
+    view.focus = vi.fn();
+    const formula = await waitFor(() => {
+      const found = view.contentDOM.querySelector('td .cm-math');
+      if (!found) throw new Error('no formula');
+      return found;
+    });
+    act(() => { formula.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    const popover = await screen.findByTestId('math-popover');
+    const display = within(popover).getByRole('button', { name: 'Display' });
+    expect(display).toHaveProperty('disabled', true);
+    expect(display.getAttribute('title')).toBe('A table cell holds only inline formulas');
+  });
+});

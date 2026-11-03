@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -118,5 +120,22 @@ describe('math rendering', () => {
     expect(error.title).toBe('Undefined control sequence: \\foo');
     expect(drawn[0].querySelector('.katex-mathml math')).not.toBeNull();
     view.destroy();
+  });
+});
+
+describe('math styles', () => {
+  const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/math.css'), 'utf8');
+  const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
+
+  it('defines every editor token the popover uses, since it draws outside the editor', () => {
+    const popover = rules.filter((rule) => rule.selector.startsWith('.opal-math'));
+    const used = new Set(popover.flatMap((rule) => [...rule.body.matchAll(/var\((--editor-[\w-]+)/g)].map((match) => match[1])));
+    const defined = new Set(popover.flatMap((rule) => [...rule.body.matchAll(/(--editor-[\w-]+)\s*:/g)].map((match) => match[1])));
+    expect([...used].filter((token) => !defined.has(token))).toEqual([]);
+  });
+
+  it('lets a long inline formula wrap where KaTeX allows rather than cutting it off', () => {
+    const inline = rules.find((rule) => rule.selector === '.opal-editor .cm-editor .cm-math-inline');
+    expect(inline?.body).not.toMatch(/white-space:\s*nowrap/);
   });
 });

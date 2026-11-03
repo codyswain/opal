@@ -6,7 +6,7 @@ import { EditorView } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { clearFormatting, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
-import { mathNodeAt, mathNodes } from '@/renderer/features/disk-explorer/components/editor/math';
+import { mathNodeAt, mathNodes, mathSpan } from '@/renderer/features/disk-explorer/components/editor/math';
 import { renderUncached } from '@/renderer/features/disk-explorer/components/editor/mathWidget';
 import {
   applyTyped,
@@ -605,5 +605,51 @@ describe('closing, switching and edits from elsewhere', () => {
     expect(text(view)).toBe('Energy $E=mc^3$ and more.\n\nA lower line.\n');
     act(() => { undo(view); });
     expect(text(view)).toBe('Energy $E=mc^2$ and more.\n\nA lower line.\n');
+  });
+});
+
+describe('how formulas look while edited, in tables and when they draw nothing', () => {
+  /** Runs CodeMirror's pending measure, which writes the attributes on block widgets. */
+  async function measured() {
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 30); }); });
+  }
+
+  it('marks the formula the popover edits as selected, inline, in a block and in a table cell, and clears it on close', async () => {
+    const view = mount('Energy $E=mc^2$ here.\n\n$$\nx^2\n$$\n\n| a | b |\n|---|---|\n| $y$ | c |\n');
+    openMathEditor(view, mathNodeAt(syntaxTree(view.state), 7, 1) as never);
+    expect(view.contentDOM.querySelector('.cm-math-editing > .cm-math')?.getAttribute('aria-label')).toBe('E=mc^2');
+    act(() => { closeMathEditor(view, null, false); });
+    expect(view.contentDOM.querySelector('.cm-math-editing')).toBeNull();
+    const block = mathNodes(syntaxTree(view.state), 0, text(view).length).find((node) => node.name === 'BlockMath');
+    openMathEditor(view, block as never);
+    await measured();
+    expect(view.contentDOM.querySelector('[data-math-editing] .cm-math')?.getAttribute('aria-label')).toBe('x^2');
+    act(() => { closeMathEditor(view, null, false); });
+    await measured();
+    expect(view.contentDOM.querySelector('[data-math-editing]')).toBeNull();
+    const cell = mathNodes(syntaxTree(view.state), 0, text(view).length).find((node) => mathSpan(view.state.doc, node).tex === 'y');
+    openMathEditor(view, cell as never);
+    await measured();
+    expect(view.contentDOM.querySelector('td .cm-math[data-math-editing]')?.getAttribute('aria-label')).toBe('y');
+  });
+
+  it('shows a formula that draws nothing, such as a macro definition, as its source', () => {
+    const view = mount('$\\gdef\\R{\\mathbb{R}}$ defines R. Then $\\R^n$ inline.\n');
+    const [definition, used] = [...view.contentDOM.querySelectorAll<HTMLElement>('.cm-math')];
+    expect(definition.classList.contains('cm-math-empty')).toBe(true);
+    expect(definition.textContent).toBe('$\\gdef\\R{\\mathbb{R}}$');
+    expect(definition.title).toBe('Defines macros for this page');
+    expect(used.classList.contains('cm-math-error')).toBe(false);
+  });
+
+  it('draws table-cell formulas with the page\'s macros and with \\| read as a pipe, and marks them clickable in documents', () => {
+    const doc = 'Defs $\\gdef\\Foo{x^2}$ here\n\n| a | b |\n|---|---|\n| $\\Foo$ | $\\|x\\|$ |\n\nAfter $\\Foo$ text\n';
+    const view = mount(doc);
+    const cells = [...view.contentDOM.querySelectorAll<HTMLElement>('td .cm-math')];
+    expect(cells[0].classList.contains('cm-math-error')).toBe(false);
+    expect(cells[1].querySelector('annotation')?.textContent).toBe('|x|');
+    for (const cell of cells) expect(cell.dataset.formula).toBe('');
+    const note = mount(doc, NOTE);
+    expect(note.contentDOM.querySelector<HTMLElement>('td .cm-math')?.dataset.formula).toBeUndefined();
   });
 });
