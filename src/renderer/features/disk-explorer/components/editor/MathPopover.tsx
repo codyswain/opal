@@ -153,6 +153,8 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // An input method's Enter picks a candidate and its Escape cancels the composition; neither closes the popover.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey || editor.kind !== 'block'))) {
       event.preventDefault();
       close();
@@ -172,6 +174,10 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   const problem = editor.problem ?? rendered?.error ?? null;
   const at = rendered?.errorAt ?? null;
   const spot = at !== null && editor.problem === null ? lineColumn(field.trim(), at) : null;
+  // The message's row takes room only once there is a message, then keeps it, so the footer stays put as errors come and go while typing.
+  // A popover above a new block grows upward, which would move the field, so it keeps the room from the start.
+  const roomForProblem = useRef(false);
+  roomForProblem.current = roomForProblem.current || problem !== null || side === 'top';
 
   return (
     <Popover open onOpenChange={(open) => { if (!open) close(); outside.current = false; }}>
@@ -191,6 +197,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
           fieldRef.current?.setSelectionRange(field.length, field.length);
         }}
         onCloseAutoFocus={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => { if (event.isComposing || event.keyCode === 229) event.preventDefault(); }}
         onInteractOutside={(event) => { outside.current = view.dom.contains(event.target as Node); }}
       >
         <div className="opal-math-popover">
@@ -221,7 +228,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
             onChange={onInput}
             onKeyDown={onKeyDown}
           />
-          <div className="opal-math-problem" role="status" aria-live="polite">
+          <div className={roomForProblem.current ? 'opal-math-problem' : 'opal-math-problem opal-math-problem-none'} role="status" aria-live="polite">
             {problem && spot && spot.line === 0 && spot.column < 48 ? (
               <span className="opal-math-problem-caret" aria-hidden>{`${' '.repeat(spot.column)}^`}</span>
             ) : null}

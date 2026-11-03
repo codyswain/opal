@@ -184,6 +184,16 @@
   line-height: 1.4;
 }
 
+/* No message yet: the row takes no room, and stays a live region for the first one. */
+.opal-math-problem-none {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .opal-math-problem-caret {
   display: block;
   padding-left: 9px;
