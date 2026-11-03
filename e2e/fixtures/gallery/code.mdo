@@ -1,0 +1,94 @@
+# Code
+
+Inline `code`, a padded `` `tick` `` span and a path like `Library/files/2026-11/plan.pdf` in a sentence.
+
+```ts
+// A TypeScript block, highlighted in greys.
+export function greet(name: string): string {
+  const count = 3;
+  return `Hello, ${name}! You have ${count} notes.`;
+}
+```
+
+```python
+def total(rows):
+    """Sum the cost column."""
+    return sum(row["cost"] for row in rows if row is not None)
+```
+
+```sql
+SELECT owner, COUNT(*) AS boxes FROM episodes WHERE site = 'SF' GROUP BY owner;
+```
+
+```json
+{ "name": "opal", "version": "1.0.0", "private": true, "tags": ["notes", null] }
+```
+
+```yaml
+written_by: ai
+status: draft
+tags:
+  - opal
+```
+
+```sh
+# Build the bundles, then open the gallery.
+npx vite build --config vite.renderer.config.ts && node e2e/acceptance/gallery.mjs code
+```
+
+```diff
+@@ -1,3 +1,3 @@
+ const theme = 'grey';
+-const accent = 'purple';
++const accent = null;
+```
+
+```
+A block with no language shows "Plain text" on hover.
+```
+
+```text
+Text blocks are never coloured: const x = 1;
+```
+
+```awk
+{ print $1 }
+```
+
+A very long line wraps with a hanging indent:
+
+```js
+const sentence = 'This line is long enough to wrap inside the column, and its later lines hang two characters in from where the line starts.';
+```
+
+> [!note] Code in a callout
+> ```bash
+> git pull --rebase && npm test
+> ```
+
+- A list item with code under it:
+  ```css
+  .box { border-radius: 6px; color: inherit; }
+  ```
+
+An empty block:
+
+```
+
+```
+
+```mermaid
+flowchart TD
+  A[Write] --> B{Review}
+  B -->|ok| C[Merge]
+  B -->|changes| A
+```
+
+```flowchart
+Recording -> Transcript -> Summary
+```
+
+An unclosed block runs to the end of the page:
+
+```
+No closing fence here.

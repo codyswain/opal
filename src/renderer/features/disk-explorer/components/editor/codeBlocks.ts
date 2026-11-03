@@ -791,7 +791,9 @@ const codeEnter: Command = (view) => {
   if (!inside || state.selection.ranges.length > 1) return false;
   const { line, from } = inside.fence.lines[inside.index];
   const own = /^[ \t]*/.exec(state.sliceDoc(from, line.to))?.[0] ?? '';
-  const insert = `\n${state.sliceDoc(line.from, from)}${own}`;
+  // A blank line may have lost its container's indent; the new line takes the block's.
+  const container = state.sliceDoc(line.from, from);
+  const insert = `\n${container.length >= inside.fence.prefix.length ? container : inside.fence.prefix}${own}`;
   view.dispatch(state.replaceSelection(insert), { scrollIntoView: true, userEvent: 'input' });
   return true;
 };
@@ -1011,6 +1013,16 @@ function guardFences(tr: Transaction): TransactionSpec | null {
   }
   if (!insert || insert === '\n') return null;
   const line = state.doc.lineAt(from);
+  // A blank line in a list item's code often has no indent; typed text brings it, so the item and its code go on.
+  const inside = codeAt(state, from);
+  if (inside && !insert.startsWith('\n')) {
+    const have = state.sliceDoc(line.from, from);
+    const { prefix } = inside.fence;
+    if (from === line.to && have.length < prefix.length && prefix.startsWith(have) && /^[\s>]*$/.test(line.text)) {
+      const extra = prefix.slice(have.length);
+      return { changes: { from, insert: extra + insert }, selection: { anchor: from + extra.length + insert.length }, scrollIntoView: true, userEvent };
+    }
+  }
   // Before a block that starts the page.
   if (from === 0 && fenceOpeningOn(state, line)) {
     return { changes: { from: 0, insert: `${insert}\n` }, selection: { anchor: insert.length }, scrollIntoView: true, userEvent };

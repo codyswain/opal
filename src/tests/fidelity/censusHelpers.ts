@@ -270,30 +270,15 @@ export function blockSeparators(state: EditorState, caret: number): string {
   return near ? '\n> \t' : '';
 }
 
-const BLOCKS = new Set(['FencedCode']);
-
 /**
  * The later work that fixes a failed typing check, for the bugs known when
- * `expectTyped` came in: typing beside a fence joins or reshapes it
- * (PR 3), and text typed into a long link definition's target hides with
- * it (Later, step 3). Null for anything else, which is a new failure. Each
- * PR deletes its rule when its fix lands.
+ * `expectTyped` came in: text typed into a long link definition's target
+ * hides with it (Later, step 3). PR 1 fixed typing beside tables and
+ * rules, PR 2 delimiters and PR 3 fences. Null for anything else, which is
+ * a new failure. Each PR deletes its rule when its fix lands.
  */
 export function pendingOwner(before: EditorState, after: EditorState, typed: string, caret: number): string | null {
-  const { doc } = before;
-  const line = doc.lineAt(caret);
-  const from = doc.line(Math.max(1, line.number - 1)).from;
-  const to = doc.line(Math.min(doc.lines, line.number + 1)).to;
-  let nearBlock = false;
-  (ensureSyntaxTree(before, to, 5_000) ?? syntaxTree(before)).iterate({
-    from,
-    to,
-    enter: (ref) => {
-      if (BLOCKS.has(ref.name)) nearBlock = true;
-      return !nearBlock;
-    },
-  });
-  if (nearBlock) return 'PR 3: typing beside a fence';
+  const line = before.doc.lineAt(caret);
   if (/^ {0,3}(?:> ?)*\[(?:[^\]\\]|\\.)+\]:/.test(line.text)) return 'Later, step 3: typing in a link definition\'s shortened target';
   return null;
 }

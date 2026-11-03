@@ -270,6 +270,17 @@ describe('a code block in a document', () => {
     expect(text(view)).toBe('> ```\n>   indented\n>   \n> ```\n');
   });
 
+  it('gives a blank code line in a list item its indent back when typing on it, so the item goes on', async () => {
+    const doc = '1. item\n   ```\n   a\n\n   b\n   ```\n';
+    const view = mount(doc, doc.indexOf('\n\n') + 1);
+    await focusPage(view);
+    type(view, 'x');
+    expect(text(view)).toBe('1. item\n   ```\n   a\n   x\n   b\n   ```\n');
+    select(view, text(view).indexOf('a') + 1);
+    key(view, 'Enter');
+    expect(text(view)).toBe('1. item\n   ```\n   a\n   \n   x\n   b\n   ```\n');
+  });
+
   it('indents in the block\'s own style with Tab and Shift+Tab', async () => {
     const doc = '```\na\n  b\n  c\n```\n';
     const view = mount(doc, doc.indexOf('c'));
