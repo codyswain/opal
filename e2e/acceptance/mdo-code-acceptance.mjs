@@ -109,13 +109,32 @@ try {
 
   // The gallery document: every state, light and dark.
   await open(GALLERY);
-  const mermaid = page.locator('img.cm-diagram-image').first();
-  if (await mermaid.count()) {
-    await mermaid.scrollIntoViewIfNeeded();
-    await page.waitForFunction(() => (document.querySelector('img.cm-diagram-image')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 }).catch(() => undefined);
-    const width = await mermaid.evaluate((image) => image.naturalWidth);
-    check('a Mermaid block draws an image', width > 0, `naturalWidth ${width}`);
+  // Scroll until the Mermaid block is drawn, then wait for its picture.
+  for (let step = 0; step < 20 && (await page.locator('img.cm-diagram-image').count()) === 0; step += 1) {
+    await page.locator('.cm-scroller').first().evaluate((element) => { element.scrollTop += element.clientHeight / 2; });
+    await page.waitForTimeout(400);
   }
+  await page.waitForFunction(() => (document.querySelector('img.cm-diagram-image')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 }).catch(() => undefined);
+  const width = await page.evaluate(() => document.querySelector('img.cm-diagram-image')?.naturalWidth ?? 0);
+  check('a Mermaid block draws an image', width > 0, `naturalWidth ${width}`);
+  for (let step = 0; step < 10 && (await page.locator('.cm-diagram-step').count()) === 0; step += 1) {
+    await page.locator('.cm-scroller').first().evaluate((element) => { element.scrollTop += element.clientHeight / 3; });
+    await page.waitForTimeout(300);
+  }
+  const steps = await page.locator('.cm-diagram-step').allTextContents();
+  check('a Pocket flowchart draws its chain', steps.join(' > ') === 'Recording > Transcript > Summary', steps.join(' > '));
+  const diagram = page.locator('.cm-diagram').first();
+  await diagram.click({ position: { x: 40, y: 60 } });
+  await page.waitForTimeout(200);
+  await shot('light-state-diagram-framed', diagram, { above: 20, below: 40 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  const fenceShown = await page.locator('.cm-code-header .cm-diagram-modes').count();
+  check('Enter on a framed diagram shows its code in place', fenceShown === 1);
+  await shot('light-state-diagram-code', page.locator('.cm-code-header .cm-diagram-modes').first(), { above: 30, below: 520 });
+  await page.locator('.cm-code-header .cm-diagram-segment', { hasText: 'Diagram' }).first().click();
+  await page.waitForTimeout(300);
+  check('the Diagram/Code switch writes nothing', (await readFile(GALLERY, 'utf8')) === (await readFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), 'utf8')));
   for (const theme of ['light', 'dark']) {
     await setTheme(theme);
     // The whole document, one window at a time.

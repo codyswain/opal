@@ -464,3 +464,159 @@
     transition: none;
   }
 }
+
+/* Diagrams: on the page's colour with a quiet edge, the picture centred at most full width. */
+.opal-editor .cm-editor .cm-diagram {
+  padding-top: 0.25em;
+  padding-bottom: 0.25em;
+}
+
+.opal-editor .cm-editor .cm-diagram-box {
+  box-sizing: border-box;
+  padding: 0 16px 16px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-row);
+  background-color: hsl(var(--canvas));
+  transition: border-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-diagram-preview .cm-diagram-box {
+  padding-top: 16px;
+}
+
+.opal-editor .cm-editor .cm-diagram[data-object]:hover {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-diagram[data-object]:hover .cm-diagram-box {
+  border-color: hsl(var(--border-default));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-diagram[data-object-framed] {
+  box-shadow: none;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-diagram[data-object-framed] .cm-diagram-box {
+  box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-diagram-header {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 28px;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-diagram-canvas {
+  display: flex;
+  min-height: 2em;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-source {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.opal-editor .cm-editor .cm-diagram-error {
+  align-self: stretch;
+  padding-top: 6px;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+}
+
+/* Diagram and Code: a two-part control in greys. */
+.opal-editor .cm-editor .cm-diagram-modes {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-code-header .cm-diagram-modes {
+  margin-right: 4px;
+}
+
+.opal-editor .cm-editor .cm-diagram-segment {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-diagram-segment[aria-pressed="true"] {
+  background-color: hsl(var(--canvas));
+  box-shadow: 0 0 0 1px hsl(var(--border-subtle));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-diagram-segment:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+/* Pocket's flowcharts: a top-to-bottom chain of boxes. */
+.opal-editor .cm-editor .cm-diagram-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-ui-size);
+}
+
+.opal-editor .cm-editor .cm-diagram-step {
+  max-width: min(24rem, 100%);
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--foreground));
+  border-radius: 4px;
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  line-height: 1.4;
+  text-align: center;
+}
+
+.opal-editor .cm-editor .cm-diagram-arrow {
+  display: flex;
+  height: 24px;
+  align-items: center;
+  color: hsl(var(--text-tertiary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-diagram-box {
+    transition: none;
+  }
+}

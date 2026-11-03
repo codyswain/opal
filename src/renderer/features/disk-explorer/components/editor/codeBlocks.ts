@@ -20,6 +20,7 @@ import {
   type PageObject,
   type TextRange,
 } from './extensionPoints';
+import { DiagramWidget, diagramDocExtension, diagramFence, modeControl, showsDiagram } from './diagrams';
 import { inlineCode, inlineCodeDoc } from './inlineCode';
 import { docMode, drawnBlockAt } from './livePreview';
 import { objectFrame, removeObject } from './objectFrame';
@@ -230,10 +231,10 @@ function button(className: string, label: string, html: string): HTMLButtonEleme
  * the block. A click elsewhere on it frames the block.
  */
 class CodeHeaderWidget extends WidgetType {
-  constructor(readonly label: string, readonly quiet: boolean, readonly active: boolean) { super(); }
+  constructor(readonly label: string, readonly quiet: boolean, readonly active: boolean, readonly diagram = false) { super(); }
 
   eq(other: CodeHeaderWidget) {
-    return other.label === this.label && other.quiet === this.quiet && other.active === this.active;
+    return other.label === this.label && other.quiet === this.quiet && other.active === this.active && other.diagram === this.diagram;
   }
 
   toDOM(view: EditorView) {
@@ -251,7 +252,10 @@ class CodeHeaderWidget extends WidgetType {
     label.addEventListener('click', () => openLanguageMenu(view, label, view.posAtDOM(head)));
     const copy = button('cm-code-copy', 'Copy code', `${ICONS.copy}<span>Copy</span>`);
     copy.addEventListener('click', () => { copyCode(view, view.posAtDOM(head), copy); });
-    head.append(label, copy);
+    head.append(label);
+    // A diagram shown as code can go back to the picture.
+    if (this.diagram) head.append(modeControl(view, () => fenceAt(view.state, view.posAtDOM(head))?.open.from ?? view.posAtDOM(head), true));
+    head.append(copy);
     // Arrow keys move between the header's buttons; Escape goes back to the code.
     head.addEventListener('keydown', (event) => {
       const buttons = [label, copy];
@@ -608,7 +612,8 @@ function collapseBlocks(state: EditorState, expanded: readonly number[]): Collap
       if (ref.name !== 'FencedCode') return LEAF.has(ref.name) ? false : undefined;
       const fence = fenceOf(state, ref.node);
       const { lines } = fence;
-      if (lines.length <= COLLAPSE_AFTER || expanded.includes(fence.open.from)) return false;
+      // Diagrams draw as pictures, so they never collapse.
+      if (lines.length <= COLLAPSE_AFTER || expanded.includes(fence.open.from) || diagramFence(state, fence)) return false;
       const from = lines[COLLAPSE_AFTER].line.from;
       const to = lines[lines.length - 1].line.to;
       blocks.push({ from, to, block: fence.open.from });
@@ -691,6 +696,11 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   const indent = listIndent(fence.node);
   const style = indent ? `--code-indent: ${indent}em` : undefined;
   const shown = (line: Line) => line.to >= ctx.from && line.from <= ctx.to;
+  // A diagram shown as its picture is drawn over the whole fence (diagrams.ts), one step for the caret.
+  if (close && showsDiagram(state, fence)) {
+    ctx.unit(open.number > 1 ? open.from - 1 : open.from, close.to < doc.length ? close.to + 1 : close.to);
+    return;
+  }
   for (const unit of fenceUnits(doc, fence)) ctx.unit(unit.from, unit.to);
   // A collapsed block's hidden lines are one step for the caret, together with the closing fence.
   const collapsed = collapsedOf(state, fence);
@@ -699,7 +709,7 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   if (shown(open)) {
     ctx.lineClass(open.from, 'cm-code-line cm-code-head', style);
     ctx.hide(open.from, fence.node.from);
-    ctx.out.push(Decoration.replace({ widget: new CodeHeaderWidget(language.label, language.quiet, active) }).range(fence.node.from, open.to));
+    ctx.out.push(Decoration.replace({ widget: new CodeHeaderWidget(language.label, language.quiet, active, diagramFence(state, fence) !== null) }).range(fence.node.from, open.to));
   }
   const diff = language.language?.id === 'diff';
   lines.forEach(({ line, from }, index) => {
@@ -762,6 +772,8 @@ const codeRenderer = blockRenderers.of({
   widget(state, node, from, _to, layout) {
     if (state.facet(docMode)) return null;
     const fence = fenceOf(state, node);
+    const kind = diagramFence(state, fence);
+    if (kind) return new DiagramWidget(codeText(state, fence), kind, kind === 'mermaid' ? 'Mermaid' : 'Flowchart', layout.context, layout.indent, false);
     return new CodeBlockWidget(
       state.sliceDoc(from, _to),
       codeText(state, fence),
@@ -813,6 +825,7 @@ const highlightPlugin = ViewPlugin.fromClass(class {
           if (ref.name !== 'FencedCode') return;
           if (drawnBlockAt(state, ref.from)) return false;
           const fence = fenceOf(state, ref.node);
+          if (showsDiagram(state, fence)) return false;
           const language = fenceLanguage(fence.info.text).language;
           if (!language || fence.lines.length === 0) return false;
           const code = codeText(state, fence);
@@ -937,6 +950,7 @@ const codeKind = objectKinds.of({
   kind: 'code',
   nodes: ['FencedCode'],
   block: true,
+  test: (state, node) => !showsDiagram(state, fenceOf(state, node)),
   open: (view, obj) => view.dispatch({ selection: { anchor: codeStartOf(view.state, obj) }, scrollIntoView: true }),
   actions: (state, obj) => [
     { id: 'copy', label: 'Copy', icon: Copy, run: (view, target) => { copyCode(view, target.to); } },
@@ -1192,7 +1206,7 @@ function codeDelete(view: EditorView, dir: -1 | 1): boolean {
   // Backspace at the start of the line after a block: an empty line goes, a text line's caret moves into the code.
   if (dir < 0 && line.number > 1 && /^[\s>]*$/.test(state.sliceDoc(line.from, at))) {
     const fence = fenceEndingOn(state, state.doc.line(line.number - 1));
-    if (fence) {
+    if (fence && !showsDiagram(state, fence)) {
       const end = fence.lines.length > 0 ? fence.lines[fence.lines.length - 1].line.to : null;
       if (blankText(line)) {
         view.dispatch({ changes: { from: fence.close?.to ?? line.from - 1, to: line.to }, selection: { anchor: end ?? fence.open.from }, scrollIntoView: true, userEvent: 'delete.backward' });
@@ -1205,7 +1219,7 @@ function codeDelete(view: EditorView, dir: -1 | 1): boolean {
   // Delete at the end of the line before a block: an empty line goes, a text line's caret moves into the code.
   if (dir > 0 && at === line.to && line.number < state.doc.lines) {
     const fence = fenceOpeningOn(state, state.doc.line(line.number + 1));
-    if (fence) {
+    if (fence && !showsDiagram(state, fence)) {
       const start = fence.lines[0]?.from ?? null;
       if (blankText(line)) {
         view.dispatch({ changes: { from: line.from, to: line.to + 1 }, selection: { anchor: start === null ? line.from : start - (line.length + 1) }, scrollIntoView: true, userEvent: 'delete.forward' });
@@ -1434,6 +1448,7 @@ function linkAroundCode(view: EditorView): boolean {
 export function codeDocExtension({ toggleInline, editLink }: { toggleInline: StateCommand; editLink: Command }): Extension {
   return [
     codeKind,
+    diagramDocExtension,
     codeDeletes,
     insertCodeBlock,
     madeFence,
