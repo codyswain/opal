@@ -4,7 +4,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState, type Extension } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { balancedText, containerPrefix, pasteLiterallyNext, pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
@@ -171,7 +171,9 @@ describe('Paste and Match Style in a document', () => {
   it('is what the paste event does after ⌘⇧V', () => {
     const view = mount('See \n');
     select(view, 4);
-    pasteLiterallyNext(view);
+    const mod = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    // The browser names the key "V" with Shift held; CodeMirror matches its key code.
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'V', keyCode: 86, shiftKey: true, ...mod }), 'editor'); });
     clipboardEvent(view, 'paste', clipboardData({ 'text/plain': '*x*' }));
     expect(text(view)).toBe('See \\*x\\*\n');
   });

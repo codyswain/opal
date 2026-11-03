@@ -40,12 +40,15 @@ export function rawAt(state: EditorState, at: number): boolean {
 const DELIMITERS = '*_~`\\';
 const ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/;
 
+// The latest typed delimiters kept: a shortcut is finished soon after it starts.
+const TYPED_KEPT = 1_000;
+
 /** Positions of the delimiters typed in this editor, so a shortcut typed here is kept and an old mark is not. */
 export const typedMarks = StateField.define<readonly number[]>({
   create: () => [],
   update(marks, tr) {
     if (!tr.docChanged) return marks;
-    const kept = marks.map((at) => tr.changes.mapPos(at, 1, MapMode.TrackDel)).filter((at): at is number => at !== null);
+    const kept = marks.slice(-TYPED_KEPT).map((at) => tr.changes.mapPos(at, 1, MapMode.TrackDel)).filter((at): at is number => at !== null);
     if (!tr.isUserEvent('input.type')) return kept;
     tr.changes.iterChanges((_fromA, _toA, fromB, _toB, inserted) => {
       const text = inserted.toString();
@@ -124,7 +127,10 @@ function format(view: EditorView, doc: Text, removals: readonly { from: number; 
   });
 }
 
-const formatting = (tr: Transaction) => tr.effects.find((effect) => effect.is(formatAfter))?.value as readonly { from: number; to: number }[] | undefined;
+function formatting(tr: Transaction): readonly { from: number; to: number }[] | undefined {
+  for (const effect of tr.effects) if (effect.is(formatAfter)) return effect.value;
+  return undefined;
+}
 
 // Typed text that can finish a shortcut: a space after a line mark, or a closing delimiter.
 const SHORTCUT_KEYS = /^[ *_~`]$/;
