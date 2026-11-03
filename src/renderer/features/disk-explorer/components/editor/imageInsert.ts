@@ -273,6 +273,7 @@ const pendingFiles = StateField.define<ReadonlyMap<number, Pending>>({
 });
 
 const CARD_HEIGHT = 64;
+const AUDIO_WIDTH = 448;
 // A video's width before it is stored, when the column can't be read.
 const VIDEO_WIDTH = 640;
 
@@ -287,9 +288,10 @@ export async function pendingSize(view: EditorView, file: File, look: InsertLook
   const card: PendingSize = { preview: false, width: null, height: CARD_HEIGHT };
   if (look !== 'default') return card;
   if (kind === 'pdf') return { preview: true, width: null, height: 401 };
-  if (kind === 'audio') return { preview: true, width: null, height: 56 };
-  if (kind !== 'image' && kind !== 'video') return card;
+  if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return card;
   const room = roomOf(view);
+  // Audio's row is a card's width, 28rem.
+  if (kind === 'audio') return { preview: true, width: room.width > 0 ? Math.min(AUDIO_WIDTH, room.width) : null, height: 94 };
   if (kind === 'video') {
     const width = room.width > 0 ? room.width : VIDEO_WIDTH;
     return { preview: true, width, height: Math.round((width * 9) / 16) };

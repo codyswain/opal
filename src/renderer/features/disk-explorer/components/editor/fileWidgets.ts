@@ -781,7 +781,7 @@ export class VideoWidget extends WidgetType {
   }
 }
 
-/** Audio: one row with the card's edge, an icon, the name and duration, and a native player on the right. */
+/** Audio: the card's width and edge, an icon, the name and duration, and a native player under them, 94px tall. */
 export class AudioWidget extends WidgetType {
   readonly key: string;
 
@@ -792,7 +792,7 @@ export class AudioWidget extends WidgetType {
 
   eq(other: AudioWidget) { return other.key === this.key; }
 
-  get estimatedHeight() { return 56; }
+  get estimatedHeight() { return 94; }
 
   toDOM(view: EditorView) {
     const { ref, name } = this.drawn;
