@@ -190,6 +190,21 @@ describe('pasting files', () => {
     expect(window.markdownAPI.resolveLinks).not.toHaveBeenCalledWith(DOC, ['Library/files/2026-11/screen-shot.a3f9c2e1.png']);
   });
 
+  it('holds a pasted picture\'s place at the size it will land at while it is stored', async () => {
+    let finish: (value: FilesResult<ImportedFile>) => void = () => undefined;
+    installFilesApi({ import: vi.fn(() => new Promise<FilesResult<ImportedFile>>((resolve) => { finish = resolve; })) });
+    const view = mount('Notes here\n');
+    act(() => { view.dispatch({ selection: { anchor: 3 } }); });
+    // A Retina screenshot, 1094 by 898 pixels at 144 dpi: 547 points wide.
+    paste(view, [new File([png(1094, 898, 5669)], 'Screen Shot.png', { type: 'image/png' })]);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending-box')).not.toBeNull());
+    const box = view.contentDOM.querySelector('.cm-file-pending-box') as HTMLElement;
+    expect([box.style.width, box.style.height]).toEqual(['547px', '449px']);
+    expect(box).toHaveTextContent('Adding Screen Shot.png…');
+    await act(async () => { finish({ success: true, data: storedFile('Screen Shot.png') }); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pending-box')).toBeNull());
+  });
+
   it('is its own undo step, apart from the words typed before it', async () => {
     const view = mount('', NOTE);
     act(() => { view.dispatch({ changes: { from: 0, insert: 'typed' }, selection: { anchor: 5 }, userEvent: 'input.type' }); });
@@ -207,13 +222,12 @@ describe('pasting files', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('stores a file copied in Finder, not its name, and links a file that is no image', async () => {
+  it('stores a file copied in Finder, not its name, and puts a file that is no image in as a chip at a caret in text', async () => {
     installFilesApi({ hasPath: vi.fn(() => true) });
     const view = mount('Start\n', NOTE);
     const report = new File(['%PDF'], 'Q3 report.pdf', { type: 'application/pdf' });
     paste(view, [report], 'Q3 report.pdf');
-    await waitFor(() => expect(text(view)).toBe('Start\n[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]]\n'));
-    expect(window.filesAPI.info).not.toHaveBeenCalled();
+    await waitFor(() => expect(text(view)).toBe('[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]] Start\n'));
   });
 
   it('leaves a paste without files to CodeMirror', () => {
@@ -299,7 +313,7 @@ describe('dropping files', () => {
     const view = mount('Notes\n');
     pointAt(view, 0, 5);
     drag(view, 'drop', [new File(['x'], 'Opal PR.webloc'), new File(['x'], 'clip.mov')], { clientY: 30 });
-    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n[[Library/clip.mov|clip.mov]]\n'));
+    await waitFor(() => expect(text(view)).toBe('Notes\n[Opal \\[PR\\] \\*13\\*](https://github.com/codyswain/opal/pull/13)\n![[Library/clip.mov]]\n'));
     expect(toastPlain).toHaveBeenCalledWith('"clip.mov" is larger than 100 MB and is not in Git LFS, so GitHub will refuse it.');
   });
 

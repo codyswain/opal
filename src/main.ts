@@ -7,6 +7,7 @@ import { PinsService } from "@/main/pins/PinsService";
 import { PinsHandlers } from "@/main/pins/PinsHandlers";
 import { FilesService } from "@/main/files/FilesService";
 import { FilesHandlers } from "@/main/files/FilesHandlers";
+import { VideoStills } from "@/main/files/videoStills";
 import {
   app,
   BrowserWindow,
@@ -16,6 +17,7 @@ import {
   nativeTheme,
   screen,
   Menu,
+  net,
 } from "electron";
 import path from "path";
 import {
@@ -466,6 +468,7 @@ const filesService = new FilesService({
 const filesHandlers = new FilesHandlers({
   ipc: ipcMain,
   service: filesService,
+  stills: new VideoStills({ dir: path.join(userDataDir, "video-stills"), fetch: (url, init) => net.fetch(url, init) }),
   showOpenDialog: (options) => {
     const window = BrowserWindow.getFocusedWindow();
     return window

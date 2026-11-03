@@ -22,6 +22,12 @@ export function electronFilesPlatform(): FilesPlatform {
     },
     // Slack, Gmail and Finder take a file URL on the pasteboard as the file itself.
     copyFileToClipboard: (file) => clipboard.writeBuffer('public.file-url', Buffer.from(pathToFileURL(file).href)),
+    copyImageToClipboard: (file) => {
+      const image = nativeImage.createFromPath(file);
+      if (image.isEmpty()) return false;
+      clipboard.writeImage(image);
+      return true;
+    },
     saveDialog: async (name) => {
       const window = BrowserWindow.getFocusedWindow();
       const options = { defaultPath: path.join(os.homedir(), 'Downloads', name) };

@@ -237,7 +237,8 @@ describe('Find and Replace in a document', () => {
     run(view, replaceAll);
     expect(text(view)).toBe('The roadmap is in [[Plan]] and at https://plan.example.com/plan today.\n');
     expect(view.contentDOM.querySelectorAll('.cm-searchMatch:not(.opal-searchKept)').length).toBe(0);
-    expect(view.contentDOM.querySelectorAll('.opal-searchKept').length).toBe(3);
+    // The wiki link is one object in a document, so its match draws no mark of its own.
+    expect(view.contentDOM.querySelectorAll('.opal-searchKept').length).toBe(2);
   });
 
   it('writes a replacement into a wiki link\'s text as written, and keeps the match when brackets or a bar would end the link', () => {

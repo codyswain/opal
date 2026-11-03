@@ -1,19 +1,20 @@
 import { isolateHistory } from '@codemirror/commands';
 import { syntaxTree } from '@codemirror/language';
-import { Prec, type ChangeSpec, type EditorState, type Extension } from '@codemirror/state';
-import { EditorView, keymap, type Command } from '@codemirror/view';
+import type { ChangeSpec, EditorState, Extension } from '@codemirror/state';
+import { ViewPlugin, type EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { classifyFile } from '@/common/fileKind';
+import { objectAt } from './extensionPoints';
 import { linkTarget } from './livePreview';
+import { setFrame } from './objectFrame';
 import { parseWikiTarget, resolvedLinks } from './wikiLinks';
 
 /*
- * Images in a document. A click selects one: the selection covers its
- * Markdown, and the image draws a frame with a square at each corner
- * (ImageWidget). Dragging a corner resizes it, keeping its shape, and writes
- * only its width when the button comes up. Arrow keys step over it, as doc
- * mode steps over anything drawn. Delete on a selected image, or Backspace
- * just after one, takes its line out of the page; the file stays in the
+ * Images in a document. An image is a file object (fileWidgets.ts): a click
+ * frames it and the frame shows a square at each corner (ImageWidget).
+ * Dragging a corner resizes it, keeping its shape, and writes only its width
+ * when the button comes up. Backspace and Delete frame it first and take it
+ * out on a second press, as every block object does; the file stays in the
  * files folder.
  */
 
@@ -45,13 +46,6 @@ function imageNode(state: EditorState, at: number, side: -1 | 1): SyntaxNode | n
   return null;
 }
 
-/** The image the selection covers exactly, if it does. */
-function selectedImage(state: EditorState): SyntaxNode | null {
-  const { main } = state.selection;
-  const node = main.empty ? null : imageNode(state, main.from, 1);
-  return node && node.to === main.to ? node : null;
-}
-
 /**
  * The change that writes `width` as the size of the image starting at
  * `from`, in place of the size it has, or after its target or alt text when
@@ -67,31 +61,6 @@ export function widthChange(state: EditorState, from: number, width: number): Ch
   // An embed's size is all of its alias; a Markdown image's is the part after the alt text.
   const size = node.name === 'Embed' ? written.slice(bar + 1) : written.slice(bar + 1).split('|')[0];
   return SIZE.test(size) ? { from: text.from + bar + 1, to: text.from + bar + 1 + size.length, insert: String(width) } : null;
-}
-
-/** Takes an image out: its whole line when only quote marks and spaces share it, otherwise just its Markdown. */
-function removeImage(view: EditorView, image: Range, userEvent: string): void {
-  const { doc } = view.state;
-  const line = doc.lineAt(image.from);
-  let { from, to } = image;
-  if (!/[^\s>]/.test(line.text.slice(0, from - line.from) + line.text.slice(to - line.from))) {
-    from = line.number > 1 ? line.from - 1 : line.from;
-    to = line.number > 1 ? line.to : Math.min(doc.length, line.to + 1);
-  }
-  view.dispatch({ changes: { from, to }, selection: { anchor: from }, scrollIntoView: true, userEvent });
-}
-
-/** Backspace just after an image, Delete just before one, or either on a selected one, takes it out. */
-function deleteImage(forward: boolean): Command {
-  return (view) => {
-    const { state } = view;
-    const { main } = state.selection;
-    if (state.readOnly || state.selection.ranges.length > 1) return false;
-    const image = main.empty ? imageNode(state, main.head, forward ? 1 : -1) : selectedImage(state);
-    if (!image) return false;
-    removeImage(view, image, forward ? 'delete.forward' : 'delete.backward');
-    return true;
-  };
 }
 
 /** Drags a corner: the image keeps its shape and follows the pointer, and its width is written when the button comes up. */
@@ -111,38 +80,64 @@ function resize(view: EditorView, frame: HTMLElement, corner: string, start: Mou
     image.style.width = `${width}px`;
     view.requestMeasure();
   };
+  const at = view.posAtDOM(frame);
   const up = () => {
     window.removeEventListener('mousemove', move);
     window.removeEventListener('mouseup', up);
-    const selected = view.dom.isConnected ? selectedImage(view.state) : null;
-    const changes = selected && width !== Math.round(box.width) ? widthChange(view.state, selected.from, width) : null;
-    if (changes) view.dispatch({ changes, annotations: isolateHistory.of('full'), userEvent: 'input.resize' });
-    else image.style.width = before;
+    const node = view.dom.isConnected ? imageNode(view.state, at, 1) : null;
+    const changes = node && width !== Math.round(box.width) ? widthChange(view.state, node.from, width) : null;
+    if (!changes) {
+      image.style.width = before;
+      return;
+    }
+    view.dispatch({ changes, annotations: isolateHistory.of('full'), userEvent: 'input.resize' });
+    // The image stays framed at its new width.
+    const obj = objectAt(view.state, at, 1) ?? objectAt(view.state, at, 0);
+    if (obj) view.dispatch({ effects: setFrame.of(obj) });
   };
   window.addEventListener('mousemove', move);
   window.addEventListener('mouseup', up);
 }
 
-/** A click on an image selects it; on one of its corners it also starts a resize. */
-const imageClicks = EditorView.domEventHandlers({
-  mousedown(event, view) {
-    if (event.button !== 0 || !(event.target instanceof Element)) return false;
-    const frame = event.target.closest<HTMLElement>('.cm-md-image');
-    const image = frame && imageNode(view.state, view.posAtDOM(frame), 1);
-    if (!frame || !image) return false;
-    event.preventDefault();
-    view.dispatch({ selection: { anchor: image.from, head: image.to } });
-    view.focus();
+/**
+ * A drag on a framed image's corner resizes it, and a drag on the framed
+ * image itself takes its file out of the window, to Finder, Slack or Gmail.
+ * The listeners sit on the whole editor and run first, ahead of the frame's
+ * own click, which frames an image on a plain click (objectFrame.ts).
+ */
+const cornerDrags = ViewPlugin.define((view) => {
+  const down = (event: MouseEvent) => {
+    if (event.button !== 0 || !(event.target instanceof Element)) return;
     const corner = event.target.closest<HTMLElement>('.cm-md-image-handle')?.dataset.corner;
-    if (corner) resize(view, frame, corner, event);
-    return true;
-  },
+    const frame = corner ? event.target.closest<HTMLElement>('.cm-md-image') : null;
+    if (corner && frame && imageNode(view.state, view.posAtDOM(frame), 1)) {
+      event.preventDefault();
+      event.stopPropagation();
+      resize(view, frame, corner, event);
+      return;
+    }
+    // A framed picture drags its file out of the window: the browser's own drag starts, which the page would stop.
+    const image = event.target.closest<HTMLImageElement>('.cm-md-image[data-file-framed][data-file-path] img');
+    if (!image || event.metaKey || event.ctrlKey || event.detail > 1) return;
+    image.draggable = true;
+    event.stopPropagation();
+    window.addEventListener('mouseup', () => { image.draggable = false; }, { once: true });
+  };
+  const dragOut = (event: DragEvent) => {
+    const frame = event.target instanceof Element ? event.target.closest<HTMLElement>('.cm-md-image[data-file-framed][data-file-path]') : null;
+    if (!frame?.dataset.filePath) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.filesAPI.startDrag(frame.dataset.filePath);
+  };
+  view.dom.addEventListener('mousedown', down, true);
+  view.dom.addEventListener('dragstart', dragOut, true);
+  return {
+    destroy: () => {
+      view.dom.removeEventListener('mousedown', down, true);
+      view.dom.removeEventListener('dragstart', dragOut, true);
+    },
+  };
 });
 
-export const imageFrame: Extension = [
-  Prec.highest(imageClicks),
-  Prec.highest(keymap.of([
-    { key: 'Backspace', run: deleteImage(false) },
-    { key: 'Delete', run: deleteImage(true) },
-  ])),
-];
+export const imageFrame: Extension = [cornerDrags];

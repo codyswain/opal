@@ -10,7 +10,7 @@
 // `area` renders only e2e/fixtures/gallery/<area>.mdo. The output folder is
 // --out, then OPAL_GALLERY_OUT, then e2e/out/gallery.
 import { _electron as electron } from '@playwright/test';
-import { copyFile, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -36,7 +36,12 @@ const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-gallery-userdata-'))
 const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-gallery-vault-'));
 await mkdir(path.join(vaultParent, 'Vault', 'Gallery'), { recursive: true });
 const vault = await realpath(path.join(vaultParent, 'Vault'));
-for (const name of fixtures) await copyFile(path.join(FIXTURES, name), path.join(vault, 'Gallery', name));
+for (const name of fixtures) {
+  await copyFile(path.join(FIXTURES, name), path.join(vault, 'Gallery', name));
+  // A fixture's `<area>.setup.mjs` writes the files it shows into the vault.
+  const setup = path.join(FIXTURES, name.replace(/\.mdo$/, '.setup.mjs'));
+  if (await access(setup).then(() => true, () => false)) await (await import(setup)).default(vault, path.join(vault, 'Gallery'));
+}
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 await mkdir(outDir, { recursive: true });
 

@@ -1,12 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { Pencil, Unlink } from 'lucide-react';
 import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
+import type { DiskEntry } from '@/types/disk';
 import { setLinkEditor, type LinkEditor } from './docMode';
 import { linkBetween, removeLink, typedLinkText, writeLink, type LinkAt } from './formatCommands';
 import { autolinkHref, docMode, drawnBlockAt, openLink } from './livePreview';
 import { visibleSlice } from './visibleText';
-import { openWikiLink, parseWikiTarget } from './wikiLinks';
+import { openWikiLink, pageContext, parseWikiTarget } from './wikiLinks';
+import { relativePath } from './fileActions';
+import { findLinkTargets, folderOf, pickedText, rowLabel } from './linkPicker';
 
 /** Where the link sits on screen, from its first character on its first line. */
 function linkRect(view: EditorView, from: number, to: number): DOMRect {
@@ -53,8 +56,52 @@ const LinkForm: React.FC<LinkFormProps> = ({ view, editor, link }) => {
     >
       <input aria-label="Text" value={text} onChange={(event) => setText(event.target.value)} className={fieldClass} />
       <input autoFocus aria-label="Link" placeholder="Paste or type a link" value={url} onChange={(event) => setUrl(event.target.value)} className={fieldClass} />
+      <AddressMatches view={view} typed={url} wiki={link?.kind === 'wiki'} onPick={setUrl} />
       <Button type="submit" size="compact" className="self-end" disabled={!url.trim()}>Apply</Button>
     </form>
+  );
+};
+
+/** A pick's address: a wiki target from the vault's top, or a path relative to the page with each segment encoded. */
+function addressOf(view: EditorView, entry: DiskEntry, wiki: boolean): string {
+  const target = pickedText(entry, view.state.facet(pageContext).path, false, true).target;
+  if (wiki) return target;
+  return relativePath(view.state.facet(pageContext).path, entry.path).split('/').map(encodeURIComponent).join('/');
+}
+
+/** Notes, documents and files matching what is typed in the address field, as the "[[" picker lists them. */
+const AddressMatches: React.FC<{ view: EditorView; typed: string; wiki: boolean; onPick: (address: string) => void }> = ({ view, typed, wiki, onPick }) => {
+  const [matches, setMatches] = useState<DiskEntry[]>([]);
+  const query = /^[a-z][a-z0-9+.-]*:|^www\./i.test(typed.trim()) ? '' : typed.trim();
+  useEffect(() => {
+    let live = true;
+    if (!query) {
+      setMatches([]);
+      return undefined;
+    }
+    const timer = setTimeout(() => { void findLinkTargets(query, 6).then((found) => { if (live) setMatches(found); }); }, 80);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+  if (matches.length === 0) return null;
+  return (
+    <ul role="listbox" aria-label="Notes and files" data-testid="link-address-matches" className="-mt-1 flex flex-col">
+      {matches.map((entry) => (
+        <li key={entry.path} role="option" aria-selected={false}>
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onPick(addressOf(view, entry, wiki))}
+            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-ui text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <span className="min-w-0 truncate">{rowLabel(entry)}</span>
+            <span className="ml-auto min-w-0 truncate pl-2 text-metadata text-foreground-tertiary">{folderOf(entry.path)}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 };
 

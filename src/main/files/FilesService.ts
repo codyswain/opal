@@ -30,6 +30,8 @@ export interface FilesPlatform {
   thumbnail: ThumbnailProvider;
   /** Puts the file itself on the pasteboard. */
   copyFileToClipboard: (file: string) => void;
+  /** Puts a picture's pixels on the pasteboard; false when the file is no picture macOS reads. */
+  copyImageToClipboard?: (file: string) => boolean;
   /** Asks where to save `name`; null when cancelled. */
   saveDialog: (name: string) => Promise<string | null>;
   startDrag: (sender: WebContents, file: string) => Promise<void>;
@@ -179,6 +181,12 @@ export class FilesService {
   /** Puts the file itself on the pasteboard, from its real bytes, so Slack, Gmail and Finder attach it. */
   async copyFile(target: string): Promise<void> {
     this.platform.copyFileToClipboard(await this.outgoing(await this.deps.registry.assertAllowed(target)));
+  }
+
+  /** Puts a picture's pixels on the pasteboard, from its real bytes, for Slack or Gmail. */
+  async copyImage(target: string): Promise<void> {
+    const file = await this.real(await this.deps.registry.assertAllowed(target));
+    if (!this.platform.copyImageToClipboard?.(file)) throw new Error(`${withoutHash(path.basename(target))} is not a picture Opal can copy.`);
   }
 
   /** Saves a copy where the person picks, named `name` or the stored name without its hash. The vault file is untouched. */

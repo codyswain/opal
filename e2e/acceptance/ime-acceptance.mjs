@@ -2,12 +2,12 @@
 // caret cell (both edges of bold, after a link, inline code and a wiki
 // link, the text start of a list item, task, heading and quote, after Cmd+B,
 // over a selection that crosses a mark, and on both sides of an inline
-// formula, at a line's start and end too) it types one letter with the
-// real keyboard, then sends the same place an input method's composition
-// through the DevTools protocol (Input.imeSetComposition, then
-// Input.insertText), and a dead key (´ then é). The composed text must land
-// where the letter did, with the same marks around it. Prints a result
-// table for the PR body. Own userData and temp vault; run from the
+// formula and a file chip, at a line's start and end too) it types one
+// letter with the real keyboard, then sends the same place an input
+// method's composition through the DevTools protocol
+// (Input.imeSetComposition, then Input.insertText), and a dead key (´ then
+// é). The composed text must land where the letter did, with the same marks
+// around it. Prints a result table for the PR body. Own userData and temp vault; run from the
 // repository root after the Vite bundles are built: see README.md here.
 //
 //   node e2e/acceptance/ime-acceptance.mjs [--table]
@@ -41,6 +41,10 @@ const CELLS = [
   { name: 'before an inline formula', doc: 'Energy ‸$E=mc^2$ and more.' },
   { name: 'line start, before a formula', doc: '‸$x$ starts this line.' },
   { name: 'line end, after a formula', doc: 'This line ends with $y$‸' },
+  { name: 'before a file chip', doc: 'See ‸[[Library/files/2026-11/deck.pptx|deck]] here' },
+  { name: 'after a file chip', doc: 'See [[Library/files/2026-11/deck.pptx|deck]]‸ here' },
+  { name: 'line start, before a file chip', doc: '‸[[Library/files/2026-11/deck.pptx|deck]] here' },
+  { name: 'line end, after a file chip', doc: 'See [[Library/files/2026-11/deck.pptx|deck]]‸' },
 ];
 
 const COMPOSITIONS = [
@@ -55,6 +59,8 @@ const vault = await realpath(path.join(vaultParent, 'Vault'));
 const DOC = `${vault}/Notes/ime.mdo`;
 await writeFile(DOC, 'Start\n');
 await writeFile(path.join(vault, 'Notes', 'Plan.md'), '# Plan\n');
+await mkdir(path.join(vault, 'Library', 'files', '2026-11'), { recursive: true });
+await writeFile(path.join(vault, 'Library', 'files', '2026-11', 'deck.pptx'), 'deck');
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 
 const app = await electron.launch({ args: [PROJECT_ROOT], env: { ...process.env, OPAL_TEST_USER_DATA_DIR: userData } });

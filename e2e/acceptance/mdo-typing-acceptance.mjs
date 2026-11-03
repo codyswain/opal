@@ -196,7 +196,8 @@ try {
   await page.waitForTimeout(300);
   const kept = await page.evaluate(() => document.querySelectorAll('.cm-content .opal-searchKept').length);
   const status = await page.getByText(/^Replaced \d+ of \d+\./).first().textContent({ timeout: 3_000 }).catch(() => null);
-  check('matches Replace kept are drawn apart, and a status message counts them', kept >= 3 && /^Replaced 2 of \d+\./.test(status ?? ''), `${kept} kept; ${status}`);
+  // The bare URL's two matches are drawn apart; a wiki link is one object in a document, with no match drawn inside it.
+  check('matches Replace kept are drawn apart, and a status message counts them', kept >= 2 && /^Replaced 2 of \d+\./.test(status ?? ''), `${kept} kept; ${status}`);
   await shoot('typing-replaced');
   const replaced = await text();
   check('Replace All changes the link text and the sentence', replaced.includes('[a roadmap link](https://example.com/plan)') && replaced.includes('The roadmap is in'), JSON.stringify(replaced.split('\n')[8]));

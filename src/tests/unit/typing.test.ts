@@ -229,13 +229,14 @@ describe('typing in a document', () => {
   });
 
   it('writes <!-- as typed inside a wiki link or URL, where a backslash would show', () => {
-    const view = mount('[[Robotics]] and https://x.com/ab\n');
-    at(view, 5);
+    // An unaliased wiki link is one object in a document, so the typing goes in an alias.
+    const view = mount('[[Robotics|Robotics]] and https://x.com/ab\n');
+    at(view, 14);
     type(view, '<!--');
     const url = text(view).indexOf('ab') + 1;
     at(view, url);
     type(view, '<!--');
-    expect(text(view)).toBe('[[Rob<!--otics]] and https://x.com/a<!--b\n');
+    expect(text(view)).toBe('[[Robotics|Rob<!--otics]] and https://x.com/a<!--b\n');
   });
 
   it('doubles a backslash typed before an HTML comment on its own line', () => {

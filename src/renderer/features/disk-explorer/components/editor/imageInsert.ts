@@ -3,25 +3,28 @@ import { syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
-import { classifyFile, pageName } from '@/common/fileKind';
+import { classifyFile, pageName, withoutHash } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow } from '@/common/fsPaths';
 import type { FilesResult, ImportedFile } from '@/types/files';
 import { useDiskStore } from '../../store/diskStore';
 import { draggedTreeFile } from '../dragMoveState';
 import { vaultRelativePath } from '../tabLabels';
 import { insertItems } from './extensionPoints';
-import { embedWidth } from './imageSize';
+import { WIKI_UNSAFE, escapeLinkText, linkFor, wikiAlias } from './fileActions';
+import { inCode, inTableAt } from './fileEmbeds';
+import { embedWidth, imageSize } from './imageSize';
 import { linksResolved, pageContext } from './wikiLinks';
 
 /*
  * Files put into a page: dropped from Finder, a browser or Photos, pasted,
- * or picked with the toolbar's Image button. Each is stored in the files
- * folder first, then goes in on a line of its own, an image as an embed with
- * a width and any other file as a link, by its path from the vault's top.
- * Each insert is its own undo step, and its link counts as resolved at once.
- * A row dragged from the tree is linked where it is.
+ * or picked with Insert > Image… or File…. Each is stored in the files
+ * folder first, with a placeholder where it goes, then goes in by its path
+ * from the vault's top: inside text as a chip, on a line of its own in its
+ * type's look (a preview for pictures, PDF, video and audio, a card
+ * otherwise). Each insert is its own undo step, and its link counts as
+ * resolved at once. A row dragged from the tree is linked where it is.
  */
 
 const hasText = (text: string) => /[^\s>]/.test(text);
@@ -74,6 +77,8 @@ export function placeEmbed(state: EditorState, at: number, embed: string): { fro
 interface Place {
   at: number;
   caret: number | null;
+  /** Where a chip goes inside text, or null for a line of its own. */
+  inline: number | null;
 }
 
 const setPlace = StateEffect.define<{ id: number; place: Place | null }>();
@@ -83,7 +88,7 @@ const places = StateField.define<ReadonlyMap<number, Place>>({
   update(value, tr) {
     const map = (at: number) => tr.changes.mapPos(at, -1);
     let next = value.size > 0 && tr.docChanged
-      ? new Map([...value].map(([id, { at, caret }]) => [id, { at: map(at), caret: caret === null ? null : map(caret) }]))
+      ? new Map([...value].map(([id, { at, caret, inline }]) => [id, { at: map(at), caret: caret === null ? null : map(caret), inline: inline === null ? null : map(inline) }]))
       : value;
     for (const effect of tr.effects) {
       if (!effect.is(setPlace)) continue;
@@ -98,9 +103,9 @@ const places = StateField.define<ReadonlyMap<number, Place>>({
 
 let lastPlace = 0;
 
-function holdPlace(view: EditorView, at: number): number {
+function holdPlace(view: EditorView, at: number, inline: number | null = null): number {
   const id = ++lastPlace;
-  view.dispatch({ effects: setPlace.of({ id, place: { at, caret: view.state.selection.main.head } }) });
+  view.dispatch({ effects: setPlace.of({ id, place: { at, caret: view.state.selection.main.head, inline } }) });
   return id;
 }
 
@@ -120,15 +125,48 @@ async function widthFor(view: EditorView, path: string): Promise<number | null> 
       ? { width: info.data.width, height: info.data.height, retina: info.data.retina ?? false }
       : null;
     if (!size) return null;
-    const style = getComputedStyle(view.contentDOM);
-    const column = view.contentDOM.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    return embedWidth(size, { width: column, height: Math.min(window.innerHeight, view.scrollDOM.clientHeight) });
+    return embedWidth(size, roomOf(view));
   } catch {
     return null;
   }
 }
 
+/** The column's width and one screen's height, which a new picture or video fits in. */
+function roomOf(view: EditorView): { width: number; height: number } {
+  const style = getComputedStyle(view.contentDOM);
+  const column = view.contentDOM.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
+  return { width: Math.max(0, column), height: Math.min(window.innerHeight, view.scrollDOM.clientHeight) };
+}
+
 type InsertEvent = 'input' | 'input.drop' | 'input.paste';
+
+/** How a stored file goes in: a chip at the caret, the type's default look on a line of its own, or a card. */
+export type InsertLook = 'chip' | 'default' | 'card';
+
+/**
+ * The Markdown for a file put on a page. The default look embeds images,
+ * PDF, video and audio as previews, pictures and video with a width and the
+ * others with their name, and links anything else as a card. A chip and a
+ * card are a link with the file's name. A dropped `.webloc` or `.url` is a
+ * link to its address.
+ */
+export function insertedText(file: Pick<ImportedFile, 'path' | 'vaultPath' | 'name' | 'url'>, page: string, look: InsertLook, width: number | null, inTable = false): string {
+  // A dropped .webloc or .url stored nothing: it links to the address it holds.
+  if (file.url) return `[${escapeLinkText(file.name.replace(/\.(webloc|url)$/i, ''), inTable)}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`;
+  const kind = classifyFile(file.path);
+  const sized = kind === 'image' || kind === 'video';
+  if (look === 'default' && (sized || kind === 'pdf' || kind === 'audio')) {
+    return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: true, slot: sized ? (width ? String(width) : null) : file.name, inTable });
+  }
+  return linkFor({ vaultPath: file.vaultPath, path: file.path, page, embed: false, slot: file.name, inTable });
+}
+
+/** A chip at `at` inside text, with a space between it and a word it would touch. */
+export function chipAt(state: EditorState, at: number, chip: string): { from: number; insert: string } {
+  const before = state.sliceDoc(Math.max(0, at - 1), at);
+  const after = state.sliceDoc(at, at + 1);
+  return { from: at, insert: `${before && /\S/.test(before) ? ' ' : ''}${chip}${after && /[^\s.,;:!?)\]]/.test(after) ? ' ' : ''}` };
+}
 
 /**
  * Puts a stored file in at its import's place and moves the place past it.
@@ -136,64 +174,288 @@ type InsertEvent = 'input' | 'input.drop' | 'input.paste';
  * meanwhile carries on undisturbed. Nothing once the page has closed: the
  * file stays.
  */
-async function putFile(view: EditorView, id: number, file: ImportedFile, userEvent: InsertEvent): Promise<void> {
-  if (file.warning) toast(file.warning);
-  const image = !file.url && classifyFile(file.path) === 'image';
-  const width = image ? await widthFor(view, file.path) : null;
+async function putFile(view: EditorView, id: number, file: ImportedFile, userEvent: InsertEvent, look: InsertLook = 'default'): Promise<void> {
+  const kind = classifyFile(file.path);
+  const sized = !file.url && look === 'default' && (kind === 'image' || kind === 'video');
+  const width = sized ? await widthFor(view, file.path) : null;
   const place = view.dom.isConnected ? view.state.field(places).get(id) : undefined;
   if (!place) return;
-  // A dropped .webloc or .url stored nothing: it links to the address it holds.
-  const embed = file.url
-    ? `[${file.name.replace(/[\\[\]*|]/g, '\\$&')}](${/[\s()]/.test(file.url) ? `<${file.url}>` : file.url})`
-    : image ? `![[${file.vaultPath}${width ? `|${width}` : ''}]]` : `[[${file.vaultPath}|${file.name.replace(/[[\]|]/g, '')}]]`;
-  const { from, insert } = placeEmbed(view.state, place.at, embed);
+  const page = view.state.facet(pageContext).path;
+  const inline = place.inline !== null && look === 'chip';
+  const text = insertedText(file, page, inline ? 'chip' : look, width, inline && place.inline !== null && inTableAt(view.state, place.inline));
+  const { from, insert } = inline && place.inline !== null ? chipAt(view.state, place.inline, text) : placeEmbed(view.state, place.at, text);
   const end = from + insert.length;
   const follow = view.state.selection.main.head === place.caret;
   view.dispatch({
     changes: { from, insert },
     selection: follow ? { anchor: end } : undefined,
-    effects: [...(file.url ? [] : [linksResolved.of({ [file.vaultPath]: file.path })]), setPlace.of({ id, place: { at: end, caret: follow ? end : null } })],
+    effects: [
+      ...(file.url ? [] : [linksResolved.of({ [file.vaultPath]: file.path })]),
+      setPlace.of({ id, place: inline ? { at: place.at + (from <= place.at ? insert.length : 0), caret: follow ? end : null, inline: end } : { at: end, caret: follow ? end : null, inline: null } }),
+    ],
     annotations: isolateHistory.of('full'),
     scrollIntoView: true,
     userEvent,
   });
+  if (file.warning) toast(file.warning);
 }
 
-/** Stores each file in order and puts it in after the line holding `at`. One that fails, or is over 100 MB, is skipped with its reason. */
-export async function addFiles(view: EditorView, files: readonly File[], at: number, userEvent: InsertEvent): Promise<void> {
-  const page = view.state.facet(pageContext).path;
-  const id = holdPlace(view, at);
-  for (const file of files) {
-    const stored: FilesResult<ImportedFile> = await window.filesAPI.import(page, file)
-      .catch(() => ({ success: false as const, error: `"${file.name}" could not be added.` }));
-    if (stored.success) await putFile(view, id, stored.data, userEvent);
-    else toast.error(stored.error);
+// Over three files that are not pictures go in as cards, so a page doesn't fill with previews.
+const CARDS_OVER = 3;
+
+/**
+ * The look each of `files` takes: one file at a caret in text is a chip,
+ * except a picture, which goes on its own line to be seen; more than three
+ * files that are not pictures are cards.
+ */
+function looksFor(files: readonly { name: string }[], inline: boolean): InsertLook[] {
+  const picture = (file: { name: string }) => classifyFile(file.name) === 'image';
+  const others = files.filter((file) => !picture(file)).length;
+  return files.map((file) => {
+    if (picture(file)) return 'default';
+    if (inline && files.length === 1) return 'chip';
+    return others > CARDS_OVER ? 'card' : 'default';
+  });
+}
+
+/** The box a file's look will take once it is in: a preview's width and height, or a card's height. */
+interface PendingSize {
+  preview: boolean;
+  width: number | null;
+  height: number;
+}
+
+/** A file being stored, drawn where it will go until it is in, or as an error card with Retry and Remove. */
+interface Pending {
+  at: number;
+  name: string;
+  look: InsertLook;
+  size: PendingSize;
+  failed: string | null;
+  retry: () => void;
+}
+
+const setPending = StateEffect.define<{ id: number; pending: Pending | null }>();
+
+const pendingFiles = StateField.define<ReadonlyMap<number, Pending>>({
+  create: () => new Map(),
+  update(value, tr) {
+    let next = value.size > 0 && tr.docChanged
+      ? new Map([...value].map(([id, pending]) => [id, { ...pending, at: tr.changes.mapPos(pending.at, 1) }]))
+      : value;
+    for (const effect of tr.effects) {
+      if (!effect.is(setPending)) continue;
+      const changed = new Map(next);
+      if (effect.value.pending === null) changed.delete(effect.value.id);
+      else changed.set(effect.value.id, effect.value.pending);
+      next = changed;
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field, (pending) => Decoration.set([...pending].map(([id, file]) =>
+    Decoration.widget({ widget: new PendingWidget(id, file), block: true, side: 1 }).range(file.at)), true)),
+});
+
+const CARD_HEIGHT = 64;
+// A video's width before it is stored, when the column can't be read.
+const VIDEO_WIDTH = 640;
+
+/**
+ * The box a file's look will take, so the page doesn't move when it lands:
+ * a picture at the width it will be written with, read from its first
+ * bytes; a video at the column's width, 16:9; a PDF at its first page and
+ * footer; audio's row; otherwise a card.
+ */
+export async function pendingSize(view: EditorView, file: File, look: InsertLook): Promise<PendingSize> {
+  const kind = classifyFile(file.name);
+  const card: PendingSize = { preview: false, width: null, height: CARD_HEIGHT };
+  if (look !== 'default') return card;
+  if (kind === 'pdf') return { preview: true, width: null, height: 401 };
+  if (kind === 'audio') return { preview: true, width: null, height: 56 };
+  if (kind !== 'image' && kind !== 'video') return card;
+  const room = roomOf(view);
+  if (kind === 'video') {
+    const width = room.width > 0 ? room.width : VIDEO_WIDTH;
+    return { preview: true, width, height: Math.round((width * 9) / 16) };
   }
+  const bytes = await Promise.resolve().then(() => file.slice(0, 256 * 1024).arrayBuffer()).catch(() => null);
+  const size = bytes ? imageSize(new Uint8Array(bytes)) : null;
+  if (!size) return { preview: true, width: null, height: 240 };
+  const width = embedWidth(size, room);
+  return { preview: true, width, height: Math.round((width * size.height) / size.width) };
+}
+
+class PendingWidget extends WidgetType {
+  constructor(readonly id: number, readonly file: Pending) { super(); }
+
+  eq(other: PendingWidget) {
+    return other.id === this.id && other.file.failed === this.file.failed && other.file.name === this.file.name &&
+      other.file.size.width === this.file.size.width && other.file.size.height === this.file.size.height;
+  }
+
+  get estimatedHeight() { return this.file.failed ? CARD_HEIGHT : this.file.size.height; }
+
+  toDOM(view: EditorView) {
+    const box = document.createElement('div');
+    box.className = 'cm-file-pending';
+    const { size } = this.file;
+    // A preview's place: a grey box at its final size, with what is being added inside it.
+    if (!this.file.failed && size.preview) {
+      const shape = document.createElement('span');
+      shape.className = 'cm-file-pending-box';
+      shape.style.height = `${size.height}px`;
+      if (size.width) shape.style.width = `${size.width}px`;
+      shape.textContent = `Adding ${this.file.name}…`;
+      box.append(shape);
+      return box;
+    }
+    const card = document.createElement('span');
+    card.className = 'cm-file-card';
+    card.dataset.state = this.file.failed ? 'failed' : 'adding';
+    const body = document.createElement('span');
+    body.className = 'cm-file-card-body';
+    const name = document.createElement('span');
+    name.className = 'cm-file-card-name';
+    name.textContent = this.file.failed ? this.file.name : `Adding ${this.file.name}…`;
+    const meta = document.createElement('span');
+    meta.className = 'cm-file-card-meta';
+    meta.textContent = this.file.failed ?? 'Storing in Library/files';
+    body.append(name, meta);
+    card.append(body);
+    if (this.file.failed) {
+      const actions = document.createElement('span');
+      actions.className = 'cm-file-card-actions';
+      const control = (label: string, run: () => void) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'cm-file-button';
+        button.textContent = label;
+        button.addEventListener('mousedown', (event) => event.preventDefault());
+        button.addEventListener('click', run);
+        return button;
+      };
+      actions.append(
+        control('Retry', () => this.file.retry()),
+        control('Remove', () => view.dispatch({ effects: setPending.of({ id: this.id, pending: null }) })),
+      );
+      card.append(actions);
+    }
+    box.append(card);
+    return box;
+  }
+
+  ignoreEvent() { return true; }
+}
+
+let lastPending = 0;
+
+/** Stores one file with a placeholder where it goes; a failure leaves an error card that can try again. */
+async function storeOne(view: EditorView, id: number, file: File, look: InsertLook, userEvent: InsertEvent): Promise<void> {
+  const page = view.state.facet(pageContext).path;
+  const pending = ++lastPending;
+  const at = () => {
+    const place = view.state.field(places).get(id);
+    return place ? placeEmbed(view.state, place.at, '').from : view.state.doc.length;
+  };
+  const sizing = pendingSize(view, file, look);
+  const attempt = async (): Promise<void> => {
+    if (!view.dom.isConnected) return;
+    // Storing starts at once; the placeholder shows as soon as its size is read.
+    const storing: Promise<FilesResult<ImportedFile>> = window.filesAPI.import(page, file)
+      .catch(() => ({ success: false as const, error: `"${file.name}" could not be added.` }));
+    const size = await sizing;
+    if (!view.dom.isConnected) return;
+    view.dispatch({ effects: setPending.of({ id: pending, pending: { at: at(), name: file.name, look, size, failed: null, retry: () => undefined } }) });
+    const stored = await storing;
+    if (!view.dom.isConnected) return;
+    if (stored.success) {
+      view.dispatch({ effects: setPending.of({ id: pending, pending: null }) });
+      await putFile(view, id, stored.data, userEvent, look);
+      return;
+    }
+    toast.error(stored.error);
+    const failed: Pending = { at: at(), name: file.name, look, size: await sizing, failed: stored.error, retry: () => {
+      // A retry goes where the error card is.
+      const kept = holdPlace(view, view.state.field(pendingFiles).get(pending)?.at ?? at(), null);
+      view.dispatch({ effects: setPending.of({ id: pending, pending: null }) });
+      void storeOne(view, kept, file, look, userEvent).then(() => letGo(view, kept));
+    } };
+    view.dispatch({ effects: setPending.of({ id: pending, pending: failed }) });
+  };
+  await attempt();
+}
+
+/**
+ * Stores each file in order and puts it in after the line holding `at`, or
+ * as a chip at `inline` when one file goes in from inside text. More than
+ * three files that are not pictures go in as cards. One that fails leaves
+ * an error card with Retry and Remove.
+ */
+export async function addFiles(view: EditorView, files: readonly File[], at: number, userEvent: InsertEvent, inline: number | null = null): Promise<void> {
+  const id = holdPlace(view, at, files.length === 1 ? inline : null);
+  const looks = looksFor(files, inline !== null);
+  for (const [index, file] of files.entries()) await storeOne(view, id, file, looks[index], userEvent);
+  letGo(view, id);
+}
+
+/**
+ * Where a caret at `head` puts one file: inside text, a chip there; on an
+ * empty line, or in code or a formula, null, for a line of its own after it.
+ */
+export function caretInText(state: EditorState, head: number): number | null {
+  const line = state.doc.lineAt(head);
+  return hasText(line.text) && !inCode(state, head) ? head : null;
+}
+
+/** Insert > Image… and Insert > File…: the files picked in the open dialog, at the caret. */
+export async function addPickedFiles(view: EditorView, anyType = false): Promise<void> {
+  const head = view.state.selection.main.head;
+  const page = view.state.facet(pageContext).path;
+  const picked = await (anyType ? window.filesAPI.pickAndImport(page, { anyType: true }) : window.filesAPI.pickAndImport(page));
+  if (!picked.success) {
+    toast.error(picked.error);
+    return;
+  }
+  const { files } = picked.data;
+  const inline = files.length === 1 && anyType ? caretInText(view.state, head) : null;
+  const id = holdPlace(view, view.state.doc.lineAt(head).to, inline);
+  const looks = looksFor(files.map((file) => ({ name: file.path || file.name })), inline !== null);
+  for (const [index, file] of files.entries()) await putFile(view, id, file, 'input', looks[index]);
+  for (const message of picked.data.skipped) toast.error(message);
   letGo(view, id);
 }
 
 /** The toolbar's Image button: the images picked in the open dialog, after the caret's line. */
 export async function addPickedImages(view: EditorView): Promise<void> {
-  const id = holdPlace(view, view.state.doc.lineAt(view.state.selection.main.head).to);
-  const picked = await window.filesAPI.pickAndImport(view.state.facet(pageContext).path);
-  if (picked.success) {
-    for (const file of picked.data.files) await putFile(view, id, file, 'input');
-    for (const message of picked.data.skipped) toast.error(message);
-  } else {
-    toast.error(picked.error);
-  }
-  letGo(view, id);
+  await addPickedFiles(view, false);
 }
 
-/** A tree row dropped on the page: a link to its file by its path from the vault's top. Nothing is copied. */
-function linkFile(view: EditorView, path: string, at: number): void {
+/**
+ * A tree row dropped on the page: a note as a link by its name, any other
+ * file in its type's look (a preview for pictures, PDF, video and audio, a
+ * card otherwise), by its path from the vault's top. Nothing is copied.
+ */
+async function linkFile(view: EditorView, path: string, at: number): Promise<void> {
   const root = useDiskStore.getState().roots.filter((candidate) => isFsPathAtOrBelow(candidate, path)).sort((a, b) => a.length - b.length)[0];
   if (!root) return;
   const relative = vaultRelativePath(path, [root]);
-  // A note goes by its name, as [[Name]] does; a document keeps ".mdo".
-  const target = relative.endsWith('.md') ? relative.slice(0, -3) : relative;
-  const name = classifyFile(path) === 'markdown' ? pageName(basenameFsPath(path)) : basenameFsPath(path);
-  const { from, insert } = placeEmbed(view.state, at, `[[${target}|${name.replace(/[[\]|]/g, '')}]]`);
+  const kind = classifyFile(path);
+  let text: string;
+  let target = relative;
+  if (kind === 'markdown') {
+    // A note goes by its name, as [[Name]] does; a document keeps ".mdo".
+    target = relative.endsWith('.md') ? relative.slice(0, -3) : relative;
+    const name = pageName(basenameFsPath(path));
+    text = WIKI_UNSAFE.test(target)
+      ? linkFor({ vaultPath: relative, path, page: view.state.facet(pageContext).path, embed: false, slot: name })
+      : `[[${target}|${wikiAlias(name)}]]`;
+  } else {
+    const sized = kind === 'image' || kind === 'video';
+    const width = sized ? await widthFor(view, path) : null;
+    text = insertedText({ path, vaultPath: relative, name: withoutHash(basenameFsPath(path)) }, view.state.facet(pageContext).path, 'default', width);
+  }
+  if (!view.dom.isConnected) return;
+  const { from, insert } = placeEmbed(view.state, Math.min(at, view.state.doc.length), text);
   view.dispatch({
     changes: { from, insert },
     selection: { anchor: from + insert.length },
@@ -272,7 +534,7 @@ const fileDrops = ViewPlugin.define((view) => {
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!carriesFiles(event) || (!row && files.length === 0)) return;
       event.preventDefault();
-      if (row) linkFile(view, row, lineAt(event));
+      if (row) void linkFile(view, row, lineAt(event));
       else void addFiles(view, files, lineAt(event), 'input.drop');
       view.focus();
     },
@@ -297,12 +559,13 @@ const filePaste = EditorView.domEventHandlers({
     const copied = files.filter((file) => window.filesAPI.hasPath(file));
     const added = copied.length > 0 ? copied : data.getData('text/plain') ? [] : files;
     if (added.length === 0) return false;
-    void addFiles(view, added, view.state.doc.lineAt(view.state.selection.main.head).to, 'input.paste');
+    const { head } = view.state.selection.main;
+    void addFiles(view, added, view.state.doc.lineAt(head).to, 'input.paste', caretInText(view.state, head));
     return true;
   },
 });
 
-export const fileInserts: Extension = [places, dropLine, fileDrops, filePaste];
+export const fileInserts: Extension = [places, pendingFiles, dropLine, fileDrops, filePaste];
 
 /** Insert > Image…: the system picker, then the picked images at the caret. */
 export const insertImageItem = insertItems.of({
@@ -312,6 +575,18 @@ export const insertImageItem = insertItems.of({
   order: 0,
   run: async (view) => {
     await addPickedImages(view);
+    view.focus();
+  },
+});
+
+/** Insert > File…: the system picker for any type, then the file at the caret: a chip in text, its look on an empty line. */
+export const insertFileItem = insertItems.of({
+  id: 'file',
+  label: 'File…',
+  icon: Paperclip,
+  order: 1,
+  run: async (view) => {
+    await addPickedFiles(view, true);
     view.focus();
   },
 });
