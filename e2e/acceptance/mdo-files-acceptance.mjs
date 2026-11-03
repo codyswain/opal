@@ -1,8 +1,7 @@
 // Disposable Electron acceptance for files in documents: chips, cards and
 // previews drawn from e2e/fixtures/gallery/files.mdo, every failure state,
 // captions from the investor update's forms, a movie seeking to its end,
-// the object bar, a drop of a PDF, a movie and a deck, input methods next to
-// a chip, and no web loads. Own userData and temp vault; thumbnails come
+// the object bar, a drop of a PDF, a movie and a deck, and no web loads. Own userData and temp vault; thumbnails come
 // from macOS as in the app. Run from the repository root after the Vite
 // bundles are built (see README.md here):
 //
@@ -35,7 +34,6 @@ await copyFile(path.join(PROJECT_ROOT, 'e2e/fixtures/gallery/files.mdo'), path.j
 const made = await setup(vault, gallery);
 if (!made.movie) console.log('SKIP movie checks: ffmpeg could not make a test movie');
 await writeFile(path.join(gallery, 'Drop.mdo'), 'Intro\n');
-const CHIP = '[[Library/files/2026-11/gob-deck.a3f9c2e1.pptx|deck]]';
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 if (shotsDir) await mkdir(shotsDir, { recursive: true });
 
@@ -310,32 +308,7 @@ try {
   check('a dropped movie goes in as a preview with a width', /^!\[\[Library\/files\/\d{4}-\d{2}\/clip\.[0-9a-f]{8}\.mp4(\|\d+)?\]\]$/.test(lines[2] ?? ''), lines[2]);
   check('a dropped deck goes in as a card link with its name', /^\[\[Library\/files\/\d{4}-\d{2}\/pitch-deck\.[0-9a-f]{8}\.pptx\|Pitch deck\.pptx\]\]$/.test(lines[3] ?? ''), lines[3]);
   if (shotsDir) await page.locator('.opal-editor').first().screenshot({ path: path.join(shotsDir, 'drop-light.png') });
-
-  // Input methods next to a chip: before and after it, at the line's start and end. The caret goes there by keys, as a person moves it.
-  const cdp = await page.context().newCDPSession(page);
-  const cells = [
-    ['before a chip', ['Meta+ArrowLeft', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight'], `See に${CHIP} here\n`],
-    ['after a chip', ['Meta+ArrowLeft', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight'], `See ${CHIP}に here\n`],
-    ['at the line\'s start', ['Meta+ArrowLeft'], `にSee ${CHIP} here\n`],
-    ['at the line\'s end', ['Meta+ArrowRight'], `See ${CHIP} hereに\n`],
-  ];
-  for (const [index, [label, keys, expected]] of cells.entries()) {
-    const file = path.join(gallery, `IME ${index + 1}.mdo`);
-    await writeFile(file, `See ${CHIP} here\n`);
-    await open(file);
-    await page.locator('.cm-content').first().click({ position: { x: 4, y: 4 } });
-    for (const key of keys) await page.keyboard.press(key);
-    await cdp.send('Input.imeSetComposition', { text: 'に', selectionStart: 1, selectionEnd: 1 });
-    await page.waitForTimeout(100);
-    await cdp.send('Input.insertText', { text: 'に' });
-    let after = '';
-    for (let tries = 0; tries < 20; tries += 1) {
-      await page.waitForTimeout(250);
-      after = await readFile(file, 'utf8');
-      if (after.includes('に')) break;
-    }
-    check(`Japanese input ${label} lands where a typed letter would`, after === expected, JSON.stringify(after));
-  }
+  // Input methods next to a chip are checked in ime-acceptance.mjs.
 } catch (error) {
   check('the run finished', false, String(error));
 } finally {
