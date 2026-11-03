@@ -22,7 +22,7 @@ node e2e/acceptance/editor-acceptance.mjs        # Markdown editing: autosave, e
 node e2e/acceptance/stack-stress-acceptance.mjs  # The daily stream with 100 daily pages: frame times, memory, editor count, drift, Back and relaunch
 node e2e/acceptance/git-autostash-acceptance.mjs # Autosave during vault-pull.sh's `git merge --autostash` in a 3,000-file repo: 30 runs, no saved, typed or upstream line lost
 node e2e/acceptance/gallery.mjs [area] [--out dir] # The look gallery: each e2e/fixtures/gallery/*.mdo light and dark at 700 and 420px, into e2e/out/gallery/index.html
-node e2e/acceptance/mdo-typing-acceptance.mjs [--shots dir] # Typing in a document with the real keyboard: 2*3*4, Option+Arrow, Shift+Cmd+Left, Replace All; saved bytes and screenshots
+node e2e/acceptance/mdo-typing-acceptance.mjs [--shots dir] # Typing in a document with the real keyboard: 2*3*4, a wiki link, 3.14, Option+Arrow, Shift+Cmd+Left, Replace All with the floating Find bar; saved bytes and screenshots
 node e2e/acceptance/ime-acceptance.mjs        # Input methods: a Japanese composition and a dead key at each caret cell land where a typed letter does; prints a result table
 ```
 

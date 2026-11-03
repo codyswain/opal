@@ -1,9 +1,10 @@
 // Disposable Electron acceptance for typing in a document, with the real
-// keyboard: type 2*3*4, move by Option+Arrow across bold and a link, take a
-// word out with Option+Backspace, select a list item's text with
-// Shift+Cmd+Left and type over it, and Find and Replace a word that also
-// sits in a link's address and a wiki link's target. Checks the saved
-// bytes, and saves light and dark screenshots for review (never compared).
+// keyboard: type 2*3*4, a wiki link and 3.14, move by Option+Arrow across
+// bold and a link, take a word out with Option+Backspace, select a list
+// item's text with Shift+Cmd+Left and type over it, and Find and Replace a
+// word that also sits in a link's address and a wiki link's target, with
+// the Find bar over the page. Checks the saved bytes, and saves light and
+// dark screenshots for review (never compared).
 // Own userData and temp vault; run from the repository root after the Vite
 // bundles are built: see README.md here.
 //
@@ -33,6 +34,8 @@ const BODY = [
   '- first item text',
   '',
   'The plan is in [[Plan]] and at https://plan.example.com/plan today.',
+  '',
+  'Typed: ',
   '',
 ].join('\n');
 
@@ -108,6 +111,13 @@ try {
   await page.keyboard.type('2*3*4', { delay: 30 });
   check('2*3*4 shows as typed', (await text()).includes('Math: 2*3\\*4'), JSON.stringify((await text()).split('\n')[2]));
 
+  // A wiki link typed by hand keeps its brackets, and a number with a decimal point at a line start keeps its bytes.
+  await caretAt('Typed: ');
+  await page.keyboard.type('[[Plan]] and', { delay: 30 });
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('3.14 is pi', { delay: 30 });
+  check('a typed wiki link and 3.14 keep their bytes', (await text()).includes('Typed: [[Plan]] and\n3.14 is pi'), JSON.stringify((await text()).split('\n').slice(10, 12)));
+
   // Option+Right moves one visible word at a time across bold and a link.
   await caretAt('Move ', 0);
   const stops = [];
@@ -172,18 +182,34 @@ try {
 
   // Find and Replace All: "plan" in visible text only.
   await caretAt('# Typing', 0);
+  const titleTop = () => page.evaluate(() => document.querySelector('.cm-content .cm-line')?.getBoundingClientRect().top ?? null);
+  const beforeFind = await titleTop();
   await page.keyboard.press('Meta+f');
   const search = page.locator('.cm-search input[name="search"]');
   await search.waitFor({ timeout: 5_000 });
+  const afterFind = await titleTop();
+  check('opening Find moves nothing on the page', beforeFind !== null && afterFind !== null && Math.abs(afterFind - beforeFind) < 1, `${beforeFind} then ${afterFind}`);
   await search.fill('plan');
   await page.locator('.cm-search input[name="replace"]').fill('roadmap');
   await shoot('typing-find');
   await page.locator('.cm-search button[name="replaceAll"]').click();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
+  const kept = await page.evaluate(() => document.querySelectorAll('.cm-content .opal-searchKept').length);
+  const status = await page.getByText(/^Replaced \d+ of \d+\./).first().textContent({ timeout: 3_000 }).catch(() => null);
+  check('matches Replace kept are drawn apart, and a status message counts them', kept >= 3 && /^Replaced 2 of \d+\./.test(status ?? ''), `${kept} kept; ${status}`);
+  await shoot('typing-replaced');
   const replaced = await text();
   check('Replace All changes the link text and the sentence', replaced.includes('[a roadmap link](https://example.com/plan)') && replaced.includes('The roadmap is in'), JSON.stringify(replaced.split('\n')[8]));
   check('Replace All leaves the link address, the wiki link target and the bare URL', replaced.includes('(https://example.com/plan)') && replaced.includes('[[Plan]]') && replaced.includes('https://plan.example.com/plan'));
   await page.keyboard.press('Escape');
+
+  // Edit > Paste and Match Style is the page's command, so a click pastes literally too.
+  const pasteItem = await app.evaluate(({ Menu }) => {
+    const find = (items) => items.flatMap((item) => [item, ...(item.submenu ? find(item.submenu.items) : [])]);
+    const item = find(Menu.getApplicationMenu().items).find((entry) => entry.label === 'Paste and Match Style');
+    return item ? { role: item.role ?? null, accelerator: item.accelerator ?? null } : null;
+  });
+  check('Edit > Paste and Match Style runs the page\'s literal paste', pasteItem !== null && !pasteItem.role && pasteItem.accelerator === 'CmdOrCtrl+Shift+V', JSON.stringify(pasteItem));
 
   await page.keyboard.press('Meta+s');
   const bytes = await saved((written) => written.includes('roadmap'));
