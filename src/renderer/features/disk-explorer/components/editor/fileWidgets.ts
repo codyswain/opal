@@ -130,6 +130,7 @@ export class FileChipWidget extends WidgetType {
     chip.dataset.object = 'file';
     chip.setAttribute('role', 'link');
     chip.setAttribute('aria-label', `${ref.url ? 'Video' : kindLabel(fileName(ref), ref.kind)}, ${name}`);
+    chip.title = name;
     if (ref.path === null && !ref.url) chip.classList.add('cm-file-unresolved');
     chip.append(iconNode(ref.url ? 'play' : iconFor(fileName(ref), ref.kind), 16, 'cm-file-chip-icon'), element('span', 'cm-file-chip-name', name));
     if (ref.path) {

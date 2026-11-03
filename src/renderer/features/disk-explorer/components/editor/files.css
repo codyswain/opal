@@ -5,7 +5,11 @@
  * is padding, never margins, since CodeMirror measures boxes.
  */
 
-/* A file inside text: a 1px edge, an icon, then the name in the body's serif. */
+/*
+ * A file inside text: a 1px edge, an icon, then the name in the body's
+ * serif. A chip never breaks across lines; a long name ends in an ellipsis,
+ * and the full name shows on hover and in the bar.
+ */
 .opal-editor .cm-editor .cm-file-chip {
   display: inline;
   padding: 0 0.3em;
@@ -13,8 +17,16 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background-color var(--duration-hover) var(--ease-standard);
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-file-chip-name {
+  display: inline-block;
+  max-width: min(24ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
 }
 
 .opal-editor .cm-editor .cm-file-chip:hover {

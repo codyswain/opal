@@ -30,11 +30,18 @@ describe('the look of documents', () => {
     view.destroy();
   });
 
-  it('closes each line\'s piece of inline code that wraps, as a chip\'s are', () => {
+  it('closes each line\'s piece of inline code that wraps', () => {
     const declarations = rule('code.css', '.opal-editor .cm-editor .cm-md-code');
     expect(declarations).toMatch(/-webkit-box-decoration-break: clone/);
     expect(declarations).toMatch(/(^|[^-])box-decoration-break: clone/);
-    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/-webkit-box-decoration-break: clone/);
+  });
+
+  it('keeps a file chip whole on one line, a long name ending in an ellipsis', () => {
+    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/white-space: nowrap/);
+    const name = rule('files.css', '.opal-editor .cm-editor .cm-file-chip-name');
+    expect(name).toMatch(/display: inline-block/);
+    expect(name).toMatch(/max-width: min\(24ch, 100%\)/);
+    expect(name).toMatch(/text-overflow: ellipsis/);
   });
 
   it('draws the link underline under a formula in link text as a straight line', () => {
