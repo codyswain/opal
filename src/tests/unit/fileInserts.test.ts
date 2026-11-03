@@ -244,6 +244,22 @@ describe('pasting files', () => {
     await waitFor(() => expect(text(view)).toBe('[[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report.pdf]] Start\n'));
   });
 
+  it('puts a chip after a link the caret is inside, never inside its text', async () => {
+    installFilesApi({ hasPath: vi.fn(() => true) });
+    const report = () => new File(['%PDF'], 'report.pdf', { type: 'application/pdf' });
+    const chip = '[[Library/files/2026-11/report.a3f9c2e1.pdf|report.pdf]]';
+    for (const [doc, inside, expected] of [
+      ['See [[Plan|My plan]] today\n', 'plan]]', `See [[Plan|My plan]] ${chip} today\n`],
+      ['See [the plan](https://example.com) today\n', 'plan]', `See [the plan](https://example.com) ${chip} today\n`],
+      ['See ![[Library/files/2026-11/a.a3f9c2e1.png|a.png]] here\n', 'a.png]]', `See ![[Library/files/2026-11/a.a3f9c2e1.png|a.png]] ${chip} here\n`],
+    ] as const) {
+      const view = mount(doc);
+      act(() => { view.dispatch({ selection: { anchor: doc.indexOf(inside) } }); });
+      paste(view, [report()], 'report.pdf');
+      await waitFor(() => expect(text(view)).toBe(expected));
+    }
+  });
+
   it('leaves a paste without files to CodeMirror', () => {
     const view = mount('Start\n');
     paste(view, [], 'plain');

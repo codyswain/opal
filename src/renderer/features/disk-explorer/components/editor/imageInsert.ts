@@ -412,13 +412,22 @@ export async function addFiles(view: EditorView, files: readonly File[], at: num
   letGo(view, id);
 }
 
+// Links whose text the caret can be in; a chip goes after them, since a link inside a link breaks both.
+const LINKS = new Set(['Link', 'Image', 'WikiLink', 'Embed', 'Autolink', 'URL']);
+
 /**
- * Where a caret at `head` puts one file: inside text, a chip there; on an
- * empty line, or in code or a formula, null, for a line of its own after it.
+ * Where a caret at `head` puts one file: inside text, a chip there, or after
+ * the link the caret is in; on an empty line, or in code or a formula, null,
+ * for a line of its own after it.
  */
 export function caretInText(state: EditorState, head: number): number | null {
   const line = state.doc.lineAt(head);
-  return hasText(line.text) && !inCode(state, head) ? head : null;
+  if (!hasText(line.text) || inCode(state, head)) return null;
+  let at = head;
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(head, 1); node; node = node.parent) {
+    if (LINKS.has(node.name) && node.from < head && head < node.to) at = node.to;
+  }
+  return at;
 }
 
 /** Insert > Image… and Insert > File…: the files picked in the open dialog, at the caret. */
