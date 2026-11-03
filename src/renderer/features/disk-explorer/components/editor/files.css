@@ -373,6 +373,75 @@
   background-color: hsl(var(--surface-hover));
 }
 
+/* The link picker: the popover surface, a grey kind icon, the name, then the folder. */
+.opal-editor .cm-editor .cm-tooltip.cm-link-picker {
+  overflow: hidden;
+  padding: 4px;
+  border: 1px solid hsl(var(--border-overlay));
+  border-radius: var(--radius-overlay);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+}
+
+.opal-editor .cm-editor .cm-tooltip.cm-link-picker > ul {
+  max-width: min(28rem, 90vw);
+  max-height: 18rem;
+  font-family: var(--font-sans);
+}
+
+.opal-editor .cm-editor .cm-tooltip.cm-link-picker > ul > li.cm-link-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: hsl(var(--foreground));
+  font-size: var(--text-ui-size);
+  line-height: 32px;
+}
+
+.opal-editor .cm-editor .cm-tooltip.cm-link-picker > ul > li[aria-selected] {
+  background-color: hsl(var(--surface-selected));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-link-picker-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-link-picker .cm-completionLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-link-picker .cm-completionDetail {
+  margin-left: auto;
+  overflow: hidden;
+  padding-left: 12px;
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-metadata-size);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A file being stored: a grey placeholder at its final height. */
+.opal-editor .cm-editor .cm-file-pending {
+  box-sizing: border-box;
+  padding: 0.35em 0;
+}
+
+.opal-editor .cm-editor .cm-file-pending .cm-file-card[data-state="adding"] {
+  border-style: dashed;
+  background-color: var(--editor-sunken);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .opal-editor .cm-editor .cm-file-chip,
   .opal-editor .cm-editor .cm-file-card,

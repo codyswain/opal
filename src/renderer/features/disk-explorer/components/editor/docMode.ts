@@ -46,6 +46,7 @@ import { clipboard } from './clipboard';
 import { typingExtension } from './typing';
 import { hiddenOn } from './visibleText';
 import { visibleSearch } from './visibleSearch';
+import { insertLinkItem } from './linkPicker';
 import { opensNewTab } from './wikiLinks';
 import { wordMotion } from './wordMotion';
 
@@ -476,6 +477,7 @@ export function docModeExtensions(): Extension {
     codeDocExtension({ toggleInline: toggleInlineCode, editLink }),
     insertImageItem,
     insertFileItem,
+    insertLinkItem,
     insertTableItem,
     docListKeys,
     headingKeys,

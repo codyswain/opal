@@ -21,6 +21,7 @@ import { fileInserts } from './imageInsert';
 import { docMode, linkMarkStyle, livePreview } from './livePreview';
 import { mathSyntax } from './math';
 import { math } from './mathWidget';
+import { linkPicker } from './linkPicker';
 import { pageProperties } from './pageProperties';
 import { tableKeys } from './tableKeys';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
@@ -184,6 +185,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     wikiLinks,
     fileInserts,
     fileObjects,
+    linkPicker,
     livePreview,
     blockGuards,
     guardedLineMoves,
