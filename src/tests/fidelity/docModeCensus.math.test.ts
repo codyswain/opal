@@ -45,11 +45,30 @@ function formulas(state: EditorState): string[] {
   return tree ? mathNodes(tree, 0, state.doc.length).map((node) => mathSpan(state.doc, node).tex.split('\n').map((line) => line.trim()).join('\n')) : [];
 }
 
-/** Indent and the list commands rewrite every selected line, blocks included: PR 1's guards cover them. */
-const PENDING_PR1 = new Set(['indent', 'outdent', 'bullets', 'numbers', 'tasks']);
+/**
+ * Indent and the list commands rewrite every selected line, blocks included,
+ * until PR 1's guards keep them off a block's lines. A command counts as
+ * pending only while it still rewrites the blocks on a small page; once this
+ * branch has the guard, its runs over the vault count as failures.
+ */
+function pendingPr1(): Set<string> {
+  return new Set(COMMANDS.filter(([name, command]) => ['indent', 'outdent', 'bullets', 'numbers', 'tasks'].includes(name) && rewritesBlocks(command)).map(([name]) => name));
+}
+
+function rewritesBlocks(command: StateCommand): boolean {
+  const doc = 'Intro\n\n$$\n= a + b\n$$\n\n1. Item:\n   \\[\n   0.30(12\\times2.4)\n   +0.70(12\\times0.45)\n   \\]\n   More.\n\n- item\n\n  $$\n  x^2\n  $$\n\nEnd\n';
+  const state = EditorState.create({ doc, selection: EditorSelection.single(0, doc.length), extensions: markdownEditorExtensions('/Vault/Probe.mdo') });
+  ensureSyntaxTree(state, doc.length, 1_000);
+  let result: Transaction | null = null;
+  command({ state, dispatch: (tr) => { result = tr; } });
+  if (!result) return false;
+  const after = formulas((result as Transaction).state);
+  return formulas(state).some((formula) => !after.includes(formula));
+}
 
 describe.skipIf(!ROOT)('doc mode math census', () => {
   it('keeps every byte inside formulas through hidden ranges, commands and the popover', async () => {
+    const PENDING_PR1 = pendingPr1();
     const vault = await vaultFiles(ROOT as string);
     const failures: string[] = [];
     const pending: string[] = [];
@@ -114,9 +133,12 @@ describe.skipIf(!ROOT)('doc mode math census', () => {
           openMathEditor(view, fresh);
           const editor = view.state.field(mathEditor);
           if (!editor) { failures.push(`${relative}@${node.from} popover did not open`); continue; }
-          const typed = writeLive(view, editor, `${editor.tex}x`, () => true);
-          if (typed.problem) failures.push(`${relative}@${node.from} typing refused: ${typed.problem}`);
-          writeLive(view, view.state.field(mathEditor) ?? typed, editor.tex, () => true);
+          // A character at the end of the TeX, then one at its start, each deleted again.
+          for (const input of [`${editor.tex}x`, `x${editor.tex}`]) {
+            const typed = writeLive(view, view.state.field(mathEditor) ?? editor, input, () => true);
+            if (typed.problem) failures.push(`${relative}@${node.from} typing refused: ${typed.problem}`);
+            writeLive(view, view.state.field(mathEditor) ?? typed, editor.tex, () => true);
+          }
           closeMathEditor(view, editor.tex, false);
           if (view.state.doc.toString() !== body) {
             failures.push(`${relative}@${node.from} popover changed ${JSON.stringify(body.slice(node.from, node.to).slice(0, 40))}`);
@@ -129,7 +151,7 @@ describe.skipIf(!ROOT)('doc mode math census', () => {
     }
     console.info(openedLine('doc-mode math census', opened, vault));
     console.info(`[doc-mode math census] ${notes} notes with math: ${checked} formulas with no hidden range inside, ${commands} command runs, ${popovers} popover type-and-delete runs; ${failures.length} failed`);
-    if (pending.length > 0) console.info(`[doc-mode math census] pending, PR 1: indent and list commands rewrite a block's lines: ${pending.length} runs\n  ${pending.slice(0, 20).join('\n  ')}`);
+    if (pending.length > 0) console.info(`[doc-mode math census] pending, PR 1 (${[...PENDING_PR1].join(', ')} still rewrite a block's lines on this branch): ${pending.length} runs\n  ${pending.slice(0, 20).join('\n  ')}`);
     if (failures.length > 0) console.info(`[doc-mode math census] failures:\n  ${failures.slice(0, 40).join('\n  ')}`);
     expect(failures).toEqual([]);
   }, 1_200_000);
