@@ -6,7 +6,7 @@
 // item, Enter in a numbered list adds one line, a numbered task keeps its
 // box, a quote in a callout draws its rule, and the framed table and rule are
 // screenshotted light and dark. A second document that ends with a table
-// takes text typed after Cmd+Down outside the table, and a callout from
+// takes text typed after Cmd+Down as a paragraph under it, and a callout from
 // Insert ignores Cmd+Enter and takes its fold sign from its type menu. Own userData and temp vault; run from the
 // repository root after the Vite bundles are built (see README.md here):
 //
@@ -248,8 +248,8 @@ try {
   await page.keyboard.press('Meta+ArrowDown');
   await page.keyboard.type('After');
   let ended = await waitForEnd((text) => text.includes('After'));
-  // The caret cannot rest under a drawn table that ends the file yet, so Cmd+Down stops above it; the text never joins the table.
-  check('typing after Cmd+Down in a file that ends with a table never writes into the table', ended.endsWith('\n\n| a | b |\n|---|---|\n| 1 | 2 |') && !/\| *After|After *\|/.test(ended), JSON.stringify(ended.slice(0, 40)));
+  // No line under the table holds the caret: Cmd+Down frames the table, and the letter starts a paragraph under it.
+  check('typing after Cmd+Down in a file that ends with a table starts a paragraph under it', ended === `${ENDS}\n\nAfter`, JSON.stringify(ended.slice(-30)));
 
   // Insert > Callout, then typing into it.
   await page.keyboard.press('Enter');

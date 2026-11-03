@@ -325,8 +325,13 @@ describe('typing after a table that ends the file', () => {
     press(view, 'End', /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
     expect(view.state.field(objectFrame)).toMatchObject({ kind: 'table' });
     expect(caret(view)).toBe(doc.length);
-    type(view, 'A');
+    // The browser puts its caret back above the table, where it can rest; the letter still goes under it.
+    act(() => { view.dispatch({ selection: { anchor: 5 }, userEvent: 'select' }); });
+    const event = new KeyboardEvent('keydown', { key: 'A', bubbles: true, cancelable: true });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
     expect(text(view)).toBe(`${doc}\n\nA`);
+    expect(view.state.field(objectFrame)).toBeNull();
   });
 });
 

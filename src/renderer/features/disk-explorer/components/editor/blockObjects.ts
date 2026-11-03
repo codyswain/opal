@@ -441,6 +441,9 @@ const compositionSeparators = EditorView.domEventObservers({
  * the caret goes to the page's end and the block frames. A letter typed
  * then starts a paragraph under it, as at any framed block.
  */
+// The page each view's last block was framed on by Cmd+Down.
+const endFrames = new WeakMap<EditorView, EditorState['doc']>();
+
 const toEndBlock: Command = (view) => {
   const { state } = view;
   if (!state.facet(docMode) || state.doc.length === 0) return false;
@@ -448,12 +451,41 @@ const toEndBlock: Command = (view) => {
   const obj = objectAt(state, last.to, -1);
   if (!obj || !objectKind(state, obj.kind)?.block || state.doc.lineAt(obj.to).number !== last.number || (obj.kind === 'table' && !drawnBlockAt(state, obj.from))) return false;
   view.dispatch({ selection: { anchor: state.doc.length }, effects: setFrame.of(obj), scrollIntoView: true, userEvent: 'select' });
+  endFrames.set(view, view.state.doc);
   return true;
 };
+
+const MODIFIER_KEYS = new Set(['Shift', 'Meta', 'Control', 'Alt', 'CapsLock']);
+
+/**
+ * A letter typed after Cmd+Down framed the block that ends the page: no
+ * line under the block holds the browser's caret, which may have gone back
+ * above it, so the letter is written at the page's end here, where the
+ * separators put it on a paragraph of its own under the block. A click or
+ * any other key ends this.
+ */
+const typedAfterEnd = EditorView.domEventHandlers({
+  keydown(event, view) {
+    const doc = endFrames.get(view);
+    if (!doc || MODIFIER_KEYS.has(event.key)) return false;
+    endFrames.delete(view);
+    if (doc !== view.state.doc || event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
+    event.preventDefault();
+    if (view.state.field(objectFrame, false)) view.dispatch({ effects: setFrame.of(null) });
+    const end = view.state.doc.length;
+    view.dispatch({ changes: { from: end, insert: event.key }, selection: { anchor: end + 1 }, scrollIntoView: true, userEvent: 'input.type' });
+    return true;
+  },
+  mousedown(_event, view) {
+    endFrames.delete(view);
+    return false;
+  },
+});
 
 /** The block objects, their separators and the Backspace rule under a table. Documents only. */
 export const blockObjects: Extension = [
   Prec.high(keymap.of([{ key: 'Mod-End', run: toEndBlock }, { mac: 'Cmd-ArrowDown', run: toEndBlock }])),
+  Prec.highest(typedAfterEnd),
   ruleFrame,
   compositionSeparators,
   objectKinds.of(tableKind),
