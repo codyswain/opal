@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'crypto';
 import { appendFile, mkdir, mkdtemp, rm, truncate, writeFile } from 'fs/promises';
+import { deflateSync } from 'zlib';
 import os from 'os';
 import path from 'path';
 import { imageSize } from '@/common/imageSize';
@@ -128,14 +129,59 @@ describe('file info from headers', () => {
   });
 
   it('asks Spotlight only for what the headers left out, with a timeout, and keeps the answer until the file changes', async () => {
-    mdls.mockImplementation(async () => ({ stdout: '(null)\0' + '95.5\0' + '1280\0' + '720', stderr: '' }));
+    mdls.mockImplementation(spotlight({ kMDItemDurationSeconds: 95.5, kMDItemPixelWidth: 1280, kMDItemPixelHeight: 720 }));
     const file = await put('talk.webm', Buffer.from('not a header Opal reads'));
     expect(await reader.info(file)).toMatchObject({ kind: 'video', duration: 95.5, width: 1280, height: 720 });
-    expect(mdls).toHaveBeenCalledWith(MDLS, ['-raw', '-name', 'kMDItemNumberOfPages', '-name', 'kMDItemDurationSeconds', '-name', 'kMDItemPixelWidth', '-name', 'kMDItemPixelHeight', '--', file], { timeout: 3000 });
+    expect(mdls).toHaveBeenCalledWith(MDLS, ['-name', 'kMDItemNumberOfPages', '-name', 'kMDItemDurationSeconds', '-name', 'kMDItemPixelWidth', '-name', 'kMDItemPixelHeight', '--', file], { timeout: 3000 });
     await reader.info(file);
     expect(mdls).toHaveBeenCalledTimes(1);
     mdls.mockClear();
     await reader.info(await put('clip.mp4', movie({ seconds: 1, width: 10, height: 10 })));
     expect(mdls).not.toHaveBeenCalled();
   });
+
+  it('reads Spotlight\'s answers by name, since mdls prints them in its own order', async () => {
+    // A 1920 by 1380 picture; mdls prints height before width whatever the order asked.
+    mdls.mockImplementation(spotlight({ kMDItemPixelWidth: 1920, kMDItemPixelHeight: 1380 }));
+    expect(await reader.info(await put('scan.tiff', Buffer.from('II*\0 not a header Opal reads')))).toMatchObject({ kind: 'image', width: 1920, height: 1380 });
+    mdls.mockImplementation(spotlight({ kMDItemNumberOfPages: 15 }));
+    const pdf = await reader.info(await put('scan.pdf', Buffer.from('%PDF garbage')));
+    expect(pdf).toMatchObject({ pages: 15 });
+    expect(pdf.duration).toBeUndefined();
+    mdls.mockImplementation(spotlight({ kMDItemDurationSeconds: 42, kMDItemPixelWidth: 640, kMDItemPixelHeight: 360 }));
+    const video = await reader.info(await put('old.avi', Buffer.from('RIFF not read')));
+    expect(video).toMatchObject({ duration: 42, width: 640, height: 360 });
+    expect(video.pages).toBeUndefined();
+  });
+
+  it('counts the page tree\'s root inside an object stream when the inner Pages nodes are plain objects', () => {
+    const stream = deflateSync(Buffer.from('2 0 <</Count 9/Kids[5 0 R 6 0 R]/Type/Pages>>'));
+    const pdf = Buffer.concat([
+      Buffer.from(`%PDF-1.7\n1 0 obj\n<</Filter/FlateDecode/First 4/Length ${stream.length}/N 1/Type/ObjStm>>stream\n`), stream,
+      Buffer.from('\nendstream\nendobj\n5 0 obj\n<</Count 4/Kids[7 0 R]/Parent 2 0 R/Type/Pages>>\nendobj\n6 0 obj\n<</Count 5/Kids[8 0 R]/Parent 2 0 R/Type/Pages>>\nendobj\n'),
+    ]);
+    expect(pdfHeaders(pdf)).toEqual({ pages: 9 });
+  });
+
+  it('reads a large movie\'s headers at once, without waiting behind thumbnails in the queue', async () => {
+    const queue = jobQueue(3);
+    const busy = Array.from({ length: 6 }, () => queue.run(() => new Promise((resolve) => setTimeout(resolve, 300)), { visible: true, timeoutMs: 1000 }));
+    const file = await put('long.mov', movie({ seconds: 4, width: 1920, height: 1080 }));
+    await truncate(file, 9 * 1024 * 1024);
+    const started = Date.now();
+    expect(await new FileInfoReader({ limiter: queue, run: mdls }).info(file)).toMatchObject({ duration: 4, width: 1920, height: 1080 });
+    expect(Date.now() - started).toBeLessThan(150);
+    await Promise.all(busy);
+  });
 });
+
+/** Answers as /usr/bin/mdls does: one `name = value` line per name, in its own (alphabetical) order, not the order asked. */
+function spotlight(values: Record<string, number>): RunFile {
+  return async (_file, args) => {
+    const names = args.filter((_, index) => args[index - 1] === '-name').sort();
+    const shown = names.map((name) => [name, name in values ? String(values[name]) : '(null)']);
+    if (args.includes('-raw')) return { stdout: shown.map(([, value]) => value).join('\0'), stderr: '' };
+    const width = Math.max(...names.map((name) => name.length));
+    return { stdout: shown.map(([name, value]) => `${name.padEnd(width)} = ${value}\n`).join(''), stderr: '' };
+  };
+}

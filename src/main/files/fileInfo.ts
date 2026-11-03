@@ -11,10 +11,15 @@ import { readMediaHeaders, type MediaHeaders } from './mediaHeaders';
 export const MDLS = '/usr/bin/mdls';
 const MDLS_TIMEOUT_MS = 3000;
 const CACHE_LIMIT = 2000;
-/** Files larger than this are read through the job queue. */
+/** PDFs larger than this are read through the job queue; other types read a few headers wherever they are. */
 const LARGE_READ = 8 * 1024 * 1024;
 const LARGE_READ_TIMEOUT_MS = 10_000;
-const MDLS_NAMES = ['kMDItemNumberOfPages', 'kMDItemDurationSeconds', 'kMDItemPixelWidth', 'kMDItemPixelHeight'] as const;
+const MDLS_FIELDS = {
+  kMDItemNumberOfPages: 'pages',
+  kMDItemDurationSeconds: 'duration',
+  kMDItemPixelWidth: 'width',
+  kMDItemPixelHeight: 'height',
+} as const;
 
 export interface FileInfoDependencies {
   /** The queue mdls shares with thumbnails and renditions. */
@@ -90,22 +95,30 @@ export class FileInfoReader {
       }
     };
     // A PDF can be read whole, so large ones wait their turn in the queue and memory stays bounded.
-    if (size <= LARGE_READ) return read();
-    return this.deps.limiter.run(read, { timeoutMs: LARGE_READ_TIMEOUT_MS, label: `Reading ${name}` }).catch(() => ({}));
+    // The page is laying out what it asks about, so the read goes ahead of off-screen thumbnails.
+    if (size <= LARGE_READ || classifyFile(name) !== 'pdf') return read();
+    return this.deps.limiter.run(read, { visible: true, timeoutMs: LARGE_READ_TIMEOUT_MS, label: `Reading ${name}` }).catch(() => ({}));
   }
 
-  /** What Spotlight knows, for the fields the headers left out. Nothing when mdls is slow or missing. */
+  /**
+   * What Spotlight knows, for the fields the headers left out. Nothing when
+   * mdls is slow or missing. mdls prints `name = value` lines in its own
+   * order, not the order asked, so the values are read by name.
+   */
   private async spotlight(file: string, known: MediaHeaders): Promise<MediaHeaders> {
     const run = this.deps.run ?? runFile;
     try {
       const { stdout } = await this.deps.limiter.run(
-        () => run(MDLS, ['-raw', ...MDLS_NAMES.flatMap((name) => ['-name', name]), '--', file], { timeout: MDLS_TIMEOUT_MS }),
-        { timeoutMs: MDLS_TIMEOUT_MS, label: 'mdls' },
+        () => run(MDLS, [...Object.keys(MDLS_FIELDS).flatMap((name) => ['-name', name]), '--', file], { timeout: MDLS_TIMEOUT_MS }),
+        { visible: true, timeoutMs: MDLS_TIMEOUT_MS, label: 'mdls' },
       );
-      const [pages, duration, width, height] = stdout.split('\0').map((value) => {
-        const number = Number(value.trim());
-        return value.trim() === '(null)' || !Number.isFinite(number) || number <= 0 ? undefined : number;
-      });
+      const values: Partial<Record<'pages' | 'duration' | 'width' | 'height', number>> = {};
+      for (const [, name, value] of stdout.matchAll(/^(kMDItem\w+)\s*=\s*(\S+)\s*$/gm)) {
+        const field = MDLS_FIELDS[name as keyof typeof MDLS_FIELDS];
+        const number = Number(value);
+        if (field && Number.isFinite(number) && number > 0) values[field] = number;
+      }
+      const { pages, duration, width, height } = values;
       const found: MediaHeaders = {};
       if (known.pages === undefined && pages !== undefined) found.pages = Math.round(pages);
       if (known.duration === undefined && duration !== undefined) found.duration = duration;

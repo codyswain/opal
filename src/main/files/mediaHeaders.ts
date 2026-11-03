@@ -106,16 +106,15 @@ function pagesIn(text: string): number | null {
 
 /**
  * A PDF's page count. A linearized file says it in its first object (`/N`).
- * Otherwise the page tree's root, either in plain objects or, since PDF
- * 1.5, inside compressed object streams.
+ * Otherwise the page tree's root, the largest count in plain objects and,
+ * since PDF 1.5, inside compressed object streams.
  */
 export function pdfHeaders(bytes: Uint8Array): MediaHeaders {
   const text = latin1(bytes);
   const linearized = /\/Linearized\b[^>]*?\/N\s+(\d+)/.exec(text.slice(0, 2048))?.[1];
   if (linearized) return { pages: Number(linearized) };
-  const plain = pagesIn(text);
-  if (plain) return { pages: plain };
-  let best: number | null = null;
+  // The root may sit in an object stream while the nodes under it are plain objects, so both are searched.
+  let best = pagesIn(text);
   for (const match of text.matchAll(/\/Type\s*\/ObjStm\b/g)) {
     const start = text.indexOf('stream', match.index);
     if (start === -1) continue;
