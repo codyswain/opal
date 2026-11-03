@@ -352,6 +352,20 @@ describe('file objects in a document', () => {
     expect(text(view)).toBe('A  b\n');
   });
 
+  it('frames a card on a click and follows it on Cmd+click', async () => {
+    const openNote = vi.fn();
+    const view = new EditorView({ parent: document.body, state: EditorState.create({ doc: `Intro\n[[${PDF}|Q3.pdf]]\n`, extensions: markdownEditorExtensions(DOC, openNote) }) });
+    view.focus = vi.fn();
+    views.push(view);
+    act(() => { view.dispatch({ effects: linksResolved.of(resolved) }); });
+    const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
+    act(() => { card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'file', from: 6 });
+    expect(openNote).not.toHaveBeenCalled();
+    act(() => { card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, metaKey: true })); });
+    expect(openNote).toHaveBeenCalledWith(`/Vault/${PDF}`, true);
+  });
+
   it('opens Quick Look on Space when a file is framed', async () => {
     const view = await mount(`Intro\n[[${DECK}|Gob deck.pptx]]\n`);
     act(() => { view.dispatch({ selection: { anchor: text(view).length } }); });

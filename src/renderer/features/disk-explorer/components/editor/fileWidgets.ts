@@ -1,4 +1,4 @@
-import type { EditorState, Extension } from '@codemirror/state';
+import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
@@ -873,12 +873,17 @@ function kindFor(block: boolean): ObjectKind {
   };
 }
 
-/** In a note, a click on a chip or card opens its file; Cmd+click opens it in a new tab. A document frames it instead. */
-const noteClicks = EditorView.domEventHandlers({
+/**
+ * In a note, a click on a chip or card opens its file; Cmd+click opens it in
+ * a new tab. A document frames it on a click and follows it on Cmd+click.
+ */
+const fileClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
     if (event.button !== 0 || !(event.target instanceof Element)) return false;
-    const target = event.target.closest<HTMLElement>('.cm-file-chip, .cm-file-card');
-    if (!target || target.closest('button') || view.state.field(objectFrame, false) !== undefined) return false;
+    const target = event.target.closest<HTMLElement>('.cm-file-chip:not(.cm-url-chip), .cm-file-card, .cm-file-preview, .cm-md-image[data-object]');
+    if (!target || target.closest('button')) return false;
+    const inDocument = view.state.field(objectFrame, false) !== undefined;
+    if (inDocument ? !opensNewTab(event) : !target.matches('.cm-file-chip, .cm-file-card')) return false;
     const ref = refFrom(view, target);
     if (!ref) return false;
     event.preventDefault();
@@ -936,7 +941,7 @@ export const fileObjects: Extension = [
   nodeDecorators.of({ nodes: FILE_NODES, decorate: drawFile }),
   objectKinds.of(kindFor(true)),
   objectKinds.of(kindFor(false)),
-  noteClicks,
+  Prec.highest(fileClicks),
   framedFiles,
   wikiNames,
   urlChips,
