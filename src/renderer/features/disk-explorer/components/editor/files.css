@@ -306,6 +306,12 @@
   background-color: #ffffff;
 }
 
+/* In dark mode a white page is dimmed, so a PDF's first page or a document's page picture is not the brightest thing on the screen. Photos and video keep their colour. */
+.dark .opal-editor .cm-editor .cm-file-pdf-image,
+.dark .opal-editor .cm-editor .cm-file-card-tile-page .cm-file-thumb {
+  filter: brightness(0.82) contrast(1.05);
+}
+
 .opal-editor .cm-editor .cm-file-pdf-footer {
   display: flex;
   box-sizing: border-box;

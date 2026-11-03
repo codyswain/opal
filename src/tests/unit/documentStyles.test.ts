@@ -67,4 +67,11 @@ describe('the look of documents', () => {
     expect(declarations).toMatch(/box-shadow: inset 0 0 0 1px hsl\(var\(--border-subtle\)\)/);
     expect(declarations).toMatch(/pointer-events: none/);
   });
+
+  it('dims a white PDF page and a page picture in dark mode, and leaves photos alone', () => {
+    for (const selector of ['.dark .opal-editor .cm-editor .cm-file-pdf-image', '.dark .opal-editor .cm-editor .cm-file-card-tile-page .cm-file-thumb']) {
+      expect(rule('files.css', selector)).toMatch(/filter: brightness\(0\.82\) contrast\(1\.05\)/);
+    }
+    expect(readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/files.css'), 'utf8')).not.toMatch(/\.cm-md-image[^{]*\{[^}]*filter:/);
+  });
 });
