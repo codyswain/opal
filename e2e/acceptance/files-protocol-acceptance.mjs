@@ -152,7 +152,7 @@ try {
   const responses = [ranged, past, html, await request(url(path.join(files, 'deck.b2c3d4e5.pdf'))), await request(url(path.join(vault, '..', 'outside.png')))];
   check('no opal-file response carries Access-Control-Allow-Origin', responses.every((response) => !('access-control-allow-origin' in response.headers)));
   check('every opal-file response carries nosniff', responses.every((response) => response.headers['x-content-type-options'] === 'nosniff'));
-  check('HTML carries only the sandbox policy', html.headers['content-security-policy'] === 'sandbox', html.headers['content-security-policy']);
+  check('HTML carries only its own sandbox policy, which loads nothing', html.headers['content-security-policy'] === "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", html.headers['content-security-policy']);
 
   // HTML loaded as a page in its own window runs no script.
   const title = await app.evaluate(async ({ BrowserWindow }, target) => {

@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import { contentTypeFor, toOpalFileUrl } from '@/common/opalFileUrl';
 import { RootRegistry } from '@/main/fs/RootRegistry';
-import { parseRange, serveOpalFile } from '@/main/protocol/opalFile';
+import { DOCUMENT_POLICY, parseRange, serveOpalFile } from '@/main/protocol/opalFile';
 
 vi.mock('electron', () => ({ protocol: { handle: vi.fn(), registerSchemesAsPrivileged: vi.fn() } }));
 vi.mock('@/main/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
@@ -187,14 +187,15 @@ describe('opal-file responses', () => {
     }
   });
 
-  it('sends HTML and SVG with a sandbox policy, and other types without one', async () => {
+  it('sends HTML and SVG with a sandbox policy that loads nothing, and other types without one', async () => {
     await writeFile(path.join(root, 'page.html'), '<script>alert(1)</script>');
     await writeFile(path.join(root, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
     await writeFile(path.join(root, 'clip.mp4'), BYTES);
     const page = await get(path.join(root, 'page.html'));
     expect(page.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
-    expect(page.headers.get('Content-Security-Policy')).toBe('sandbox');
-    expect((await get(path.join(root, 'icon.svg'))).headers.get('Content-Security-Policy')).toBe('sandbox');
+    expect(page.headers.get('Content-Security-Policy')).toBe(DOCUMENT_POLICY);
+    expect(DOCUMENT_POLICY.split('; ')).toEqual(['sandbox', "default-src 'none'", "style-src 'unsafe-inline'", 'img-src data:']);
+    expect((await get(path.join(root, 'icon.svg'))).headers.get('Content-Security-Policy')).toBe(DOCUMENT_POLICY);
     expect((await get(path.join(root, 'clip.mp4'))).headers.get('Content-Security-Policy')).toBeNull();
   });
 

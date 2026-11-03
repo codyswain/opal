@@ -48,6 +48,12 @@ const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff' };
 
 /** Types that run script when loaded as a document. They never run any from here. */
 const DOCUMENT_TYPES = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml)\b/;
+/**
+ * The policy those types get: a sandbox (no script, no forms, an opaque
+ * origin), and nothing loaded from anywhere, so a framed page can't reach
+ * the web either. Inline styles and data: pictures still draw.
+ */
+export const DOCUMENT_POLICY = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
 const answer = (status: number, text: string) =>
   new Response(text, { status, headers: { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' } });
@@ -160,7 +166,7 @@ export async function serveOpalFile(request: Request, deps: OpalFileProtocolDepe
       'Last-Modified': lastModified,
     };
     // HTML and SVG from the vault never run as a page: no script, no forms, its own origin.
-    if (DOCUMENT_TYPES.test(type)) headers['Content-Security-Policy'] = 'sandbox';
+    if (DOCUMENT_TYPES.test(type)) headers['Content-Security-Policy'] = DOCUMENT_POLICY;
 
     const ask = rangeStillValid(request.headers.get('if-range'), etag, lastModified)
       ? parseRange(request.headers.get('range'), size)

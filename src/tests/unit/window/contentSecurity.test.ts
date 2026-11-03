@@ -17,9 +17,10 @@ describe('the app policy hook', () => {
     expect(applyAppPolicy({ url: 'http://localhost:5173/' }).responseHeaders?.['Content-Security-Policy']).toEqual([APP_CSP]);
   });
 
-  it('lets the page fetch nothing from the web or opal-file:, and frame no file', () => {
+  it('lets the page fetch nothing from the web or opal-file:', () => {
     expect(directive('connect-src')).toBe("connect-src 'self' ws: http://localhost:11434");
-    expect(directive('frame-src')).toBe("frame-src 'self'");
+    // Chromium checks the PDF <embed>'s inner frame against frame-src.
+    expect(directive('frame-src')).toBe("frame-src 'self' opal-file:");
     expect(directive('object-src')).toBe("object-src 'self' opal-file:");
     expect(directive('img-src')).toContain('opal-file:');
     expect(directive('media-src')).toContain('opal-file:');

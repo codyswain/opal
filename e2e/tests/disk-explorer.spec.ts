@@ -102,17 +102,18 @@ test.describe('disk explorer', () => {
     );
   });
 
-  test('refuses to serve a file outside every opened root', async ({ page }) => {
+  test('refuses to serve a file outside every opened root', async ({ page, electronApp }) => {
     await gotoFiles(page);
     await expect(page.getByTestId(`disk-tree-item-${vaultRoot}/Photos`)).toBeVisible();
 
-    // The allowed-roots guard is the security boundary. Fetching a path that was
-    // never opened must be rejected by the protocol handler, not served.
-    const status = await page.evaluate(async () => {
-      const response = await fetch('opal-file:///etc/hosts');
-      return response.status;
-    });
+    // The page can't read file bytes with fetch at all: connect-src leaves out opal-file:.
+    const fetched = await page.evaluate(() => fetch('opal-file:///etc/hosts').then(() => 'read', () => 'blocked'));
+    expect(fetched).toBe('blocked');
 
+    // The allowed-roots guard is the security boundary. A request for a path
+    // that was never opened, as an <img> makes, is rejected by the protocol
+    // handler, not served.
+    const status = await electronApp.evaluate(async ({ net }) => (await net.fetch('opal-file:///etc/hosts')).status);
     expect(status).toBe(403);
   });
 });

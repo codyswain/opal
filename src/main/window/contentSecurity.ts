@@ -3,9 +3,12 @@ import { OPAL_FILE_SCHEME } from '@/common/opalFileUrl';
 /**
  * The app document's policy. Nothing on a page fetches the network: no
  * `https:` in connect-src, so only <img> loads web pictures a note embeds.
- * opal-file: is not in connect-src or frame-src, since the page reads file
- * bytes only through <img>, <video> and the PDF viewer's <embed>
- * (object-src).
+ * opal-file: is not in connect-src, since the page reads file bytes only
+ * through <img>, <video> and the PDF viewer's <embed>. It stays in
+ * object-src and frame-src because Chromium checks the <embed>'s inner
+ * frame against frame-src ("Refused to frame" without it). HTML and SVG
+ * served there carry their own sandbox policy, so a framed one runs nothing
+ * and loads nothing.
  */
 export const APP_CSP = [
   "default-src 'self'",
@@ -16,7 +19,7 @@ export const APP_CSP = [
   "connect-src 'self' ws: http://localhost:11434", // Vite's reload socket and Ollama
   `media-src 'self' https: ${OPAL_FILE_SCHEME}:`,
   `object-src 'self' ${OPAL_FILE_SCHEME}:`,
-  "frame-src 'self'",
+  `frame-src 'self' ${OPAL_FILE_SCHEME}:`,
 ].join('; ');
 
 /** The part of Electron's onHeadersReceived details the hook reads. */
