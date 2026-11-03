@@ -122,11 +122,12 @@ function containerOf(state: EditorState, block: Separated, line: Line): { prefix
 /**
  * `tr` with the separators a typed or pasted text needs next to a table or
  * rule: on a blank line under one, the text goes on a new line after a
- * blank line in the same container; on a blank line above a table, a text
- * holding a pipe (or any text between two blocks) keeps a blank line under
- * it, and so does any text above a `---` rule, which would otherwise
- * underline it as a heading. Text typed at a block's first or last
- * character goes on its own line beside it. Null when none is needed.
+ * blank line in the same container; on a blank line above a table or a
+ * `---` rule it keeps a blank line under it, since the table could join the
+ * paragraph above and the rule would underline the text as a heading; and
+ * a line holding a pipe right above a table gets a blank line under it.
+ * Text typed at a block's first or last character goes on its own line
+ * beside it. Null when none is needed.
  */
 export function separated(tr: Transaction): TransactionSpec | null {
   if (!tr.docChanged || !tr.isUserEvent('input') || tr.isUserEvent('input.type.compose')) return null;
@@ -166,15 +167,17 @@ export function separated(tr: Transaction): TransactionSpec | null {
   if (!above && !below) return null;
   const container = containerOf(state, (above ?? below) as Separated, line);
   const typedLine = (doc.sliceString(line.from, from) + text + doc.sliceString(to, line.to)).split('\n').pop() ?? '';
-  const belowNeeds = below && (above
-    || (below.node.name === 'Table' && typedLine.includes('|'))
-    || (empty && below.node.name === 'HorizontalRule' && /^[\s>]*-/.test(below.first.text)));
+  // A blank line over a table or a "---" rule stays, since text there can take the table into a paragraph or underline itself.
+  const belowNeeds = below && (above || empty
+    ? below.node.name === 'Table' || /^[\s>]*-/.test(below.first.text) || above
+    : below.node.name === 'Table' && typedLine.includes('|'));
   if (!above && !belowNeeds) return null;
   const head = above ? `${container.blank}\n${container.prefix}` : doc.sliceString(line.from, from);
+  const gap = `\n${container.blank}`;
   const changes = [
     ...(above ? [{ from: line.from, to: from, insert: head }] : []),
-    { from, to, insert: text },
-    ...(belowNeeds ? [{ from: line.to, insert: `\n${container.blank}` }] : []),
+    { from, to, insert: empty && belowNeeds ? text + gap : text },
+    ...(!empty && belowNeeds ? [{ from: line.to, insert: gap }] : []),
   ];
   return { changes, selection: { anchor: line.from + head.length + text.length }, scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) };
 }

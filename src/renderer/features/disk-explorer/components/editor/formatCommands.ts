@@ -468,6 +468,13 @@ export function setHeading(level: number): StateCommand {
       if (level > 0) return heading.level === level ? [] : [{ from: open.from, to: open.to, insert: '#'.repeat(level) }];
       const marks: ChangeSpec[] = [{ from: open.from, to: skipSpaces(state, open.to, line.to) }];
       if (close) marks.push({ from: line.from + state.sliceDoc(line.from, close.from).trimEnd().length, to: close.to });
+      // Normal text next to other text would join it: a paragraph above, a table's rows, or a
+      // "---" below that would underline it. Blank lines keep it a paragraph of its own.
+      const previous = line.number > 1 ? state.doc.line(line.number - 1) : null;
+      const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+      const converted = (other: Line) => lines.some((each) => each.number === other.number) && headingOf(state, other) !== null;
+      if (previous && /[^\s>]/.test(previous.text) && !converted(previous)) marks.unshift({ from: line.from, insert: `${blankFor(line)}\n` });
+      if (next && /[^\s>]/.test(next.text)) marks.push({ from: line.to, insert: `\n${blankFor(line)}` });
       return marks;
     });
     dispatch(state.update({ changes, scrollIntoView: true, userEvent: 'input' }));

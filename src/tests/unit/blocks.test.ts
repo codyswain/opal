@@ -173,12 +173,17 @@ describe('separators next to tables and rules in a document', () => {
     expect(marked(view)).toBe('- item\n\n  | a | b |\n  |---|---|\n  | 1 | 2 |\n\n  x‸\n');
   });
 
-  it('keeps a blank line under a typed line that holds a pipe right above a table', () => {
+  it('keeps a blank line under text typed on the blank line above a table, and under a line that gains a pipe right above one', () => {
     const view = mount(`Intro\n\n‸\n${TABLE}\n`);
     type(view, 'a ');
-    expect(marked(view)).toBe(`Intro\n\na ‸\n${TABLE}\n`);
-    type(view, '|');
-    expect(marked(view)).toBe(`Intro\n\na |‸\n\n${TABLE}\n`);
+    expect(marked(view)).toBe(`Intro\n\na ‸\n\n${TABLE}\n`);
+    // The paragraph above would otherwise take the table in.
+    const joined = mount(`See [[a|b]].\n‸\n${TABLE}\n`);
+    type(joined, 'x');
+    expect(marked(joined)).toBe(`See [[a|b]].\nx‸\n\n${TABLE}\n`);
+    const tight = mount(`Intro a ‸\n${TABLE}\n`);
+    type(tight, '|');
+    expect(marked(tight)).toBe(`Intro a |‸\n\n${TABLE}\n`);
   });
 
   it('keeps a blank line under text typed right above a --- rule and under a rule', () => {
@@ -316,5 +321,15 @@ describe('tables in a document', () => {
     act(() => { end.dispatch({ selection: { anchor: text(end).length - 1 } }); });
     type(end, '\n| a | b | c |');
     expect(text(end)).toBe('| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |\n| a | b | c |\n');
+  });
+});
+
+describe('Normal text on a heading next to other blocks', () => {
+  it('keeps blank lines around it, so a rule never underlines it and nothing takes it in', () => {
+    expect(onAll('# Log\n-------------\n## Notes\n', setHeading(0))).toBe('Log\n\n-------------\n\nNotes\n');
+    // Nor a table take it in as a row, nor a paragraph as a line.
+    expect(onAll(`${TABLE}\n## Next\n`, setHeading(0))).toBe(`${TABLE}\n\nNext\n`);
+    expect(onAll('Text\n## Head\nMore\n', setHeading(0))).toBe('Text\n\nHead\n\nMore\n');
+    expect(onAll('# A\n## B\n', setHeading(0))).toBe('A\n\nB\n');
   });
 });
