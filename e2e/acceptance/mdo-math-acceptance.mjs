@@ -49,6 +49,9 @@ const DOC = `${vault}/Notes/physics.mdo`;
 await writeFile(DOC, ORIGINAL);
 const GALLERY = `${vault}/Notes/math.mdo`;
 await writeFile(GALLERY, await readFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'math.mdo'), 'utf8'));
+const IME = `${vault}/Notes/ime.mdo`;
+const IME_TEXT = 'Energy $E=mc^2$ and more.\n\n$x$ starts this line.\n\nThis line ends with $y$\n';
+await writeFile(IME, IME_TEXT);
 const NOTE = `${vault}/Notes/math-note.md`;
 await writeFile(NOTE, await readFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'math.mdo'), 'utf8'));
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
@@ -248,6 +251,39 @@ try {
   const reopened = await waitForFile((written) => written.includes('Area $\\pi r^2\n') || written.includes('Area $\\pi r^2\r'));
   check('Backspace right after takes only the $', reopened.includes('$5M-$10M. Area $\\pi r^2\n'), JSON.stringify(reopened.split('\n')[8]));
   await shoot('math-typed');
+
+  // Input methods beside inline formulas: the composed text lands where a typed letter would.
+  await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, IME);
+  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('starts this line'), null, { timeout: 15_000 });
+  await page.waitForTimeout(400);
+  const cdp = await page.context().newCDPSession(page);
+  const compose = async (text) => {
+    await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+    await page.waitForTimeout(60);
+    await cdp.send('Input.insertText', { text });
+    await page.waitForTimeout(150);
+  };
+  const readIme = () => readFile(IME, 'utf8');
+  const waitIme = async (predicate) => {
+    const start = Date.now();
+    let text = await readIme();
+    while (!predicate(text) && Date.now() - start < 5_000) { await page.waitForTimeout(100); text = await readIme(); }
+    return text;
+  };
+  const cells = [
+    ['after an inline formula', async () => { await page.locator('.cm-line', { hasText: 'Energy' }).click(); await page.keyboard.press('End'); for (let i = 0; i < ' and more.'.length; i += 1) await page.keyboard.press('ArrowLeft'); }, 'か', (text) => text.includes('Energy $E=mc^2$か and more.')],
+    ['before an inline formula', async () => { await page.locator('.cm-line', { hasText: 'Energy' }).click(); await page.keyboard.press('Home'); for (let i = 0; i < 'Energy '.length; i += 1) await page.keyboard.press('ArrowRight'); }, 'き', (text) => text.includes('Energy き$E=mc^2$')],
+    ['at a line start, before a formula', async () => { await page.locator('.cm-line', { hasText: 'starts this line' }).click(); await page.keyboard.press('Home'); }, 'く', (text) => text.includes('\nく$x$ starts this line.')],
+    ['at a line end, after a formula', async () => { await page.locator('.cm-line', { hasText: 'ends with' }).click(); await page.keyboard.press('End'); }, 'け', (text) => text.includes('ends with $y$け')],
+  ];
+  for (const [name, place, text, ok] of cells) {
+    await place();
+    await compose(text);
+    const written = await waitIme(ok);
+    check(`input method text lands ${name}`, ok(written), JSON.stringify(written));
+  }
+  const formulasKept = await page.evaluate(() => [...document.querySelectorAll('.cm-math')].map((element) => element.getAttribute('aria-label')).join(' '));
+  check('input methods leave the formulas whole', formulasKept === 'E=mc^2 x y', formulasKept);
 
   // The gallery fixture, top and bottom, for people to look at: chemistry, money, lists, callouts and tables sit below the fold.
   await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, GALLERY);
