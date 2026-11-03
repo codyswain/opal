@@ -18,11 +18,18 @@ const DAILY = '/Vault/Library/daily/2026-10-28.md';
 const LEGACY_LOG = '/Vault/Inbox/Logs/2026-10-28.md';
 
 let changed: ((payload: { directories: string[] }) => void) | null = null;
+const listeners = new Set<(payload: { directories: string[] }) => void>();
 
 beforeEach(() => {
   changed = null;
+  listeners.clear();
   installDiskApi({
-    onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => { changed = null; }; }),
+    // Every listener hears a change, as in the app: the page and the files it shows both listen.
+    onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
+      listeners.add(callback);
+      changed = (payload) => { for (const listener of [...listeners]) listener(payload); };
+      return () => { listeners.delete(callback); };
+    }),
   });
   useDiskStore.setState({ listings: {}, pendingAction: null });
   usePagePropertiesStore.setState({ open: false });

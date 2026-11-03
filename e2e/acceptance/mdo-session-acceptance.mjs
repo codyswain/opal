@@ -316,12 +316,11 @@ try {
   doc = await edit('Cmd+Z takes back Show as', () => press('Meta+z'), dropped);
   doc = await edit('Shift+Cmd+Z puts Show as back', () => press('Meta+Shift+z'), carded);
 
-  // 26. Backspace twice at the end removes the deck card, which frames first.
-  doc = await edit('Backspace frames the deck card and changes nothing', async () => {
-    await press('Meta+ArrowDown', 'Backspace');
-  }, (bytes) => bytes === carded || bytes === `${carded}\n`);
+  // 26. Cmd+Down frames the deck card that ends the page, and Backspace removes it.
+  doc = await edit('Cmd+Down frames the deck card at the page\'s end and changes nothing', () => press('Meta+ArrowDown'), (bytes) => bytes === carded || bytes === `${carded}\n`);
+  await page.waitForTimeout(300);
   check('the framed card shows the bar', await bar.count() === 1);
-  doc = await edit('a second Backspace removes the card', () => press('Backspace'), (bytes) => !bytes.includes('pitch-deck') && bytes.startsWith(carded.slice(0, carded.lastIndexOf('\n'))));
+  doc = await edit('Backspace removes the framed card', () => press('Backspace'), (bytes) => !bytes.includes('pitch-deck') && bytes.startsWith(carded.slice(0, carded.lastIndexOf('\n'))));
   doc = await edit('Cmd+Z brings the card back', () => press('Meta+z'), (bytes) => bytes.includes('pitch-deck') && bytes.startsWith(carded));
 
   // The page shows no Markdown, and the file holds what the page holds.

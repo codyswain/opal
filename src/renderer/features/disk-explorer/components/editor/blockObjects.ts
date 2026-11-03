@@ -1,10 +1,11 @@
-import { EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { EditorState, Prec, Transaction, type ChangeSpec, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
+import { Decoration, EditorView, keymap, type Command } from '@codemirror/view';
 import { ensureSyntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calloutMarker } from './blockGuards';
+import { headingOf, rewriteSetext } from './formatCommands';
 import { deleteHandlers, latestTree, objectAt, objectKinds, objectOf, objectKind, type ObjectAction, type ObjectKind, type PageObject } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
 import { objectFrame, removeObject, setFrame } from './objectFrame';
@@ -101,8 +102,12 @@ interface Separated {
   last: Line;
 }
 
-/** The table or rule that `line` is the first (`edge` 1) or last (-1) line of, when the page draws it. */
-function blockOn(state: EditorState, line: Line, edge: -1 | 1): Separated | null {
+/**
+ * The table or rule that `line` is the first (`edge` 1) or last (-1) line
+ * of, when the page draws it, or when it shows its source and `typed`, the
+ * line being typed beside it, does not start a row.
+ */
+function blockOn(state: EditorState, line: Line, edge: -1 | 1, typed?: string): Separated | null {
   const tree = latestTree(state);
   const at = edge < 0 ? line.to : line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0);
   for (let node: SyntaxNode | null = tree.resolveInner(at, edge < 0 ? -1 : 1); node; node = node.parent) {
@@ -110,8 +115,8 @@ function blockOn(state: EditorState, line: Line, edge: -1 | 1): Separated | null
     const first = state.doc.lineAt(node.from);
     const last = lastLineOf(state, node);
     if ((edge < 0 ? last : first).number !== line.number) return null;
-    // A table showing its Markdown takes typed rows, as a table being written should.
-    if (node.name === 'Table' && !drawnBlockAt(state, node.from)) return null;
+    // A table showing its Markdown takes typed rows, as a table being written should, and only rows.
+    if (node.name === 'Table' && !drawnBlockAt(state, node.from) && (typed === undefined || /^[\s>]*\|/.test(typed))) return null;
     return { node, first, last };
   }
   return null;
@@ -180,11 +185,11 @@ export function separated(tr: Transaction): TransactionSpec | null {
   }
 
   const empty = blank(line.text);
-  const above = empty && line.number > 1 ? blockOn(state, doc.line(line.number - 1), -1) : null;
+  const typedLine = (doc.sliceString(line.from, from) + text + doc.sliceString(to, line.to)).split('\n').pop() ?? '';
+  const above = empty && line.number > 1 ? blockOn(state, doc.line(line.number - 1), -1, typedLine) : null;
   const below = line.number < doc.lines ? blockOn(state, doc.line(line.number + 1), 1) : null;
   if (!above && !below) return null;
   const container = containerOf(state, (above ?? below) as Separated, line);
-  const typedLine = (doc.sliceString(line.from, from) + text + doc.sliceString(to, line.to)).split('\n').pop() ?? '';
   // A blank line over a table or a "---" rule stays, since text there can take the table into a paragraph or underline itself.
   const belowNeeds = below && (above || empty
     ? below.node.name === 'Table' || /^[\s>]*-/.test(below.first.text) || above
@@ -247,6 +252,29 @@ function guardedGap(state: EditorState, gap: Line): SyntaxNode | null {
   return rule && paragraphOver(state, above, rule) ? rule : null;
 }
 
+/** Whether the blank line `gap` keeps paragraph text from becoming a lazy line of the list item or quote that ends above it. */
+function lazyJoin(state: EditorState, gap: Line): boolean {
+  if (gap.number < 2 || gap.number >= state.doc.lines || !blank(gap.text)) return false;
+  const above = state.doc.line(gap.number - 1);
+  const below = state.doc.line(gap.number + 1);
+  if (blank(above.text) || !textLine(below.text) || /^[ \t]*>/.test(below.text)) return false;
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(above.to, -1); node; node = node.parent) {
+    if (node.name === 'FencedCode' || node.name === 'Table' || node.name === 'HTMLBlock') return false;
+    if (node.name === 'ListItem' || node.name === 'Blockquote') return node.to <= below.from;
+  }
+  return false;
+}
+
+/** The changes that take out the blank line `gap` between text and a setext heading, writing the heading with "#" marks. */
+function setextUnder(state: EditorState, gap: Line): ChangeSpec[] | null {
+  if (gap.number < 2 || gap.number >= state.doc.lines || !blank(gap.text)) return null;
+  const above = state.doc.line(gap.number - 1);
+  const below = state.doc.line(gap.number + 1);
+  const heading = !blank(above.text) && headingOf(state, below);
+  if (!heading || !heading.node.name.startsWith('Setext') || state.doc.lineAt(heading.node.from).number !== below.number) return null;
+  return [{ from: gap.from, to: below.from }, ...rewriteSetext(state, below, heading.node, heading.level)];
+}
+
 // Where a line's text starts for Backspace: past quote marks and a heading's hidden "#" marks.
 const textStarts = (line: Line) => [
   line.from + quoteOf(line.text).length,
@@ -290,6 +318,19 @@ const deleteBesideBlocks = deleteHandlers.of({
     if (empty) gap = line;
     else if (atStart && line.number > 1) gap = state.doc.line(line.number - 1);
     else if (atEnd && line.number < state.doc.lines) gap = state.doc.line(line.number + 1);
+    // The blank line over a setext heading goes, and the heading is written in "#" form in the same step, so the text above never joins it.
+    const setext = gap && setextUnder(state, gap);
+    if (gap && setext) {
+      const changes = state.changes(setext);
+      view.dispatch({ changes, selection: { anchor: empty ? gap.from - 1 : changes.mapPos(main.head, atStart ? 1 : -1) }, scrollIntoView: true, userEvent: dir < 0 ? 'delete.backward' : 'delete.forward' });
+      return true;
+    }
+    // Taking the blank line under a list or quote would make the paragraph after it a line of the last item or the quote: the caret moves instead.
+    if (gap && lazyJoin(state, gap)) {
+      const target = dir < 0 ? state.doc.line(gap.number - 1).to : state.doc.line(gap.number + 1).from;
+      view.dispatch({ selection: { anchor: target }, scrollIntoView: true, userEvent: 'select' });
+      return true;
+    }
     const node = gap && guardedGap(state, gap);
     const kind = node && objectKind(state, KIND_OF[node.name]);
     const framed = node && kind ? objectOf(state, kind, node) : !node && (atStart || atEnd) ? blockAcross(state, line, dir) : null;
@@ -394,8 +435,73 @@ const compositionSeparators = EditorView.domEventObservers({
   },
 });
 
+/**
+ * Cmd+Down or Cmd+End in a document that ends with a drawn table, rule or
+ * other block object: the page has no line under it to hold the caret, so
+ * the caret goes to the page's end and the block frames. A letter typed
+ * then starts a paragraph under it, as at any framed block.
+ */
+// The page each view's last block was framed on by Cmd+Down.
+const endFrames = new WeakMap<EditorView, EditorState['doc']>();
+
+/** The drawn block object that ends a document's page, or null. */
+function endBlock(state: EditorState): PageObject | null {
+  if (!state.facet(docMode) || state.doc.length === 0) return null;
+  const last = state.doc.line(state.doc.lines);
+  const obj = objectAt(state, last.to, -1);
+  if (!obj || !objectKind(state, obj.kind)?.block || state.doc.lineAt(obj.to).number !== last.number || (obj.kind === 'table' && !drawnBlockAt(state, obj.from))) return null;
+  return obj;
+}
+
+const toEndBlock: Command = (view) => {
+  const { state } = view;
+  const obj = endBlock(state);
+  if (!obj) return false;
+  view.dispatch({ selection: { anchor: state.doc.length }, effects: setFrame.of(obj), scrollIntoView: true, userEvent: 'select' });
+  endFrames.set(view, view.state.doc);
+  return true;
+};
+
+const MODIFIER_KEYS = new Set(['Shift', 'Meta', 'Control', 'Alt', 'CapsLock']);
+
+/**
+ * A letter typed after Cmd+Down framed the block that ends the page: no
+ * line under the block holds the browser's caret, which may have gone back
+ * above it, so the letter is written at the page's end here, where the
+ * separators put it on a paragraph of its own under the block. Backspace
+ * or Delete removes the block. A click or any other key ends this.
+ */
+const typedAfterEnd = EditorView.domEventHandlers({
+  keydown(event, view) {
+    const doc = endFrames.get(view);
+    if (!doc || MODIFIER_KEYS.has(event.key)) return false;
+    endFrames.delete(view);
+    if (doc !== view.state.doc || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
+    // Backspace or Delete takes the framed block off, as at any framed object, wherever the browser put its caret.
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !event.repeat) {
+      const obj = endBlock(view.state);
+      if (!obj) return false;
+      event.preventDefault();
+      removeObject(view, obj, event.key === 'Delete' ? 1 : -1);
+      return true;
+    }
+    if (event.key.length !== 1) return false;
+    event.preventDefault();
+    if (view.state.field(objectFrame, false)) view.dispatch({ effects: setFrame.of(null) });
+    const end = view.state.doc.length;
+    view.dispatch({ changes: { from: end, insert: event.key }, selection: { anchor: end + 1 }, scrollIntoView: true, userEvent: 'input.type' });
+    return true;
+  },
+  mousedown(_event, view) {
+    endFrames.delete(view);
+    return false;
+  },
+});
+
 /** The block objects, their separators and the Backspace rule under a table. Documents only. */
 export const blockObjects: Extension = [
+  Prec.high(keymap.of([{ key: 'Mod-End', run: toEndBlock }, { mac: 'Cmd-ArrowDown', run: toEndBlock }])),
+  Prec.highest(typedAfterEnd),
   ruleFrame,
   compositionSeparators,
   objectKinds.of(tableKind),

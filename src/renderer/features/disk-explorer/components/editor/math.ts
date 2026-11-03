@@ -1,5 +1,5 @@
 import { syntaxTree } from '@codemirror/language';
-import { EditorState, type ChangeSpec, type Extension, type Text, type Transaction, type TransactionSpec } from '@codemirror/state';
+import { EditorState, Prec, type ChangeSpec, type Extension, type Text, type Transaction, type TransactionSpec } from '@codemirror/state';
 import type { SyntaxNode, Tree } from '@lezer/common';
 import { styleTags, tags } from '@lezer/highlight';
 import { Line as BlockLine, type BlockContext, type Element, type InlineContext, type MarkdownConfig } from '@lezer/markdown';
@@ -312,8 +312,12 @@ const RUN_LINES = 2_000;
  * A change can make a `$$` or `\[` line above it a block's opener, by adding
  * its closer or taking out a blank line between them. The parser reuses the
  * blocks above a change, so that opener would keep its old reading until the
- * page reopens. This adds an edit that writes the opener's two characters
- * back as they were, so the parser reads again from there. No byte changes.
+ * page reopens. This adds an edit that writes the line break after the
+ * opener back as it was, so the parser reads again from there. No byte
+ * changes. It is the line break, not the opener's characters: the undo
+ * history maps typed text through edits made outside it, and text rewritten
+ * by one, such as the `$$` a popover's live write sits under, would drop out
+ * of its undo step.
  */
 function reparseOpeners(tr: Transaction): Transaction | readonly [Transaction, TransactionSpec] {
   if (!tr.docChanged) return tr;
@@ -330,10 +334,10 @@ function reparseOpeners(tr: Transaction): Transaction | readonly [Transaction, T
       if (BLANK.test(line.text) && line.to < range.from) break;
       const opener = OPENER_LINE.exec(line.text);
       const start = opener ? line.from + opener[1].length : -1;
-      // An opener the change wrote, or one already read as a block, is read again anyway.
-      if (opener && openerOf(line.text, start - line.from) && !changed.some((other) => other.from <= start + 2 && other.to >= start)) {
+      // An opener on a line the change wrote, or one already read as a block, is read again anyway.
+      if (opener && line.to < doc.length && openerOf(line.text, start - line.from) && !changed.some((other) => other.from <= line.to + 1 && other.to >= line.from)) {
         const reading = mathNodeAt(before, tr.changes.invertedDesc.mapPos(start, 1), 1);
-        if (!reading || reading.name !== 'BlockMath') touched.set(start, { from: start, to: start + 2, insert: doc.sliceString(start, start + 2) });
+        if (!reading || reading.name !== 'BlockMath') touched.set(line.to, { from: line.to, to: line.to + 1, insert: '\n' });
       }
       if (line.number === 1) break;
       line = doc.line(line.number - 1);
@@ -343,5 +347,9 @@ function reparseOpeners(tr: Transaction): Transaction | readonly [Transaction, T
   return [tr, { changes: [...touched.values()], sequential: true }];
 }
 
-/** Keeps block math read as a fresh parse would read it when a change pairs an opener with a closer below it. */
-export const mathReparse: Extension = EditorState.transactionFilter.of((tr) => reparseOpeners(tr));
+/**
+ * Keeps block math read as a fresh parse would read it when a change pairs an
+ * opener with a closer below it. Highest, so it runs after the other filters:
+ * those that act only on a single edit never see its extra one.
+ */
+export const mathReparse: Extension = Prec.highest(EditorState.transactionFilter.of((tr) => reparseOpeners(tr)));

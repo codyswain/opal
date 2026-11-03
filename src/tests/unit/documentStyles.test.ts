@@ -30,22 +30,48 @@ describe('the look of documents', () => {
     view.destroy();
   });
 
-  it('closes each line\'s piece of inline code that wraps, as a chip\'s are', () => {
+  it('closes each line\'s piece of inline code that wraps', () => {
     const declarations = rule('code.css', '.opal-editor .cm-editor .cm-md-code');
     expect(declarations).toMatch(/-webkit-box-decoration-break: clone/);
     expect(declarations).toMatch(/(^|[^-])box-decoration-break: clone/);
-    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/-webkit-box-decoration-break: clone/);
+  });
+
+  it('keeps a file chip whole on one line, a long name ending in an ellipsis', () => {
+    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/white-space: nowrap/);
+    const name = rule('files.css', '.opal-editor .cm-editor .cm-file-chip-name');
+    expect(name).toMatch(/display: inline-block/);
+    expect(name).toMatch(/max-width: min\(24ch, 100%\)/);
+    expect(name).toMatch(/text-overflow: ellipsis/);
+  });
+
+  it('gives every file row one width and a card exactly 64px with its edge, buttons under the name when narrow', () => {
+    const card = rule('files.css', '.opal-editor .cm-editor .cm-file-card');
+    expect(card).toMatch(/height: 64px/);
+    // 48px tile, 7px above and below it, a 1px edge.
+    expect(card).toMatch(/padding: 7px 12px 7px 8px/);
+    expect(card).toMatch(/container-type: inline-size/);
+    expect(rule('files.css', '.opal-editor .cm-editor .cm-file-audio')).toMatch(/width: min\(100%, 28rem\)/);
+    const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/files.css'), 'utf8');
+    expect(css).toMatch(/@container \(max-width: 400px\) \{\s*\.opal-editor \.cm-editor \.cm-file-card > \.cm-file-card-actions \{[^}]*flex-basis: 100%[^}]*padding-left: 60px/);
   });
 
   it('draws the link underline under a formula in link text as a straight line', () => {
-    const declarations = rule('math.css', '.opal-editor .cm-editor .cm-md-link .cm-math-inline');
-    expect(declarations).toMatch(/box-shadow: inset 0 -1px 0/);
-    expect(declarations).toMatch(/border-radius: 0;/);
+    const declarations = rule('math.css', '.opal-editor .cm-editor .cm-md-link:has(.cm-math-inline)');
+    expect(declarations).toMatch(/border-bottom: 1px solid/);
+    expect(declarations).toMatch(/text-decoration: none;/);
+    expect(rule('math.css', '.opal-editor .cm-editor .cm-md-link .cm-math-inline')).toMatch(/border-radius: 0;/);
   });
 
   it('edges a card\'s picture of a page with a hairline, so a white page shows its shape on a white card', () => {
     const declarations = rule('files.css', '.opal-editor .cm-editor .cm-file-card-tile-thumb.cm-file-card-tile-page::after');
     expect(declarations).toMatch(/box-shadow: inset 0 0 0 1px hsl\(var\(--border-subtle\)\)/);
     expect(declarations).toMatch(/pointer-events: none/);
+  });
+
+  it('dims a white PDF page and a page picture in dark mode, and leaves photos alone', () => {
+    for (const selector of ['.dark .opal-editor .cm-editor .cm-file-pdf-image', '.dark .opal-editor .cm-editor .cm-file-card-tile-page .cm-file-thumb']) {
+      expect(rule('files.css', selector)).toMatch(/filter: brightness\(0\.82\) contrast\(1\.05\)/);
+    }
+    expect(readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/files.css'), 'utf8')).not.toMatch(/\.cm-md-image[^{]*\{[^}]*filter:/);
   });
 });

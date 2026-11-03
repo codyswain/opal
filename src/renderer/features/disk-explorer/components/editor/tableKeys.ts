@@ -1,5 +1,6 @@
 import { EditorSelection, EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
 import { EditorView, keymap, type Command } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree } from './extensionPoints';
 import { cellCaretOf, docMode, drawnBlockAt, setCellCaret } from './livePreview';
@@ -86,7 +87,8 @@ function addRow(state: EditorState, table: SyntaxNode, line: Line, dispatch: Par
   if (!header) return false;
   const row = emptyRow(state, table, header);
   const caret = line.to + 1 + rowPrefix(state, table).length + 2;
-  dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input' }));
+  // The new row is its own undo step, so Cmd+Z takes back what is typed into it first.
+  dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input', annotations: isolateHistory.of('full') }));
   return true;
 }
 
@@ -103,6 +105,27 @@ function moveCellCaret(view: EditorView, dir: 1 | -1): boolean {
   const anchor = target.to > target.from ? target.from : Math.min(target.end, target.start + 1);
   view.dispatch({ selection: { anchor }, effects: setCellCaret.of(anchor), scrollIntoView: true });
   return true;
+}
+
+/**
+ * Home (-1) or End (1) in a table's cell goes to the start or end of the
+ * cell's text, as in Docs: in a drawn table's cell, and in a document's
+ * table source. Pressed again at that edge, it goes on to the row's edge.
+ */
+function cellEdge(dir: 1 | -1): Command {
+  return (view) => {
+    const { state } = view;
+    const caret = cellCaretOf(state);
+    const at = caret ?? state.selection.main.head;
+    const table = caret !== null ? anyTableAt(state, caret) : state.facet(docMode) && state.selection.ranges.length === 1 && state.selection.main.empty ? tableAt(state, at) : null;
+    if (!table) return false;
+    const cell = rowsOf(table).filter((row) => row.name !== 'TableDelimiter').flatMap((row) => cellsOf(state, row)).find((one) => one.start <= at && at <= one.end);
+    if (!cell) return false;
+    const anchor = cell.to > cell.from ? (dir > 0 ? cell.to : cell.from) : Math.min(cell.end, cell.start + 1);
+    if (caret === null && anchor === at) return false;
+    view.dispatch({ selection: { anchor }, effects: caret === null ? [] : setCellCaret.of(anchor), scrollIntoView: true, userEvent: 'select' });
+    return true;
+  };
 }
 
 /** Tab (1) or Shift+Tab (-1) in a table's Markdown. */
@@ -178,12 +201,14 @@ export function spacedCell(tr: Transaction): TransactionSpec | null {
   const line = state.doc.lineAt(main.head);
   const cell = cellsOf(state, row).find((each) => each.start <= main.head && main.head <= each.end);
   const userEvent = tr.annotation(Transaction.userEvent);
+  // The caret keeps its place in the typed text, such as inside the marks bold wrapped around it.
+  const offset = Math.min(typed.length, Math.max(0, tr.newSelection.main.head - main.head));
   if (cell && cell.to === cell.from) {
     const insert = ` ${typed} `;
-    return { changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + typed.length }, scrollIntoView: true, userEvent };
+    return { changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + offset }, scrollIntoView: true, userEvent };
   }
   if (!cell && main.head === line.to && state.sliceDoc(line.to - 1, line.to) === '|') {
-    return { changes: { from: main.head, insert: ` ${typed} |` }, selection: { anchor: main.head + 1 + typed.length }, scrollIntoView: true, userEvent };
+    return { changes: { from: main.head, insert: ` ${typed} |` }, selection: { anchor: main.head + 1 + offset }, scrollIntoView: true, userEvent };
   }
   return null;
 }
@@ -211,6 +236,10 @@ export const tableKeys: Extension = [
   Prec.high(keymap.of([
     { key: 'Tab', run: moveCell(1), shift: moveCell(-1) },
     { key: 'Enter', run: newRow },
+    { key: 'Home', run: cellEdge(-1) },
+    { key: 'End', run: cellEdge(1) },
+    { mac: 'Mod-ArrowLeft', run: cellEdge(-1) },
+    { mac: 'Mod-ArrowRight', run: cellEdge(1) },
   ])),
   EditorState.transactionFilter.of((tr) => spacedCell(tr) ?? tr),
   composedCells,

@@ -27,8 +27,11 @@ export interface CodeMark {
   className: string;
 }
 
+// At most 400 blocks and 2 million characters of code, so typing in a large block for a while does not keep every version.
 const CACHE_SIZE = 400;
+const CACHE_CHARACTERS = 2_000_000;
 const cache = new Map<string, readonly CodeMark[]>();
+let cached = 0;
 
 // Past this many characters a parse takes a good part of a frame, so typing in such a block
 // draws the last colours, moved past the edit, and parses once typing pauses.
@@ -53,8 +56,13 @@ function compute(code: string, language: CodeLanguage): readonly CodeMark[] | nu
     if (to > from) marks.push({ from, to, className });
   });
   const key = `${language.id}\u0000${code}`;
+  if (!cache.has(key)) cached += key.length;
   cache.set(key, marks);
-  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
+  while (cache.size > CACHE_SIZE || (cached > CACHE_CHARACTERS && cache.size > 1)) {
+    const oldest = cache.keys().next().value as string;
+    cache.delete(oldest);
+    cached -= oldest.length;
+  }
   if (code.length > LARGE) {
     recentLarge.unshift({ id: language.id, code, marks });
     recentLarge.length = Math.min(recentLarge.length, 4);

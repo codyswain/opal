@@ -7,7 +7,7 @@ const directive = (name: string) => APP_CSP.split('; ').find((part) => part.star
 describe('the app policy hook', () => {
   it('leaves opal-file: responses and the PDF viewer alone', () => {
     const own = { 'Content-Security-Policy': ['sandbox'], 'X-Content-Type-Options': ['nosniff'] };
-    expect(applyAppPolicy({ url: 'opal-file:///Users/cody/vault/page.html', responseHeaders: own })).toEqual({});
+    expect(applyAppPolicy({ url: 'opal-file:///Users/alex/vault/page.html', responseHeaders: own })).toEqual({});
     expect(applyAppPolicy({ url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html' })).toEqual({});
   });
 

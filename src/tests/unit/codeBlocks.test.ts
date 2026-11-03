@@ -5,6 +5,7 @@ import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
 import { codeText, collapsedBlocks, copiedCode, copyCode, fenceAt, setLanguage, toggleCodeBlock } from '@/renderer/features/disk-explorer/components/editor/codeBlocks';
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
@@ -383,10 +384,10 @@ describe('a code block in a document', () => {
     expect(foot?.classList.contains('cm-md-callout-last')).toBe(true);
     const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/code.css'), 'utf8');
     const rule = (selector: string) => new RegExp(`${selector.replace(/[.()[\]:]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/padding-bottom: calc\(0\.45em \/ 0\.85\)/);
-    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before')).toMatch(/bottom: calc\(0\.45em \/ 0\.85\)/);
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/padding-bottom: calc\(0\.75em \/ 0\.85\)/);
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before')).toMatch(/bottom: calc\(0\.75em \/ 0\.85\)/);
     // Lines are border-box, so the closing fence's line grows by the padding and keeps its rounded foot.
-    expect(rule('.cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/height: calc\(0\.4em \+ 0\.45em \/ 0\.85\)/);
+    expect(rule('.cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/height: calc\(0\.4em \+ 0\.75em \/ 0\.85\)/);
   });
 
   it('draws diff lines', () => {
@@ -984,5 +985,153 @@ describe('the header and its menus', () => {
     const language = objectKind(view.state, 'code')?.actions(view.state, obj).find((action) => action.id === 'language');
     expect(language?.items?.map((item) => item.id)).toContain('mermaid');
     expect(language?.items?.filter((item) => item.checked).map((item) => item.label)).toEqual(['TypeScript']);
+  });
+});
+
+describe('code edge cases, second pass', () => {
+  it('Cmd+Option+C in an unclosed block unwraps it by removing its opening fence', async () => {
+    const doc = 'Top\n\n```\na\nb\n';
+    const view = mount(doc, doc.indexOf('b'));
+    await focusPage(view);
+    key(view, 'c', { ...mod, altKey: true });
+    expect(text(view)).toBe('Top\n\na\nb\n');
+  });
+
+  it('Backspace in indented code removes a blank code line above and keeps the line\'s indent', async () => {
+    const doc = 'Para\n\n    a\n\n    b\n';
+    const view = mount(doc, doc.lastIndexOf('b'));
+    await focusPage(view);
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Para\n\n    a\n    b\n');
+    expect(caret(view)).toBe(text(view).lastIndexOf('b'));
+  });
+
+  it('Backspace on a paragraph right under indented code leaves the paragraph out of the code', async () => {
+    const doc = 'Para\n\n    a\nb\n';
+    const view = mount(doc, doc.lastIndexOf('b'));
+    await focusPage(view);
+    key(view, 'Backspace');
+    expect(text(view)).toBe(doc);
+    expect(caret(view)).toBe(doc.indexOf('    a') + 5);
+  });
+
+  it('Enter inside a code line\'s indent keeps the line\'s own indent', async () => {
+    const doc = '```\n    abc\n```\n';
+    const view = mount(doc, doc.indexOf('abc') - 2);
+    await focusPage(view);
+    key(view, 'Enter');
+    expect(text(view)).toBe('```\n  \n    abc\n```\n');
+  });
+
+  it('a backtick typed in a span of backticks keeps the caret inside the span', async () => {
+    const doc = 'x `` ` `` y\n';
+    const view = mount(doc, doc.indexOf('` ``') + 1);
+    await focusPage(view);
+    type(view, '`');
+    expect(text(view)).toBe('x ``` `` ``` y\n');
+    // After the typed backtick, never before the span. At the span's inner edge the caret settles past its hidden end, as for any inline code.
+    type(view, 'z');
+    expect(text(view)).toBe('x ``` `` ```z y\n');
+    const middle = 'x ``` `` ``` y\n';
+    const other = mount(middle, middle.indexOf(' `` ') + 2);
+    await focusPage(other);
+    type(other, '`');
+    type(other, 'z');
+    expect(text(other)).toBe('x ```` ``z` ```` y\n');
+  });
+
+  it('a list key at the stop after a final block is one undo step', async () => {
+    const doc = 'A\n\n```\nx\n```';
+    const view = mount(doc, doc.length);
+    await focusPage(view);
+    key(view, '8', { ...mod, shiftKey: true });
+    expect(text(view)).toBe(`${doc}\n- `);
+    act(() => { undo(view); });
+    expect(text(view)).toBe(doc);
+  });
+
+  it('picking the language a block already has writes nothing', () => {
+    const plain = '```\ncode\n```\n';
+    const view = mount(plain);
+    setLanguage(view, 5, 'text');
+    expect(text(view)).toBe(plain);
+    const named = '```typescript\ncode\n```\n';
+    const other = mount(named);
+    setLanguage(other, 15, 'ts');
+    expect(text(other)).toBe(named);
+  });
+
+  it('Show all lasts when text is typed before a block that starts the page', async () => {
+    const lines = Array.from({ length: 60 }, (_, index) => `line ${index}`).join('\n');
+    const doc = `\`\`\`\n${lines}\n\`\`\`\n`;
+    const view = mount(doc, 0);
+    await focusPage(view);
+    select(view, doc.indexOf('line 50'));
+    expect(collapsedBlocks(view.state)).toHaveLength(0);
+    select(view, 0);
+    type(view, 'T');
+    expect(text(view).startsWith('T\n```')).toBe(true);
+    expect(collapsedBlocks(view.state)).toHaveLength(0);
+  });
+
+  it('a new Mermaid block opens as code with the caret on its empty line, and draws once the caret leaves', async () => {
+    const doc = 'The flow:\n\n';
+    const view = mount(doc, doc.length);
+    await focusPage(view);
+    type(view, '```mermaid');
+    key(view, 'Enter');
+    expect(text(view)).toBe('The flow:\n\n```mermaid\n\n```');
+    expect(caret(view)).toBe(text(view).indexOf('mermaid\n') + 8);
+    type(view, 'graph TD');
+    expect(text(view)).toBe('The flow:\n\n```mermaid\ngraph TD\n```');
+    expect(view.contentDOM.querySelector('.cm-diagram:not(.cm-diagram-preview)')).toBeNull();
+    select(view, 0);
+    expect(view.contentDOM.querySelector('.cm-diagram:not(.cm-diagram-preview)')).not.toBeNull();
+  });
+
+  it('a block made with Cmd+Option+C and set to Mermaid keeps the caret on its empty line', async () => {
+    const doc = 'A\n\n\n\nB\n';
+    const view = mount(doc, 3);
+    await focusPage(view);
+    key(view, 'c', { ...mod, altKey: true });
+    expect(text(view)).toBe('A\n\n```\n\n```\n\nB\n');
+    const at = caret(view);
+    act(() => { setLanguage(view, 3, 'mermaid'); });
+    expect(text(view)).toBe('A\n\n```mermaid\n\n```\n\nB\n');
+    expect(caret(view)).toBe(at + 'mermaid'.length);
+    type(view, 'graph TD');
+    expect(text(view)).toBe('A\n\n```mermaid\ngraph TD\n```\n\nB\n');
+  });
+  it('the language menu ranks an exact name, then a prefix, over a label that only contains the letters', () => {
+    const pickFor = (query: string) => {
+      const view = mount('```ts\ncode\n```\n');
+      act(() => { (view.contentDOM.querySelector('.cm-code-label') as HTMLElement).click(); });
+      const search = document.querySelector('.opal-code-menu-search') as HTMLInputElement;
+      act(() => {
+        search.value = query;
+        search.dispatchEvent(new Event('input'));
+        search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      });
+      return text(view);
+    };
+    expect(pickFor('c')).toBe('```c\ncode\n```\n');
+    expect(pickFor('java')).toBe('```java\ncode\n```\n');
+    expect(pickFor('go')).toBe('```go\ncode\n```\n');
+    expect(pickFor('rust')).toBe('```rust\ncode\n```\n');
+    expect(pickFor('swi')).toBe('```swift\ncode\n```\n');
+  });
+  it('resolves link definitions after an unclosed fence in a quote or on a list item\'s line', () => {
+    for (const opening of ['> ```\n> code', '- ```\n  code']) {
+      const doc = `${opening}\n\nSee [docs][ref].\n\n[ref]: https://example.com\n`;
+      const view = mount(doc, 0, NOTE);
+      expect(view.contentDOM.querySelector('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
+    }
+  });
+  it('shows an empty diagram as code, with its fences hidden and a line saying how to start', () => {
+    const doc = 'Above\n\n```mermaid\n\n```\n\nBelow\n';
+    const view = mount(doc);
+    expect(view.contentDOM.textContent).not.toContain('```');
+    expect(view.contentDOM.querySelector('.cm-code-placeholder')).not.toBeNull();
+    expect(view.contentDOM.querySelector('.cm-diagram-preview .cm-diagram-hint')?.textContent).toBe('Start with a diagram type, such as graph TD');
   });
 });

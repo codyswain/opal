@@ -7,6 +7,7 @@ import { setLinkEditor, type LinkEditor } from './docMode';
 import { linkBetween, removeLink, typedLinkText, writeLink, type LinkAt } from './formatCommands';
 import { autolinkHref, docMode, drawnBlockAt, openLink } from './livePreview';
 import { visibleSlice } from './visibleText';
+import { webAddress } from './linkSchemes';
 import { openWikiLink, pageContext, parseWikiTarget } from './wikiLinks';
 import { relativePath } from './fileActions';
 import { findLinkTargets, folderOf, pickedText, rowLabel } from './linkPicker';
@@ -50,7 +51,7 @@ const LinkForm: React.FC<LinkFormProps> = ({ view, editor, link }) => {
         if (!url.trim()) return;
         const { state: now } = view;
         const raw = text === shown ? now.sliceDoc(written.from, written.to) : now.facet(docMode) ? typedLinkText(text) : text;
-        view.dispatch(writeLink(now, editor, raw, url.trim(), link), { effects: setLinkEditor.of(null) });
+        view.dispatch(writeLink(now, editor, raw, link?.kind === 'wiki' ? url.trim() : webAddress(url), link), { effects: setLinkEditor.of(null) });
         view.focus();
       }}
     >

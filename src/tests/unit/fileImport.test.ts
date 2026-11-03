@@ -90,10 +90,10 @@ describe('importing files', () => {
   afterEach(async () => { await rm(temporary, { recursive: true, force: true }); });
 
   it('links a file already in the vault where it is, notes included, and copies nothing', async () => {
-    await mkdir(path.join(root, 'Library/parametric'), { recursive: true });
-    await writeFile(path.join(root, 'Library/parametric/q3.pdf'), '%PDF');
-    expect(await service.import(page, { path: path.join(root, 'Library/parametric/q3.pdf') })).toEqual({
-      path: path.join(root, 'Library/parametric/q3.pdf'), vaultPath: 'Library/parametric/q3.pdf', name: 'q3.pdf',
+    await mkdir(path.join(root, 'Library/reports'), { recursive: true });
+    await writeFile(path.join(root, 'Library/reports/q3.pdf'), '%PDF');
+    expect(await service.import(page, { path: path.join(root, 'Library/reports/q3.pdf') })).toEqual({
+      path: path.join(root, 'Library/reports/q3.pdf'), vaultPath: 'Library/reports/q3.pdf', name: 'q3.pdf',
     });
     await writeFile(path.join(root, 'Library/notes/Other note.md'), '# Other');
     expect((await service.import(page, { path: path.join(root, 'Library/notes/Other note.md') })).vaultPath).toBe('Library/notes/Other note.md');
@@ -191,9 +191,9 @@ describe('importing files', () => {
   });
 
   it('turns a .webloc or .url into its address and stores nothing', async () => {
-    await writeFile(path.join(outside, 'Opal PR.webloc'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>URL</key><string>https://github.com/codyswain/opal/pull/13?a=1&amp;b=2</string></dict></plist>\n');
+    await writeFile(path.join(outside, 'Opal PR.webloc'), '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>URL</key><string>https://github.com/example/project/pull/13?a=1&amp;b=2</string></dict></plist>\n');
     expect(await service.import(page, { path: path.join(outside, 'Opal PR.webloc') })).toEqual({
-      path: '', vaultPath: '', name: 'Opal PR', url: 'https://github.com/codyswain/opal/pull/13?a=1&b=2',
+      path: '', vaultPath: '', name: 'Opal PR', url: 'https://github.com/example/project/pull/13?a=1&b=2',
     });
     await writeFile(path.join(outside, 'Docs.url'), '[InternetShortcut]\r\nURL=https://docs.google.com/document/d/1\r\n');
     expect((await service.import(page, { path: path.join(outside, 'Docs.url') })).url).toBe('https://docs.google.com/document/d/1');
@@ -204,8 +204,8 @@ describe('importing files', () => {
 
   it('reads a binary .webloc through plutil, run without a shell', async () => {
     await writeFile(path.join(outside, 'Binary.webloc'), Buffer.concat([Buffer.from('bplist00'), Buffer.alloc(40)]));
-    sips.mockResolvedValueOnce({ stdout: 'https://linear.app/parametricpbc/issue/SW-640\n', stderr: '' });
-    expect((await service.import(page, { path: path.join(outside, 'Binary.webloc') })).url).toBe('https://linear.app/parametricpbc/issue/SW-640');
+    sips.mockResolvedValueOnce({ stdout: 'https://linear.app/acme/issue/ENG-12\n', stderr: '' });
+    expect((await service.import(page, { path: path.join(outside, 'Binary.webloc') })).url).toBe('https://linear.app/acme/issue/ENG-12');
     expect(sips).toHaveBeenCalledWith('/usr/bin/plutil', ['-extract', 'URL', 'raw', '-o', '-', '--', path.join(outside, 'Binary.webloc')], expect.anything());
   });
 
@@ -242,10 +242,15 @@ describe('importing files', () => {
 
   it('refuses a folder, asks for a zip of a document saved as a folder, and never adds git\'s own files', async () => {
     await expect(service.import(page, { path: path.join(root, 'Library') })).rejects.toThrow("Folders can't be added yet.");
-    await mkdir(path.join(outside, 'Gob deck.key/Data'), { recursive: true });
-    await expect(service.import(page, { path: path.join(outside, 'Gob deck.key') })).rejects.toThrow('"Gob deck.key" is saved as a folder. Zip it first.');
+    await mkdir(path.join(outside, 'Demo deck.key/Data'), { recursive: true });
+    await expect(service.import(page, { path: path.join(outside, 'Demo deck.key') })).rejects.toThrow('"Demo deck.key" is saved as a folder. Zip it first.');
+    // An app is linked where it is inside the vault, and named as an app outside it.
+    await mkdir(path.join(outside, 'Demo.app/Contents'), { recursive: true });
+    await expect(service.import(page, { path: path.join(outside, 'Demo.app') })).rejects.toThrow('"Demo.app" is an app. Opal links apps only from inside the vault.');
+    await mkdir(path.join(root, 'Tools/Demo.app/Contents'), { recursive: true });
+    expect(await service.import(page, { path: path.join(root, 'Tools/Demo.app') })).toMatchObject({ vaultPath: 'Tools/Demo.app', name: 'Demo.app' });
     // git's config can hold a remote address with a token in it.
-    await writeFile(path.join(root, '.git/config'), '[remote "origin"]\n\turl = https://token@github.com/codyswain/vault\n', { flag: 'a' });
+    await writeFile(path.join(root, '.git/config'), '[remote "origin"]\n\turl = https://token@github.com/example/notes\n', { flag: 'a' });
     await expect(service.import(page, { path: path.join(root, '.git/config') })).rejects.toThrow("Files inside .git can't be added.");
     await expect(readdir(path.join(root, 'Library/files'))).rejects.toThrow();
   });

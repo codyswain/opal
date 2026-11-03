@@ -22,6 +22,20 @@
   white-space: normal;
 }
 
+/* An inline formula and the punctuation right after it stay on one line; the formula leaves room for that punctuation. */
+.opal-editor .cm-editor .cm-math-glue {
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-math-glue > .cm-math-inline {
+  max-width: calc(100% - 1em);
+}
+
+/* A formula wider than the column flows with the text, from the line it starts on, so what follows it sits right after its last part. */
+.opal-editor .cm-editor .cm-math-inline.cm-math-flow {
+  display: inline;
+}
+
 /* Display math: centred on its own line, scrolling sideways in its own box when wide. */
 .opal-editor .cm-editor .cm-math-display {
   display: block;
@@ -47,10 +61,32 @@
   text-underline-offset: 2px;
 }
 
-/* A formula in link text carries the link's underline, which text-decoration can't reach inside an inline-block. Square corners, so the line stays straight. */
+/* A clipped edge of a wide formula fades out over 24px, as a table's does, so it reads as more to scroll to. */
+.opal-editor .cm-editor .cm-math-display.cm-math-clipped-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.opal-editor .cm-editor .cm-math-display.cm-math-clipped-left {
+  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+}
+
+.opal-editor .cm-editor .cm-math-display.cm-math-clipped-left.cm-math-clipped-right {
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+
+/*
+ * Link text holding a formula: text-decoration can't reach inside the
+ * formula's box, so the link draws its underline as a bottom border, which
+ * runs straight under text and formula at one height.
+ */
+.opal-editor .cm-editor .cm-md-link:has(.cm-math-inline) {
+  padding-bottom: 1px;
+  border-bottom: 1px solid hsl(var(--text-tertiary) / 0.55);
+  text-decoration: none;
+}
+
 .opal-editor .cm-editor .cm-md-link .cm-math-inline {
   border-radius: 0;
-  box-shadow: inset 0 -1px 0 hsl(var(--text-tertiary) / 0.55);
 }
 
 /* A block over whole lines: inside a quote or callout it takes the box's ground, inside a list it lines up with the item's text. */
@@ -97,19 +133,33 @@
   transition: background-color var(--duration-hover) var(--ease-standard);
 }
 
+
+
 .opal-editor .cm-editor .cm-math[data-formula]:hover {
   background-color: hsl(var(--surface-hover));
+}
+
+/* While Find is open, a formula whose TeX holds a match takes the match fill. */
+.opal-editor .cm-editor .cm-math-match .cm-math,
+.opal-editor .cm-editor .cm-math[data-math-match] {
+  background-color: hsl(var(--foreground) / 0.12);
 }
 
 .opal-editor .cm-editor .cm-object-framed-inline .cm-math {
   background-color: hsl(var(--surface-selected));
 }
 
-/* The formula the popover edits is selected: a fill and an inset edge in a line or a cell, the object frame on a block. */
-.opal-editor .cm-editor .cm-math-editing > .cm-math,
+/*
+ * The formula the popover edits is selected: a fill and an edge in a line or
+ * a cell, the object frame on a block. The edge stands 1px off the formula,
+ * on the fill, so it never cuts an italic letter that leans past the box.
+ */
+.opal-editor .cm-editor .cm-math-editing .cm-math,
 .opal-editor .cm-editor .cm-math[data-math-editing] {
   background-color: hsl(var(--surface-selected));
-  box-shadow: inset 0 0 0 1px hsl(var(--foreground));
+  box-shadow: 0 0 0 1px hsl(var(--surface-selected));
+  outline: 1px solid hsl(var(--foreground));
+  outline-offset: 1px;
 }
 
 .opal-editor .cm-editor .cm-content > [data-math-editing] {
@@ -184,6 +234,16 @@
   line-height: 1.4;
 }
 
+/* No message yet: the row takes no room, and stays a live region for the first one. */
+.opal-math-problem-none {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .opal-math-problem-caret {
   display: block;
   padding-left: 9px;
@@ -244,4 +304,11 @@
 .opal-math-quiet:hover {
   background-color: hsl(var(--surface-hover));
   color: hsl(var(--text-secondary));
+}
+
+/* \colorbox draws in the text colour, so its box is a grey edge, as \fbox's is. */
+.opal-editor .cm-editor .cm-math .katex .fbox,
+.opal-math-preview .katex .fbox {
+  border: 1px solid hsl(var(--border-default));
+  border-radius: 2px;
 }

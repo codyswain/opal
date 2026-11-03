@@ -47,7 +47,8 @@ export function literalBacktick(tr: Transaction): TransactionSpec | null {
   const at = padded ? offset - 1 : offset;
   const next = content.slice(0, at) + insert + content.slice(at);
   const written = codeSpan(next);
-  const start = written.indexOf(next);
+  // The delimiter and its padding come before the text; indexOf would find a text of backticks inside the delimiter.
+  const start = (written.length - next.length) / 2;
   return {
     changes: { from: span.from, to: span.to, insert: written },
     selection: { anchor: span.from + start + at + insert.length },

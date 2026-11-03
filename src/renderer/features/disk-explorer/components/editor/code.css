@@ -42,16 +42,16 @@
 
 /* A block that ends a callout stops above the callout's bottom padding, as text does. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last) {
-  padding-bottom: calc(0.45em / 0.85);
+  padding-bottom: calc(0.75em / 0.85);
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before {
-  bottom: calc(0.45em / 0.85);
+  bottom: calc(0.75em / 0.85);
 }
 
 /* The closing fence's line keeps its 0.4em of box above that padding, since lines are sized border-box. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last) {
-  height: calc(0.4em + 0.45em / 0.85);
+  height: calc(0.4em + 0.75em / 0.85);
 }
 
 /* The header row: the opening fence's line, 28px tall. */
@@ -61,23 +61,23 @@
   line-height: 28px;
 }
 
-/* A block right under a line of text, or right over one, keeps a gap from it, inside the line. */
+/* A block right under a line of text, or right over one, keeps a 10px gap from it, inside the line, as other blocks do. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text {
-  padding-top: 0.5em;
+  padding-top: 10px;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text::before {
-  top: 0.5em;
+  top: 10px;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text {
-  height: 0.9em;
-  padding-bottom: 0.5em;
+  height: calc(0.4em + 10px);
+  padding-bottom: 10px;
   box-sizing: border-box;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text::before {
-  bottom: 0.5em;
+  bottom: 10px;
 }
 
 /* A fence on a list item's line keeps the item's marker, just outside the box, with the label where code starts. */
@@ -94,8 +94,56 @@
   border-top-right-radius: var(--radius-row);
 }
 
-.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head:has(.cm-code-header:hover)::before {
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head:not(.cm-code-quiet):has(.cm-code-header:hover)::before {
   background-color: hsl(var(--foreground) / 0.07);
+}
+
+/*
+ * A block with no language: the opening fence's line is as short as the
+ * closing one's, so the code sits in the middle of the box. "Plain text" and
+ * Copy show over the box's top right corner on hover, on their own grey so
+ * the code under them stays out of the way, and nothing moves.
+ */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-quiet {
+  z-index: 1;
+  height: 0.4em;
+  line-height: 0.4em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-quiet.cm-code-after-text {
+  height: calc(0.4em + 10px);
+}
+
+.opal-editor .cm-editor .cm-code-quiet .cm-code-header {
+  position: absolute;
+  top: 4px;
+  right: calc(var(--code-right, 0px) + 6px);
+  width: auto;
+  height: 22px;
+  gap: 2px;
+  line-height: 22px;
+}
+
+.opal-editor .cm-editor .cm-code-after-text.cm-code-quiet .cm-code-header {
+  top: calc(10px + 4px);
+}
+
+/* The box's own grey, made opaque over the page, so code under the corner does not show through. */
+.opal-editor .cm-editor .cm-code-quiet :is(.cm-code-label, .cm-code-copy) {
+  background: linear-gradient(var(--editor-sunken), var(--editor-sunken)) hsl(var(--canvas));
+}
+
+.opal-editor .cm-editor .cm-code-quiet .cm-code-label {
+  margin-left: 0;
+}
+
+.opal-editor .cm-editor .cm-code-quiet :is(.cm-code-label, .cm-code-copy):hover {
+  background: linear-gradient(hsl(var(--surface-hover)), hsl(var(--surface-hover))), linear-gradient(var(--editor-sunken), var(--editor-sunken)) hsl(var(--canvas));
+}
+
+/* Over the code, the corner shows on hover or keyboard focus only, so it never covers the line being typed. */
+.opal-editor .cm-editor .cm-code-quiet .cm-code-header[data-active]:not(:hover, [data-hover], :focus-within) :is(.cm-code-label, .cm-code-copy:not([data-copied])) {
+  opacity: 0;
 }
 
 /* The closing fence's line: the box's bottom edge. */
@@ -115,17 +163,36 @@
   padding-bottom: 0.35em;
 }
 
-/* No closing fence: a dashed bottom edge and a footer saying so. */
+/*
+ * No closing fence: a dashed bottom edge and a footer saying so. The footer
+ * sits in the last line's bottom padding, out of the text's flow, so no
+ * empty line forms after it. When the last line is empty, as a file's final
+ * line break leaves it, the footer is that line.
+ */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-unclosed {
+  --open-end-height: calc(var(--text-label-size) * 1.4 + 14px);
+  padding-bottom: var(--open-end-height);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-unclosed.cm-code-unclosed-empty {
+  height: var(--open-end-height);
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
+
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-unclosed::before {
   border-bottom: 1px dashed hsl(var(--border-default));
 }
 
 .opal-editor .cm-editor .cm-code-open-end {
+  position: absolute;
+  bottom: 0;
+  /* Where the code starts, past the box's edge and padding. */
+  left: calc(var(--code-box-left) + 1em);
   display: block;
-  /* Out of the code's hanging indent, in the code's own font, so the footer lines up with the code. */
-  margin-left: -2ch;
-  padding: 0.4em 0 0.15em;
+  padding: 6px 0 8px;
   text-indent: 0;
+  white-space: nowrap;
   user-select: none;
 }
 
@@ -554,7 +621,8 @@
 
 .opal-editor .cm-editor .cm-diagram-box {
   box-sizing: border-box;
-  padding: 0 16px 16px;
+  /* The label lines up with a code block's: 1em of the code's 0.85em, less the border. */
+  padding: 0 calc(0.85em - 1px) 16px;
   border: 1px solid hsl(var(--border-subtle));
   border-radius: var(--radius-row);
   background-color: hsl(var(--canvas));
@@ -606,8 +674,10 @@
 
 .opal-editor .cm-editor .cm-diagram-image {
   display: block;
+  width: auto;
   max-width: 100%;
   height: auto;
+  max-height: 400px;
 }
 
 .opal-editor .cm-editor .cm-diagram-source {
@@ -619,6 +689,14 @@
   font-size: 0.85em;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.opal-editor .cm-editor .cm-diagram-hint {
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 1.4;
 }
 
 .opal-editor .cm-editor .cm-diagram-error {
@@ -672,7 +750,7 @@
 }
 
 .opal-editor .cm-editor .cm-diagram-segment[aria-pressed="true"] {
-  background-color: hsl(var(--canvas));
+  background-color: hsl(var(--surface-lift));
   box-shadow: 0 0 0 1px hsl(var(--border-subtle));
   color: hsl(var(--foreground));
 }
@@ -682,18 +760,19 @@
   box-shadow: 0 0 0 2px hsl(var(--focus));
 }
 
-/* Pocket's flowcharts: a top-to-bottom chain of boxes. */
+/* Pocket's flowcharts: a top-to-bottom chain of boxes, each as wide as the widest. */
 .opal-editor .cm-editor .cm-diagram-chain {
   display: flex;
+  width: max-content;
+  max-width: min(24rem, 100%);
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   font-family: var(--font-sans);
   font-feature-settings: var(--font-features);
   font-size: var(--text-ui-size);
 }
 
 .opal-editor .cm-editor .cm-diagram-step {
-  max-width: min(24rem, 100%);
   padding: 6px 12px;
   border: 1px solid hsl(var(--foreground));
   border-radius: 4px;
@@ -707,6 +786,7 @@
   display: flex;
   height: 24px;
   align-items: center;
+  justify-content: center;
   color: hsl(var(--text-tertiary));
 }
 

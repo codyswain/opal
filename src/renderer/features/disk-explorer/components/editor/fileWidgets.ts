@@ -1,3 +1,4 @@
+import { syntaxTree } from '@codemirror/language';
 import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
@@ -83,7 +84,8 @@ export function metaLine(name: string, kind: FileKind, info: FileInfo | null | u
   const parts = [kindLabel(name, kind)];
   if (info?.pages) parts.push(`${info.pages} ${info.pages === 1 ? 'page' : 'pages'}`);
   if (info?.duration) parts.push(formatDuration(info.duration));
-  if (info?.size) parts.push(formatBytes(info.size));
+  // An empty file says 0 B like any other.
+  if (typeof info?.size === 'number') parts.push(formatBytes(info.size));
   return parts.join(' · ');
 }
 
@@ -130,6 +132,7 @@ export class FileChipWidget extends WidgetType {
     chip.dataset.object = 'file';
     chip.setAttribute('role', 'link');
     chip.setAttribute('aria-label', `${ref.url ? 'Video' : kindLabel(fileName(ref), ref.kind)}, ${name}`);
+    chip.title = name;
     if (ref.path === null && !ref.url) chip.classList.add('cm-file-unresolved');
     chip.append(iconNode(ref.url ? 'play' : iconFor(fileName(ref), ref.kind), 16, 'cm-file-chip-icon'), element('span', 'cm-file-chip-name', name));
     if (ref.path) {
@@ -214,7 +217,7 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
       case 'unreadable': {
         const what = ref.kind === 'video' ? "Can't play this video in Opal" : ref.kind === 'audio' ? "Can't play this audio in Opal" : ref.kind === 'pdf' ? "Can't read this PDF" : "Can't read this file";
         meta.textContent = what;
-        actions.append(button(app ? `Open in ${app}` : 'Open in App', () => { const at = refFrom(view, card); if (at) void openFile(view, at, 'app'); }));
+        actions.append(button(app ? `Open in ${app}` : 'Open', () => { const at = refFrom(view, card); if (at) void openFile(view, at, 'app'); }));
         break;
       }
       default:
@@ -526,7 +529,7 @@ export class PdfPreviewWidget extends WidgetType {
     }
     const firstPage = async () => {
       const url = await thumbnailUrl(path, Math.max(240, Math.round(view.contentDOM.clientWidth || 700)));
-      if (!url || reading.has(this.key)) return;
+      if (!url || readers.has(this.key)) return;
       const image = element('img', 'cm-file-pdf-image');
       image.src = url;
       image.alt = `First page of ${name}`;
@@ -538,8 +541,9 @@ export class PdfPreviewWidget extends WidgetType {
     done.hidden = true;
     const read = button('Read here', () => openReader());
     read.classList.add('cm-file-pdf-read');
+    const readers = readersOf(view);
     const closeReader = () => {
-      reading.delete(this.key);
+      readers.delete(this.key);
       if (liveReader?.key === this.key) liveReader = null;
       page.classList.remove('cm-file-pdf-reading');
       page.style.height = `${height}px`;
@@ -551,14 +555,14 @@ export class PdfPreviewWidget extends WidgetType {
     };
     // Chromium's viewer, one per window; it stays through redraws until Done or Escape.
     const openReader = () => {
-      if (liveReader && liveReader.key !== this.key) liveReader.close();
-      let viewer = reading.get(this.key);
+      if (liveReader && (liveReader.key !== this.key || liveReader.page !== page)) liveReader.close();
+      let viewer = readers.get(this.key);
       if (!viewer) {
         viewer = document.createElement('embed');
         viewer.setAttribute('type', 'application/pdf');
         viewer.setAttribute('src', `${toOpalFileUrl(path)}#toolbar=0&view=FitH${fragmentValue(ref, 'page') ? `&page=${fragmentValue(ref, 'page')}` : ''}`);
         viewer.className = 'cm-file-pdf-viewer';
-        reading.set(this.key, viewer);
+        readers.set(this.key, viewer);
       }
       liveReader = { key: this.key, close: closeReader, view, page };
       page.classList.add('cm-file-pdf-reading');
@@ -576,12 +580,21 @@ export class PdfPreviewWidget extends WidgetType {
         return;
       }
       meta.textContent = [info?.pages ? `${info.pages} ${info.pages === 1 ? 'page' : 'pages'}` : null, info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
-      if (reading.has(this.key)) openReader();
-      else void firstPage();
+      if (!readers.has(this.key)) {
+        void firstPage();
+        return;
+      }
+      // Once CodeMirror has taken the old element off the page; a second embed of the same file leaves the reader where it is.
+      queueMicrotask(() => {
+        if (!readers.get(this.key)?.isConnected) openReader();
+        else void firstPage();
+      });
     };
     const known = knownInfo(path);
     if (known !== undefined) show(known);
     else void fileInfo(path).then((info) => { show(info); view.requestMeasure(); });
+    // The bar's Open in Preview names the app; ask now so it is known by the first click.
+    void appFor(path);
     return wrap;
   }
 
@@ -590,8 +603,17 @@ export class PdfPreviewWidget extends WidgetType {
   }
 }
 
-/** The PDF viewers open with Read here, by widget, so a redraw keeps them; one is live in the window at a time. */
-const reading = new Map<string, HTMLElement>();
+/** The PDF viewers open with Read here, per page and by widget, so a redraw keeps them; one is live in the window at a time. */
+const reading = new WeakMap<EditorView, Map<string, HTMLElement>>();
+
+function readersOf(view: EditorView): Map<string, HTMLElement> {
+  let readers = reading.get(view);
+  if (!readers) {
+    readers = new Map();
+    reading.set(view, readers);
+  }
+  return readers;
+}
 let liveReader: { key: string; close: () => void; view: EditorView; page: HTMLElement } | null = null;
 
 // Escape in the page that holds the reader puts the first page back. Escape anywhere else, as in a menu, is left alone.
@@ -655,6 +677,7 @@ function restMedia(media: HTMLMediaElement): void {
     media.pause();
     media.removeAttribute('src');
     media.load();
+    observer?.unobserve(media);
   }, RELEASE_MS));
 }
 
@@ -731,7 +754,8 @@ export class VideoWidget extends WidgetType {
       if (info?.width && info.height) box.style.aspectRatio = `${info.width} / ${info.height}`;
       // After the old element, if CodeMirror is drawing this line again, has been put to rest.
       queueMicrotask(() => {
-        if (box.querySelector('video')) return;
+        // Not once CodeMirror has taken the preview off the page meanwhile: nothing would put that player to rest.
+        if (!wrap.isConnected || box.querySelector('video')) return;
         const media = takeMedia('video', src);
         media.addEventListener('error', () => {
           if (media.error && media.error.code !== MEDIA_ERR_ABORTED && wrap.contains(media)) fillAsCard(view, wrap, this.drawn, 'unplayable');
@@ -757,7 +781,7 @@ export class VideoWidget extends WidgetType {
   }
 }
 
-/** Audio: one row with the card's edge, an icon, the name and duration, and a native player on the right. */
+/** Audio: the card's width and edge, an icon, the name and duration, and a native player under them, 94px tall. */
 export class AudioWidget extends WidgetType {
   readonly key: string;
 
@@ -768,7 +792,7 @@ export class AudioWidget extends WidgetType {
 
   eq(other: AudioWidget) { return other.key === this.key; }
 
-  get estimatedHeight() { return 56; }
+  get estimatedHeight() { return 94; }
 
   toDOM(view: EditorView) {
     const { ref, name } = this.drawn;
@@ -797,7 +821,7 @@ export class AudioWidget extends WidgetType {
       }
       meta.textContent = [info?.duration ? formatDuration(info.duration) : null, info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
       queueMicrotask(() => {
-        if (row.querySelector('audio')) return;
+        if (!wrap.isConnected || row.querySelector('audio')) return;
         const media = takeMedia('audio', toOpalFileUrl(path));
         media.addEventListener('error', () => {
           if (media.error && media.error.code !== MEDIA_ERR_ABORTED && wrap.contains(media)) fillAsCard(view, wrap, this.drawn, 'unplayable');
@@ -1047,6 +1071,45 @@ const framedFiles = ViewPlugin.fromClass(class {
   }
 });
 
+/**
+ * A file deleted, moved or replaced while its page is open, by a sync or in
+ * Finder: when its folder changes, the page asks about the files it shows
+ * from there again and redraws only those whose answer changed, so a card
+ * turns into File not found or Moved, and nothing else on the page moves.
+ */
+const changedFiles = ViewPlugin.define((view) => {
+  const changed = (directories: readonly string[]) => {
+    if (!view.dom.isConnected) return;
+    const folders = new Set(directories);
+    const links = view.state.field(resolvedLinks, false) ?? new Map<string, string | null>();
+    const page = view.state.facet(pageContext).path;
+    const paths = new Set<string>();
+    for (const { from, to } of view.visibleRanges) {
+      syntaxTree(view.state).iterate({
+        from,
+        to,
+        enter: (node) => {
+          if (!FILE_NODES.includes(node.name)) return;
+          const ref = fileRefOf(view.state, node.node, links, page);
+          if (ref?.path && folders.has(parentFsPath(ref.path) ?? '')) paths.add(ref.path);
+        },
+      });
+    }
+    for (const path of paths) {
+      const before = knownInfo(path);
+      if (before === undefined) continue;
+      forgetInfo(path);
+      void fileInfo(path).then((after) => {
+        if (!view.dom.isConnected) return;
+        if (before?.status === after?.status && before?.size === after?.size && before?.mtimeMs === after?.mtimeMs) return;
+        view.dispatch({ effects: fileChanged.of(toOpalFileUrl(path)) });
+      });
+    }
+  };
+  const stop = typeof window !== 'undefined' && window.diskAPI?.onChanged ? window.diskAPI.onChanged(({ directories }) => changed(directories)) : null;
+  return { destroy: () => stop?.() };
+});
+
 /** Files on every page: their looks, and in documents their objects and bar. */
 export const fileObjects: Extension = [
   nodeDecorators.of({ nodes: FILE_NODES, decorate: drawFile }),
@@ -1056,6 +1119,7 @@ export const fileObjects: Extension = [
   objectKinds.of(webPictureKind(false)),
   Prec.highest(fileClicks),
   framedFiles,
+  changedFiles,
   wikiNames,
   urlChips,
   linkPicker,

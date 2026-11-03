@@ -16,14 +16,14 @@ describe('where a link with a scheme goes', () => {
   it('keeps vault links in Opal, whatever app wrote them', () => {
     expect(routeLink('opal://open?path=Library%2Fx%2FPlan.mdo', ROOTS)).toEqual({ kind: 'vault', target: 'Library/x/Plan.mdo' });
     expect(routeLink('obsidian://open?vault=vault&file=Library%2Fx%2FPlan', ROOTS)).toEqual({ kind: 'vault', target: 'Library/x/Plan' });
-    expect(routeLink('https://codys-mac-mini-1.tail51bb4a.ts.net/o/Library/x/My%20Plan.md', ROOTS)).toEqual({ kind: 'vault', target: 'Library/x/My Plan.md' });
+    expect(routeLink('https://notes.example.ts.net/o/Library/x/My%20Plan.md', ROOTS)).toEqual({ kind: 'vault', target: 'Library/x/My Plan.md' });
     expect(routeLink('file:///Vault/Library/x/a%20b.md', ROOTS)).toEqual({ kind: 'vault', target: '/Vault/Library/x/a b.md' });
   });
 
   it('sends web, mail, Linear and Slack links out, and refuses the rest', () => {
     expect(routeLink('https://example.com/a', ROOTS)).toEqual({ kind: 'external', url: 'https://example.com/a' });
     expect(routeLink('mailto:a@b.com', ROOTS).kind).toBe('external');
-    expect(routeLink('linear://parametricpbc/issue/SW-640', ROOTS).kind).toBe('external');
+    expect(routeLink('linear://acme/issue/ENG-12', ROOTS).kind).toBe('external');
     expect(routeLink('slack://channel?id=C1', ROOTS).kind).toBe('external');
     expect(routeLink('file:///etc/hosts', ROOTS)).toEqual({ kind: 'outside', path: '/etc/hosts' });
     expect(routeLink('javascript:alert(1)', ROOTS).kind).toBe('refused');

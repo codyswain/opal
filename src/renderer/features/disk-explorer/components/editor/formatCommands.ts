@@ -54,9 +54,12 @@ function textStart(state: EditorState, line: Line, marks: ReadonlySet<string> = 
 function touchedLines(state: EditorState): Line[] {
   const lines = new Map<number, Line>();
   for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from);
     const last = state.doc.lineAt(range.to);
     const end = !range.empty && range.to === last.from && last.from > range.from ? last.number - 1 : last.number;
-    for (let number = state.doc.lineAt(range.from).number; number <= end; number += 1) lines.set(number, state.doc.line(number));
+    // A selection that starts at the end of a line, as one past a formula's line break does, leaves that line out too.
+    const start = !range.empty && range.from === first.to && range.to > first.to ? first.number + 1 : first.number;
+    for (let number = start; number <= end; number += 1) lines.set(number, state.doc.line(number));
   }
   return [...lines.values()].sort((a, b) => a.number - b.number);
 }
@@ -259,7 +262,8 @@ function ordered(changes: Change[]): Change[] {
 function addStyle(state: EditorState, text: SelectedText, name: string, marker: string): Change[] | null {
   const fitted = fitMarks(state, text.from, text.to);
   if (!fitted) return null;
-  const { from, to } = outOf(text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
+  const split = splitAt(state, text.spans.filter((span) => span.name !== name), fitted.from, fitted.to);
+  const { from, to } = outOf(text.spans.filter((span) => span.name !== name && !split.spans.includes(span)), fitted.from, fitted.to);
   const touching = text.spans.filter((span) => span.name === name && span.to >= from && span.from <= to);
   const left = touching.filter((span) => span.textFrom < from).sort((a, b) => a.from - b.from)[0];
   const right = touching.filter((span) => span.textTo > to).sort((a, b) => b.to - a.to)[0];
@@ -273,7 +277,37 @@ function addStyle(state: EditorState, text: SelectedText, name: string, marker: 
     if (span !== left) changes.push({ from: span.from, to: span.textFrom, insert: '' });
     if (span !== right) changes.push({ from: span.textTo, to: span.to, insert: '' });
   }
-  return changes;
+  return [...split.changes, ...changes];
+}
+
+/**
+ * Bold, italic and strikethrough that start inside the selection and end
+ * past it, or the other way round, close at the selection's edge and open
+ * again across the spaces there, so new marks never take in words that
+ * were not selected. Only at a word's edge, where both marks parse.
+ */
+function splitAt(state: EditorState, spans: readonly InlineSpan[], from: number, to: number): { spans: InlineSpan[]; changes: Change[] } {
+  const split: InlineSpan[] = [];
+  const changes: Change[] = [];
+  for (const span of spans) {
+    if (!EMPHASIS.has(span.name)) continue;
+    const opens = state.sliceDoc(span.from, span.textFrom);
+    const closes = state.sliceDoc(span.textTo, span.to);
+    if (span.from >= from && to > span.textFrom && to < span.textTo) {
+      let openAt = to;
+      while (openAt < span.textTo && isSpace(state, openAt)) openAt += 1;
+      if (openAt === to || openAt === span.textTo || !closesAt(state, to) || !opensAt(state, openAt)) continue;
+      changes.push({ from: to, to, insert: closes, nesting: -1 }, { from: openAt, to: openAt, insert: opens });
+      split.push(span);
+    } else if (span.to <= to && from > span.textFrom && from < span.textTo) {
+      let closeAt = from;
+      while (closeAt > span.textFrom && isSpace(state, closeAt - 1)) closeAt -= 1;
+      if (closeAt === from || closeAt === span.textFrom || !closesAt(state, closeAt) || !opensAt(state, from)) continue;
+      changes.push({ from: closeAt, to: closeAt, insert: closes }, { from, to: from, insert: opens, nesting: 1 });
+      split.push(span);
+    }
+  }
+  return { spans: split, changes };
 }
 
 /**
@@ -494,6 +528,63 @@ function joinsBelow(state: EditorState, next: Line): boolean {
   return false;
 }
 
+// Formatting that may run over a line break inside a paragraph.
+const SPLIT = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough']);
+
+/** Whether `line` carries on a paragraph that starts on an earlier line. */
+function continuesParagraph(state: EditorState, line: Line): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(textStart(state, line, QUOTE_MARK), 1); node; node = node.parent) {
+    if (node.name === 'Paragraph') return state.doc.lineAt(node.from).number < line.number;
+    if (node.name === 'ListItem' || node.name === 'Blockquote' || node.name === 'Document') return false;
+  }
+  return false;
+}
+
+/**
+ * The marks that keep inline formatting whole when `line` leaves its
+ * paragraph as a heading or a list item: a span that runs onto the line
+ * from the line above closes at that line's end and opens again at `at`,
+ * where the line's text will start; with `below`, a span that runs on past
+ * the line closes at its end and opens again on the next line.
+ */
+function splitSpans(state: EditorState, line: Line, at: number, below: boolean): ChangeSpec[] {
+  const changes: ChangeSpec[] = [];
+  const end = (other: Line) => other.from + other.text.trimEnd().length;
+  for (const span of inlineSpans(state, line.from, line.to)) {
+    if (!SPLIT.has(span.name)) continue;
+    const open = state.sliceDoc(span.from, span.textFrom);
+    const close = state.sliceDoc(span.textTo, span.to);
+    if (span.from < line.from && span.to > line.from && line.number > 1) changes.push({ from: end(state.doc.line(line.number - 1)), insert: close }, { from: at, insert: open });
+    if (below && span.from < line.to && span.to > line.to && line.number < state.doc.lines) {
+      const next = state.doc.line(line.number + 1);
+      changes.push({ from: end(line), insert: close }, { from: textStart(state, next, QUOTE_MARK), insert: open });
+    }
+  }
+  return changes;
+}
+
+/**
+ * The indent a paragraph's later line gets when it becomes a heading or a
+ * list item, or none outside a list: a heading stays in the item it is in,
+ * at the item's content column, and an item becomes that item's sibling. A
+ * deep indent, which a paragraph's line never shows, would keep the marks
+ * from reading as a heading or a list.
+ */
+function leadOf(state: EditorState, line: Line, sibling: boolean): { from: number; to: number; insert: string } | null {
+  if (!continuesParagraph(state, line)) return null;
+  const from = line.from + quoteOf(line).length;
+  const to = skipSpaces(state, from, line.to);
+  let indent = '';
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(to, 1); node; node = node.parent) {
+    if (node.name !== 'ListItem') continue;
+    const first = state.doc.lineAt(node.from);
+    const item = listItemOf(state, first);
+    if (item) indent = sibling ? first.text.slice(quoteOf(first).length, item.markFrom - first.from) : first.text.slice(quoteOf(first).length, item.contentFrom - first.from).replace(/[^\t]/g, ' ');
+    break;
+  }
+  return state.sliceDoc(from, to) === indent ? null : { from, to, insert: indent };
+}
+
 /**
  * Normal text (0) or a heading level on each selected line: adds, changes or
  * removes the "#" marks. Normal also removes a closing "##". A blank line
@@ -503,18 +594,26 @@ export function setHeading(level: number): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     if (!treeFor(state, selectionEnd(state))) return true;
-    // A callout's title line takes no heading.
-    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line) && !setextLater(state, line));
+    // A callout's title line and a task take no heading: the box holds one line of text.
+    const lines = selectedLines(state).filter((line) => !calloutMarker(state, line) && !setextLater(state, line) && listItemOf(state, line)?.kind !== 'task');
     const changes = lines.flatMap((line): ChangeSpec[] => {
       const heading = headingOf(state, line);
       if (heading?.node.name.startsWith('Setext')) return heading.level === level ? [] : rewriteSetext(state, line, heading.node, level);
       if (!heading) {
         const blank = !/[^\s>]/.test(line.text);
-        return level > 0 && (!blank || lines.length === 1) ? [{ from: textStart(state, line, BLOCK_MARKS), insert: `${'#'.repeat(level)} ` }] : [];
+        if (level === 0 || (blank && lines.length > 1)) return [];
+        const at = textStart(state, line, BLOCK_MARKS);
+        const lead = leadOf(state, line, false);
+        const selected = (other: number) => lines.some((each) => each.number === other);
+        return [...(lead ? [lead] : []), { from: at, insert: `${'#'.repeat(level)} ` }, ...splitSpans(state, line, at, !selected(line.number + 1))];
       }
       const [open, close] = heading.node.getChildren('HeaderMark');
       if (level > 0) return heading.level === level ? [] : [{ from: open.from, to: open.to, insert: '#'.repeat(level) }];
-      const marks: ChangeSpec[] = [{ from: open.from, to: skipSpaces(state, open.to, line.to) }];
+      const textFrom = skipSpaces(state, open.to, line.to);
+      // "## 5. Notes" as normal text stays text: the number's dot or a leading "-" is escaped, so no list starts.
+      const listy = /^(?:\d{1,9}(?=[.)][ \t]|[.)]$)|[-+*](?=[ \t]|$))/.exec(state.sliceDoc(textFrom, line.to));
+      const marks: ChangeSpec[] = [{ from: open.from, to: textFrom }];
+      if (listy) marks.push({ from: textFrom + listy[0].length - (/\d/.test(listy[0]) ? 0 : 1), insert: '\\' });
       if (close) marks.push({ from: line.from + state.sliceDoc(line.from, close.from).trimEnd().length, to: close.to });
       // Normal text sits on its own line, as Enter leaves it, unless that joins it to a block:
       // a list item, quote, table or HTML above takes it in, and a "---" or "===" below
@@ -537,6 +636,8 @@ export type ListKind = 'bullet' | 'number' | 'task';
 interface ListLine {
   kind: ListKind;
   markFrom: number;
+  /** Where the item's content column starts on its first line. */
+  contentFrom: number;
   textFrom: number;
   number: number;
 }
@@ -547,12 +648,28 @@ export function listItemOf(state: EditorState, line: Line): ListLine | null {
   if (mark.name !== 'ListMark' || mark.to > line.to || item?.name !== 'ListItem') return null;
   const box = item.getChild('Task')?.getChild('TaskMarker');
   const task = box && box.from <= line.to ? box : null;
+  // The content column: past the marker and the spaces after it, or one space when more than four follow.
+  const after = /^ */.exec(state.sliceDoc(mark.to, line.to))?.[0].length ?? 0;
+  const spaces = after > 4 ? 1 : after;
   return {
     kind: task ? 'task' : item.parent?.name === 'OrderedList' ? 'number' : 'bullet',
     markFrom: mark.from,
+    contentFrom: mark.to + spaces,
     textFrom: skipSpaces(state, task ? task.to : mark.to, line.to),
     number: Number.parseInt(state.sliceDoc(mark.from, mark.to), 10) || 1,
   };
+}
+
+/** Whether the list item that `line` starts goes on past that line with more text, which reads from its content column. */
+function carriesOn(state: EditorState, line: Line): boolean {
+  if (line.number >= state.doc.lines) return false;
+  const next = state.doc.line(line.number + 1);
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(textStart(state, line, QUOTE_MARK), 1); node; node = node.parent) {
+    if (node.name !== 'ListItem') continue;
+    const end = node.to > node.from && state.doc.lineAt(node.to).from === node.to ? node.to - 1 : node.to;
+    return end >= next.from;
+  }
+  return false;
 }
 
 /** Whether a line belongs to a list item: its first line, or one the item carries on to. */
@@ -603,15 +720,38 @@ export function toggleList(kind: ListKind): StateCommand {
           const previous = line.number > 1 ? listItemOf(state, state.doc.line(line.number - 1)) : null;
           number = previous?.kind === 'number' ? previous.number + 1 : 1;
         }
-        const mark = kind === 'bullet' ? '- ' : kind === 'task' ? '- [ ] ' : `${number++}. `;
-        if (item) changes.push({ from: item.markFrom, to: item.textFrom, insert: mark });
-        else changes.push({ from: textStart(state, line, QUOTE_MARK), insert: mark });
+        let mark = kind === 'bullet' ? '- ' : kind === 'task' ? '- [ ] ' : `${number++}. `;
+        if (item) {
+          // An item whose later lines hold text keeps its content column, so a formula or code in it reads the same.
+          const column = item.contentFrom - item.markFrom;
+          const width = mark.indexOf(' ') + 1;
+          if (width < column && carriesOn(state, line)) mark = `${mark.slice(0, width - 1)}${' '.repeat(column - width + 1)}${mark.slice(width)}`;
+          changes.push({ from: item.markFrom, to: item.textFrom, insert: mark });
+          return;
+        }
+        // A task's box holds one line of text, so a heading becomes the task's text.
+        const heading = kind === 'task' ? headingOf(state, line) : null;
+        const open = heading?.node.name.startsWith('ATX') ? heading.node.getChild('HeaderMark') : null;
+        const from = textStart(state, line, QUOTE_MARK);
+        const lead = leadOf(state, line, true);
+        if (lead) changes.push(lead);
+        // Text that starts like a list marker stays text inside the new item.
+        const literal = !open && /^(?:[-+*]|\d{1,9}[.)])(?=[ \t]|$)/.exec(state.sliceDoc(from, line.to));
+        const escape = literal ? [{ from: from + literal[0].length - 1, insert: '\\' }] : [];
+        changes.push(open && open.from === from ? { from, to: skipSpaces(state, open.to, line.to), insert: mark } : { from, insert: mark }, ...escape);
+        const selected = (other: number) => lines.some((each) => each.number === other);
+        changes.push(...splitSpans(state, line, from, !selected(line.number + 1)));
       });
       if (!items[items.length - 1] && below && /[^\s>]/.test(below.text) && !listItemOf(state, below)) {
         changes.push({ from: last.to, insert: `\n${blankFor(last)}` });
       }
     }
-    dispatch(state.update({ changes, scrollIntoView: true, userEvent: 'input' }));
+    const changeSet = state.changes(changes);
+    // A caret where a marker went in goes after it, ready to type.
+    const { head } = state.selection.main;
+    const marked = state.selection.main.empty ? changes.find((change) => (change as { from: number }).from === head && (change as { insert?: string }).insert?.trim()) as { insert: string } | undefined : undefined;
+    const selection = marked ? { anchor: changeSet.mapPos(head, -1) + marked.insert.length } : undefined;
+    dispatch(state.update({ changes: changeSet, selection, scrollIntoView: true, userEvent: 'input' }));
     return true;
   };
 }

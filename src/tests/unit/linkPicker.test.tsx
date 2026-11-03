@@ -10,6 +10,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import { setLinkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
 import { LinkPopover } from '@/renderer/features/disk-explorer/components/editor/LinkPopover';
 import { linkCompletions, pickedText } from '@/renderer/features/disk-explorer/components/editor/linkPicker';
+import { linksResolved } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import { collectionResult, collectionRow, installCollectionsApi } from '@/tests/helpers/collectionsApi';
@@ -24,7 +25,7 @@ const DOC = '/Vault/Notes/Plan.mdo';
 const ROWS = [
   collectionRow({ entry: { path: '/Vault/Library/files/2026-11/q3.a3f9c2e1.pdf', name: 'q3.a3f9c2e1.pdf', kind: 'pdf' }, touchedAt: 3 }),
   collectionRow({ entry: { path: '/Vault/Projects/Roadmap.mdo', name: 'Roadmap.mdo', kind: 'markdown' }, touchedAt: 2 }),
-  collectionRow({ entry: { path: '/Vault/Decks/Gob deck.pptx', name: 'Gob deck.pptx', kind: 'other' }, touchedAt: 1 }),
+  collectionRow({ entry: { path: '/Vault/Decks/Demo deck.pptx', name: 'Demo deck.pptx', kind: 'other' }, touchedAt: 1 }),
 ];
 
 let views: EditorView[] = [];
@@ -76,7 +77,7 @@ describe('the [[ picker', () => {
     expect(result?.options.map((option) => [option.label, option.detail])).toEqual([
       ['q3.pdf', 'Library/files/2026-11'],
       ['Roadmap', 'Projects'],
-      ['Gob deck.pptx', 'Decks'],
+      ['Demo deck.pptx', 'Decks'],
     ]);
     expect(queries[0].sort).toEqual({ field: 'touched', direction: 'desc' });
     const typed = mount('See [[road');
@@ -102,7 +103,7 @@ describe('the [[ picker', () => {
     expect(text(view)).toBe('Intro\n![[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]]\n');
     const deck = mount('[[');
     await pick(deck, 2);
-    expect(text(deck)).toBe('[[Decks/Gob deck.pptx|Gob deck.pptx]]');
+    expect(text(deck)).toBe('[[Decks/Demo deck.pptx|Demo deck.pptx]]');
   });
 
   it('writes a plain link with Option+Enter, even on an empty line', () => {
@@ -130,14 +131,14 @@ describe('the [[ picker in tables, code and odd names', () => {
   };
 
   it('writes the alias pipe as \\| in a table cell, for a note and for a file', async () => {
-    const doc = '| Doc | Owner |\n| --- | --- |\n| [[ | Cody |\n';
+    const doc = '| Doc | Owner |\n| --- | --- |\n| [[ | Alex |\n';
     const note = mount(doc, doc.indexOf('[[') + 2);
     await pick(note, 1);
-    expect(text(note)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Projects/Roadmap.mdo\\|Roadmap]] | Cody |\n');
+    expect(text(note)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Projects/Roadmap.mdo\\|Roadmap]] | Alex |\n');
     expect(cells(note)).toEqual([2, 2]);
     const file = mount(doc, doc.indexOf('[[') + 2);
     await pick(file, 2);
-    expect(text(file)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Decks/Gob deck.pptx\\|Gob deck.pptx]] | Cody |\n');
+    expect(text(file)).toBe('| Doc | Owner |\n| --- | --- |\n| [[Decks/Demo deck.pptx\\|Demo deck.pptx]] | Alex |\n');
     expect(cells(file)).toEqual([2, 2]);
   });
 
@@ -155,6 +156,21 @@ describe('the [[ picker in tables, code and odd names', () => {
     expect(text(view)).toBe('See [[Library/files/2026-11/q3.a3f9c2e1.pdf|q3.pdf]] today');
   });
 
+  it('keeps the line typed on clear of the footer at the page\'s bottom edge', () => {
+    const view = mount('See [[big');
+    const bottoms = view.state.facet(EditorView.scrollMargins).map((margin) => margin(view)?.bottom ?? 0);
+    expect(Math.max(...bottoms)).toBeGreaterThanOrEqual(56);
+  });
+
+  it('names a stored file as this page already shows it, in the row and in the link', async () => {
+    const stored = '[[Library/files/2026-11/q3.a3f9c2e1.pdf|Q3 report.pdf]]';
+    const view = mount(`${stored}\nSee [[ today`, stored.length + 7);
+    act(() => { view.dispatch({ effects: linksResolved.of({ 'Library/files/2026-11/q3.a3f9c2e1.pdf': '/Vault/Library/files/2026-11/q3.a3f9c2e1.pdf' }) }); });
+    const result = await pick(view, 0);
+    expect(result.options[0].label).toBe('Q3 report.pdf');
+    expect(text(view)).toBe(`${stored}\nSee [[Library/files/2026-11/q3.a3f9c2e1.pdf|Q3 report.pdf]] today`);
+  });
+
   it('writes a note whose name holds # as a Markdown link', () => {
     const entry = { path: '/Vault/Projects/PR #12 notes.md', name: 'PR #12 notes.md' };
     expect(pickedText(entry, DOC, false, false).text).toBe('[PR #12 notes](<../Projects/PR %2312 notes.md>)');
@@ -166,11 +182,11 @@ describe('the link form\'s address field', () => {
     const view = mount('Read this now\n', 0);
     act(() => { view.dispatch({ selection: { anchor: 5, head: 9 }, effects: setLinkEditor.of({ from: 5, to: 9, editing: true }) }); });
     render(<TooltipProvider><LinkPopover view={view} editor={{ from: 5, to: 9, editing: true }} /></TooltipProvider>);
-    fireEvent.change(screen.getByLabelText('Link'), { target: { value: 'gob' } });
+    fireEvent.change(screen.getByLabelText('Link'), { target: { value: 'demo' } });
     const list = await screen.findByTestId('link-address-matches');
-    expect(queries.at(-1)?.filters).toContainEqual({ field: 'name', op: 'matches', value: 'gob' });
+    expect(queries.at(-1)?.filters).toContainEqual({ field: 'name', op: 'matches', value: 'demo' });
     fireEvent.click(list.querySelectorAll('button')[2]);
-    expect(screen.getByLabelText('Link')).toHaveValue('../Decks/Gob%20deck.pptx');
+    expect(screen.getByLabelText('Link')).toHaveValue('../Decks/Demo%20deck.pptx');
     fireEvent.change(screen.getByLabelText('Link'), { target: { value: 'https://example.com' } });
     await waitFor(() => expect(screen.queryByTestId('link-address-matches')).toBeNull());
   });

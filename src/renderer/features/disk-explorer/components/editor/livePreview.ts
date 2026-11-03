@@ -273,10 +273,23 @@ function findDefinitions(doc: Text): LinkDefinitions {
   const long: { line: number; from: number; to: number }[] = [];
   let at = 0;
   let fence: string | null = null;
+  // A fence in a quote ends with the quote, and one on a list item's line with the item, as CommonMark reads them.
+  let quotes = 0;
+  let itemIndent = 0;
   for (const line of doc.iterLines()) {
+    if (fence !== null && (quotes > 0 || itemIndent > 0)) {
+      const lead = /^[ \t>]*/.exec(line)?.[0] ?? '';
+      const ended = (lead.match(/>/g)?.length ?? 0) < quotes || (itemIndent > 0 && line.trim() !== '' && lead.replace(/^.*>[ ]?/, '').length < itemIndent);
+      if (ended) fence = null;
+    }
     const marks = line.includes('``') || line.includes('~~') ? FENCE_LINE.exec(line) : null;
-    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) fence = marks[1];
-    else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
+    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) {
+      fence = marks[1];
+      const before = line.slice(0, line.indexOf(marks[1]));
+      quotes = before.match(/>/g)?.length ?? 0;
+      const inQuote = before.replace(/^.*>[ ]?/, '');
+      itemIndent = /(?:[-+*]|\d+[.)])[ \t]+$/.test(inQuote) ? inQuote.length : 0;
+    } else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
     const match = fence === null && line.includes(']:') ? DEFINITION.exec(line) : null;
     if (match) {
       const key = referenceKey(match[1]);
@@ -521,6 +534,8 @@ const blockPreview = StateField.define<BlockPreview>({
 const hidden = Decoration.replace({});
 const hiddenCaretAfter = Decoration.replace({ caretAfter: true });
 const inlineCode = Decoration.mark({ class: 'cm-md-code' });
+// Short code never breaks across lines.
+const shortInlineCode = Decoration.mark({ class: 'cm-md-code cm-md-code-short' });
 const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 const taskDone = Decoration.mark({ class: 'cm-md-task-done' });
 const calloutTitle = Decoration.mark({ class: 'cm-md-callout-title' });
@@ -622,7 +637,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           return false;
         }
         case 'InlineCode':
-          out.push(inlineCode.range(ref.from, ref.to));
+          out.push((ref.to - ref.from <= 26 ? shortInlineCode : inlineCode).range(ref.from, ref.to));
           return true;
         case 'Escape':
           if (!reveal.span(ref.from, ref.to)) hide(ref.from, ref.from + 1);
@@ -633,7 +648,8 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           if (target === null) return true;
           const [open, close] = node.getChildren('LinkMark');
           if (close.from > open.to) {
-            out.push(Decoration.mark({ class: 'cm-md-link', attributes: target ? { 'data-href': target } : undefined }).range(open.to, close.from));
+            // Inclusive, so a formula or chip at either end of the link text is drawn inside the link and takes its clicks.
+            out.push(Decoration.mark({ class: 'cm-md-link', attributes: target ? { 'data-href': target } : undefined, inclusive: true }).range(open.to, close.from));
           }
           if (!reveal.span(ref.from, ref.to)) {
             hide(open.from, open.to);

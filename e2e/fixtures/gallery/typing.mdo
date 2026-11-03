@@ -14,6 +14,10 @@ A path: C:\\*.txt, and snake_case_names stay as they are.
 
 Stars kept as text: \*\*not bold\*\*, and a \`tick\` that is not code.
 
+Tags and entities as typed: a \<br> tag and \&amp;, and backslashes kept: \\*stars\\\*.
+
+Short code stays on one line: run `npm test`, then `npm run build && npm test -- --watch` when it wraps.
+
 ## Hard breaks
 
 First line of an address, ending in a backslash\
@@ -25,6 +29,10 @@ Third line.
 **b**[**old** t](https://example.com) is one link over half of a bold word.
 
 A [plan link](https://example.com/plan), [[Plan]] and https://plan.example.com/plan: only the first is text that Replace changes.
+
+## Replaced across formatting
+
+Intro with Strong **words**, and **Fourth *slanted*** *here*: replacing or bolding half of a span splits it at the word.
 
 ## Formatting next to punctuation
 

@@ -194,3 +194,14 @@ describe('format state', () => {
     expect(formatState(state).canRedo).toBe(true);
   });
 });
+
+describe('bold over half of other formatting', () => {
+  it('splits a half-covered italic span rather than bolding words that were not selected', () => {
+    expect(run('‹Fourth *slanted› here*.', toggleMarker('**'))).toBe('**‹Fourth *slanted›*** *here*.');
+    expect(run('*Fourth ‹slanted* here›.', toggleMarker('**'))).toBe('*Fourth* ***‹slanted* here›**.');
+  });
+
+  it('still widens where a split cannot parse, inside a word', () => {
+    expect(run('‹ab*cd›ef*', toggleMarker('**'))).toBe('**‹ab*cd›ef***');
+  });
+});

@@ -202,6 +202,60 @@ try {
   const replaced = await text();
   check('Replace All changes the link text and the sentence', replaced.includes('[a roadmap link](https://example.com/plan)') && replaced.includes('The roadmap is in'), JSON.stringify(replaced.split('\n')[8]));
   check('Replace All leaves the link address, the wiki link target and the bare URL', replaced.includes('(https://example.com/plan)') && replaced.includes('[[Plan]]') && replaced.includes('https://plan.example.com/plan'));
+
+  // A match that starts in plain text and ends inside bold, then Cmd+Z and Shift+Cmd+Z with focus on the bar's button.
+  await page.evaluate(() => {
+    const editor = document.querySelector('.cm-content').cmTile.root.view;
+    const end = editor.state.doc.length;
+    editor.dispatch({ changes: { from: end, insert: 'Intro with **bold words**, more.\n' } });
+  });
+  await search.fill('with bold');
+  await page.locator('.cm-search input[name="replace"]').fill('with Strong');
+  await page.waitForTimeout(200);
+  const count = await page.locator('.cm-search .opal-searchCount').textContent();
+  check('the Find bar counts the matches', count === '1 match', JSON.stringify(count));
+  await page.locator('.cm-search button[name="replaceAll"]').click();
+  await page.waitForTimeout(200);
+  check('Replace All across a bold opener keeps the rest bold with no stars', (await text()).includes('Intro with Strong **words**, more.'), JSON.stringify((await text()).split('\n').at(-2)));
+  await page.keyboard.press('Meta+z');
+  await page.waitForTimeout(200);
+  check('Cmd+Z on the Replace all button undoes the replace', (await text()).includes('Intro with **bold words**, more.'), JSON.stringify((await text()).split('\n').at(-2)));
+  await page.keyboard.press('Meta+Shift+z');
+  await page.waitForTimeout(200);
+  check('Shift+Cmd+Z there redoes it', (await text()).includes('Intro with Strong **words**, more.'), JSON.stringify((await text()).split('\n').at(-2)));
+
+  // The options are toggles reached by Tab, with a focus ring, toggled by Space.
+  await search.fill('');
+  await search.focus();
+  for (let index = 0; index < 4; index += 1) await page.keyboard.press('Tab');
+  const focused = await page.evaluate(() => {
+    const active = document.activeElement;
+    const label = active?.closest('label');
+    return { name: active?.getAttribute('name'), outline: label ? getComputedStyle(label).outlineStyle : null };
+  });
+  await page.keyboard.press('Space');
+  const toggled = await page.evaluate(() => document.querySelector('.cm-search input[name="case"]').checked);
+  check('Tab reaches Match case, which shows a focus ring and toggles with Space', focused.name === 'case' && focused.outline === 'solid' && toggled, JSON.stringify({ ...focused, toggled }));
+  await search.fill('plan');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(150);
+  for (let index = 0; index < 3; index += 1) await page.keyboard.press('Tab');
+  await shoot('typing-find-toggles');
+  // In a narrow window the bar's controls wrap inside it.
+  const size = await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; const [width, height] = win.getSize(); win.setSize(760, height); return [width, height]; });
+  await page.waitForTimeout(300);
+  const fits = await page.evaluate(() => {
+    const bar = document.querySelector('.cm-panel.cm-search').getBoundingClientRect();
+    return [...document.querySelectorAll('.cm-search input, .cm-search button, .cm-search label')].every((control) => {
+      const box = control.getBoundingClientRect();
+      return box.width === 0 || (box.left >= bar.left - 1 && box.right <= bar.right + 1);
+    });
+  });
+  check('in a narrow window every Find bar control stays inside the bar', fits);
+  await shoot('typing-find-narrow');
+  await app.evaluate(({ BrowserWindow }, [width, height]) => { BrowserWindow.getAllWindows()[0].setSize(width, height); }, size);
+  await page.waitForTimeout(300);
+  await page.locator('.cm-search input[name="case"]').uncheck();
   await page.keyboard.press('Escape');
 
   // Edit > Paste and Match Style is the page's command, so a click pastes literally too.
@@ -236,7 +290,7 @@ try {
   const fixture = `${vault}/Notes/typing-gallery.mdo`;
   await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'typing.mdo'), fixture);
   await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, fixture);
-  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('Links over half-bold text'), null, { timeout: 15_000 });
+  await page.waitForFunction(() => document.querySelector('.cm-content')?.textContent?.includes('Escaped literals'), null, { timeout: 15_000 });
   await caretAt('**b**[**old** t]', 0);
   await page.evaluate(() => {
     const editor = document.querySelector('.cm-content').cmTile.root.view;

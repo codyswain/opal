@@ -4,11 +4,11 @@ Every file a document can hold, in each of its three looks, and every way it can
 
 ## Chips in text
 
-The [[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report]] has the numbers, the [[Library/files/2026-11/gob-deck.a3f9c2e1.pptx|Gob deck.pptx]] has the story, and [[Library/files/2026-11/bracket.a3f9c2e1.stl|the bracket]] is in CAD. A [[Library/files/2026-11/gone.deadbeef.zip|file that is gone]] fades. Notes stay links: [[Roadmap]] and [[Roadmap#Goals]]. A video page in text: [the demo](https://www.youtube.com/watch?v=dQw4w9WgXcQ).
+The [[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report]] has the numbers, the [[Library/files/2026-11/demo-deck.a3f9c2e1.pptx|Demo deck.pptx]] has the story, and [[Library/files/2026-11/bracket.a3f9c2e1.stl|the bracket]] is in CAD. A [[Library/files/2026-11/gone.deadbeef.zip|file that is gone]] fades. Notes stay links: [[Roadmap]] and [[Roadmap#Goals]]. A video page in text: [the demo](https://www.youtube.com/watch?v=dQw4w9WgXcQ).
 
 ## Cards
 
-[[Library/files/2026-11/gob-deck.a3f9c2e1.pptx|Gob deck.pptx]]
+[[Library/files/2026-11/demo-deck.a3f9c2e1.pptx|Demo deck.pptx]]
 
 [[Library/files/2026-11/bracket.a3f9c2e1.stl|Bracket.stl]]
 
@@ -16,7 +16,7 @@ The [[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report]] has the numbers, 
 
 [[Library/files/2026-11/throughput.a3f9c2e1.csv|Throughput.csv]]
 
-[[Library/files/2026-11/rig-sketch.a3f9c2e1.excalidraw|Rig sketch.excalidraw]]
+[[Library/files/2026-11/sketch.a3f9c2e1.excalidraw|Sketch.excalidraw]]
 
 ![](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 
@@ -28,7 +28,7 @@ The [[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report]] has the numbers, 
 
 ![[Library/files/2026-11/night-shift.a3f9c2e1.mp4|480]]
 
-![[Library/files/2026-11/standup-memo.a3f9c2e1.m4a|Standup memo.m4a]]
+![[Library/files/2026-11/voice-memo.a3f9c2e1.m4a|Voice memo.m4a]]
 
 ## When a file can't show
 
@@ -42,14 +42,14 @@ The [[Library/files/2026-11/q3-report.a3f9c2e1.pdf|Q3 report]] has the numbers, 
 
 ![[Library/files/2026-11/old-format.a3f9c2e1.avi|Old format.avi]]
 
-## The October investor update's forms
+## A long document's forms
 
-![SF box-assembly rigs, with two rigs shown](assets/rig.png)
+![A wide photo](assets/wide.png)
 
-![Bit](assets/bit.png)
+![A ring](assets/ring.png)
 
-![Autonomous policy rollout](assets/rollout.mp4)
+![A short clip](assets/clip.mp4)
 
-[Kyle controlling the grippers](assets/rollout.mp4)
+[The same clip as a link](assets/clip.mp4)
 
 ![](assets/appendix.pdf)

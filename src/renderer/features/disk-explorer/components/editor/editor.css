@@ -290,9 +290,10 @@
   text-decoration-color: hsl(var(--foreground));
 }
 
-.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.45em; font-size: 1.8em; }
-.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.4em; font-size: 1.5em; }
-.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.3em; font-size: 1.25em; }
+/* More room above a heading than below it, so it sits on its section. */
+.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.8em; padding-bottom: 0.15em; font-size: 1.8em; }
+.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.75em; padding-bottom: 0.15em; font-size: 1.5em; }
+.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.6em; padding-bottom: 0.1em; font-size: 1.25em; }
 .opal-editor .cm-editor .cm-md-h4 { padding-top: 0.25em; font-size: 1.1em; }
 .opal-editor .cm-editor .cm-md-h5 { padding-top: 0.2em; font-size: 1em; }
 .opal-editor .cm-editor .cm-md-h6 { padding-top: 0.2em; font-size: 1em; color: hsl(var(--text-secondary)); }
@@ -328,6 +329,11 @@
   background-color: var(--editor-sunken);
   font-family: var(--font-mono);
   font-size: 0.85em;
+}
+
+/* Code of 24 characters or fewer stays on one line rather than leaving a boxed space at a line's end. */
+.opal-editor .cm-editor .cm-md-code-short {
+  white-space: nowrap;
 }
 
 /* Lists: the marker sits in a box as wide as the indent, so wrapped lines
@@ -424,14 +430,14 @@
 }
 
 .opal-editor .cm-editor .cm-md-callout-first {
-  padding-top: 0.45em;
+  padding-top: 0.6em;
   border-top-left-radius: var(--radius-row);
   border-top-right-radius: var(--radius-row);
 }
 
 .opal-editor .cm-editor .cm-md-callout-last,
 .opal-editor .cm-editor .cm-md-in-callout-last {
-  padding-bottom: 0.45em;
+  padding-bottom: 0.75em;
   border-bottom-left-radius: var(--radius-row);
   border-bottom-right-radius: var(--radius-row);
 }
@@ -570,8 +576,13 @@
 }
 
 
+/* Rounded outer corners, as on code and callouts: the table draws its own
+   edge and each cell only its inner lines. */
 .opal-editor .cm-editor .cm-md-table table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--editor-rule);
+  border-radius: var(--radius-row);
   font-size: 0.9375em;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
@@ -581,10 +592,20 @@
 .opal-editor .cm-editor .cm-md-table td {
   min-width: 3em;
   padding: 0.3em 0.75em;
-  border: 1px solid var(--editor-rule);
+  border-right: 1px solid var(--editor-rule);
+  border-bottom: 1px solid var(--editor-rule);
   text-align: left;
   vertical-align: top;
   overflow-wrap: normal;
+}
+
+.opal-editor .cm-editor .cm-md-table tr > :last-child {
+  border-right: 0;
+}
+
+.opal-editor .cm-editor .cm-md-table tbody tr:last-child > *,
+.opal-editor .cm-editor .cm-md-table table:not(:has(tbody tr)) thead tr > * {
+  border-bottom: 0;
 }
 
 .opal-editor .cm-editor .cm-md-table th {
@@ -697,9 +718,82 @@
   padding: 6px 28px 6px 8px;
 }
 
+/* Match case, Regex and Whole word are toggles drawn like the bar's buttons; the box stays for keys and screen readers. */
 .opal-editor .cm-editor .cm-panel.cm-search label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 1.6rem;
+  margin: 2px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: hsl(var(--text-secondary));
   font-size: inherit;
-  accent-color: hsl(var(--foreground));
+  vertical-align: middle;
+  cursor: default;
+  user-select: none;
+  transition: background-color var(--duration-hover), color var(--duration-hover);
+}
+
+/* A thin rule sets the toggles apart from the buttons before them. */
+.opal-editor .cm-editor .cm-panel.cm-search label:first-of-type {
+  margin-left: 11px;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label:first-of-type::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -7px;
+  width: 1px;
+  height: 16px;
+  margin-top: -8px;
+  background: hsl(var(--border-subtle));
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label:hover {
+  background: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label:has(input:checked) {
+  border-color: hsl(var(--border-default));
+  background: hsl(var(--surface-selected));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label:has(input:focus-visible) {
+  outline: 2px solid hsl(var(--focus));
+  outline-offset: -1px;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search label input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: default;
+}
+
+/* The count sits inside the query field's right end. */
+.opal-editor .cm-editor .cm-panel.cm-search input[name="search"] {
+  padding-right: 6.5em;
+}
+
+.opal-editor .cm-editor .cm-panel.cm-search .opal-searchCount {
+  display: inline-block;
+  width: 6.5em;
+  margin-left: calc(-6.5em - 2px);
+  padding-right: 8px;
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-metadata-size);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+  pointer-events: none;
 }
 
 .opal-editor .cm-editor .cm-panel .cm-textfield,
@@ -722,6 +816,12 @@
 
 .opal-editor .cm-editor .cm-panel .cm-button:hover {
   background: hsl(var(--surface-hover));
+}
+
+.opal-editor .cm-editor .cm-panel .cm-button:focus-visible,
+.opal-editor .cm-editor .cm-panel.cm-search [name="close"]:focus-visible {
+  outline: 2px solid hsl(var(--focus));
+  outline-offset: -1px;
 }
 
 .opal-editor .cm-editor .cm-panel.cm-search [name="close"] {

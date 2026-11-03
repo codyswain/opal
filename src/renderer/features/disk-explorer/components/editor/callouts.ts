@@ -2,6 +2,7 @@ import { syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap, type Command, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { docMode } from './livePreview';
 
 /*
  * Callouts: a grey line icon per Obsidian type family, the type's own word
@@ -210,13 +211,42 @@ export function calloutHeadAt(state: EditorState, at: number): number | null {
   return CALLOUT_HEAD.test(head.text) ? head.from : null;
 }
 
-/** Cmd+Enter on a foldable callout's first line folds or opens it, as on a toggle in Notion. Writes nothing. */
+/**
+ * Cmd+Enter on a foldable callout's first line folds or opens it, as on a
+ * toggle in Notion. Writes nothing. On a callout that cannot fold, and on
+ * its body in a document, it does nothing rather than split the callout.
+ */
 const toggleFoldHere: Command = (view) => {
-  const line = view.state.doc.lineAt(view.state.selection.main.head);
-  const callout = foldables(view.state).find((each) => each.head === line.from);
-  if (!callout) return false;
-  view.dispatch({ effects: toggleFold.of(callout.head) });
-  return true;
+  const { state } = view;
+  const { head } = state.selection.main;
+  const line = state.doc.lineAt(head);
+  const callout = foldables(state).find((each) => each.head === line.from);
+  if (callout) {
+    view.dispatch({ effects: toggleFold.of(callout.head) });
+    return true;
+  }
+  // Read at the line's first quote mark or text: the caret at the line's end can sit past the quote's node.
+  const start = /\S/.test(line.text) ? calloutHeadAt(state, line.from + (/^[ \t]*/.exec(line.text)?.[0].length ?? 0)) : null;
+  return start !== null && state.facet(EditorView.editable) && CALLOUT_HEAD.test(state.doc.lineAt(start).text) && isDocument(state);
 };
+
+const isDocument = (state: EditorState) => state.facet(docMode);
+
+/** The fold sign after "[!type]": none, "+" (open) or "-" (folded). */
+export type FoldSign = '' | '+' | '-';
+
+/** The fold sign of the callout starting at `head`. */
+export function foldSignAt(state: EditorState, head: number): FoldSign {
+  return (CALLOUT_HEAD.exec(state.doc.lineAt(head).text)?.[3] ?? '') as FoldSign;
+}
+
+/** The change that writes `sign` after the "[!type]" of the callout starting at `head`, and nothing else. */
+export function refoldCallout(state: EditorState, head: number, sign: FoldSign): { from: number; to: number; insert: string } | null {
+  const line = state.doc.lineAt(head);
+  const match = CALLOUT_HEAD.exec(line.text);
+  if (!match || match[3] === sign) return null;
+  const from = line.from + match[0].length - match[3].length;
+  return { from, to: from + match[3].length, insert: sign };
+}
 
 export const callouts: Extension = [calloutFolds, keymap.of([{ key: 'Mod-Enter', run: toggleFoldHere }])];

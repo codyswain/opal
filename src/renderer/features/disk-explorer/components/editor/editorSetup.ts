@@ -23,6 +23,7 @@ import { mathSyntax } from './math';
 import { math } from './mathWidget';
 import { pageProperties } from './pageProperties';
 import { tableKeys } from './tableKeys';
+import { findBar } from './visibleSearch';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -177,6 +178,8 @@ const editingKeymap = defaultKeymap.filter((binding) => !MENU_KEYS.has(binding.k
 export function markdownEditorExtensions(path: string, openNote: OpenNote = () => undefined): Extension[] {
   return [
     EditorState.lineSeparator.of('\n'),
+    // Pasted and dropped text gets "\n" line ends, the ones the file is saved with.
+    EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?/g, '\n')),
     pageContext.of({ path, openNote }),
     history(),
     markdown({ extensions: [GFM, wikiLinkSyntax, linkMarkStyle, mathSyntax], completeHTMLTags: false, addKeymap: false }),
@@ -194,6 +197,9 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     codeBlocks,
     pageProperties,
     search({ top: true }),
+    findBar,
+    // The caret's line stays clear of the word-count footer over the page's bottom edge, as when "[[" is typed on the last line.
+    EditorView.scrollMargins.of(() => ({ bottom: 56 })),
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
       { key: 'Backspace', run: deleteMarkupInList },

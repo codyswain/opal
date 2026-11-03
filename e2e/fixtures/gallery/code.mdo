@@ -19,7 +19,7 @@ def total(rows):
 ```
 
 ```sql
-SELECT owner, COUNT(*) AS boxes FROM episodes WHERE site = 'SF' GROUP BY owner;
+SELECT owner, COUNT(*) FROM orders GROUP BY owner;
 ```
 
 ```json
@@ -27,7 +27,7 @@ SELECT owner, COUNT(*) AS boxes FROM episodes WHERE site = 'SF' GROUP BY owner;
 ```
 
 ```yaml
-written_by: cody
+author: alex
 status: draft
 tags:
   - opal

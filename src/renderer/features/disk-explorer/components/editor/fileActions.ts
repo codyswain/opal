@@ -123,12 +123,14 @@ export interface LinkSpec {
 /**
  * A link to a file as Opal writes it: `[[path|Name]]` or `![[path|640]]`,
  * or `[Name](<path>)` and `![Name](<path>)` relative to the page when the
- * path holds a character a wiki link can't.
+ * path holds a character a wiki link can't, or the name a bracket, which
+ * Markdown link text keeps escaped.
  */
 export function linkFor(spec: LinkSpec): string {
   const bang = spec.embed ? '!' : '';
   const slot = spec.slot ?? null;
-  if (!WIKI_UNSAFE.test(spec.vaultPath)) {
+  const bracketed = slot !== null && !isSize(slot) && /[[\]]/.test(slot);
+  if (!WIKI_UNSAFE.test(spec.vaultPath) && !bracketed) {
     const bar = spec.inTable ? '\\|' : '|';
     return `${bang}[[${spec.vaultPath}${slot !== null && slot !== '' ? `${bar}${isSize(slot) ? slot.trim() : wikiAlias(slot, spec.inTable)}` : ''}]]`;
   }
@@ -334,7 +336,9 @@ const LAUNCHERS = new Set(['app', 'command', 'terminal', 'workflow', 'fileloc', 
 const OPAL_SHOWS = new Set(['image', 'pdf', 'video', 'audio', 'text', 'markdown']);
 
 const isLauncher = (ref: FileRef) => LAUNCHERS.has(storedExtension(basenameFsPath(ref.path ?? ref.target)));
-const opensInOpal = (ref: FileRef) => !ref.url && OPAL_SHOWS.has(ref.kind) && !/\.(heic|heif|tiff?)$/i.test(ref.target);
+// A file outside the opened folders opens in its app, after Opal names the app and asks; an Opal tab can't show it.
+const inVault = (path: string) => useDiskStore.getState().roots.some((root) => isFsPathAtOrBelow(root, path));
+const opensInOpal = (ref: FileRef) => !ref.url && OPAL_SHOWS.has(ref.kind) && !/\.(heic|heif|tiff?)$/i.test(ref.target) && (!ref.path || inVault(ref.path));
 
 async function launch(path: string, quickLook = false): Promise<void> {
   const call = (confirmed?: boolean) => (quickLook ? window.filesAPI.quickLook(path, { confirmed }) : window.filesAPI.open(path, { confirmed }));
@@ -514,10 +518,11 @@ export function destinationOf(state: EditorState, obj: PageObject): string | nul
       return ref.url;
     }
   }
-  const name = fileName(ref);
+  // The name the page shows, whole, so a chip cut short with an ellipsis reads in full here.
+  const name = shownName(ref);
   const info = ref.path ? knownInfo(ref.path) : null;
   if (ref.path && info === undefined) void fileInfo(ref.path);
-  return [name, kindLabel(name, ref.kind), info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
+  return [name, kindLabel(fileName(ref), ref.kind), typeof info?.size === 'number' ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
 }
 
 const IMAGE_SIZES = [
@@ -539,7 +544,8 @@ export function fileActions(state: EditorState, obj: PageObject): ObjectAction[]
   const path = ref.path ?? null;
   if (path && knownApp(path) === undefined) void appFor(path);
   const app = path ? knownApp(path) : null;
-  const appLabel = app ? `Open in ${app}` : 'Open in App';
+  // The app's name once main has said it; until then, or with no app, a plain Open.
+  const appLabel = app ? `Open in ${app}` : 'Open';
   const inDoc = state.facet(docMode);
   const fresh = (view: EditorView) => refAt(view.state, obj) ?? ref;
   const actions: ObjectAction[] = [];
@@ -550,7 +556,7 @@ export function fileActions(state: EditorState, obj: PageObject): ObjectAction[]
     actions.push({ id: 'reveal', label: 'Reveal in Finder', disabled: !path, run: () => { if (path) void window.diskAPI.reveal(path); } });
   } else if (opensInOpal(ref)) {
     actions.push({ id: 'open', label: 'Open', disabled: !path, run: (view) => { void openFile(view, fresh(view), 'main'); } });
-    actions.push({ id: 'open-app', label: appLabel, disabled: !path, run: (view) => { void openFile(view, fresh(view), 'app'); } });
+    if (app) actions.push({ id: 'open-app', label: appLabel, run: (view) => { void openFile(view, fresh(view), 'app'); } });
   } else {
     actions.push({ id: 'open-app', label: appLabel, disabled: !path, run: (view) => { void openFile(view, fresh(view), 'app'); } });
   }

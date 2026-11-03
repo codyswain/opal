@@ -121,7 +121,7 @@ export function inTableAt(state: EditorState, at: number): boolean {
 /**
  * A Markdown link's or image's address as written, and its URL node: the one
  * after "](", not an address the link's own text holds, as in
- * `[henry@x.com](mailto:henry@x.com)`. A reference link's comes from its
+ * `[alex@example.com](mailto:alex@example.com)`. A reference link's comes from its
  * definition.
  */
 function addressOf(state: EditorState, node: SyntaxNode, marks: readonly SyntaxNode[]): { written: string | null; url: SyntaxNode | null } {
@@ -225,6 +225,14 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
     if (!videoService(address)) return null;
     return { ...base, target: address, fragment: null, path: null, url: address, kind: 'video' };
   }
+  // A file outside the vault, `[Report](file:///Users/…/report.pdf)`: a file link with its own path, opened only after a confirm.
+  if (!image && /^<?file:\/\//i.test(written.trim())) {
+    let path: string;
+    try { path = normalizeFsPath(decodeURIComponent(new URL(written.trim().replace(/^<|>$/g, '')).pathname).normalize('NFC')); } catch { return null; }
+    const kind = classifyFile(path);
+    if (kind === 'markdown' || !extensionOf(basenameFsPath(path))) return null;
+    return { ...base, target: path, fragment: null, path, url: null, kind };
+  }
   if (SCHEME.test(written.trim())) return null;
   // A heading on this page, or a folder, is no file.
   const bare = written.trim().replace(/^<|>$/g, '');
@@ -326,6 +334,7 @@ export function kindLabel(name: string, kind: FileKind): string {
     aif: 'AIFF audio', aiff: 'AIFF audio', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', gif: 'GIF image',
     webp: 'WebP image', heic: 'HEIC image', heif: 'HEIF image', tif: 'TIFF image', tiff: 'TIFF image', svg: 'SVG image',
     avif: 'AVIF image', bmp: 'BMP image', sh: 'Shell script', py: 'Python script', command: 'Command', app: 'App', jar: 'Java archive',
+    ipynb: 'Jupyter notebook', xml: 'XML', toml: 'TOML',
   };
   if (labels[extension]) return labels[extension];
   if (kind === 'text') return 'Text';

@@ -25,42 +25,42 @@ const text = (view: EditorView) => view.state.doc.toString();
 
 describe('a document\'s first line', () => {
   it('tells a body that would open as properties', () => {
-    expect(opensAsProperties(EditorState.create({ doc: '---\nOwner: Cody\n---\nText' }).doc)).toBe(true);
+    expect(opensAsProperties(EditorState.create({ doc: '---\nOwner: Alex\n---\nText' }).doc)).toBe(true);
     expect(opensAsProperties(EditorState.create({ doc: '---\n---\n' }).doc)).toBe(true);
     expect(opensAsProperties(EditorState.create({ doc: '---\n- a list\n---\n' }).doc)).toBe(false);
     expect(opensAsProperties(EditorState.create({ doc: '---\nNo closing line\n' }).doc)).toBe(false);
-    expect(opensAsProperties(EditorState.create({ doc: '***\nOwner: Cody\n---\n' }).doc)).toBe(false);
+    expect(opensAsProperties(EditorState.create({ doc: '***\nOwner: Alex\n---\n' }).doc)).toBe(false);
   });
 
   it('writes the rule as *** when deleting the text above it would turn it into properties, in one undo step', () => {
-    const doc = 'Intro\n\n---\n\nOwner: Cody\n\n---\n\nText\n';
+    const doc = 'Intro\n\n---\n\nOwner: Alex\n\n---\n\nText\n';
     const view = mount(doc, 0, 7);
     act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
-    expect(text(view)).toBe('***\n\nOwner: Cody\n\n---\n\nText\n');
+    expect(text(view)).toBe('***\n\nOwner: Alex\n\n---\n\nText\n');
     act(() => { undo(view); });
     expect(text(view)).toBe(doc);
   });
 
   it('writes *** for a paste that starts with a properties block', () => {
     const view = mount('');
-    act(() => { view.dispatch({ changes: { from: 0, insert: '---\nOwner: Cody\n---\nNotes' }, selection: { anchor: 25 }, userEvent: 'input.paste' }); });
-    expect(text(view)).toBe('***\nOwner: Cody\n---\nNotes');
+    act(() => { view.dispatch({ changes: { from: 0, insert: '---\nOwner: Alex\n---\nNotes' }, selection: { anchor: 25 }, userEvent: 'input.paste' }); });
+    expect(text(view)).toBe('***\nOwner: Alex\n---\nNotes');
   });
 
   it('writes *** when a line move puts a rule first', () => {
-    const doc = 'Owner: Cody\n---\n---\nmore\n';
+    const doc = 'Owner: Alex\n---\n---\nmore\n';
     const view = mount(doc, 12);
     act(() => { moveLineUp(view); });
-    expect(text(view)).toBe('***\nOwner: Cody\n---\nmore\n');
+    expect(text(view)).toBe('***\nOwner: Alex\n---\nmore\n');
     act(() => { undo(view); });
     expect(text(view)).toBe(doc);
   });
 
   it('leaves a file with properties, and an agent\'s write, alone', () => {
-    const view = mount('Intro\n\n---\nOwner: Cody\n---\n', 0, 7);
+    const view = mount('Intro\n\n---\nOwner: Alex\n---\n', 0, 7);
     act(() => { view.dispatch({ effects: setFileProperties.of(true) }); });
     act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
-    expect(text(view)).toBe('---\nOwner: Cody\n---\n');
+    expect(text(view)).toBe('---\nOwner: Alex\n---\n');
     const remote = mount('Intro\n');
     act(() => { replaceText(remote, '---\nOwner: Agent\n---\nIntro\n'); });
     expect(text(remote)).toBe('---\nOwner: Agent\n---\nIntro\n');

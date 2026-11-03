@@ -23,7 +23,7 @@ describe('isExternalLink', () => {
     expect(isExternalLink('https://example.com/a?b=c')).toBe(true);
     expect(isExternalLink('http://example.com')).toBe(true);
     expect(isExternalLink('mailto:robert@ishikilabs.ai')).toBe(true);
-    expect(isExternalLink('linear://parametricpbc/issue/SW-640')).toBe(true);
+    expect(isExternalLink('linear://acme/issue/ENG-12')).toBe(true);
     expect(isExternalLink('slack://channel?team=T1&id=C1')).toBe(true);
     expect(isExternalLink('obsidian://open?file=Plan')).toBe(false);
     expect(isExternalLink('file:///etc/passwd')).toBe(false);

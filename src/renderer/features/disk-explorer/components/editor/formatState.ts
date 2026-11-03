@@ -8,7 +8,7 @@ import { inCodeBlock } from './codeBlocks';
 export interface FormatState {
   /** Normal text is 0; null when the selected lines differ. */
   heading: number | null;
-  /** On a callout's title line, which takes no heading. */
+  /** On a callout's title line or a task, which take no heading. */
   headingDisabled: boolean;
   bold: boolean;
   italic: boolean;
@@ -47,7 +47,7 @@ export function formatState(state: EditorState): FormatState {
   return {
     // Lines in a table or code take no heading: the menu reads Normal text and stays shut.
     heading: levels.size === 1 ? [...levels][0] : levels.size === 0 ? 0 : null,
-    headingDisabled: lines.length === 0 || lines.some((line) => calloutMarker(state, line) !== null),
+    headingDisabled: lines.length === 0 || lines.some((line) => calloutMarker(state, line) !== null) || items.some((item) => item?.kind === 'task'),
     bold: styled(state, texts, 'StrongEmphasis', '**'),
     italic: styled(state, texts, 'Emphasis', '*'),
     strikethrough: styled(state, texts, 'Strikethrough', '~~'),

@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'fs/promises';
-import path from 'path';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { diagramField, diagramKind, pocketSteps, setDiagramCode, sizeLimit, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
+import { diagramField, diagramKind, errorLine, pocketSteps, setDiagramCode, sizeLimit, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { objectAt } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { vaultFiles } from '@/tests/fidelity/censusHelpers';
 
 /*
  * Diagrams without layout: happy-dom draws no SVG, so these check what goes
@@ -44,11 +44,11 @@ function mount(doc: string, at = 0, page = DOC) {
 const MERMAID = 'flowchart TD\n  A[Write] --> B{Review}\n  B -->|ok| C[Merge]\n  classDef hot fill:#f96,stroke:#333,stroke-width:4px,color:#fff\n  class A hot\n  style C fill:#bbf,stroke-dasharray: 5 5\n  linkStyle 0 stroke:#ff3,stroke-width:2px';
 
 /** The fences of `kind` in the vault's notes, for the checks that read it. */
-async function vaultFences(kind: string, files: string[]): Promise<string[]> {
+async function vaultFences(kind: string): Promise<string[]> {
   const fences: string[] = [];
-  for (const file of files) {
-    const text = await readFile(path.join(ROOT as string, file), 'utf8');
-    for (const match of text.matchAll(new RegExp(`^[ \\t>]*(\`{3,}|~{3,})${kind}[^\\n]*\\n([\\s\\S]*?)^[ \\t>]*\\1[ \\t]*$`, 'gm'))) fences.push(match[2]);
+  for (const file of (await vaultFiles(ROOT as string)).found) {
+    const text = await readFile(file, 'utf8');
+    for (const match of text.matchAll(new RegExp(`^[ \\t>]*(\`{3,}|~{3,})${kind}[ \\t]*\\n([\\s\\S]*?)^[ \\t>]*\\1[ \\t]*$`, 'gm'))) fences.push(match[2]);
   }
   return fences;
 }
@@ -104,22 +104,11 @@ describe('diagrams', () => {
   it.skipIf(!ROOT)('parse every Mermaid fence in the vault and lay out every Pocket flowchart', async () => {
     const mermaid = (await import('mermaid')).default;
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', logLevel: 'fatal' });
-    const sources = await vaultFences('mermaid', [
-      'Library/parametric/mini-bit/research-1to3/electronics.md',
-      'Library/parametric/bastion-desktop/camera-service-research.md',
-      'Library/parametric/bastion-hosting/research/05-data-volume.md',
-      'Library/parametric/strategy/2026-10-26/memos/2-production.md',
-      'docs/superpowers/specs/2026-09-24-local-agent-communication-design.md',
-    ]);
-    expect(sources).toHaveLength(5);
+    const sources = await vaultFences('mermaid');
+    expect(sources.length).toBeGreaterThan(0);
     for (const source of sources) await expect(mermaid.parse(stripColours(source))).resolves.toBeTruthy();
-    const flowcharts = await vaultFences('flowchart', [
-      'Library/recordings/2026-10-21 1053 Robotics Hardware Scaling and Operations.md',
-      'Library/recordings/2026-10-21 2052 Nature Videos and Casual Chat.md',
-      'Library/recordings/2026-10-19 1115 Cody Lucas.md',
-      'Library/recordings/2026-10-22 1050 Operator Staffing and Robot Hardware.md',
-    ]);
-    expect(flowcharts).toHaveLength(4);
+    const flowcharts = await vaultFences('flowchart');
+    expect(flowcharts.length).toBeGreaterThan(0);
     for (const source of flowcharts) expect(pocketSteps(source)?.length).toBeGreaterThan(3);
   });
 });
@@ -171,5 +160,10 @@ describe('diagrams in a document', () => {
   it('draw a Pocket flowchart as its chain', () => {
     const view = mount('```flowchart\nOne -> Two\nTwo -> Three\n```\n', 0, NOTE);
     expect([...view.contentDOM.querySelectorAll('.cm-diagram-step')].map((step) => step.textContent)).toEqual(['One', 'Two', 'Three']);
+  });
+  it('name a line the source has when Mermaid reports an error past its end', () => {
+    const source = 'flowchart TD\n  A[Unclosed --> B';
+    expect(errorLine('Parse error on line 3:\n...nclosed --> B\n-----^\nExpecting', source)).toBe('Parse error on line 2');
+    expect(errorLine('Parse error on line 1:\nx', source)).toBe('Parse error on line 1');
   });
 });

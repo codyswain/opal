@@ -10,8 +10,8 @@ import { fileRefOf, inCode, inTableAt, videoService } from './fileEmbeds';
 import { autolinkHref, docMode, openLink } from './livePreview';
 
 /*
- * Bare addresses of the services Cody works in, drawn as chips with a grey
- * glyph and a label read from the address alone: "SW-640", "opal#13",
+ * Bare addresses of common work services, drawn as chips with a grey
+ * glyph and a label read from the address alone: "ENG-12", "project#13",
  * "Google Doc", "Email". Nothing is fetched. A chip forms once the address
  * is ended by a space, Enter or a paste, so typing one is never interrupted.
  * A YouTube or Loom address alone on its line is a card (fileWidgets.ts).

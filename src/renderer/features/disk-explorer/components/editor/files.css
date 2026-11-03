@@ -5,7 +5,11 @@
  * is padding, never margins, since CodeMirror measures boxes.
  */
 
-/* A file inside text: a 1px edge, an icon, then the name in the body's serif. */
+/*
+ * A file inside text: a 1px edge, an icon, then the name in the body's
+ * serif. A chip never breaks across lines; a long name ends in an ellipsis,
+ * and the full name shows on hover and in the bar.
+ */
 .opal-editor .cm-editor .cm-file-chip {
   display: inline;
   padding: 0 0.3em;
@@ -13,8 +17,16 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background-color var(--duration-hover) var(--ease-standard);
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+  white-space: nowrap;
+}
+
+.opal-editor .cm-editor .cm-file-chip-name {
+  display: inline-block;
+  max-width: min(24ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
 }
 
 .opal-editor .cm-editor .cm-file-chip:hover {
@@ -40,9 +52,10 @@
 }
 
 /*
- * A file on its own line: a row 28rem wide, 64px tall. Inline, so the line
- * holds it with no empty line box above or below; 4px above and below, so
- * cards on lines in a row sit 8px apart.
+ * A file on its own line: a row 28rem wide, 64px tall with its edge, the
+ * 48px tile 7px in from it. Inline, so the line holds it with no empty line
+ * box above or below; 4px above and below, so cards on lines in a row sit
+ * 8px apart. It is a container, so a narrow card puts its buttons under it.
  */
 .opal-editor .cm-editor .cm-file-card {
   display: inline-flex;
@@ -52,7 +65,8 @@
   width: min(100%, 28rem);
   height: 64px;
   margin: 4px 0;
-  padding: 8px 12px 8px 8px;
+  padding: 7px 12px 7px 8px;
+  container-type: inline-size;
   border: 1px solid hsl(var(--border-subtle));
   border-radius: var(--radius-card);
   background-color: hsl(var(--canvas));
@@ -72,8 +86,8 @@
   border-style: dashed;
 }
 
-/* A card that says what went wrong keeps its message whole: in a narrow column the buttons go under it. */
-.opal-editor .cm-editor .cm-file-card:is([data-state="remote"], [data-state="missing"], [data-state="moved"], [data-state="unplayable"], [data-state="unreadable"], [data-state="failed"]) {
+/* A card with buttons (what went wrong, Load preview) stays one 64px row while they fit beside the name. */
+.opal-editor .cm-editor .cm-file-card:has(> .cm-file-card-actions) {
   flex-wrap: wrap;
   row-gap: 6px;
   height: auto;
@@ -88,7 +102,7 @@
   white-space: normal;
 }
 
-.opal-editor .cm-editor .cm-file-card:is([data-state="remote"], [data-state="missing"], [data-state="moved"], [data-state="unplayable"], [data-state="unreadable"], [data-state="failed"]) .cm-file-card-actions {
+.opal-editor .cm-editor .cm-file-card > .cm-file-card-actions {
   margin-left: auto;
 }
 
@@ -200,6 +214,21 @@
   background-color: hsl(var(--surface-hover));
 }
 
+/* In a narrow card the buttons go on a row of their own under the name, lined up with it, and compact. */
+@container (max-width: 400px) {
+  .opal-editor .cm-editor .cm-file-card > .cm-file-card-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    margin-left: 0;
+    padding-left: 60px;
+  }
+
+  .opal-editor .cm-editor .cm-file-card .cm-file-button {
+    height: 24px;
+  }
+}
+
 .opal-editor .cm-editor .cm-file-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px hsl(var(--focus));
@@ -275,6 +304,12 @@
   width: 100%;
   height: auto;
   background-color: #ffffff;
+}
+
+/* In dark mode a white page is dimmed, so a PDF's first page or a document's page picture is not the brightest thing on the screen. Photos and video keep their colour. */
+.dark .opal-editor .cm-editor .cm-file-pdf-image,
+.dark .opal-editor .cm-editor .cm-file-card-tile-page .cm-file-thumb {
+  filter: brightness(0.82) contrast(1.05);
 }
 
 .opal-editor .cm-editor .cm-file-pdf-footer {
@@ -409,13 +444,13 @@
   opacity: 1;
 }
 
-/* Audio: one row with the card's edge, a native player on the right. */
+/* Audio: the card's width and edge, the name and duration, then a native player under them. */
 .opal-editor .cm-editor .cm-file-audio {
   display: flex;
   box-sizing: border-box;
   align-items: center;
   gap: 12px;
-  width: 100%;
+  width: min(100%, 28rem);
   min-height: 56px;
   padding: 8px 8px 8px 12px;
   border: 1px solid hsl(var(--border-subtle));
@@ -425,7 +460,7 @@
   font-feature-settings: var(--font-features);
 }
 
-/* In a narrow column the player goes on its own line under the name, so it keeps its time and scrubber. */
+/* The player goes on its own line under the name, lined up with it, so its scrubber has the row's width. */
 .opal-editor .cm-editor .cm-file-audio {
   flex-wrap: wrap;
   row-gap: 4px;
@@ -436,11 +471,10 @@
 }
 
 .opal-editor .cm-editor .cm-file-audio audio {
-  flex: 0 0 300px;
+  flex: 0 0 calc(100% - 28px);
   min-width: 0;
-  max-width: 100%;
   height: 40px;
-  margin-left: auto;
+  margin-left: 28px;
 }
 
 .opal-editor .cm-editor .cm-file-audio audio::-webkit-media-controls-panel {
@@ -456,9 +490,10 @@
   background-color: hsl(0 0% 96%);
 }
 
-/* A failed image is a card in the image's place. */
-.opal-editor .cm-editor .cm-file-image-failed {
-  padding: 0.35em 0;
+/* A failed image is a card in the image's place. A preview turned card keeps only the card's own 4px, so every card sits the same distance apart. */
+.opal-editor .cm-editor .cm-file-image-failed,
+.opal-editor .cm-editor .cm-file-figure:has(> .cm-file-card) {
+  padding: 0;
 }
 
 /* Framed on a document's page: the ring follows the card's, preview's or image's own radius. */

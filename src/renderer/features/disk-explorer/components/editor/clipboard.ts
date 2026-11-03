@@ -3,9 +3,10 @@ import { Annotation, ChangeSet, EditorSelection, EditorState, Transaction, type 
 import { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, outsideProtected } from './extensionPoints';
-import { inlineSpans, linkAt, withoutEdgeMarks, writeLink } from './formatCommands';
+import { inlineSpans, linkAt, listItemOf, withoutEdgeMarks, writeLink } from './formatCommands';
 import { docMode } from './livePreview';
 import { literalText, rawAt } from './typing';
+import { webAddress } from './linkSchemes';
 
 /*
  * The clipboard in a document. Copy, cut and drag write balanced Markdown:
@@ -145,6 +146,7 @@ function containedLines(replace: (state: EditorState, from: number, to: number, 
 }
 
 const URL_TEXT = /^(?:https?:\/\/|mailto:|obsidian:\/\/|opal:\/\/)\S+$/i;
+const WWW_TEXT = /^www\.[^\s.]+\.\S+$/i;
 
 /**
  * What a paste of `text` writes in a document, or null to leave it to
@@ -158,21 +160,55 @@ export function pasteSpec(state: EditorState, text: string, literal: boolean): T
   const range = state.selection.main;
   const pasted = text.replace(/\r\n?/g, '\n');
   const url = pasted.trim();
-  // Paste and Match Style pastes a URL as text, so both stay a key away.
-  if (!literal && !range.empty && URL_TEXT.test(url) && !rawAt(state, range.from)) {
+  // Paste and Match Style pastes a URL as text, so both stay a key away. A bare `www.` address links as a web page.
+  if (!literal && !range.empty && (URL_TEXT.test(url) || WWW_TEXT.test(url)) && !rawAt(state, range.from)) {
+    const address = webAddress(url);
     const link = linkAt(state, range.from);
     // Written as a link edit, not a paste, so doc mode's mark keeping leaves the address it replaces alone.
     if (link?.kind === 'link' && range.from >= link.textFrom && range.to <= link.textTo) {
-      return writeLink(state, link, state.sliceDoc(link.textFrom, link.textTo), url, link);
+      return writeLink(state, link, state.sliceDoc(link.textFrom, link.textTo), address, link);
     }
-    return writeLink(state, range, state.sliceDoc(range.from, range.to), url, null);
+    return writeLink(state, range, state.sliceDoc(range.from, range.to), address, null);
   }
-  if (!literal) return null;
+  if (!literal) return listIntoItem(state, pasted);
   const prefix = containerPrefix(state, range.from);
   const insert = literalText(state, range.from, range.to, pasted, { prefix, table: inTable(state, range.from) });
   return {
     changes: { from: range.from, to: range.to, insert },
     selection: { anchor: range.from + insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.paste',
+    annotations: prefixed.of(true),
+  };
+}
+
+const LIST_LINE = /^[ \t]*(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)/;
+
+/**
+ * A pasted list on an empty list item, as Enter at a list's end leaves it:
+ * the pasted items take the empty item's place at its level, nested items
+ * one level deeper each, in the list's own indent character.
+ */
+function listIntoItem(state: EditorState, pasted: string): TransactionSpec | null {
+  const range = state.selection.main;
+  if (!range.empty || !state.facet(docMode)) return null;
+  const line = state.doc.lineAt(range.head);
+  const item = listItemOf(state, line);
+  const lines = pasted.replace(/\n+$/, '').split('\n');
+  if (!item || item.textFrom !== line.to || range.head !== line.to || !lines.every((each) => !/\S/.test(each) || LIST_LINE.test(each)) || !LIST_LINE.test(lines[0])) return null;
+  const lead = line.text.slice(0, item.markFrom - line.from);
+  const indents = lines.map((each) => /^[ \t]*/.exec(each)?.[0] ?? '');
+  const unit = Math.min(...indents.map((indent) => indent.replace(/\t/g, '    ').length).filter((width) => width > 0), Infinity);
+  const tabs = /\t/.test(lead) || /^[ \t>]*\t/.test(state.doc.lineAt(Math.max(0, line.from - 1)).text);
+  const insert = lines.map((each, index) => {
+    if (!/\S/.test(each)) return lead.replace(/[ \t]+$/, '');
+    const width = indents[index].replace(/\t/g, '    ').length;
+    const level = unit === Infinity ? 0 : Math.round(width / unit);
+    return `${lead}${tabs ? '\t'.repeat(level) : indents[index]}${each.slice(indents[index].length)}`;
+  }).join('\n');
+  return {
+    changes: { from: line.from, to: line.to, insert },
+    selection: { anchor: line.from + insert.length },
     scrollIntoView: true,
     userEvent: 'input.paste',
     annotations: prefixed.of(true),
@@ -188,12 +224,12 @@ function inTable(state: EditorState, at: number): boolean {
 
 /**
  * Edit > Paste and Match Style, from the menu or ⌘⇧V: the clipboard's text
- * pasted literally into the editor that holds `target`, or as plain text
- * into another field. The menu runs this rather than the system's paste,
- * whose paste event looks the same as ⌘V's.
+ * pasted literally into the page that holds `target`, or as plain text
+ * into another field, such as the Find bar's. The menu runs this rather
+ * than the system's paste, whose paste event looks the same as ⌘V's.
  */
 export async function pasteAndMatchStyle(target: Element | null = document.activeElement): Promise<void> {
-  const host = target?.closest('.cm-editor');
+  const host = target?.closest('.cm-content')?.closest('.cm-editor');
   const view = host instanceof HTMLElement ? EditorView.findFromDOM(host) : null;
   let text = '';
   try {
