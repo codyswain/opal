@@ -180,6 +180,21 @@ describe('importing files', () => {
     expect((await service.import(page, { path: big })).warning).toBeUndefined();
   });
 
+  it('finds where a stored file went by the hash in its name, for the Moved marker', async () => {
+    const stored = await service.import(page, { bytes: new Uint8Array(Buffer.from('%PDF moved')), name: 'Q3.pdf' });
+    expect(await service.findMoved(stored.path)).toBeNull();
+    await mkdir(path.join(root, 'Library/files/archive/2026'), { recursive: true });
+    const moved = path.join(root, 'Library/files/archive/2026', path.basename(stored.path));
+    await import('fs/promises').then((fs) => fs.rename(stored.path, moved));
+    expect(await service.findMoved(stored.path)).toBe(moved);
+    // Renamed as well: the hash still finds it.
+    const renamed = path.join(root, 'Library/files/archive/2026', `q3-final.${hash8(Buffer.from('%PDF moved'))}.pdf`);
+    await import('fs/promises').then((fs) => fs.rename(moved, renamed));
+    expect(await service.findMoved(stored.path)).toBe(renamed);
+    expect(await service.findMoved(path.join(root, 'Library/files/2026-11/plain-name.pdf'))).toBeNull();
+    await expect(service.findMoved(path.join(temporary, 'elsewhere/q3.a1b2c3d4.pdf'))).rejects.toThrow(/not inside/);
+  });
+
   it('refuses a folder and never links git\'s own files', async () => {
     await expect(service.import(page, { path: path.join(root, 'Library') })).rejects.toThrow("Folders can't be added yet.");
     await writeFile(path.join(root, '.git/description'), 'repo');
