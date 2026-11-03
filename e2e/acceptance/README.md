@@ -25,6 +25,7 @@ node e2e/acceptance/gallery.mjs [area] [--out dir] # The look gallery: each e2e/
 node e2e/acceptance/mdo-typing-acceptance.mjs [--shots dir] # Typing in a document with the real keyboard: 2*3*4, a wiki link, 3.14, Option+Arrow, Shift+Cmd+Left, Replace All with the floating Find bar; saved bytes and screenshots
 node e2e/acceptance/ime-acceptance.mjs        # Input methods: a Japanese composition and a dead key at each caret cell land where a typed letter does; prints a result table
 node e2e/acceptance/mdo-math-acceptance.mjs [--out dir] # Math in documents: drawing, the formula popover, one undo step, Backspace, ⇧⌘E, notes' source, light and dark screenshots
+node e2e/acceptance/files-protocol-acceptance.mjs [--shots dir] # Files in the main process: opal-file:// ranges and headers, sandboxed HTML, a movie seeking to its end, read-only LFS opens, launchers shown in Finder, thumbnails and a HEIC copy (ffmpeg makes the test movie when it is installed)
 ```
 
 The gallery writes to `--out`, then `OPAL_GALLERY_OUT`, then `e2e/out/gallery`.

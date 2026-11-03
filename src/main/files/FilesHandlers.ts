@@ -26,9 +26,9 @@ function isSource(value: unknown): value is ImportSource {
 
 const invalid = (): FilesResult<never> => ({ success: false, error: 'Invalid files request.' });
 
-/** A size in pixels the page asks for: a whole number up to 4096, or nothing. */
+/** A size in pixels the page asks for, as a layout measures it: above 0 and up to 4096, or nothing. */
 const isPixels = (value: unknown, optional = false): value is number | undefined =>
-  (optional && value === undefined) || (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4096);
+  (optional && value === undefined) || (typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 4096);
 
 /** `{ visible?: boolean }`, `{ confirmed?: boolean }` or `{ anyType?: boolean }`, or nothing. */
 const flags = (value: unknown, key: 'visible' | 'confirmed' | 'anyType'): { [name: string]: boolean } | null => {
@@ -61,11 +61,13 @@ export class FilesHandlers {
       isPath(target) ? this.respond(() => service.info(target), 'Failed to read the file') : invalid());
     ipc.handle('files:thumbnail', (_, target: unknown, px: unknown, options: unknown) => {
       const visible = flags(options, 'visible');
-      return isPath(target) && isPixels(px) && visible ? this.respond(() => service.thumbnail(target, px, visible), 'Failed to draw the file') : invalid();
+      return isPath(target) && isPixels(px) && visible ? this.respond(() => service.thumbnail(target, Math.ceil(px), visible), 'Failed to draw the file') : invalid();
     });
     ipc.handle('files:rendition', (_, target: unknown, width: unknown, options: unknown) => {
       const visible = flags(options, 'visible');
-      return isPath(target) && isPixels(width, true) && visible ? this.respond(() => service.rendition(target, width, visible), 'Failed to draw the picture') : invalid();
+      return isPath(target) && isPixels(width, true) && visible
+        ? this.respond(() => service.rendition(target, width === undefined ? undefined : Math.ceil(width), visible), 'Failed to draw the picture')
+        : invalid();
     });
     ipc.handle('files:open', (_, target: unknown, options: unknown) => {
       const confirmed = flags(options, 'confirmed');

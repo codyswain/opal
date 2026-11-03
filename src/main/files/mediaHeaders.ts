@@ -1,5 +1,5 @@
 import { inflateSync } from 'zlib';
-import { extensionOf } from '@/common/fileKind';
+import { classifyFile, extensionOf } from '@/common/fileKind';
 import { imageSize } from '@/common/imageSize';
 
 /** What a file's own headers say about it. Every field is missing when they don't say. */
@@ -48,6 +48,7 @@ export async function readMediaHeaders(name: string, size: number, read: ReadAt)
     if (extension === 'aif' || extension === 'aiff') return aiffHeaders(await read(0, IMAGE_HEAD));
     if (extension === 'flac') return flacHeaders(await read(0, 64));
     if (extension === 'mp3') return mp3Headers(size, await read(0, IMAGE_HEAD), read);
+    if (classifyFile(name) !== 'image') return {};
     const head = await read(0, IMAGE_HEAD);
     const image = imageSize(head);
     return image ? { width: image.width, height: image.height, retina: image.retina } : {};

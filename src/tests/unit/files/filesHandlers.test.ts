@@ -51,7 +51,8 @@ describe('FilesHandlers', () => {
     expect(await invoke('files:status', path.join(temporary, 'outside.png'))).toMatchObject({ success: false, error: /not inside/ });
     expect(await invoke('files:info', 'relative.png')).toEqual(invalid);
     expect(await invoke('files:thumbnail', page, 0)).toEqual(invalid);
-    expect(await invoke('files:thumbnail', page, 96.5)).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, Infinity)).toEqual(invalid);
+    expect(await invoke('files:thumbnail', page, 4097)).toEqual(invalid);
     expect(await invoke('files:thumbnail', page, 96, { visible: 'yes' })).toEqual(invalid);
     expect(await invoke('files:rendition', page, -1)).toEqual(invalid);
     expect(await invoke('files:open', page, { confirmed: 1 })).toEqual(invalid);

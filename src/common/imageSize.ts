@@ -127,10 +127,11 @@ function heifSize(data: DataView): ImageSize | null {
 
 /**
  * An SVG's width and height attributes in pixels, or its viewBox when they
- * are missing or relative. Only the opening tag is read, as text.
+ * are missing or relative. Only the opening tag is read, as text, within
+ * the first 64 KB (after any comments and doctype).
  */
 function svgSize(bytes: Uint8Array): ImageSize | null {
-  const head = new TextDecoder().decode(bytes.subarray(0, 4096));
+  const head = new TextDecoder().decode(bytes.subarray(0, 64 * 1024));
   const tag = /<svg\b[^>]*>/i.exec(head)?.[0];
   if (!tag) return null;
   const attribute = (name: string) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag)?.[1]?.trim();
