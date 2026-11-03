@@ -85,7 +85,7 @@ export function videoService(url: string): 'YouTube' | 'Loom' | null {
  * A Markdown address as the file it names, relative to the page or from the
  * top of the disk with a leading "/". Angle brackets come off, `\<` and `\>`
  * are read as written, and each segment is decoded on its own, so `%23` is a
- * "#" in a name and a bare "#" starts the fragment.
+ * "#" in a name, `%3C` a "<", and a bare "#" starts the fragment.
  */
 export function readAddress(written: string, page: string): { path: string; fragment: string | null } {
   let raw = written.trim();
@@ -119,7 +119,7 @@ export function inTableAt(state: EditorState, at: number): boolean {
 }
 
 /** The line holds this node and nothing else but quote marks and spaces, outside lists and tables. */
-function aloneOnLine(state: EditorState, node: SyntaxNode): { alone: boolean; inTable: boolean } {
+export function aloneOnLine(state: EditorState, node: SyntaxNode): { alone: boolean; inTable: boolean } {
   let inTable = false;
   let inList = false;
   for (let at = node.parent; at; at = at.parent) {
@@ -190,7 +190,9 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
   const image = node.name === 'Image';
   const bar = image ? label.lastIndexOf('|') : -1;
   const slot = bar === -1 ? null : label.slice(bar + 1);
-  const text = image && bar !== -1 && isSize(slot) ? label.slice(0, bar) : label;
+  // In a table the size's pipe is written "\|", and its backslash is no part of the alt text.
+  const cut = inTable && bar > 0 && label[bar - 1] === '\\' ? bar - 1 : bar;
+  const text = image && bar !== -1 && isSize(slot) ? label.slice(0, cut) : label;
   const base = {
     form: (image ? 'image' : 'link') as FileForm,
     from: node.from,
@@ -211,10 +213,32 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
     return { ...base, target: address, fragment: null, path: null, url: address, kind: 'video' };
   }
   if (SCHEME.test(written.trim())) return null;
+  // A heading on this page, or a folder, is no file.
+  const bare = written.trim().replace(/^<|>$/g, '');
+  if (bare.startsWith('#') || /\/(#|$)/.test(bare)) return null;
   const { path, fragment } = readAddress(written, page);
   const kind = classifyFile(path);
   if (!image && (kind === 'markdown' || !extensionOf(basenameFsPath(path)))) return null;
   return { ...base, target: path, fragment, path, url: null, kind };
+}
+
+/** A picture from the web, `![alt|300](https://…)`, that is no video page: its address, alt text and width. */
+export interface WebPicture {
+  address: string;
+  alt: string;
+  width: number | null;
+  alone: boolean;
+}
+
+export function webPictureOf(state: EditorState, node: SyntaxNode): WebPicture | null {
+  if (node.name !== 'Image') return null;
+  const marks = node.getChildren('LinkMark');
+  const written = marks.length >= 2 ? linkTarget(state, node) : null;
+  if (!written) return null;
+  const address = written.trim().replace(/^<|>$/g, '');
+  if (!WEB.test(address) || videoService(address)) return null;
+  const [alt, size] = state.sliceDoc(marks[0].to, marks[1].from).split('|');
+  return { address, alt, width: slotWidth(size), alone: aloneOnLine(state, node).alone };
 }
 
 /** The file link at `node`, with the page's wiki targets and path read from `state`. */

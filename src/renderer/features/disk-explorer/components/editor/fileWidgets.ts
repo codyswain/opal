@@ -26,12 +26,13 @@ import {
   shownName,
   slotWidth,
   videoService,
+  webPictureOf,
   type FileLook,
   type FileRef,
 } from './fileEmbeds';
 import { useDiskStore } from '../../store/diskStore';
 import { fileIcon, type FileIconName } from './fileIcons';
-import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt, removeRef, updateMovedLink } from './fileActions';
+import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt, removeRef, updateMovedLink, webPictureActions, webPictureIn } from './fileActions';
 import { objectFrame } from './objectFrame';
 import { ImageWidget, fileChanged } from './previewWidgets';
 import { linkPicker } from './linkPicker';
@@ -513,7 +514,7 @@ export class PdfPreviewWidget extends WidgetType {
         viewer.className = 'cm-file-pdf-viewer';
         reading.set(this.key, viewer);
       }
-      liveReader = { key: this.key, close: closeReader };
+      liveReader = { key: this.key, close: closeReader, view, page };
       page.classList.add('cm-file-pdf-reading');
       page.style.height = '80vh';
       page.replaceChildren(viewer);
@@ -545,15 +546,20 @@ export class PdfPreviewWidget extends WidgetType {
 
 /** The PDF viewers open with Read here, by widget, so a redraw keeps them; one is live in the window at a time. */
 const reading = new Map<string, HTMLElement>();
-let liveReader: { key: string; close: () => void } | null = null;
+let liveReader: { key: string; close: () => void; view: EditorView; page: HTMLElement } | null = null;
 
-// Escape puts the first page back.
+// Escape in the page that holds the reader puts the first page back. Escape anywhere else, as in a menu, is left alone.
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && liveReader) {
-      liveReader.close();
-      event.stopPropagation();
+    if (event.key !== 'Escape' || !liveReader) return;
+    if (!liveReader.page.isConnected || !liveReader.view.dom.isConnected) {
+      liveReader = null;
+      return;
     }
+    if (!(event.target instanceof Node) || !liveReader.view.dom.contains(event.target)) return;
+    liveReader.close();
+    event.preventDefault();
+    event.stopPropagation();
   }, true);
 }
 
@@ -826,10 +832,24 @@ async function pictureRatio(file: string): Promise<number | null> {
 
 const syntax = Decoration.mark({ class: 'cm-md-syntax' });
 
+/**
+ * In a document, a picture from the web is an object like a stored one: a
+ * click frames it, its corners resize it, and Backspace frames it first.
+ * A note leaves it to the live preview.
+ */
+function drawWebPicture(ctx: DecorateContext, node: SyntaxNode): boolean {
+  if (!ctx.docMode || ctx.covered(node.from) || ctx.state.doc.lineAt(node.from).to < node.to) return false;
+  const picture = webPictureOf(ctx.state, node);
+  if (!picture) return false;
+  const widget = new ImageWidget(picture.address, picture.alt, picture.width, ctx.versions.get(picture.address), false, { object: true });
+  ctx.out.push(Decoration.replace({ widget }).range(node.from, node.to));
+  return true;
+}
+
 /** Draws a file link in its look, or leaves it to the live preview when it is not a file. */
 function drawFile(ctx: DecorateContext, node: SyntaxNode): boolean {
   const ref = fileRefOf(ctx.state, node, ctx.links, ctx.page);
-  if (!ref) return false;
+  if (!ref) return node.name === 'Image' && drawWebPicture(ctx, node);
   if (ref.to > ctx.state.doc.lineAt(ref.from).to) return false;
   if (ctx.covered(ref.from)) return true;
   if (node.name === 'URL' && !urlCardShown(ctx.state, ref)) return false;
@@ -884,6 +904,32 @@ function kindFor(block: boolean): ObjectKind {
       if (!ref?.path) return false;
       void quickLookFile(ref);
       return true;
+    },
+  };
+}
+
+/** A picture from the web in a document: a block on its own line, framed first, and inline in text. */
+function webPictureKind(block: boolean): ObjectKind {
+  return {
+    kind: block ? 'web-picture' : 'web-picture-inline',
+    nodes: ['Image'],
+    block,
+    test: (state, node) => {
+      if (!state.facet(docMode)) return false;
+      const picture = webPictureOf(state, node);
+      return picture !== null && picture.alone === block;
+    },
+    open: (view, obj) => { const picture = webPictureIn(view.state, obj); if (picture) window.open(picture.address, '_blank'); },
+    actions: (state, obj) => webPictureActions(state, obj),
+    destination: (state, obj) => {
+      const picture = webPictureIn(state, obj);
+      if (!picture) return null;
+      try {
+        const url = new URL(picture.address);
+        return `${url.hostname.replace(/^www\./, '')}${url.pathname === '/' ? '' : url.pathname}`;
+      } catch {
+        return picture.address;
+      }
     },
   };
 }
@@ -956,6 +1002,8 @@ export const fileObjects: Extension = [
   nodeDecorators.of({ nodes: FILE_NODES, decorate: drawFile }),
   objectKinds.of(kindFor(true)),
   objectKinds.of(kindFor(false)),
+  objectKinds.of(webPictureKind(true)),
+  objectKinds.of(webPictureKind(false)),
   Prec.highest(fileClicks),
   framedFiles,
   wikiNames,

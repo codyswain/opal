@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { undo } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -119,7 +119,8 @@ describe('the bar', () => {
       return fileActions(view.state, { kind: 'file', from: line.from, to: line.to, node: '' }).map((item) => item.label);
     };
     expect(ids(PDF)).toEqual(['Open', 'Open in App', 'Show as', 'Size', 'More']);
-    expect(ids(PPTX)).toEqual(['Open in App', 'Show as', 'Edit link', 'More']);
+    // A deck draws as a card either way, so Show as is left out.
+    expect(ids(PPTX)).toEqual(['Open in App', 'Edit link', 'More']);
     expect(ids(PNG)).toEqual(['Open', 'Open in App', 'Show as', 'Size', 'More']);
     const more = action(view, PNG, 'more').items?.map((item) => item.label);
     expect(more).toEqual(['Quick Look', 'Reveal in Finder', 'Copy image', 'Copy file', 'Copy as Markdown', 'Copy path', 'Save a copy…', 'Replace…', 'Remove']);
@@ -135,8 +136,15 @@ describe('the bar', () => {
     expect(await bytes(`[[${MP4}|clip.mp4]]\n`, 'show-as/preview')).toEqual([`![[${MP4}|700]]\n`, `[[${MP4}|clip.mp4]]\n`]);
     expect(await bytes(`![[${M4A}]]\n`, 'show-as/card')).toEqual([`[[${M4A}|memo.m4a]]\n`, `![[${M4A}]]\n`]);
     expect(await bytes(`[[${M4A}|Memo]]\n`, 'show-as/preview')).toEqual([`![[${M4A}|Memo]]\n`, `[[${M4A}|Memo]]\n`]);
-    expect(await bytes(`[[${PPTX}|Gob deck.pptx]]\n`, 'show-as/preview')).toEqual([`![[${PPTX}|Gob deck.pptx]]\n`, `[[${PPTX}|Gob deck.pptx]]\n`]);
-    expect(await bytes(`![[${PPTX}]]\n`, 'show-as/card')).toEqual([`[[${PPTX}|deck.pptx]]\n`, `![[${PPTX}]]\n`]);
+  });
+
+  it('offers Show as only where Card and Preview look different', () => {
+    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n\n![[${PPTX}]]\n\nhttps://www.youtube.com/watch?v=abc\n\n![](https://www.youtube.com/watch?v=abc)\n`);
+    for (const needle of [`[[${PPTX}`, `![[${PPTX}`, 'https://www.youtube.com/watch?v=abc\n', '![](https']) {
+      const at = text(view).indexOf(needle);
+      const line = view.state.doc.lineAt(at);
+      expect(fileActions(view.state, { kind: 'file', from: line.from, to: line.to, node: '' }).map((item) => item.id)).not.toContain('show-as');
+    }
   });
 
   it('drops a name that reads as a size when a link becomes a preview, and says so', async () => {
@@ -144,9 +152,11 @@ describe('the bar', () => {
     expect(toast).toHaveBeenCalledWith('Dropped the name "2026", since an embed reads it as a size.');
   });
 
-  it('turns an empty-alt video page embed into a link with its name', async () => {
+  it('turns an empty-alt video page embed into a link with its name', () => {
     const url = 'https://www.youtube.com/watch?v=abc';
-    expect(await bytes(`![](${url})\n`, 'show-as/card')).toEqual([`[YouTube video](${url})\n`, `![](${url})\n`]);
+    const view = mount(`![](${url})\n`);
+    const ref = refAt(view.state, { from: 0, to: 0 });
+    expect(ref && cardText(view.state, ref)).toBe(`[YouTube video](${url})`);
   });
 
   it('sizes pictures and video by width, and PDFs by #height', async () => {
@@ -173,6 +183,41 @@ describe('the bar', () => {
       pickAndImport: vi.fn(async () => ({ success: true as const, data: { files: [{ path: '/Vault/Library/files/2026-11/new.b1b2b3b4.png', vaultPath: 'Library/files/2026-11/new.b1b2b3b4.png', name: 'new.png' }], skipped: [] } })),
     });
     expect(await bytes(`![[${PNG}|300]]\n`, 'more/replace')).toEqual(['![[Library/files/2026-11/new.b1b2b3b4.png|300]]\n', `![[${PNG}|300]]\n`]);
+  });
+
+  it('opens Rename… once the More menu has closed and given focus back, and applies what is typed there', async () => {
+    setAskText(null);
+    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n`);
+    // The menu is open, with focus in it, when its item runs.
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    const item = document.createElement('button');
+    menu.append(item);
+    document.body.append(menu);
+    item.focus();
+    await act(async () => { action(view, PPTX, 'more/rename').run?.(view, { kind: 'file', from: 0, to: 0, node: '' }); });
+    expect(document.querySelector('.opal-file-ask')).toBeNull();
+    // Closing, the menu puts focus back in the text.
+    menu.remove();
+    view.contentDOM.focus();
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.opal-file-ask input')));
+    const input = document.activeElement as HTMLInputElement;
+    input.value = 'Gob deck v2';
+    await act(async () => { input.form?.requestSubmit(); });
+    expect(text(view)).toBe(`[[${PPTX}|Gob deck v2]]\n`);
+    expect(document.querySelector('.opal-file-ask')).toBeNull();
+  });
+
+  it('closes the Rename… field when the page scrolls, writing nothing', async () => {
+    setAskText(null);
+    const view = mount(`[[${PPTX}|Gob deck.pptx]]\n`);
+    await act(async () => { action(view, PPTX, 'more/rename').run?.(view, { kind: 'file', from: 0, to: 0, node: '' }); });
+    await waitFor(() => expect(document.querySelector('.opal-file-ask')).not.toBeNull());
+    expect(document.body.hasAttribute('data-file-ask')).toBe(true);
+    act(() => { view.scrollDOM.dispatchEvent(new Event('scroll')); });
+    await waitFor(() => expect(document.querySelector('.opal-file-ask')).toBeNull());
+    expect(document.body.hasAttribute('data-file-ask')).toBe(false);
+    expect(text(view)).toBe(`[[${PPTX}|Gob deck.pptx]]\n`);
   });
 
   it('copies the Markdown, the path, the file and the image', async () => {
@@ -204,6 +249,27 @@ describe('writing links', () => {
       const written = encodeAddress(`Docs/${name}`);
       expect(readAddress(written, '/Vault/page.md').path).toBe(`/Vault/Docs/${name}`);
     }
+  });
+
+  it('reads a path with < or > back from what it writes, through the Markdown parser too', () => {
+    const written = linkFor({ vaultPath: 'Docs/A #1 > B.pdf', path: '/Vault/Docs/A #1 > B.pdf', page: '/Vault/Notes/Plan.md', embed: false, slot: 'A #1 > B.pdf' });
+    const state = EditorState.create({ doc: `${written}\n`, extensions: markdownEditorExtensions('/Vault/Notes/Plan.md') });
+    expect(refAt(state, { from: 0, to: 0 })?.path).toBe('/Vault/Docs/A #1 > B.pdf');
+  });
+
+  it('reads a sized Markdown picture in a table cell without the backslash, and sizes it without splitting the row', () => {
+    const doc = '| Shot | Note |\n| --- | --- |\n| ![a chart\\|300](shot.png) | x |\n';
+    const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Notes/Plan.md') });
+    const ref = refAt(state, { from: doc.indexOf('!['), to: doc.indexOf(') |') + 1 });
+    expect(ref?.text).toBe('a chart');
+    expect(ref && sizeText(state, ref, { width: 400 })).toBe('![a chart\\|400](shot.png)');
+  });
+
+  it('reads no file from a link to a heading on the page or to a folder, in a folder whose name has a dot', () => {
+    const doc = 'See [Goals](#goals) and [v1](../v1.2/) below.\n';
+    const state = EditorState.create({ doc, extensions: markdownEditorExtensions('/Vault/Library/bit-0.2/Plan.md') });
+    expect(refAt(state, { from: 4, to: 19 })).toBeNull();
+    expect(refAt(state, { from: doc.indexOf('[v1'), to: doc.indexOf(' below') })).toBeNull();
   });
 
   it('escapes link text, with a pipe escaped only in a table', () => {

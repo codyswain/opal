@@ -17,6 +17,7 @@ import {
   type FileRef,
 } from '@/renderer/features/disk-explorer/components/editor/fileEmbeds';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { linksResolved, resolvedLinks } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
@@ -251,9 +252,31 @@ describe('file widgets', () => {
     act(() => { second.click(); });
     expect(view.contentDOM.querySelectorAll('.cm-file-pdf-viewer')).toHaveLength(1);
     expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).toHaveAttribute('src', expect.stringContaining('&page=3'));
-    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    // Escape in a menu or anywhere outside the page is left to it.
+    const menu = document.createElement('button');
+    document.body.append(menu);
+    const reached = vi.fn();
+    menu.addEventListener('keydown', reached);
+    act(() => { menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(reached).toHaveBeenCalled();
+    expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).not.toBeNull();
+    menu.remove();
+    act(() => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     expect(view.contentDOM.querySelector('.cm-file-pdf-viewer')).toBeNull();
     expect(text(view)).toBe(`![[${PDF}|Q3.pdf]]\n\n![[${PDF}#page=3|Q3 again.pdf]]\n`);
+  });
+
+  it('forgets a reader once its page is gone, so Escape in another page goes through', async () => {
+    const view = await mount(`![[${PDF}|Q3.pdf]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf-read')).not.toBeNull());
+    act(() => { (view.contentDOM.querySelector('.cm-file-pdf-read') as HTMLButtonElement).click(); });
+    view.destroy();
+    views = views.filter((candidate) => candidate !== view);
+    const other = await mount('Text\n');
+    const reached = vi.fn();
+    other.contentDOM.addEventListener('keydown', reached);
+    act(() => { other.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(reached).toHaveBeenCalled();
   });
 
   it('floats a 240px picture over a card after 400 ms on it', async () => {
@@ -347,6 +370,25 @@ describe('file objects in a document', () => {
     act(() => { view.dispatch({ selection: { anchor: chipEnd } }); });
     key(view, 'Backspace');
     expect(text(view)).toBe('Intro\n\nSee  here\n');
+  });
+
+  it('frames a picture from the web on the first Backspace, draws its corners, and sizes it from the bar', async () => {
+    const doc = 'Text\n![chart](https://example.com/chart.png)\nMore\n';
+    const view = await mount(doc);
+    expect(view.contentDOM.querySelector('.cm-md-image[data-object] .cm-md-image-handle')).not.toBeNull();
+    act(() => { view.dispatch({ selection: { anchor: doc.indexOf('\nMore') } }); });
+    key(view, 'Backspace');
+    expect(text(view)).toBe(doc);
+    const frame = view.state.field(objectFrame);
+    expect(frame).toMatchObject({ kind: 'web-picture', from: 5 });
+    const kind = view.state.facet(objectKinds).find((candidate) => candidate.kind === 'web-picture');
+    expect(kind?.destination?.(view.state, frame!)).toBe('example.com/chart.png');
+    const medium = kind?.actions(view.state, frame!).find((item) => item.id === 'size')?.items?.find((item) => item.id === 'medium');
+    act(() => { medium?.run?.(view, frame!); });
+    expect(text(view)).toBe('Text\n![chart|400](https://example.com/chart.png)\nMore\n');
+    key(view, 'Backspace');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('Text\nMore\n');
   });
 
   it('never deletes part of a hidden path: Backspace after an embed in text takes the whole embed', async () => {

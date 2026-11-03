@@ -433,6 +433,11 @@
 }
 
 /* Rename…, Caption…: one field on the popover surface under the file. */
+/* While Rename… or Caption… is open, its field takes the bar's place. */
+body[data-file-ask] [data-object-bar] {
+  visibility: hidden;
+}
+
 .opal-file-ask {
   position: fixed;
   z-index: 50;

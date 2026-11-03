@@ -331,7 +331,15 @@ const wikiObject = objectKinds.of({
     return [wikiDisplay(link), folder].filter(Boolean).join(' · ');
   },
   actions: () => [
-    { id: 'open', label: 'Open', run: (view, obj) => { const link = parseWikiTarget(view.state.sliceDoc(obj.from + 2, obj.to - 2)); if (link.target) void openWikiLink(view, link.target, true); } },
+    {
+      id: 'open',
+      label: 'Open',
+      run: (view, obj) => {
+        const link = parseWikiTarget(view.state.sliceDoc(obj.from + 2, obj.to - 2));
+        // Another page opens in a new tab at the heading; a heading on this page scrolls to it.
+        if (link.target || link.heading) void openWikiLink(view, `${link.target}${link.heading ? `#${link.heading}` : ''}`, Boolean(link.target));
+      },
+    },
     { id: 'edit-link', label: 'Edit link', shortcut: '⌘K', run: (view, obj) => view.dispatch({ effects: setLinkEditor.of({ from: obj.from, to: obj.to, editing: true }) }) },
     { id: 'copy-markdown', label: 'Copy as Markdown', run: (view, obj) => { void copy(view.state.sliceDoc(obj.from, obj.to)); } },
     { id: 'remove', label: 'Remove', run: (view, obj) => view.dispatch({ changes: { from: obj.from, to: obj.to }, selection: { anchor: obj.from }, annotations: isolateHistory.of('full'), userEvent: 'delete' }) },

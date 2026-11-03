@@ -14,6 +14,7 @@ import { setLinkEditor } from './docMode';
 import { objectAt, type ObjectAction, type PageObject } from './extensionPoints';
 import {
   FILE_NODES,
+  PREVIEWED,
   appFor,
   captionOf,
   fileInfo,
@@ -29,8 +30,11 @@ import {
   lookOf,
   shownName,
   slotWidth,
+  webPictureOf,
   type FileRef,
+  type WebPicture,
 } from './fileEmbeds';
+import { widthChange } from './imageFrame';
 import { embedWidth } from './imageSize';
 import { docMode } from './livePreview';
 import { fileChanged } from './previewWidgets';
@@ -80,10 +84,12 @@ export function wikiAlias(name: string, inTable = false): string {
 
 /**
  * A path as a Markdown address in angle brackets: `%` first as `%25`, then
- * `#` as `%23`, and `<` and `>` escaped. Readers decode each segment.
+ * `#` as `%23`, and `<` and `>` as `%3C` and `%3E`, since the Markdown parser
+ * ends the brackets at the first `>` even after a backslash. Readers decode
+ * each segment.
  */
 export function encodeAddress(path: string): string {
-  return `<${path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/[<>]/g, (char) => `\\${char}`)}>`;
+  return `<${path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/</g, '%3C').replace(/>/g, '%3E')}>`;
 }
 
 /** `to` from the folder holding `from`, as "../files/x.pdf". */
@@ -399,7 +405,27 @@ export function setAskText(next: AskText | null): void {
   asker = next ?? askInPlace;
 }
 
-function askInPlace(view: EditorView, at: number, label: string, value: string): Promise<string | null> {
+/** Resolves once no menu is open and a frame has passed, so a closing menu has given focus back before a field takes it. */
+function afterMenus(): Promise<void> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const check = () => {
+      if (!document.querySelector('[role="menu"]') || Date.now() - started > 1000) requestAnimationFrame(() => resolve());
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
+/**
+ * Rename… and Caption…: a field under the file, in the bar's place, which
+ * hides while it is open. It opens once the More menu has closed, so the
+ * menu's focus return never lands in the text. Enter applies; Escape, a
+ * scroll or focus anywhere else closes it.
+ */
+async function askInPlace(view: EditorView, at: number, label: string, value: string): Promise<string | null> {
+  await afterMenus();
+  if (!view.dom.isConnected) return null;
   return new Promise((resolve) => {
     const box = document.createElement('form');
     box.className = 'opal-file-ask';
@@ -419,9 +445,13 @@ function askInPlace(view: EditorView, at: number, label: string, value: string):
       if (finished) return;
       finished = true;
       box.remove();
+      document.body.removeAttribute('data-file-ask');
+      view.scrollDOM.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
       view.focus();
       resolve(answer);
     };
+    const dismiss = () => finish(null);
     box.addEventListener('submit', (event) => {
       event.preventDefault();
       finish(input.value);
@@ -429,10 +459,14 @@ function askInPlace(view: EditorView, at: number, label: string, value: string):
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
         finish(null);
       }
     });
-    input.addEventListener('blur', () => setTimeout(() => { if (!box.contains(document.activeElement)) finish(null); }, 0));
+    box.addEventListener('focusout', () => setTimeout(() => { if (!box.contains(document.activeElement)) finish(null); }, 0));
+    view.scrollDOM.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    document.body.setAttribute('data-file-ask', '');
     document.body.append(box);
     input.focus();
     input.select();
@@ -520,13 +554,14 @@ export function fileActions(state: EditorState, obj: PageObject): ObjectAction[]
     actions.push({ id: 'open-app', label: appLabel, disabled: !path, run: (view) => { void openFile(view, fresh(view), 'app'); } });
   }
 
-  if (ref.alone) {
+  // Show as only where Card and Preview look different: a file Opal previews. Any other file, and a video page, is a card either way.
+  if (ref.alone && !ref.url && PREVIEWED.has(ref.kind)) {
     actions.push({
       id: 'show-as',
       label: 'Show as',
       items: [
         { id: 'card', label: 'Card', disabled: look === 'card' || cardText(state, ref) === null, run: (view) => { void showAs(view, fresh(view), 'card'); } },
-        { id: 'preview', label: 'Preview', disabled: look === 'preview' || Boolean(ref.url && ref.form === 'image'), run: (view) => { void showAs(view, fresh(view), 'preview'); } },
+        { id: 'preview', label: 'Preview', disabled: look === 'preview', run: (view) => { void showAs(view, fresh(view), 'preview'); } },
       ],
     });
   }
@@ -586,4 +621,54 @@ export function fileActions(state: EditorState, obj: PageObject): ObjectAction[]
   more.push({ id: 'remove', label: 'Remove', run: (view) => removeRef(view, fresh(view)) });
   actions.push({ id: 'more', label: 'More', items: more });
   return actions;
+}
+
+/** The picture from the web inside `obj`, with where its node starts. */
+export function webPictureIn(state: EditorState, obj: Pick<PageObject, 'from' | 'to'>): (WebPicture & { from: number }) | null {
+  const pictures: (WebPicture & { from: number })[] = [];
+  syntaxTree(state).iterate({
+    from: obj.from,
+    to: obj.to,
+    enter: (node) => {
+      if (pictures.length > 0) return false;
+      if (node.name !== 'Image') return undefined;
+      const picture = webPictureOf(state, node.node);
+      if (picture) pictures.push({ ...picture, from: node.from });
+      return false;
+    },
+  });
+  return pictures[0] ?? null;
+}
+
+/** The bar for a picture from the web: Open in the browser, Size, and More with Copy link, Copy as Markdown and Remove. */
+export function webPictureActions(state: EditorState, obj: PageObject): ObjectAction[] {
+  const found = webPictureIn(state, obj);
+  if (!found) return [];
+  const resize = (view: EditorView, width: number) => {
+    const changes = widthChange(view.state, found.from, width);
+    if (!changes) return;
+    view.dispatch({ changes, annotations: isolateHistory.of('full'), userEvent: 'input.resize' });
+    const framed = objectAt(view.state, obj.from, 1) ?? objectAt(view.state, found.from, 1);
+    if (framed) view.dispatch({ effects: setFrame.of(framed) });
+  };
+  return [
+    { id: 'open', label: 'Open', run: () => { window.open(found.address, '_blank'); } },
+    {
+      id: 'size',
+      label: 'Size',
+      items: [
+        ...IMAGE_SIZES.map((size) => ({ id: size.id, label: size.label, disabled: found.width === size.width, run: (view: EditorView) => resize(view, size.width) })),
+        { id: 'full', label: 'Full width', run: (view: EditorView) => resize(view, columnWidth(view)) },
+      ],
+    },
+    {
+      id: 'more',
+      label: 'More',
+      items: [
+        { id: 'copy-link', label: 'Copy link', run: () => { void copyText(found.address, 'Link copied.'); } },
+        { id: 'copy-markdown', label: 'Copy as Markdown', run: (view, current) => { void copyText(view.state.sliceDoc(current.from, current.to), 'Copied as Markdown.'); } },
+        { id: 'remove', label: 'Remove', run: (view, current) => removeObject(view, current, -1, 'delete') },
+      ],
+    },
+  ];
 }

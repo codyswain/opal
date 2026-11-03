@@ -5,6 +5,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { resolveLinkTarget } from '@/main/fs/LinkIndex';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
+import { objectAt, objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { noteToCreate, openWikiLink, parseWikiTarget, wikiDisplay } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
@@ -103,6 +104,26 @@ describe('wiki links to notes', () => {
     expect(view.contentDOM.querySelector('[data-wiki-name]')).toHaveAttribute('data-wiki-target', 'Plan#Goals');
     await openWikiLink(view, 'Plan#Goals', true);
     expect(openNote).toHaveBeenCalledWith('/Vault/Plan.md', true);
+    const plan = mount('# Plan\n\nIntro\n\n## Goals\n\nShip it.\n', '/Vault/Plan.md');
+    await waitFor(() => expect(plan.state.doc.lineAt(plan.state.selection.main.head).text).toBe('## Goals'));
+  });
+
+  it('keep the heading when opened from the bar', async () => {
+    installMarkdownApi({ [DOC]: '', '/Vault/Plan.md': '' }, {
+      resolveLinks: vi.fn(async (_from: string, targets: string[]) => ({ success: true as const, data: Object.fromEntries(targets.map((target) => [target, target === 'Plan' ? '/Vault/Plan.md' : null])) })),
+    });
+    const openNote = vi.fn();
+    const doc = 'See [[#Goals]] and [[Plan#Goals]] below.\n\nFiller\n\n## Goals\n\nText\n';
+    const view = mount(doc, DOC, openNote);
+    const open = (at: number) => {
+      const obj = objectAt(view.state, at, 1);
+      const kind = view.state.facet(objectKinds).find((candidate) => candidate.kind === 'wikilink');
+      return kind?.actions(view.state, obj!).find((item) => item.id === 'open')?.run?.(view, obj!);
+    };
+    await act(async () => { open(doc.indexOf('[[#Goals')); });
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('## Goals');
+    await act(async () => { open(doc.indexOf('[[Plan')); });
+    await waitFor(() => expect(openNote).toHaveBeenCalledWith('/Vault/Plan.md', true));
     const plan = mount('# Plan\n\nIntro\n\n## Goals\n\nShip it.\n', '/Vault/Plan.md');
     await waitFor(() => expect(plan.state.doc.lineAt(plan.state.selection.main.head).text).toBe('## Goals'));
   });
