@@ -8,6 +8,7 @@ import { FilesError, runFile, type RunFile } from '@/main/files/FileStore';
 import { FilesService } from '@/main/files/FilesService';
 import { DEFAULT_FILES_SETTINGS, parseFilesSettings, readFilesSettings } from '@/main/files/filesSettings';
 import { FolderStore, LONG_EDGE_LIMIT, SIPS, fileStem, storedName } from '@/main/files/FolderStore';
+import { MutationQueue } from '@/main/fs/MutationQueue';
 import { FILE_IMPORT_LIMIT } from '@/types/files';
 
 const NOW = () => new Date(2026, 10, 2, 9, 30);
@@ -137,6 +138,13 @@ describe('FolderStore', () => {
     expect((await readdir(month())).sort()).toEqual([path.basename(first), path.basename(other)].sort());
   });
 
+  it('stores the same file once, even when it is dropped again in a later month', async () => {
+    const first = await store().import({ bytes: new Uint8Array(PNG), name: 'Nest Frame.pdf' });
+    const later = new FolderStore({ root, folder: 'Library/files', links, run: sips, now: () => new Date(2026, 11, 3) });
+    expect(await later.import({ bytes: new Uint8Array(PNG), name: 'nest frame.PDF' })).toBe(first);
+    await expect(readdir(path.join(root, 'Library/files/2026-12'))).rejects.toThrow();
+  });
+
   it('links a dropped file already in the folder where it is', async () => {
     const stored = await store().import({ bytes: new Uint8Array(PNG), name: 'a.png' });
     expect(await store().import({ path: path.join(root, stored) })).toBe(stored);
@@ -183,16 +191,32 @@ describe('FolderStore', () => {
     await expect(store().import({ bytes: new Uint8Array(PNG), name: 'broken.png' })).rejects.toThrow('Opal could not read "broken.png" as an image.');
   });
 
-  it('waits while git rewrites the repo, then writes', async () => {
+  it('waits while git rewrites the repo, then writes, and lets other writes go on meanwhile', async () => {
     await mkdir(path.join(root, '.git'));
     await writeFile(path.join(root, '.git', 'MERGE_AUTOSTASH'), 'abc\n');
+    const queue = new MutationQueue();
     let done = false;
-    const importing = store().import({ bytes: new Uint8Array(PNG), name: 'held.pdf' }).then((stored) => { done = true; return stored; });
+    const importing = new FolderStore({ root, folder: 'Library/files', links, run: sips, now: NOW, queue })
+      .import({ bytes: new Uint8Array(PNG), name: 'held.pdf' }).then((stored) => { done = true; return stored; });
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(done).toBe(false);
-    expect((await readdir(month())).filter((name) => !name.startsWith('.opal-edit-'))).toEqual([]);
+    expect(await queue.run(async () => 'saved')).toBe('saved');
+    expect(await readdir(month()).catch(() => [])).toEqual([]);
     await rm(path.join(root, '.git', 'MERGE_AUTOSTASH'));
     expect(await readFile(path.join(root, await importing))).toEqual(PNG);
+  });
+
+  it('refuses at once when git starts while the write waits its turn', async () => {
+    await mkdir(path.join(root, '.git'));
+    const queue = new MutationQueue();
+    let release: () => void = () => undefined;
+    void queue.run(() => new Promise<void>((resolve) => { release = resolve; }));
+    const importing = new FolderStore({ root, folder: 'Library/files', links, run: sips, now: NOW, queue }).import({ bytes: new Uint8Array(PNG), name: 'held.pdf' });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await writeFile(path.join(root, '.git', 'MERGE_AUTOSTASH'), 'abc\n');
+    release();
+    await expect(importing).rejects.toThrow(new FilesError('Git is changing files in this folder. Try again in a moment.'));
+    expect(await readdir(month())).toEqual([]);
   });
 
   it('refuses a files folder that is a link out of the vault', async () => {
@@ -242,12 +266,12 @@ describe('FilesService', () => {
     expect(imported.path.startsWith(path.join(root, 'files'))).toBe(true);
   });
 
-  it('refuses pages and files outside the opened folders, and says a gone file inside one is missing', async () => {
+  it('refuses pages and files outside the opened folders, and files that are gone', async () => {
     await writeFile(path.join(temporary, 'outside.md'), '');
     await expect(service.import(path.join(temporary, 'outside.md'), { bytes: new Uint8Array(PNG), name: 'a.pdf' })).rejects.toThrow(PathNotAllowedError);
     await expect(service.status(path.join(temporary, 'outside.md'))).rejects.toThrow(PathNotAllowedError);
     await expect(service.fetch(path.join(temporary, 'gone.png'))).rejects.toThrow(PathNotAllowedError);
-    expect(await service.status(path.join(root, 'files/2026-11/gone.png'))).toBe('missing');
+    await expect(service.status(path.join(root, 'files/2026-11/gone.png'))).rejects.toThrow(PathNotAllowedError);
   });
 });
 

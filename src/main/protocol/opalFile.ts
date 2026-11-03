@@ -11,7 +11,7 @@ import {
 export { OPAL_FILE_SCHEME };
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import { PathNotAllowedError } from '@/main/fs/RootRegistry';
-import { PLACEHOLDER_LIMIT, localObject, readPlaceholder } from '@/main/files/lfsPlaceholder';
+import { localObject, readPlaceholder } from '@/main/files/lfsPlaceholder';
 import logger from '@/main/logger';
 
 /**
@@ -75,7 +75,7 @@ export function registerOpalFileProtocol(deps: OpalFileProtocolDependencies): vo
       // the file store whether it can be downloaded.
       let source = resolved;
       let size = info.size;
-      const placeholder = info.size < PLACEHOLDER_LIMIT ? await readPlaceholder(resolved) : null;
+      const placeholder = await readPlaceholder(resolved);
       if (placeholder) {
         const object = await localObject(resolved, placeholder);
         if (!object) return new Response('Not downloaded', { status: 404, headers: CORS_HEADERS });

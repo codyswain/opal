@@ -98,7 +98,12 @@ describe('GitLfsStore', () => {
     expect(run).toHaveBeenCalledTimes(1);
     const [program, args, options] = run.mock.calls[0];
     expect(program).toBe('git');
-    expect(args).toEqual(['-c', 'lfs.fetchexclude=', '-c', 'lfs.dialtimeout=5', 'lfs', 'fetch', '-I', 'Library/files/2026-11/Pasted \\[1\\].png']);
+    // A Mini that is asleep or off fails in seconds: one retry, short timeouts.
+    expect(args).toEqual([
+      '-c', 'lfs.fetchexclude=',
+      '-c', 'lfs.dialtimeout=5', '-c', 'lfs.tlstimeout=5', '-c', 'lfs.activitytimeout=30', '-c', 'lfs.transfer.maxretries=1',
+      'lfs', 'fetch', '-I', 'Library/files/2026-11/Pasted \\[1\\].png',
+    ]);
     expect(options.cwd).toBe(root);
     expect(options.timeout).toBeGreaterThan(0);
     expect(options.env?.GIT_TERMINAL_PROMPT).toBe('0');
@@ -115,5 +120,8 @@ describe('GitLfsStore', () => {
     await writeFile(file('frame.jpg'), pointer());
     run.mockRejectedValueOnce(Object.assign(new Error('Command failed'), { stderr: 'fetch: 1 object found\nbatch request: dial tcp 100.125.85.12:8732: i/o timeout\n' }));
     await expect(store().fetch(file('frame.jpg'))).rejects.toThrow('Could not download frame.jpg. batch request: dial tcp 100.125.85.12:8732: i/o timeout');
+    // Killed at Opal's own time limit, git's last line says nothing useful.
+    run.mockRejectedValueOnce(Object.assign(new Error('Command failed'), { killed: true, signal: 'SIGTERM', stderr: 'Fetching reference refs/heads/main\n' }));
+    await expect(store().fetch(file('frame.jpg'))).rejects.toThrow('Could not download frame.jpg. The file store did not answer in time.');
   });
 });

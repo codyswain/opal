@@ -4,7 +4,7 @@ import path from 'path';
 import { commonDirOf, gitDirOf } from '@/main/fs/gitActivity';
 
 /** A Git LFS placeholder is a few short lines; a larger file is the bytes themselves. */
-export const PLACEHOLDER_LIMIT = 1024;
+const PLACEHOLDER_LIMIT = 1024;
 const SPEC_LINE = 'version https://git-lfs.github.com/spec/v1';
 
 /** What a placeholder names: the SHA-256 of the bytes and their size. */

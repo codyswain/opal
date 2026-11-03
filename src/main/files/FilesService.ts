@@ -1,6 +1,5 @@
-import { lstat } from 'fs/promises';
 import path from 'path';
-import { isInsideRoot, normalizePath } from '@/main/fs/paths';
+import { isInsideRoot } from '@/main/fs/paths';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
 import type { FileStatus, ImportedFile } from '@/types/files';
 import type { FileStore, ImportSource, StoreDependencies } from './FileStore';
@@ -28,12 +27,12 @@ export class FilesService {
   }
 
   async status(target: string): Promise<FileStatus> {
-    const resolved = await this.allowed(target);
+    const resolved = await this.deps.registry.assertAllowed(target);
     return (await this.storeFor(resolved)).store.status(resolved);
   }
 
   async fetch(target: string): Promise<FileStatus> {
-    const resolved = await this.allowed(target);
+    const resolved = await this.deps.registry.assertAllowed(target);
     return (await this.storeFor(resolved)).store.fetch(resolved);
   }
 
@@ -47,17 +46,5 @@ export class FilesService {
     const { folder, store } = await readFilesSettings(root);
     const Store = store === 'git-lfs' ? GitLfsStore : FolderStore;
     return { root, store: new Store({ ...this.deps, root, folder }) };
-  }
-
-  /** `target` resolved inside an opened folder. A path with nothing there passes when it is inside one, so status can say it is missing. */
-  private async allowed(target: string): Promise<string> {
-    try {
-      return await this.deps.registry.assertAllowed(target);
-    } catch (error) {
-      const lexical = normalizePath(path.resolve(target));
-      const gone = !(await lstat(lexical).catch(() => null));
-      if (gone && this.deps.registry.list().some((root) => isInsideRoot(root, lexical))) return lexical;
-      throw error;
-    }
   }
 }

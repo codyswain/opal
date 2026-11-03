@@ -4,10 +4,15 @@ import { repoOf } from '@/main/fs/gitActivity';
 import type { FileStatus } from '@/types/files';
 import { FilesError } from './FileStore';
 import { FolderStore, untilGitIdle } from './FolderStore';
-import { PLACEHOLDER_LIMIT, localObject, readPlaceholder } from './lfsPlaceholder';
+import { localObject, readPlaceholder } from './lfsPlaceholder';
 
-/** A slow file store still answers in this time; the connect itself gives up after 5 s. */
+/** A slow file store still answers in this time. */
 const FETCH_TIMEOUT_MS = 5 * 60_000;
+/**
+ * A store that is asleep or off gives up in seconds, not after git-lfs's
+ * eight retries: the settings the vault's own lfs-sync.sh uses.
+ */
+const SHORT_TIMEOUTS = ['-c', 'lfs.dialtimeout=5', '-c', 'lfs.tlstimeout=5', '-c', 'lfs.activitytimeout=30', '-c', 'lfs.transfer.maxretries=1'];
 
 /**
  * The `-I` pattern that names one file to git lfs fetch, from the repo's
@@ -42,9 +47,8 @@ const gitEnvironment = (): NodeJS.ProcessEnv => ({
  */
 export class GitLfsStore extends FolderStore {
   async status(target: string): Promise<FileStatus> {
-    const info = await lstat(target).catch(() => null);
-    if (!info?.isFile()) return 'missing';
-    const placeholder = info.size < PLACEHOLDER_LIMIT ? await readPlaceholder(target) : null;
+    if (!(await lstat(target).catch(() => null))?.isFile()) return 'missing';
+    const placeholder = await readPlaceholder(target);
     if (!placeholder) return 'here';
     return (await localObject(target, placeholder)) ? 'here' : 'remote';
   }
@@ -60,11 +64,12 @@ export class GitLfsStore extends FolderStore {
     try {
       await this.run(
         'git',
-        ['-c', 'lfs.fetchexclude=', '-c', 'lfs.dialtimeout=5', 'lfs', 'fetch', '-I', lfsInclude(relative)],
+        ['-c', 'lfs.fetchexclude=', ...SHORT_TIMEOUTS, 'lfs', 'fetch', '-I', lfsInclude(relative)],
         { cwd: repo.top, timeout: FETCH_TIMEOUT_MS, env: gitEnvironment() },
       );
     } catch (error) {
-      const said = String((error as { stderr?: unknown }).stderr ?? '').trim().split('\n').pop();
+      const { killed, stderr } = error as { killed?: boolean; stderr?: unknown };
+      const said = killed ? 'The file store did not answer in time.' : String(stderr ?? '').trim().split('\n').pop();
       throw new FilesError(`Could not download ${path.basename(target)}.${said ? ` ${said}` : ''}`);
     }
     return this.status(target);

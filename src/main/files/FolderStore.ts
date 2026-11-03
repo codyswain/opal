@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import { lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'fs/promises';
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, unlink, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { extensionOf } from '@/common/fileKind';
@@ -46,15 +46,18 @@ export function storedName(name: string, bytes: Uint8Array): string {
   return `${fileStem(name)}.${hash}${stored ? `.${stored}` : ''}`;
 }
 
-/** Waits while git rewrites the repo, as a page's save does, so a file never lands in a tree git is resetting. */
+const GIT_BUSY = 'Git is changing files in this folder. Try again in a moment.';
+
+/** Waits while git rewrites the repo, so a file never lands in a tree git is resetting. */
 export async function untilGitIdle(file: string): Promise<void> {
   for (const started = Date.now(); await gitBusy(file); ) {
-    if (Date.now() - started > GIT_WAIT_LIMIT_MS) throw new FilesError('Git is changing files in this folder. Try again in a moment.');
+    if (Date.now() - started > GIT_WAIT_LIMIT_MS) throw new FilesError(GIT_BUSY);
     await new Promise((resolve) => setTimeout(resolve, GIT_RETRY_MS));
   }
 }
 
 const isFile = async (file: string) => (await lstat(file).catch(() => null))?.isFile() ?? false;
+const MONTH = /^\d{4}-\d{2}$/;
 
 /** Imported files as plain files in a folder of the opened folder. Git, if any, carries them like any file. */
 export class FolderStore implements FileStore {
@@ -76,11 +79,15 @@ export class FolderStore implements FileStore {
       if (isInsideRoot(this.folder, real) && (await isFile(real))) return this.vaultPath(real);
     }
     const { name, bytes } = await this.read(source);
+    const filename = storedName(name, bytes);
+    const copy = await this.copyOf(filename);
+    if (copy) return this.vaultPath(copy);
     const date = now();
     const directory = path.join(this.folder, `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
-    const file = path.join(directory, storedName(name, bytes));
-    if (await isFile(file)) return this.vaultPath(file);
-    const stored = await this.prepare(name, bytes);
+    const file = path.join(directory, filename);
+    const prepared = await this.prepare(name, bytes);
+    // The wait is outside the write queue, so saves and other writes go on meanwhile.
+    await untilGitIdle(file);
     await queue.run(async () => {
       await inVault(root, directory, true);
       await mkdir(directory, { recursive: true });
@@ -89,8 +96,8 @@ export class FolderStore implements FileStore {
       const temporary = path.join(directory, `.opal-edit-${randomUUID()}`);
       try {
         const handle = await open(temporary, 'wx', 0o644);
-        try { await handle.writeFile(stored); await handle.sync(); } finally { await handle.close(); }
-        await untilGitIdle(file);
+        try { await handle.writeFile(prepared); await handle.sync(); } finally { await handle.close(); }
+        if (await gitBusy(file)) throw new FilesError(GIT_BUSY);
         // Sync never commits half a file: it appears whole, under its own name.
         await rename(temporary, file);
       } finally {
@@ -113,6 +120,16 @@ export class FolderStore implements FileStore {
     return this.status(target);
   }
 
+  /** A file stored as `filename` in any month, so the same file dropped again is stored once. */
+  private async copyOf(filename: string): Promise<string | null> {
+    const months = await readdir(this.folder).catch(() => []);
+    for (const month of months.filter((entry) => MONTH.test(entry))) {
+      const file = path.join(this.folder, month, filename);
+      if (await isFile(file)) return file;
+    }
+    return null;
+  }
+
   private vaultPath(file: string): string {
     return path.relative(this.deps.root, file).split(path.sep).join('/');
   }
@@ -126,7 +143,10 @@ export class FolderStore implements FileStore {
     const info = await stat(source.path).catch(() => null);
     if (!info?.isFile()) throw new FilesError(`"${name}" is not a file Opal can add.`);
     if (info.size > FILE_IMPORT_LIMIT) throw new FilesError(fileTooLarge(name));
-    return { name, bytes: await readFile(source.path) };
+    const bytes = await readFile(source.path);
+    // A file still being written can pass the check above.
+    if (bytes.length > FILE_IMPORT_LIMIT) throw new FilesError(fileTooLarge(name));
+    return { name, bytes };
   }
 
   /**
