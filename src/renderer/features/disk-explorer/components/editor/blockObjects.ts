@@ -1,5 +1,6 @@
 import { EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
+import { ensureSyntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -339,9 +340,22 @@ export function keptApart(tr: Transaction): TransactionSpec | null {
     if (!node || (node.name === 'HorizontalRule' && !DASH_RULE.test(block.text)) || textLine(oldLine.text)) return;
     const joined = tr.newDoc.lineAt(toB);
     if (joined.number >= tr.newDoc.lines || tr.newDoc.line(joined.number + 1).text !== block.text || !textLine(joined.text)) return;
+    // The new parse still starts the rule or table on its line, as under a list item's lazy line: nothing joined it.
+    if (parsedBlockAt(tr.state, tr.newDoc.line(joined.number + 1), node.name)) return;
     inserts.push({ from: joined.to, insert: `\n${quoteOf(joined.text).replace(/[ \t]+$/, '')}` });
   });
   return inserts.length > 0 ? { changes: inserts, sequential: true } : null;
+}
+
+/** Whether the parse of `state`, when it reaches `line` quickly, has a `name` block starting on that line. */
+function parsedBlockAt(state: EditorState, line: Line, name: string): boolean {
+  const tree = ensureSyntaxTree(state, line.to, 50);
+  if (!tree) return false;
+  const at = line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0);
+  for (let node: SyntaxNode | null = tree.resolveInner(at, 1); node; node = node.parent) {
+    if (node.name === name) return state.doc.lineAt(node.from).number === line.number;
+  }
+  return false;
 }
 
 const framedRule = Decoration.line({ class: 'cm-md-hr-framed' });

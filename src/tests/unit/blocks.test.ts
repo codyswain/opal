@@ -195,6 +195,12 @@ describe('separators next to tables and rules in a document', () => {
     expect(marked(view)).toBe(`${TABLE}\n\n\\\\‸\nMore\n`);
   });
 
+  it('adds no blank line above a rule that a list item\'s lazy line cannot underline', () => {
+    const view = mount('* a\n‸<b\n---\n');
+    type(view, 'x');
+    expect(marked(view)).toBe('* a\nx‸<b\n---\n');
+  });
+
   it('keeps a blank line under text typed right above a --- rule and under a rule', () => {
     const above = mount('Intro\n\n‸\n---\n\nMore\n');
     type(above, 'x');
