@@ -107,12 +107,13 @@ const NOTHING_REVEALED: Reveal = { lines: () => false, span: () => false };
 
 function revealer(state: EditorState): Reveal {
   const { revealed, block } = state.field(revealState);
-  if (!revealed) return NOTHING_REVEALED;
+  // A document's open table or code block shows its source with or without focus, as a menu takes it.
   if (state.facet(docMode)) {
     if (!block) return NOTHING_REVEALED;
     const open = (from: number, to = from) => from <= block.to && to >= block.from;
     return { lines: open, span: open };
   }
+  if (!revealed) return NOTHING_REVEALED;
   // Log pages and the old Activity Log section are read-only in Opal, so they always read as rendered.
   const locked = state.field(activityLogSection, false) ?? null;
   const editable = (from: number) => locked === null || from < locked;

@@ -4,11 +4,14 @@ import { Pencil, Unlink } from 'lucide-react';
 import { Button, IconButton, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
 import { setLinkEditor, type LinkEditor } from './docMode';
 import { linkBetween, removeLink, writeLink, type LinkAt } from './formatCommands';
-import { autolinkHref, openLink } from './livePreview';
+import { autolinkHref, drawnBlockAt, openLink } from './livePreview';
 import { openWikiLink, parseWikiTarget } from './wikiLinks';
 
 /** Where the link sits on screen, from its first character on its first line. */
 function linkRect(view: EditorView, from: number, to: number): DOMRect {
+  // A link in a drawn table's cell has no text on the page; its drawn element stands in.
+  const drawn = drawnBlockAt(view.state, from) && view.contentDOM.querySelector('.cm-md-cell-caret [data-href], .cm-md-cell-caret [data-wiki-target]');
+  if (drawn) return drawn.getBoundingClientRect();
   const start = view.coordsAtPos(from, 1);
   if (!start) return new DOMRect();
   const end = view.coordsAtPos(to, -1);

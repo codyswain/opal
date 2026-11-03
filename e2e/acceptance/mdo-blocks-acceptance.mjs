@@ -22,7 +22,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-const TABLE = '| Area | Owner |\n|---|---|\n| Blocks | PR 1 |\n| Typing | PR 2 |';
+const TABLE = '| Area | Owner |\n|---|---|\n| Blocks | PR 1 |\n| Typing | [the plan](https://example.com/plan) |';
 const BODY = `Intro paragraph.\n\n${TABLE}\n\n***\n\n> [!note] A callout\n> With a body line.\n\n1. one\n2. two\n3. three\n\n- top\n- next\n\n> [!tip]- A folded tip\n> Hidden until opened.\n\n> [!WARNING]+ An open warning\n> > A nested quote in it.\n`;
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-blocks-userdata-'));
@@ -87,7 +87,7 @@ try {
   await page.mouse.click(box.x + 40, box.y + box.height + 10);
   await page.keyboard.type('x');
   let saved = await waitForFile((text) => text.includes('\nx'));
-  check('text typed under a table keeps a blank line above it', saved.includes(`${TABLE}\n\nx\n`), JSON.stringify(saved.slice(saved.indexOf('| Typing'), saved.indexOf('| Typing') + 40)));
+  check('text typed under a table keeps a blank line above it', saved.includes(`${TABLE}\n\nx\n`), JSON.stringify(saved.slice(saved.indexOf('| Typing'), saved.indexOf('| Typing') + 70)));
 
   // Backspace at the start of that text frames the table; a letter lands under it.
   await page.keyboard.press('ArrowLeft');
@@ -159,6 +159,25 @@ try {
   await page.waitForTimeout(800);
   check('folding writes nothing', (await readDoc()) === before);
   await page.locator('.cm-md-callout-fold').first().dispatchEvent('mousedown');
+
+  // A link in a cell shows its popover on a click and stays put.
+  await page.keyboard.press('Meta+ArrowUp');
+  await page.locator('.cm-md-table [data-href]').first().click();
+  check('a click on a link in a cell shows its popover', await page.getByTestId('link-popover').isVisible().catch(() => false));
+  await shoot('cell-link');
+  await page.keyboard.press('Escape');
+
+  // Insert > Table writes a table that parses, with its source open.
+  await page.locator('.cm-line', { hasText: /^Intro paragraph\.$/ }).first().click();
+  await page.keyboard.press('End');
+  await page.getByRole('button', { name: 'Insert' }).click();
+  await page.getByRole('menuitem', { name: 'Table' }).click();
+  saved = await waitForFile((text) => text.includes('| Column 1 |'));
+  check('Insert > Table writes a 3 by 3 table with blank lines around it', saved.startsWith('Intro paragraph.\n\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |\n\n'));
+  await page.keyboard.type('Name');
+  saved = await waitForFile((text) => text.includes('| Name |'));
+  check('typing goes into the first header', saved.includes('| Name | Column 2 |'));
+  await shoot('insert-table');
   await page.locator('.cm-md-callout-icon').last().scrollIntoViewIfNeeded();
   await shoot('page');
   check('the editor still holds the file', (await editorText()) === null || (await editorText()) === (await readDoc()));
