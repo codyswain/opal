@@ -63,6 +63,8 @@ export interface MathEditor {
    */
   lead: boolean;
   trail: boolean;
+  /** After Inline or Display, the change back and the TeX it was made for, so switching back with that TeX gives the original bytes. */
+  revert?: { tex: string; changes: ChangeSet };
 }
 
 export const setMathEditor = StateEffect.define<MathEditor | null>();
@@ -141,12 +143,13 @@ export const mathEditor = StateField.define<MathEditor | null>({
     const to = Math.max(from, tr.changes.mapPos(value.to, -1));
     // Edits from elsewhere change the page the undo goes back to; the popover's own writes are undone on top of them.
     const undo = value.undo.map(tr.changes);
-    if (tr.annotation(mathWrite)) return { ...value, from, to, undo };
+    const revert = value.revert && { tex: value.revert.tex, changes: value.revert.changes.map(tr.changes) };
+    if (tr.annotation(mathWrite)) return { ...value, from, to, undo, revert };
     let inside = false;
     tr.changes.iterChangedRanges((changedFrom, changedTo) => {
       if (changedFrom < value.to && changedTo > value.from) inside = true;
     });
-    if (!inside) return { ...value, from, to, undo };
+    if (!inside) return { ...value, from, to, undo, revert };
     if (empty || to <= from) return null;
     const node = mathNodeAt(syntaxTree(tr.state), from, 1);
     if (!node || node.from !== from || !MATH_NODES.has(node.name)) return null;
@@ -205,18 +208,27 @@ function formulaText(editor: MathEditor, tex: string): string {
   return `${editor.open}\n${editor.prefix}${written(editor, tex)}\n${editor.prefix}${editor.close}`;
 }
 
+/** How much `old` and `next` share at their start and, after that, at their end. */
+function differing(old: string, next: string): { start: number; end: number } {
+  let start = 0;
+  while (start < old.length && start < next.length && old[start] === next[start]) start += 1;
+  let end = 0;
+  while (end < old.length - start && end < next.length - start && old[old.length - 1 - end] === next[next.length - 1 - end]) end += 1;
+  return { start, end };
+}
+
 /** The changes that take the file's formula from its TeX now to `tex`: only the part that differs, or the whole formula when it has none yet. */
 function texChanges(state: EditorState, editor: MathEditor, tex: string): { changes: ChangeSpec[]; from: number; to: number } {
-  const map = editor.to > editor.from ? texMap(state, editor) : null;
+  // A new formula's first write replaces its range whole, even when that range already reads as a formula.
+  const map = editor.to > editor.from && !(editor.fresh && editor.undo.empty) ? texMap(state, editor) : null;
   if (!map) {
+    // Only the part that differs, so the history keeps text typed before, such as the `$$` a block opened with.
     const text = formulaText(editor, tex);
-    return { changes: [{ from: editor.from, to: editor.to, insert: text }], from: editor.from, to: editor.from + text.length };
+    const { start, end } = differing(state.sliceDoc(editor.from, editor.to), text);
+    return { changes: [{ from: editor.from + start, to: editor.to - end, insert: text.slice(start, text.length - end) }], from: editor.from, to: editor.from + text.length };
   }
   const old = editor.tex;
-  let start = 0;
-  while (start < old.length && start < tex.length && old[start] === tex[start]) start += 1;
-  let end = 0;
-  while (end < old.length - start && end < tex.length - start && old[old.length - 1 - end] === tex[tex.length - 1 - end]) end += 1;
+  const { start, end } = differing(old, tex);
   const from = docPos(map, start);
   const to = docPos(map, old.length - end);
   const insert = written(editor, tex.slice(start, tex.length - end));
@@ -264,6 +276,16 @@ export function typedForFormula(text: string, table: boolean, after = ''): strin
   return out;
 }
 
+/** `text` without one pair of math marks around all of it: `$…$`, `$$…$$`, `\(…\)` or `\[…\]`. */
+function withoutMarks(text: string): string {
+  const trimmed = text.trim();
+  const inner = /^\$\$([\s\S]+)\$\$$/.exec(trimmed) ?? /^\\\(([\s\S]+)\\\)$/.exec(trimmed) ?? /^\\\[([\s\S]+)\\\]$/.exec(trimmed) ?? /^\$([^$][\s\S]*)\$$/.exec(trimmed);
+  if (!inner) return text;
+  // Only one pair: a bare `$` left inside means the marks were two formulas' ends, as in "$a$ and $b$".
+  const tex = inner[1];
+  return /(^|[^\\])\$/.test(tex) ? text : tex.trim();
+}
+
 /**
  * The field after an input: the typed text rewritten by `typedForFormula`,
  * and only it, so the TeX already there keeps its bytes. `caret` is where
@@ -277,8 +299,10 @@ export function applyTyped(before: string, after: string, caret: number, table: 
   let backslashes = 0;
   while (backslashes < start && after[start - 1 - backslashes] === '\\') backslashes += 1;
   if (backslashes % 2 === 1 && start < after.length - end) start -= 1;
-  const typed = after.slice(start, after.length - end);
+  let typed = after.slice(start, after.length - end);
   const rest = after.slice(after.length - end);
+  // A whole formula pasted with its marks, from another note or a chat answer: the marks go, the TeX stays.
+  if (start === 0 && end === 0) typed = withoutMarks(typed);
   const rewritten = typedForFormula(typed, table, rest);
   return { value: after.slice(0, start) + rewritten + rest, caret: start + rewritten.length };
 }
@@ -352,6 +376,7 @@ export function writeLive(view: EditorView, editor: MathEditor, input: string, r
     to: result.to,
     tex: result.tex,
     problem: null,
+    revert: undefined,
     // What the field holds must render: TeX that only reads back with its {} guard, such as a trailing "\", is not yet a formula to keep.
     lastGood: result.tex && rendered(editor.open === '$' ? input.trim() : input) ? result.tex : editor.lastGood,
     undo: changes.invert(view.state.doc).compose(undo),
@@ -402,11 +427,13 @@ export function closeMathEditor(view: EditorView, field: string | null = null, f
         scrollIntoView: !keep,
       });
     }
+  } else if (editor.dollars) {
+    // The block's lines were the popover's own first write, so putting the page back leaves the typed `$$` and no undo step.
+    const { from } = restore(view, editor);
+    view.dispatch({ effects: setMathEditor.of(null), ...at(from + 2), scrollIntoView: !keep });
   } else {
     const range = restore(view, editor);
-    const { changes, caret: after } = editor.dollars
-      ? { changes: [{ from: range.from, to: range.to, insert: '$$' }], caret: range.from + 2 }
-      : removalWrite(view.state, { ...editor, ...range });
+    const { changes, caret: after } = removalWrite(view.state, { ...editor, ...range });
     view.dispatch({
       changes,
       effects: setMathEditor.of(null),
@@ -501,13 +528,23 @@ export function toggleKind(view: EditorView, toDisplay: boolean): MathEditor | n
     view.dispatch({ effects: setMathEditor.of(next) });
     return next.tex.trim() ? writeLive(view, next, next.tex, () => true) : next;
   }
-  const result = switchDisplay(state, editor);
+  // Back to the marks it had, with the TeX unchanged since: the bytes it had, line breaks and all.
+  const back = editor.revert && editor.revert.tex === editor.tex ? editor.revert.changes : null;
+  const result = back ? { changes: [], problem: null, anchor: back.mapPos(editor.to, 1) } : switchDisplay(state, editor);
   if (result.problem) return refuse(result.problem);
-  const changes = ChangeSet.of(result.changes, state.doc.length);
+  const changes = back ?? ChangeSet.of(result.changes, state.doc.length);
   const after = state.update({ changes, filter: false }).state;
   const node = mathNodeAt(ensureSyntaxTree(after, Math.min(after.doc.length, result.anchor + 1), 200) ?? syntaxTree(after), result.anchor, -1);
   if (!node) return editor;
-  const next = { ...editorFor(after, node), id: editor.id, fresh: editor.fresh, version: editor.version, undo: changes.invert(state.doc).compose(editor.undo) };
+  const opened = editorFor(after, node);
+  const next: MathEditor = {
+    ...opened,
+    id: editor.id,
+    fresh: editor.fresh,
+    version: editor.version,
+    undo: changes.invert(state.doc).compose(editor.undo),
+    revert: { tex: opened.tex, changes: changes.invert(state.doc) },
+  };
   view.dispatch({ changes, effects: setMathEditor.of(next), annotations: [mathWrite.of('live'), Transaction.addToHistory.of(false)] });
   return view.state.field(mathEditor, false) ?? null;
 }
@@ -517,7 +554,9 @@ export function switchDisplay(state: EditorState, editor: MathEditor): { changes
   const refuse = (problem: string) => ({ changes: [] as ChangeSpec[], problem, anchor: editor.to });
   if (editor.kind === 'inline') {
     if (editor.table) return refuse(TABLE_INLINE_ONLY);
-    const insert = `$$${editor.tex}$$`;
+    // Alone on its line it becomes a block, its later lines under the line's quote marks or list indent; in a line, `$$…$$`.
+    const prefix = linePrefix(state.doc.lineAt(editor.from).text);
+    const insert = aloneOnLine(state, editor) ? `$$\n${prefix}${editor.tex}\n${prefix}$$` : `$$${editor.tex}$$`;
     return { changes: [{ from: editor.from, to: editor.to, insert }], problem: null, anchor: editor.from + insert.length };
   }
   if (COMMENT.test(editor.tex)) return refuse('Remove the % comment first');
@@ -642,7 +681,11 @@ export const editFormula: Command = (view) => {
   const { state } = view;
   const { main } = state.selection;
   const tree = syntaxTree(state);
-  const beside = main.empty ? mathNodeAt(tree, main.head, -1) ?? mathNodeAt(tree, main.head, 1) : null;
+  // The formula beside the caret, or the one a selection covers exactly or lies inside.
+  const covering = (node: SyntaxNode | null) => (node && node.from <= main.from && node.to >= main.to ? node : null);
+  const beside = main.empty
+    ? mathNodeAt(tree, main.head, -1) ?? mathNodeAt(tree, main.head, 1)
+    : covering(mathNodeAt(tree, main.from, 1)) ?? covering(mathNodeAt(tree, main.to, -1));
   if (beside) {
     openMathEditor(view, beside);
     return true;
@@ -661,7 +704,12 @@ export const editFormula: Command = (view) => {
   return true;
 };
 
-/** Enter right after `$$` alone on a line writes a block, `$$`, an empty line and `$$`, and opens its popover. */
+/**
+ * Enter right after `$$` alone on a line writes a block, `$$`, an empty line
+ * and `$$`, and opens its popover. Those lines are the popover's first live
+ * write, so closing writes the formula as one undo step from the typed `$$`,
+ * and an empty close leaves the `$$` with no undo step.
+ */
 const dollarsEnter: Command = (view) => {
   const { state } = view;
   if (!state.facet(docMode)) return false;
@@ -675,8 +723,14 @@ const dollarsEnter: Command = (view) => {
   if (mathNodeAt(ensureSyntaxTree(state, line.to, 50) ?? syntaxTree(state), from + 1, 0)) return false;
   const prefix = linePrefix(line.text);
   const insert = `\n${prefix}\n${prefix}$$`;
-  view.dispatch({ changes: { from: line.to, insert }, selection: { anchor: line.to + 1 + prefix.length }, userEvent: 'math.write' });
-  view.dispatch({ effects: setMathEditor.of({ ...newEditor(view.state, from, 'block'), from, to: line.to + insert.length, prefix, dollars: true }) });
+  const changes = ChangeSet.of({ from: line.to, insert }, state.doc.length);
+  const editor: MathEditor = { ...newEditor(state, from, 'block'), from, to: line.to + insert.length, prefix, dollars: true, undo: changes.invert(state.doc) };
+  view.dispatch({
+    changes,
+    selection: { anchor: line.to + 1 + prefix.length },
+    effects: setMathEditor.of(editor),
+    annotations: [mathWrite.of('live'), Transaction.addToHistory.of(false)],
+  });
   return true;
 };
 
