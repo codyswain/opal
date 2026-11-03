@@ -34,6 +34,12 @@
   gap: 0.35em;
 }
 
+/* A table outside a callout is as wide as it draws, so its bar centres on it. */
+.opal-editor .cm-editor .cm-md-table:not(.cm-md-in-callout) {
+  width: fit-content;
+  max-width: 100%;
+}
+
 /* A framed table: the ring sits on the table's own edge, not across the column. */
 .opal-editor .cm-editor .cm-content > .cm-md-table[data-object-framed] {
   box-shadow: none;
