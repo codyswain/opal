@@ -486,6 +486,12 @@
   box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
 }
 
+/* The frame shows the selection, so the browser's selection color would
+   only tint the picture. */
+.opal-editor .cm-editor .cm-md-image-selected ::selection {
+  background-color: transparent;
+}
+
 .opal-editor .cm-editor .cm-md-image-handle {
   position: absolute;
   width: 9px;
