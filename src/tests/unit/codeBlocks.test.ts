@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState } from '@codemirror/state';
@@ -361,6 +363,30 @@ describe('a code block in a document', () => {
     expect(view.contentDOM.querySelector('.cm-code-unclosed')).not.toBeNull();
     act(() => { (view.contentDOM.querySelector('.cm-code-end-here') as HTMLElement).click(); });
     expect(text(view)).toBe('```\none\n```\ntwo');
+  });
+
+  it('hangs a wrapped line two characters in from its own indent, counting from the code in a list item', () => {
+    const deep = ' '.repeat(20);
+    const view = mount(`\`\`\`py\ndef f():\n    return 1\n\tpass\n${deep}x\n\`\`\`\n\n- item\n  \`\`\`js\n  a\n    b\n  \`\`\`\n`);
+    const hangs = [...view.contentDOM.querySelectorAll('.cm-code-line:not(.cm-code-head):not(.cm-code-foot)')]
+      .map((line) => /--code-hang:\s*(\d+ch)/.exec(line.getAttribute('style') ?? '')?.[1] ?? '');
+    expect(hangs).toEqual(['', '4ch', '4ch', '16ch', '', '2ch']);
+    const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/code.css'), 'utf8');
+    const line = /\.cm-line\.cm-code-line \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(line).toMatch(/padding-left:[^;]*var\(--code-hang, 0ch\)/);
+    expect(line).toMatch(/text-indent: calc\(-2ch - var\(--code-hang, 0ch\)\)/);
+  });
+
+  it('stops a block that ends a callout above the callout\'s bottom padding', () => {
+    const view = mount('> [!note] Code in a callout\n> ```sh\n> git pull\n> ```\n\nAfter\n');
+    const foot = view.contentDOM.querySelector('.cm-code-foot');
+    expect(foot?.classList.contains('cm-md-callout-last')).toBe(true);
+    const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/code.css'), 'utf8');
+    const rule = (selector: string) => new RegExp(`${selector.replace(/[.()[\]:]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/padding-bottom: calc\(0\.45em \/ 0\.85\)/);
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before')).toMatch(/bottom: calc\(0\.45em \/ 0\.85\)/);
+    // Lines are border-box, so the closing fence's line grows by the padding and keeps its rounded foot.
+    expect(rule('.cm-line.cm-code-foot:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/height: calc\(0\.4em \+ 0\.45em \/ 0\.85\)/);
   });
 
   it('draws diff lines', () => {

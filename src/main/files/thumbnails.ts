@@ -17,6 +17,8 @@ const BUCKETS = [64, 128, 256, 512, 1024, 2048];
 export interface Picture {
   bytes: Buffer;
   type: 'image/png' | 'image/jpeg';
+  /** A corner of the picture is see-through, as an icon's is and a page's, slide's or frame's never is. */
+  clearCorner?: boolean;
 }
 
 /** Draws a thumbnail of a file on disk no larger than `px` points on its long side, at the screen's scale, or null when it can't. */
@@ -42,6 +44,20 @@ const PICTURED = new Set([
   'docx', 'pptx', 'xlsx', 'doc', 'ppt', 'xls', 'key', 'pages', 'numbers',
   'stl', 'obj', 'usdz', '3mf',
 ]);
+
+/**
+ * Types whose real picture is a page, slide or frame, opaque to its corners.
+ * When Quick Look has no picture of such a file it answers the type's icon,
+ * an app's coloured badge on a page, which the page never shows.
+ */
+const OPAQUE = new Set(['pdf', 'mp4', 'm4v', 'mov', 'webm', 'mkv', 'docx', 'pptx', 'xlsx', 'doc', 'ppt', 'xls', 'key', 'pages', 'numbers']);
+
+/** Whether a corner pixel of a bitmap (four bytes a pixel, alpha last) is mostly see-through. */
+export function hasClearCorner(bitmap: Buffer, width: number, height: number): boolean {
+  if (width < 1 || height < 1 || bitmap.length < width * height * 4) return false;
+  const alpha = (x: number, y: number) => bitmap[(y * width + x) * 4 + 3];
+  return [alpha(0, 0), alpha(width - 1, 0), alpha(0, height - 1), alpha(width - 1, height - 1)].some((value) => value < 32);
+}
 
 /** A 3MF, Bambu's `.gcode.3mf` among them. */
 const isThreeMf = (name: string) => extensionOf(name) === '3mf';
@@ -135,7 +151,8 @@ export class Thumbnails {
   async thumbnail(info: FileInfo, px: number, options: { visible?: boolean } = {}): Promise<string | null> {
     if (!PICTURED.has(extensionOf(info.name)) || info.status === 'missing' || info.status === 'lfs-missing') return null;
     const size = BUCKETS.find((bucket) => bucket >= px) ?? BUCKETS[BUCKETS.length - 1];
-    const key = DiskCache.keyFor(info, `thumbnail-${size}`);
+    // "picture": entries cached as "thumbnail" may hold an icon Quick Look drew for a file it could not.
+    const key = DiskCache.keyFor(info, `picture-${size}`);
     if (this.failed.has(key) || this.late.has(key)) return null;
     const cached = await this.deps.cache.get(key);
     if (cached) return dataUrl({ bytes: cached, type: isPng(cached) ? 'image/png' : 'image/jpeg' });
@@ -178,6 +195,7 @@ export class Thumbnails {
       const bytes = await run(UNZIP, ['-p', file, 'Metadata/plate_1.png'], { timeout: this.deps.timeoutMs ?? THUMBNAIL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
       return isPng(bytes) ? { bytes, type: 'image/png' } : null;
     }
-    return this.deps.provider(file, px);
+    const picture = await this.deps.provider(file, px);
+    return picture?.clearCorner && OPAQUE.has(extensionOf(info.name)) ? null : picture;
   }
 }

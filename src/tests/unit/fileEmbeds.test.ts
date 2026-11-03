@@ -311,6 +311,8 @@ describe('file widgets', () => {
     });
     const view = await mount(`[[${DECK}|Gob deck.pptx]]\n`);
     await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-thumb')).toHaveAttribute('src', 'data:image/png;base64,48'));
+    // A deck's slide is a page, so its tile draws a hairline edge (files.css).
+    expect([...(view.contentDOM.querySelector('.cm-file-card-tile')?.classList ?? [])]).toEqual(expect.arrayContaining(['cm-file-card-tile-thumb', 'cm-file-card-tile-page']));
     vi.useFakeTimers();
     const card = view.contentDOM.querySelector('.cm-file-card') as HTMLElement;
     const at = (top: number) => ({ top, bottom: top + 64, left: 0, right: 400, width: 400, height: 64, x: 0, y: top, toJSON: () => ({}) });

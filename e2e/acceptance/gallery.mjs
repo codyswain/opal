@@ -65,11 +65,11 @@ async function sizeEditor(width) {
 
 /**
  * Scrolls the page to screen `part` (overlapping by 80 pixels) and gives
- * back how many screens it takes. The page scrolls in the nearest scrolling
- * box around the editor's text.
+ * back how many screens it takes and where it scrolled to. The page scrolls
+ * in the nearest scrolling box around the editor's text.
  */
 async function scrollToPart(part) {
-  const parts = await page.evaluate((target) => {
+  const at = await page.evaluate((target) => {
     let scroller = document.scrollingElement;
     for (let node = document.querySelector('.cm-content'); node; node = node.parentElement) {
       if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) {
@@ -79,10 +79,10 @@ async function scrollToPart(part) {
     }
     const step = Math.max(1, scroller.clientHeight - 80);
     scroller.scrollTop = target * step;
-    return Math.max(1, Math.ceil((scroller.scrollHeight - scroller.clientHeight) / step) + 1);
+    return { parts: Math.max(1, Math.ceil((scroller.scrollHeight - scroller.clientHeight) / step) + 1), top: scroller.scrollTop };
   }, part);
   await page.waitForTimeout(200);
-  return parts;
+  return at;
 }
 
 async function setTheme(theme) {
@@ -108,15 +108,23 @@ try {
       for (const width of WIDTHS) {
         await sizeEditor(width);
         // A fixture taller than the window goes in parts, one per screen, so nothing below the fold is missed.
-        const parts = await scrollToPart(0);
+        // The count is read again at each screen, since pictures and movies that load late make the page taller.
+        let { parts } = await scrollToPart(0);
+        let last = -1;
+        let taken = 0;
         for (let part = 0; part < parts; part += 1) {
-          await scrollToPart(part);
+          const at = await scrollToPart(part);
+          parts = at.parts;
+          // A page that got shorter ends at the screen already saved.
+          if (at.top === last) break;
+          last = at.top;
+          taken += 1;
           const png = `${name.replace(/\.mdo$/, '')}-${theme}-${width}${part > 0 ? `-${part + 1}` : ''}.png`;
           await page.locator('.opal-editor').first().screenshot({ path: path.join(outDir, png) });
           shots.push({ name, theme, width, png, part });
         }
         await scrollToPart(0);
-        console.log(`PASS ${name} ${theme} ${width}px, ${parts} part${parts === 1 ? '' : 's'}`);
+        console.log(`PASS ${name} ${theme} ${width}px, ${taken} part${taken === 1 ? '' : 's'}`);
       }
     }
   }
