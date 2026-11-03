@@ -215,6 +215,17 @@ describe('how formulas sit in a line', () => {
     const first = mount('See [$O(n)$ cost](https://example.com) here.\n');
     expect(first.contentDOM.querySelector('.cm-math')?.closest('[data-href]')).not.toBeNull();
   });
+
+  it('follows the link on Cmd+click on a formula at the end of link text', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const view = mount('See [cost $O(n)$](https://example.com) here.\n');
+    view.focus = vi.fn();
+    const formula = view.contentDOM.querySelector('.cm-math');
+    act(() => { formula?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, metaKey: true })); });
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('https://example.com', '_blank'));
+    expect(view.state.field(mathEditor)).toBeNull();
+    open.mockRestore();
+  });
 });
 
 

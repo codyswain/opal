@@ -276,6 +276,25 @@ function wraps(root: HTMLElement): boolean {
   return parts[parts.length - 1].getBoundingClientRect().top >= parts[0].getBoundingClientRect().bottom - 1;
 }
 
+/** When the column's width changes, a formula that now breaks onto a second line flows with the text too. */
+const flowOnResize = ViewPlugin.fromClass(class {
+  width = -1;
+
+  update(update: ViewUpdate) {
+    if (!update.geometryChanged) return;
+    update.view.requestMeasure({
+      key: this,
+      read: (view) => {
+        const width = view.contentDOM.clientWidth;
+        if (width === this.width) return [];
+        this.width = width;
+        return [...view.contentDOM.querySelectorAll<HTMLElement>('.cm-math-inline:not(.cm-math-flow)')].filter(wraps);
+      },
+      write: (wrapped) => { for (const element of wrapped) element.classList.add('cm-math-flow'); },
+    });
+  }
+});
+
 /** A formula in a line: inline, or display math (`$$…$$`) on a centred line of its own. */
 export class MathWidget extends WidgetType {
   constructor(readonly tex: string, readonly display: boolean, readonly source: string, readonly page: PageMacros, readonly doc: boolean) { super(); }
@@ -547,4 +566,4 @@ const searchMatches = ViewPlugin.fromClass(class {
 }, { provide: (plugin) => EditorView.outerDecorations.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none) });
 
 /** Math in the page editor: the parser's reparse guard, drawing, the page's macros and, in documents, editing. */
-export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, editingMarks, editingWidgets, searchMatches, mathEditing, insertEquationItem];
+export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, editingMarks, editingWidgets, searchMatches, flowOnResize, mathEditing, insertEquationItem];
