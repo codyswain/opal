@@ -365,3 +365,17 @@ describe('the link form, typed web addresses', () => {
     }
   });
 });
+
+describe('pasting a bare web address over a selection', () => {
+  it('links the selection to the https address, and Paste and Match Style keeps it text', () => {
+    const view = mount('Visit the site\n');
+    select(view, 10, 14);
+    const spec = pasteSpec(view.state, 'www.example.com', false);
+    if (!spec) throw new Error('no link');
+    act(() => { view.dispatch(spec); });
+    expect(text(view)).toBe('Visit the [site](https://www.example.com)\n');
+    const literal = mount('Visit the site\n');
+    select(literal, 10, 14);
+    expect(pasteSpec(literal.state, 'www.example.com', true)?.changes).toEqual({ from: 10, to: 14, insert: 'www.example.com' });
+  });
+});

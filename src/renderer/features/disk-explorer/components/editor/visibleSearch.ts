@@ -500,17 +500,31 @@ const matchCount = ViewPlugin.fromClass(class {
   }
 });
 
-/** Whether a key went to one of the Find bar's buttons or toggles, which have no text of their own to undo. */
-const onBarControl = () => {
+const barFields = (view: EditorView) => [...view.dom.querySelectorAll<HTMLInputElement>('.cm-search input.cm-textfield')].map((field) => field.value).join('\n');
+
+/** The Find bar's text when it last replaced, so ⌘Z in a field it has not changed since goes to the page. */
+const replacedWith = new WeakMap<EditorView, string>();
+
+const rememberReplace = EditorView.updateListener.of((update) => {
+  if (update.transactions.some((tr) => tr.isUserEvent('input.replace'))) replacedWith.set(update.view, barFields(update.view));
+});
+
+/**
+ * Whether ⌘Z in the Find bar goes to the page: from its buttons and toggles,
+ * which have no text of their own to undo, or from a field whose text has not
+ * changed since the bar last replaced.
+ */
+const pageHistory = (view: EditorView) => {
   const active = document.activeElement;
-  return active instanceof HTMLButtonElement || (active instanceof HTMLInputElement && active.type === 'checkbox');
+  if (active instanceof HTMLButtonElement || (active instanceof HTMLInputElement && active.type === 'checkbox')) return true;
+  return active instanceof HTMLInputElement && replacedWith.get(view) === barFields(view);
 };
 
 const barHistory = keymap.of([
-  { key: 'Mod-z', run: (view) => onBarControl() && undo(view), scope: 'search-panel' },
-  { key: 'Mod-Shift-z', run: (view) => onBarControl() && redo(view), scope: 'search-panel' },
-  { key: 'Mod-y', run: (view) => onBarControl() && redo(view), scope: 'search-panel' },
+  { key: 'Mod-z', run: (view) => pageHistory(view) && undo(view), scope: 'search-panel' },
+  { key: 'Mod-Shift-z', run: (view) => pageHistory(view) && redo(view), scope: 'search-panel' },
+  { key: 'Mod-y', run: (view) => pageHistory(view) && redo(view), scope: 'search-panel' },
 ]);
 
 /** The Find bar's parts every page has. */
-export const findBar: Extension = [findPhrases, matchCount, barHistory];
+export const findBar: Extension = [findPhrases, matchCount, rememberReplace, barHistory];

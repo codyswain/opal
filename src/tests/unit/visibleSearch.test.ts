@@ -323,6 +323,28 @@ describe('Find and Replace, second pass', () => {
     expect(text(view)).toBe('A roadmap and a roadmap\n');
   });
 
+  it('Cmd+Z in a Find bar field it has not changed since Replace undoes the replace', () => {
+    const MOD = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    const view = mount('A plan and a plan\n');
+    act(() => { openSearchPanel(view); });
+    const search = view.dom.querySelector('.cm-search input[name=search]') as HTMLInputElement;
+    const replace = view.dom.querySelector('.cm-search input[name=replace]') as HTMLInputElement;
+    search.value = 'plan';
+    replace.value = 'roadmap';
+    act(() => { replace.dispatchEvent(new KeyboardEvent('keyup', { key: 'p', bubbles: true })); });
+    replace.focus();
+    const key = (init: KeyboardEventInit) => act(() => { replace.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })); });
+    key({ key: 'Enter', keyCode: 13 } as KeyboardEventInit);
+    key({ key: 'Enter', keyCode: 13 } as KeyboardEventInit);
+    expect(text(view)).toBe('A roadmap and a plan\n');
+    key({ key: 'z', ...MOD });
+    expect(text(view)).toBe('A plan and a plan\n');
+    // Once the field's text changes, Cmd+Z there is the field's own.
+    replace.value = 'roadmaps';
+    key({ key: 'z', ...MOD });
+    expect(text(view)).toBe('A plan and a plan\n');
+  });
+
   it('shows how many matches there are, and which one is selected', () => {
     const view = mount('A plan and a plan, no Plan\n');
     act(() => { openSearchPanel(view); });
