@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { findNext, getSearchQuery, replaceAll, replaceNext, SearchQuery, setSearchQuery } from '@codemirror/search';
+import { findNext, getSearchQuery, openSearchPanel, replaceAll, replaceNext, SearchQuery, setSearchQuery } from '@codemirror/search';
 import { undo } from '@codemirror/commands';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -154,5 +154,60 @@ describe('Find and Replace in a document', () => {
     expect(view.state.selection.main.from).toBe(at);
     expect(view.state.selection.main.to).toBe(at + 6);
     expect(drawnBlockAt(view.state, at)).toBeNull();
+  });
+
+  it('replaces one match that crosses a mark and scrolls to the next one that still exists', () => {
+    const view = mount('A pl**an** and plan\n');
+    query(view, 'plan', 'roadmap');
+    act(() => { view.dispatch({ selection: { anchor: 0 } }); });
+    run(view, findNext);
+    expect(() => run(view, replaceNext)).not.toThrow();
+    expect(text(view)).toBe('A roadmap and plan\n');
+    const { from, to } = view.state.selection.main;
+    expect(view.state.sliceDoc(from, to)).toBe('plan');
+  });
+
+  it('fills Find with the selection as the page shows it', () => {
+    const view = mount('A pl**an** here\n');
+    const doc = text(view);
+    act(() => { view.dispatch({ selection: { anchor: doc.indexOf('pl'), head: doc.indexOf('an') + 2 } }); });
+    run(view, openSearchPanel);
+    expect(getSearchQuery(view.state).search).toBe('plan');
+  });
+
+  it('escapes stars as well as pipes in a table cell', () => {
+    const view = mount('| a | b |\n| --- | --- |\n| plan | x |\n');
+    query(view, 'plan', '*new* a|b');
+    run(view, replaceAll);
+    expect(text(view)).toBe('| a | b |\n| --- | --- |\n| \\*new\\* a\\|b | x |\n');
+  });
+
+  it('keeps a match in inline code when the replacement holds a backtick', () => {
+    const view = mount('x `plan` y and plan\n');
+    query(view, 'plan', 'a`b');
+    run(view, replaceAll);
+    expect(text(view)).toBe('x `plan` y and a`b\n');
+  });
+
+  it('replaces every match with punctuation in the replacement in well under a second on 1500 lines', () => {
+    const lines = Array.from({ length: 1500 }, (_, i) => `Line ${i} has a plan and **bold** text and [a link](https://x.com/${i}).`);
+    const view = mount(`${lines.join('\n')}\n`);
+    query(view, 'plan', 'plan-b');
+    const started = performance.now();
+    run(view, replaceAll);
+    const took = performance.now() - started;
+    expect(text(view).split('plan-b').length - 1).toBe(1500);
+    expect(took).toBeLessThan(2_000);
+  });
+
+  it('shows matches Replace keeps apart from those it changes, and says how many it kept', () => {
+    const view = mount('The plan is in [[Plan]] and at https://plan.example.com/plan today.\n');
+    query(view, 'plan', 'roadmap');
+    run(view, openSearchPanel);
+    query(view, 'plan', 'roadmap');
+    run(view, replaceAll);
+    expect(text(view)).toBe('The roadmap is in [[Plan]] and at https://plan.example.com/plan today.\n');
+    expect(view.contentDOM.querySelectorAll('.cm-searchMatch:not(.opal-searchKept)').length).toBe(0);
+    expect(view.contentDOM.querySelectorAll('.opal-searchKept').length).toBe(3);
   });
 });

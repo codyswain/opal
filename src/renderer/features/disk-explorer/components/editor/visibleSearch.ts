@@ -1,11 +1,13 @@
-import { SearchQuery, setSearchQuery } from '@codemirror/search';
-import { ChangeSet, EditorSelection, EditorState, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
+import { getSearchQuery, SearchQuery, searchPanelOpen, setSearchQuery } from '@codemirror/search';
+import { Annotation, ChangeSet, EditorSelection, EditorState, RangeSetBuilder, StateEffect, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
+import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { toast } from 'sonner';
 import { latestTree, objectAt, protectedIn } from './extensionPoints';
 import { docMode, drawnBlockAt, setOpenBlock } from './livePreview';
 import { setFrame } from './objectFrame';
-import { literalText } from './typing';
-import { OBJECT, rawRange, visibleLines, type VisibleLine } from './visibleText';
+import { literalTexts } from './typing';
+import { OBJECT, rawRange, visibleLines, visibleSlice, type VisibleLine } from './visibleText';
 
 /*
  * Find and Replace in a document work on the text the page shows. A query
@@ -168,9 +170,10 @@ class VisibleQueryType {
     return found.length > limit ? null : found;
   }
 
+  /** Only matches Replace changes; `keptMatches` draws the others. */
   highlight(state: EditorState, from: number, to: number, add: (from: number, to: number) => void): void {
     const { doc } = state;
-    for (const match of matchesIn(state, this.spec, doc.lineAt(from).number, doc.lineAt(to).number)) add(match.from, match.to);
+    for (const match of matchesIn(state, this.spec, doc.lineAt(from).number, doc.lineAt(to).number)) if (match.precise) add(match.from, match.to);
   }
 }
 
@@ -181,11 +184,24 @@ export class VisibleQuery extends SearchQuery {
   }
 }
 
-/** `query` over visible text, keeping its settings. */
-export function visibleQuery(query: SearchQuery): VisibleQuery {
+/**
+ * `query` over visible text, keeping its settings. A query CodeMirror filled
+ * from the selection holds its Markdown, so it takes the selection's visible
+ * text instead.
+ */
+export function visibleQuery(query: SearchQuery, state?: EditorState): VisibleQuery {
   if (query instanceof VisibleQuery) return query;
+  let { search } = query;
+  const selection = state?.selection.main;
+  if (state && selection && !selection.empty) {
+    const raw = state.sliceDoc(selection.from, selection.to);
+    if (search === raw || search === raw.replace(/\n/g, '\\n')) {
+      const shown = visibleSlice(state, selection.from, selection.to);
+      search = query.literal ? shown : shown.replace(/\n/g, '\\n');
+    }
+  }
   return new VisibleQuery({
-    search: query.search,
+    search,
     caseSensitive: query.caseSensitive,
     literal: query.literal,
     regexp: query.regexp,
@@ -194,10 +210,10 @@ export function visibleQuery(query: SearchQuery): VisibleQuery {
   });
 }
 
-/** Whether `at` sits in a table: its cells need `\|` for a pipe. */
-function inTable(state: EditorState, at: number): boolean {
+/** Whether `at` sits in a node named `name`. */
+function inNode(state: EditorState, at: number, name: string): boolean {
   for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, 1); node; node = node.parent) {
-    if (node.name === 'Table') return true;
+    if (node.name === name) return true;
   }
   return false;
 }
@@ -212,14 +228,69 @@ export function replaceEdits(
   edits: readonly { from: number; to: number; insert: string }[],
   replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] },
 ): ChangeSet {
+  // A backtick would end inline code early, so a match there keeps its text.
+  const replaced = edits.filter((edit) => !keptText(state, edit.from, edit.to) && !(edit.insert.includes('`') && inNode(state, edit.from, 'InlineCode')));
+  const texts = literalTexts(state, replaced.map((edit) => ({ ...edit, table: inNode(state, edit.from, 'Table') })));
   const specs: ChangeSpec[] = [];
-  for (const edit of edits) {
-    if (keptText(state, edit.from, edit.to)) continue;
-    const text = literalText(state, edit.from, edit.to, edit.insert, { table: inTable(state, edit.from) });
-    specs.push(...replace(state, edit.from, edit.to, text).changes);
-  }
+  replaced.forEach((edit, index) => specs.push(...replace(state, edit.from, edit.to, texts[index]).changes));
   return ChangeSet.of(specs, state.doc.length);
 }
+
+/** How many matches Replace All found and left as they are, for the status message after it. */
+const keptByReplace = Annotation.define<{ replaced: number; kept: number }>();
+
+const keptMark = Decoration.mark({ class: 'opal-searchKept' });
+
+/** Matches Replace keeps (link addresses, wiki link targets, formulas), drawn apart from those it changes. */
+const keptMatches = ViewPlugin.fromClass(class {
+  decorations: DecorationSet = Decoration.none;
+
+  constructor(view: EditorView) {
+    this.decorations = this.build(view);
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || update.transactions.some((tr) => tr.effects.length > 0)) this.decorations = this.build(update.view);
+    for (const tr of update.transactions) {
+      const counts = tr.annotation(keptByReplace);
+      if (counts) toast(`Replaced ${counts.replaced} of ${counts.replaced + counts.kept}. Link addresses and formulas stay as they are.`);
+    }
+  }
+
+  build(view: EditorView): DecorationSet {
+    const { state } = view;
+    const query = getSearchQuery(state);
+    if (!searchPanelOpen(state) || !query.valid || !(query instanceof VisibleQuery)) return Decoration.none;
+    const builder = new RangeSetBuilder<Decoration>();
+    let last = 0;
+    for (const { from, to } of view.visibleRanges) {
+      for (const match of matchesIn(state, query, state.doc.lineAt(from).number, state.doc.lineAt(to).number)) {
+        if (match.precise || match.from < last || match.to <= match.from) continue;
+        builder.add(match.from, match.to, keptMark);
+        last = match.to;
+      }
+    }
+    return builder.finish();
+  }
+}, { decorations: (plugin) => plugin.decorations });
+
+// No fill, so a kept match reads apart from the grey of those Replace changes.
+const keptTheme = EditorView.theme({
+  '.opal-searchKept': { textDecoration: 'underline dashed 1px hsl(var(--text-tertiary))', textUnderlineOffset: '3px' },
+});
+
+// The Find bar's labels in sentence case.
+const searchPhrases = EditorState.phrases.of({
+  next: 'Next',
+  previous: 'Previous',
+  all: 'All',
+  'match case': 'Match case',
+  regexp: 'Regex',
+  'by word': 'Whole word',
+  replace: 'Replace',
+  'replace all': 'Replace all',
+  close: 'Close',
+});
 
 /**
  * Doc mode's search: queries over visible text, replacements written as
@@ -227,7 +298,7 @@ export function replaceEdits(
  * opens its source, a protected range frames its object.
  */
 export function visibleSearch(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
-  return EditorState.transactionFilter.of((tr) => {
+  return [keptMatches, keptTheme, searchPhrases, EditorState.transactionFilter.of((tr) => {
     if (!tr.startState.facet(docMode)) return tr;
     const queries = tr.effects.filter((effect) => effect.is(setSearchQuery) && !(effect.value instanceof VisibleQuery));
     if (queries.length > 0) {
@@ -236,18 +307,27 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
         selection: tr.selection,
         scrollIntoView: tr.scrollIntoView,
         userEvent: tr.annotation(Transaction.userEvent),
-        effects: tr.effects.map((effect) => (effect.is(setSearchQuery) ? setSearchQuery.of(visibleQuery(effect.value)) : effect)),
+        effects: tr.effects.map((effect) => (effect.is(setSearchQuery) ? setSearchQuery.of(visibleQuery(effect.value, tr.startState)) : effect)),
       };
     }
     if (tr.isUserEvent('input.replace') && tr.docChanged) {
       const edits: { from: number; to: number; insert: string }[] = [];
       tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, insert: inserted.toString() }));
       const changes = replaceEdits(tr.startState, edits, replace);
+      // Positions after CodeMirror's changes, such as the next match to scroll to, moved onto the changes written instead.
       const back = tr.changes.invert(tr.startState.doc);
       const selection = tr.selection
         ? EditorSelection.create(tr.newSelection.ranges.map((range) => EditorSelection.range(changes.mapPos(back.mapPos(range.anchor)), changes.mapPos(back.mapPos(range.head)))), tr.newSelection.mainIndex)
         : undefined;
-      const spec: TransactionSpec = { changes, selection, effects: tr.effects, scrollIntoView: tr.scrollIntoView, userEvent: tr.annotation(Transaction.userEvent) };
+      const effects = StateEffect.mapEffects(StateEffect.mapEffects(tr.effects, back), changes);
+      const annotations: Annotation<{ replaced: number; kept: number }>[] = [];
+      if (tr.isUserEvent('input.replace.all')) {
+        const query = getSearchQuery(tr.startState);
+        const found = query instanceof VisibleQuery ? query.create().matchAll(tr.startState, 1e9) ?? [] : [];
+        const kept = found.length - edits.length;
+        if (kept > 0) annotations.push(keptByReplace.of({ replaced: edits.length, kept }));
+      }
+      const spec: TransactionSpec = { changes, selection, effects, annotations, scrollIntoView: tr.scrollIntoView, userEvent: tr.annotation(Transaction.userEvent) };
       return spec;
     }
     if (tr.isUserEvent('select.search') && tr.selection) {
@@ -261,5 +341,5 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
       }
     }
     return tr;
-  });
+  })];
 }

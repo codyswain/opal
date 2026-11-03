@@ -1,12 +1,12 @@
 import { isolateHistory, undo } from '@codemirror/commands';
-import { syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { ChangeSet, EditorState, MapMode, Prec, StateEffect, StateField, Transaction, type ChangeSpec, type Extension, type Text, type TransactionSpec } from '@codemirror/state';
 import { EditorView, ViewPlugin, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, nodeDecorators, protectedIn } from './extensionPoints';
 import { inlineSpans, typingStyle } from './formatCommands';
 import { docMode, hiddenRanges } from './livePreview';
-import { visibleLine, visibleOffset, visibleSlice } from './visibleText';
+import { OBJECT as OBJECT_CHARACTER, visibleLine, visibleOffset, visibleSlice } from './visibleText';
 
 /*
  * Typing in a document writes what the page shows. A typed character that
@@ -444,11 +444,34 @@ export function keepsVisibleText(tr: Transaction): boolean {
  */
 
 const CELL_PIPE = /(?<!\\)\|/g;
+const PUNCTUATION_IN = /[!-/:-@[-`{-~]/;
 
-function escapeAt(text: string, offsets: readonly number[]): string {
-  let out = text;
-  for (const offset of [...offsets].sort((a, b) => b - a)) out = `${out.slice(0, offset)}\\${out.slice(offset)}`;
-  return out;
+/** One piece of literal text: `insert` written for `from` to `to`. */
+export interface LiteralEdit {
+  from: number;
+  to: number;
+  insert: string;
+  /** A table cell, which takes `\|` for a pipe. */
+  table?: boolean;
+  /** The container marks lines after the first go after. */
+  prefix?: string;
+}
+
+/** A line of literal text, with the backslashes this escaper wrote in it. */
+interface Written {
+  text: string;
+  ours: boolean[];
+}
+
+function escapeIn(line: Written, offset: number): void {
+  line.text = `${line.text.slice(0, offset)}\\${line.text.slice(offset)}`;
+  line.ours.splice(offset, 0, true);
+}
+
+/** `pattern`'s matches in `line` each get a backslash before them. */
+function escapeAll(line: Written, pattern: RegExp): void {
+  const offsets = [...line.text.matchAll(pattern)].map((match) => match.index ?? 0);
+  for (const offset of offsets.reverse()) escapeIn(line, offset);
 }
 
 /**
@@ -457,47 +480,94 @@ function escapeAt(text: string, offsets: readonly number[]): string {
  * table cell takes `\|` for a pipe.
  */
 export function literalText(state: EditorState, from: number, to: number, insert: string, { table = false, prefix = '' }: { table?: boolean; prefix?: string } = {}): string {
-  if (rawAt(state, from)) return insert;
-  let lines = insert.split('\n');
-  if (table) lines = lines.map((line) => line.replace(CELL_PIPE, '\\|'));
-  // A backslash just before the text would escape its first character.
-  if (/^[!-/:-@[-`{-~]/.test(lines[0]) && charBefore(state, from) === '\\' && charBefore(state, from - 1) !== '\\') lines[0] = `\\${lines[0]}`;
-  lines = lines.map((line) => line.replace(/<!--/g, '\\<!--'));
-  if (!/[!-/:-@[-`{-~]/.test(lines.join(''))) return join(lines, prefix);
-  const before = visibleSlice(state, state.doc.lineAt(from).from, from);
-  const after = visibleSlice(state, to, state.doc.lineAt(to).to);
-  const expected = before + insert.split('\n').join('\n') + after;
-  for (let round = 0; round < 6; round += 1) {
-    const written = join(lines, prefix);
-    const next = state.update({ changes: { from, to, insert: written }, filter: false }).state;
-    const end = from + written.length;
-    if (table || visibleSlice(next, next.doc.lineAt(from).from, next.doc.lineAt(end).to) === expected) return written;
-    // The hidden marks inside the inserted text, as offsets into its lines.
-    const starts: number[] = [];
-    for (let index = 0, at = from; index < lines.length; index += 1) {
-      const lead = index === 0 ? 0 : prefix.length;
-      starts.push(at + lead);
-      at += lead + lines[index].length + 1;
+  return literalTexts(state, [{ from, to, insert, table, prefix }])[0];
+}
+
+/**
+ * `literalText` for several edits at once, in order and not overlapping, as
+ * Replace All writes them. Every round writes all of them and parses the
+ * page once, so the cost does not grow with the number of edits.
+ */
+export function literalTexts(state: EditorState, edits: readonly LiteralEdit[]): string[] {
+  const lines: Written[][] = edits.map((edit) => {
+    const written = edit.insert.split('\n').map((text) => ({ text, ours: [...text].map(() => false) }));
+    if (rawAt(state, edit.from)) return written;
+    if (edit.table) for (const line of written) escapeAll(line, CELL_PIPE);
+    // A backslash just before the text would escape its first character.
+    if (PUNCTUATION_IN.test(written[0].text[0] ?? '') && charBefore(state, edit.from) === '\\' && charBefore(state, edit.from - 1) !== '\\') escapeIn(written[0], 0);
+    for (const line of written) escapeAll(line, /<!--/g);
+    return written;
+  });
+  const texts = () => edits.map((edit, index) => join(lines[index].map((line) => line.text), edit.prefix ?? ''));
+  // Edits that can still read as Markdown, grouped by the lines they touch, since edits on one line affect each other.
+  const open = edits.map((edit, index) => !rawAt(state, edit.from) && lines[index].some((line) => PUNCTUATION_IN.test(line.text)));
+  const groups: { from: number; to: number; members: number[] }[] = [];
+  edits.forEach((edit, index) => {
+    const from = state.doc.lineAt(edit.from).from;
+    const to = state.doc.lineAt(edit.to).to;
+    const last = groups[groups.length - 1];
+    if (last && from <= last.to) { last.to = Math.max(last.to, to); last.members.push(index); } else groups.push({ from, to, members: [index] });
+  });
+  let pending = groups.filter((group) => group.members.some((index) => open[index]));
+  if (pending.length === 0) return texts();
+  const expected = new Map(pending.map((group) => {
+    let shown = '';
+    let at = group.from;
+    for (const index of group.members) {
+      shown += visibleSlice(state, at, edits[index].from) + edits[index].insert;
+      at = edits[index].to;
     }
-    const escapes = lines.map((): number[] => []);
-    for (const range of hiddenRanges(next, from, end)) {
-      for (let index = 0; index < lines.length; index += 1) {
-        const lineFrom = starts[index];
-        const lineTo = lineFrom + lines[index].length;
-        for (let at = Math.max(range.from, lineFrom); at < Math.min(range.to, lineTo); at += 1) {
-          const character = lines[index][at - lineFrom];
-          if (ASCII_PUNCTUATION.test(character) && lines[index][at - lineFrom - 1] !== '\\') {
-            escapes[index].push(at - lineFrom);
-            // A mark of several characters needs only its first escaped, except emphasis runs.
-            if (!'*_~`'.includes(character)) break;
-          }
-        }
+    return [group, shown + visibleSlice(state, at, group.to)];
+  }));
+  for (let round = 0; round < 6 && pending.length > 0; round += 1) {
+    const written = texts();
+    const changes = ChangeSet.of(edits.map((edit, index) => ({ from: edit.from, to: edit.to, insert: written[index] })), state.doc.length);
+    const next = state.update({ changes, filter: false }).state;
+    const last = pending[pending.length - 1];
+    ensureSyntaxTree(next, changes.mapPos(last.to, 1), 2_000);
+    pending = pending.filter((group) => {
+      if (visibleSlice(next, changes.mapPos(group.from, -1), changes.mapPos(group.to, 1)) === expected.get(group)) return false;
+      let escaped = false;
+      for (const index of group.members) {
+        if (!open[index]) continue;
+        const prefix = edits[index].prefix ?? '';
+        let at = changes.mapPos(edits[index].from, -1);
+        lines[index].forEach((line, number) => {
+          if (number > 0) at += prefix.length;
+          escaped = escapeHidden(next, at, line) || escaped;
+          at += line.text.length + 1;
+        });
       }
-    }
-    if (escapes.every((list) => list.length === 0)) return written;
-    lines = lines.map((line, index) => escapeAt(line, [...new Set(escapes[index])]));
+      return escaped;
+    });
   }
-  return join(lines, prefix);
+  return texts();
+}
+
+/**
+ * Escapes the characters of `line`, written at `at` in `state`, that the page
+ * hides: the first of each hidden run, or all of a run of emphasis marks.
+ * Backslashes this escaper wrote are left alone. False when none needed it.
+ */
+function escapeHidden(state: EditorState, at: number, line: Written): boolean {
+  if (!line.text) return false;
+  const visible = visibleLine(state, at);
+  const shown = new Set<number>();
+  visible.starts.forEach((start, index) => { if (visible.text[index] !== OBJECT_CHARACTER) shown.add(start); });
+  const offsets: number[] = [];
+  let run = false;
+  let done = false;
+  for (let offset = 0; offset < line.text.length; offset += 1) {
+    if (shown.has(at + offset)) { run = false; continue; }
+    if (!run) { run = true; done = false; }
+    const character = line.text[offset];
+    if (done || line.ours[offset] || !PUNCTUATION_IN.test(character) || line.text[offset - 1] === '\\') continue;
+    offsets.push(offset);
+    // A mark of several characters needs only its first escaped, except emphasis runs.
+    if (!'*_~`'.includes(character)) done = true;
+  }
+  for (const offset of offsets.reverse()) escapeIn(line, offset);
+  return offsets.length > 0;
 }
 
 const join = (lines: readonly string[], prefix: string) => lines.map((line, index) => (index === 0 ? line : prefix + line)).join('\n');
