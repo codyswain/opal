@@ -28,6 +28,7 @@
   right: var(--code-right, 0px);
   background-color: var(--editor-sunken);
   content: "";
+  transition: background-color var(--duration-hover) var(--ease-standard);
 }
 
 /* In a callout the box keeps the callout's right padding, and its grey deepens. */
@@ -44,6 +45,25 @@
   padding-left: calc(var(--code-box-left) + 1em);
   text-indent: 0;
   line-height: 28px;
+}
+
+/* A block right under a line of text, or right over one, keeps a gap from it, inside the line. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text {
+  padding-top: 0.5em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text::before {
+  top: 0.5em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text {
+  height: 0.9em;
+  padding-bottom: 0.5em;
+  box-sizing: border-box;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text::before {
+  bottom: 0.5em;
 }
 
 /* A fence on a list item's line keeps the item's marker, just outside the box, with the label where code starts. */
@@ -320,14 +340,16 @@
   font-size: 0.85em;
 }
 
-/* The pieces either side of a join read as one span. */
-.opal-editor .cm-editor .cm-md-code:has(+ .cm-code-join) {
+/* The pieces either side of a join read as one span. CodeMirror puts an image buffer on either side of the join. */
+.opal-editor .cm-editor .cm-md-code:has(+ .cm-code-join),
+.opal-editor .cm-editor .cm-md-code:has(+ .cm-widgetBuffer + .cm-code-join) {
   padding-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-.opal-editor .cm-editor .cm-code-join + .cm-md-code {
+.opal-editor .cm-editor .cm-code-join + .cm-md-code,
+.opal-editor .cm-editor .cm-code-join + .cm-widgetBuffer + .cm-md-code {
   padding-left: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
@@ -485,7 +507,8 @@
   .opal-editor .cm-editor .cm-code-show-all,
   .opal-editor .cm-editor .cm-code-label,
   .opal-editor .cm-editor .cm-code-copy,
-  .opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label {
+  .opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label,
+  .opal-editor .cm-editor .cm-content > .cm-line.cm-code-line::before {
     transition: none;
   }
 }
@@ -575,8 +598,12 @@
   line-height: 1.4;
 }
 
-/* A diagram's Copy shows on hover, as a code block's does. */
+/* A diagram's Copy shows on hover, as a code block's does, left of Diagram and Code so nothing moves. */
 .opal-editor .cm-editor .cm-diagram-header .cm-code-copy {
+  margin-left: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-header .cm-code-copy + .cm-diagram-modes {
   margin-left: 4px;
 }
 

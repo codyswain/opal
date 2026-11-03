@@ -97,6 +97,10 @@ export function stripColours(source: string): string {
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
 
+// Mermaid's size limits: past these it stops with a message rather than hang the page.
+const MAX_TEXT = 50_000;
+const MAX_EDGES = 500;
+
 /** The page's black and white for an <img>, which cannot read its CSS: nodes on the page, text and strokes in its foreground, edges in its tertiary grey. */
 const THEMES = {
   light: { node: '#ffffff', text: '#262626', edge: '#6b6b6b', muted: '#f2f2f2' },
@@ -202,8 +206,8 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
       securityLevel: 'strict',
       htmlLabels: false,
       flowchart: { htmlLabels: false },
-      maxTextSize: 50_000,
-      maxEdges: 500,
+      maxTextSize: MAX_TEXT,
+      maxEdges: MAX_EDGES,
       suppressErrorRendering: true,
       fontFamily: FONT,
       themeVariables: themeVariables(theme),
@@ -284,6 +288,13 @@ function drawInto(canvas: HTMLElement, kind: DiagramKind, source: string, showSo
   });
 }
 
+/** Mermaid's message for a diagram over its size limits, which speaks to developers, as a line for the reader. */
+export function sizeLimit(message: string): string | null {
+  if (/edge limit exceeded|maxEdges/i.test(message)) return `Too large to draw (over ${MAX_EDGES.toLocaleString('en-US')} connections)`;
+  if (/maximum text size|maxTextSize/i.test(message)) return `Too large to draw (over ${MAX_TEXT.toLocaleString('en-US')} characters)`;
+  return null;
+}
+
 function showError(canvas: HTMLElement, source: string, message: string, showSource: boolean): void {
   if (showSource) {
     const code = document.createElement('pre');
@@ -291,11 +302,12 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
     code.textContent = source;
     canvas.append(code);
   }
-  // The first line says where; the parser's list of expected tokens goes in the tooltip.
+  // The first line says where; the parser's list of expected tokens goes in the tooltip. Mermaid's size limits get a plain line of their own.
   const line = document.createElement('div');
   line.className = 'cm-diagram-error';
-  line.textContent = (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
-  line.title = message;
+  const limit = sizeLimit(message);
+  line.textContent = limit ?? (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
+  if (!limit) line.title = message;
   canvas.append(line);
 }
 
@@ -409,7 +421,8 @@ export class DiagramWidget extends WidgetType {
         }, 1500);
       });
     });
-    head.append(copy);
+    // Left of Diagram and Code, which keep the right edge while Copy is hidden.
+    head.insertBefore(copy, head.querySelector('.cm-diagram-modes'));
     box.append(head, canvas);
     frame.append(box);
     drawInto(canvas, this.kind, this.source, true);

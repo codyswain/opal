@@ -31,10 +31,15 @@ const NOTE = path.join(vault, 'Docs', 'note.md');
 const KEYS = path.join(vault, 'Docs', 'keys.mdo');
 const EDGES = path.join(vault, 'Docs', 'edges.mdo');
 const HUGE = path.join(vault, 'Docs', 'huge.mdo');
+const COMPOSE = path.join(vault, 'Docs', 'compose.mdo');
+const CROSS = path.join(vault, 'Docs', 'cross.mdo');
+const CROSS_TEXT = 'Intro line\n\n```markdown\nA fence looks like:\n\nlet a = 1\n```\n\nAfter the block\n\n# Heading\n';
 const KEYS_TEXT = 'Top\n\n> ```py\n> def f():\n>     return 1\n> ```\n\nAfter words\n';
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
 await writeFile(KEYS, KEYS_TEXT);
 await writeFile(EDGES, '```js\nlet a = 1;\n```');
+await writeFile(COMPOSE, '```js\nlet a = 1;\n```');
+await writeFile(CROSS, CROSS_TEXT);
 await writeFile(HUGE, `A diagram past Mermaid's limits:\n\n\`\`\`mermaid\ngraph TD\n${Array.from({ length: 600 }, (_, index) => `  n${index} --> n${index + 1}`).join('\n')}\n\`\`\`\n\nAfter.\n`);
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
 await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
@@ -75,6 +80,29 @@ async function setTheme(theme) {
     root.style.colorScheme = resolved;
   }, theme);
 }
+
+/** The first `selector` on the page, scrolling down from the top until the editor has drawn one. */
+async function scrollTo(selector) {
+  const scroller = page.locator('.cm-scroller').first();
+  await scroller.evaluate((element) => { element.scrollTop = 0; });
+  for (let step = 0; step < 40 && (await page.locator(selector).count()) === 0; step += 1) {
+    const moved = await scroller.evaluate((element) => {
+      const before = element.scrollTop;
+      element.scrollTop += element.clientHeight / 2;
+      return element.scrollTop !== before;
+    });
+    await page.waitForTimeout(200);
+    if (!moved) break;
+  }
+  return page.locator(selector).first();
+}
+
+/** Puts the selection from `from` to `to` in the open page's text. */
+const selectText = (from, to) => page.evaluate(([anchor, head]) => {
+  const view = document.querySelector('.cm-content')?.cmTile?.root?.view;
+  view.focus();
+  view.dispatch({ selection: { anchor, head } });
+}, [from, to]);
 
 /** Saves the part of the page around `locator` as `name`, light or dark. */
 async function shot(name, locator, { above = 60, below = 80 } = {}) {
@@ -175,6 +203,40 @@ try {
   check('Option+F10 in a block moves focus to its header', await page.evaluate(() => document.activeElement?.classList.contains('cm-code-label') ?? false));
   await page.keyboard.press('Escape');
 
+  // Enter over a selection that crosses a fence keeps the fence; a ``` line typed in code lengthens the block's fences.
+  await open(CROSS);
+  await selectText(CROSS_TEXT.indexOf('= 1'), CROSS_TEXT.indexOf('the block'));
+  await page.keyboard.press('Enter');
+  const crossed = await editorText();
+  check('Enter over a selection that crosses a fence keeps the fence', crossed === 'Intro line\n\n```markdown\nA fence looks like:\n\nlet a \n\n```\nthe block\n\n# Heading\n', JSON.stringify(crossed));
+  await page.keyboard.press('Meta+z');
+  await page.locator('.cm-code-line', { hasText: 'A fence looks like:' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.type('```');
+  const fenced = await editorText();
+  check('a ``` line typed in code lengthens the block\'s fences, and the heading below stays a heading', fenced === CROSS_TEXT.replace('```markdown', '````markdown').replace('like:\n\n', 'like:\n```\n').replace('1\n```', '1\n````') && (await page.locator('.cm-code-line', { hasText: 'Heading' }).count()) === 0, JSON.stringify(fenced));
+
+  // Composing at the stops before a first block and after a final one, through the IME the page sees.
+  await open(COMPOSE);
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    await page.locator('.cm-code-line', { hasText: 'let a' }).click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowDown');
+    await cdp.send('Input.imeSetComposition', { text: 'e', selectionStart: 1, selectionEnd: 1 });
+    await cdp.send('Input.insertText', { text: 'é' });
+    await page.waitForTimeout(200);
+    check('composed text after a final block goes on a line of its own', (await editorText()) === '```js\nlet a = 1;\n```\né', JSON.stringify(await editorText()));
+    await page.keyboard.press('Meta+ArrowUp');
+    await cdp.send('Input.imeSetComposition', { text: 'u', selectionStart: 1, selectionEnd: 1 });
+    await cdp.send('Input.insertText', { text: 'ü' });
+    await page.waitForTimeout(200);
+    check('composed text before a block that starts the page goes on a line of its own', (await editorText()) === 'ü\n```js\nlet a = 1;\n```\né', JSON.stringify(await editorText()));
+  } catch (error) {
+    check('composing at a block\'s edges', false, String(error));
+  }
+
   // The gallery document: every state, light and dark.
   await open(GALLERY);
   // Scroll until the Mermaid block is drawn, then wait for its picture.
@@ -234,9 +296,14 @@ try {
     await shot(`${theme}-state-hover`, heads.first(), { above: 20, below: 200 });
     await page.locator('.cm-code-line:not(.cm-code-head)').first().click();
     await shot(`${theme}-state-caret`, heads.first(), { above: 20, below: 200 });
-    await heads.first().locator('.cm-code-label').click({ position: { x: 2, y: 2 } }).catch(() => undefined);
+    await heads.first().click({ position: { x: 300, y: 10 } });
     await page.waitForTimeout(150);
     await shot(`${theme}-state-framed`, heads.first(), { above: 20, below: 260 });
+    if (theme === 'light') {
+      await page.keyboard.press('Alt+F10');
+      check('Option+F10 on a framed block focuses its bar', await page.evaluate(() => document.activeElement?.hasAttribute('data-bar-item') ?? false));
+    }
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     // The language menu, searching.
     await heads.first().hover();
@@ -245,10 +312,24 @@ try {
     await page.waitForTimeout(150);
     await shot(`${theme}-state-language-menu`, heads.first(), { above: 20, below: 320 });
     await page.keyboard.press('Escape');
-    const showAll = page.locator('.cm-code-show-all').first();
+    // A double-backtick span over three lines reads as one span.
+    if (theme === 'light') {
+      const joined = await page.evaluate(() => {
+        const join = document.querySelector('.cm-code-join');
+        let before = join?.previousElementSibling ?? null;
+        while (before && !before.classList.contains('cm-md-code')) before = before.previousElementSibling;
+        return before ? getComputedStyle(before).borderTopRightRadius : null;
+      });
+      check('a code span over line breaks draws as one span', joined === '0px', String(joined));
+    }
+    const showAll = await scrollTo('.cm-code-show-all');
     if (await showAll.count()) await shot(`${theme}-state-collapsed`, showAll, { above: 260, below: 40 });
-    const end = page.locator('.cm-code-open-end');
+    const end = await scrollTo('.cm-code-open-end');
     if (await end.count()) await shot(`${theme}-state-unclosed`, end, { above: 120, below: 40 });
+    const empty = await scrollTo('.cm-code-placeholder');
+    if (await empty.count()) await shot(`${theme}-state-empty`, empty, { above: 60, below: 40 });
+    const diff = await scrollTo('.cm-code-diff-add');
+    if (await diff.count()) await shot(`${theme}-state-diff`, diff, { above: 80, below: 80 });
   }
   // Show all on a long block shows its lines and writes nothing.
   for (let step = 0; step < 20 && (await page.locator('.cm-code-show-all').count()) === 0; step += 1) {
@@ -264,7 +345,7 @@ try {
   await open(HUGE);
   await page.waitForFunction(() => Boolean(document.querySelector('.cm-diagram-error') || document.querySelector('img.cm-diagram-image')), null, { timeout: 20_000 }).catch(() => undefined);
   const limit = await page.evaluate(() => document.querySelector('.cm-diagram-error')?.textContent ?? '');
-  check('a diagram past Mermaid\'s size limits shows a message', limit.length > 0 && (await page.locator('img.cm-diagram-image').count()) === 0, limit);
+  check('a diagram past Mermaid\'s size limits says so in plain words', limit.startsWith('Too large to draw') && (await page.locator('img.cm-diagram-image').count()) === 0, limit);
 
   // A note keeps the drawn block, highlighted, scrolling sideways inside the column.
   await open(NOTE);

@@ -849,3 +849,84 @@ describe('reaching a block from the keyboard', () => {
     expect(back.state.doc.lineAt(caret(back)).text).toBe('line 59');
   });
 });
+
+describe('small edges of blocks', () => {
+  it('leaves no blank line when a whole line next to a fence is deleted', async () => {
+    const before = mount('para\n```\nab\n```\n', 0);
+    await focusPage(before);
+    select(before, 0, 5);
+    key(before, 'Backspace');
+    expect(text(before)).toBe('```\nab\n```\n');
+    const after = mount('```\nab\n```\npara\n', 0);
+    await focusPage(after);
+    select(after, 10, 15);
+    key(after, 'Backspace');
+    expect(text(after)).toBe('```\nab\n```\n');
+  });
+
+  it('writes a code line when a block with none is opened', async () => {
+    const doc = 'A\n\n```\n```\n\nB\n';
+    const view = mount(doc);
+    const obj = objectAt(view.state, doc.indexOf('```'), 1);
+    if (!obj) throw new Error('no code object');
+    objectKind(view.state, 'code')?.open?.(view, obj);
+    expect(text(view)).toBe('A\n\n```\n\n```\n\nB\n');
+    expect(caret(view)).toBe(doc.indexOf('```') + 4);
+    type(view, 'x');
+    expect(text(view)).toBe('A\n\n```\nx\n```\n\nB\n');
+  });
+
+  it('shows a collapsed block whole when Backspace on the line under it moves the caret into it', async () => {
+    const code = Array.from({ length: 50 }, (_, line) => `line ${line}`).join('\n');
+    const doc = `\`\`\`\n${code}\n\`\`\`\n\nafter`;
+    const view = mount(doc, doc.length);
+    await focusPage(view);
+    select(view, doc.indexOf('\n\nafter') + 1);
+    key(view, 'Backspace');
+    expect(collapsedBlocks(view.state)).toEqual([]);
+    type(view, 'Z');
+    expect(text(view)).toBe(doc.replace('line 49\n```\n\n', 'line 49Z\n```\n'));
+  });
+
+  it('writes typed backticks in an HTML block as they are', async () => {
+    const doc = '<div>\nhello\n</div>\n';
+    const view = mount(doc, doc.indexOf('hello') + 5);
+    await focusPage(view);
+    act(() => { view.dispatch({ changes: { from: caret(view), insert: '\n' }, selection: { anchor: caret(view) + 1 } }); });
+    type(view, '```');
+    expect(text(view)).toBe('<div>\nhello\n```\n</div>\n');
+  });
+});
+
+describe('the header and its menus', () => {
+  it('keeps a gap between the box and a line of text right above or below it', () => {
+    const view = mount('Hello world\n```py\nprint(1)\n```\nBelow\n');
+    expect(view.contentDOM.querySelector('.cm-code-head')?.classList.contains('cm-code-after-text')).toBe(true);
+    expect(view.contentDOM.querySelector('.cm-code-foot')?.classList.contains('cm-code-before-text')).toBe(true);
+    const spaced = mount('Hello world\n\n```py\nprint(1)\n```\n\nBelow\n');
+    expect(spaced.contentDOM.querySelector('.cm-code-after-text, .cm-code-before-text')).toBeNull();
+  });
+
+  it('announces the language menu\'s active option, and closes it when the page scrolls', () => {
+    const view = mount('```ts\ncode\n```\n');
+    const label = view.contentDOM.querySelector('.cm-code-label') as HTMLElement;
+    expect(label.getAttribute('aria-haspopup')).toBe('dialog');
+    act(() => { label.click(); });
+    const search = document.querySelector('.opal-code-menu-search') as HTMLInputElement;
+    const active = document.querySelector('.opal-code-menu-item[data-active]') as HTMLElement;
+    expect(search.getAttribute('aria-activedescendant')).toBe(active.id);
+    act(() => { search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' })); });
+    expect(search.getAttribute('aria-activedescendant')).toBe((document.querySelector('.opal-code-menu-item[data-active]') as HTMLElement).id);
+    act(() => { view.scrollDOM.dispatchEvent(new Event('scroll')); });
+    expect(document.querySelector('.opal-code-menu')).toBeNull();
+  });
+
+  it('offers Mermaid in the bar\'s Language menu, as the header does', () => {
+    const doc = '```ts\ncode\n```\n';
+    const view = mount(doc);
+    const obj = objectAt(view.state, 0, 1);
+    if (!obj) throw new Error('no code object');
+    const language = objectKind(view.state, 'code')?.actions(view.state, obj).find((action) => action.id === 'language');
+    expect(language?.items?.map((item) => item.id)).toContain('mermaid');
+  });
+});

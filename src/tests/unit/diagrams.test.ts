@@ -5,7 +5,7 @@ import { act } from '@testing-library/react';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { diagramField, diagramKind, pocketSteps, setDiagramCode, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
+import { diagramField, diagramKind, pocketSteps, setDiagramCode, sizeLimit, stripColours } from '@/renderer/features/disk-explorer/components/editor/diagrams';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { objectAt } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
@@ -54,6 +54,19 @@ async function vaultFences(kind: string, files: string[]): Promise<string[]> {
 }
 
 describe('diagrams', () => {
+  it('say in plain words when a diagram is past Mermaid\'s size limits', () => {
+    expect(sizeLimit('Edge limit exceeded. 600 edges found, but the limit is 500.\n\nInitialize mermaid with maxEdges set to a higher number to allow more edges.')).toBe('Too large to draw (over 500 connections)');
+    expect(sizeLimit('Maximum text size in diagram exceeded')).toBe('Too large to draw (over 50,000 characters)');
+    expect(sizeLimit('Parse error on line 2:')).toBeNull();
+  });
+
+  it('put Copy left of Diagram and Code in a note\'s diagram header', () => {
+    const view = mount('```mermaid\ngraph LR\n  a --> b\n```\n', 0, NOTE);
+    const head = view.contentDOM.querySelector('.cm-diagram-header') as HTMLElement;
+    const copy = head.querySelector('.cm-code-copy') as HTMLElement;
+    expect(copy.nextElementSibling?.classList.contains('cm-diagram-modes')).toBe(true);
+  });
+
   it('know a diagram fence by its info string', () => {
     expect(diagramKind('mermaid')).toBe('mermaid');
     expect(diagramKind('Mermaid title="x"')).toBe('mermaid');

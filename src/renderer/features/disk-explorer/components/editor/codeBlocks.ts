@@ -253,7 +253,7 @@ class CodeHeaderWidget extends WidgetType {
     const label = button('cm-code-label', `Language, ${this.label}`, '');
     label.append(this.label);
     label.insertAdjacentHTML('beforeend', ICONS.chevron);
-    label.setAttribute('aria-haspopup', 'listbox');
+    label.setAttribute('aria-haspopup', 'dialog');
     label.addEventListener('click', () => openLanguageMenu(view, label, view.posAtDOM(head)));
     const copy = button('cm-code-copy', 'Copy code', `${ICONS.copy}<span>Copy</span>`);
     copy.addEventListener('click', () => { copyCode(view, view.posAtDOM(head), copy); });
@@ -304,16 +304,24 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
   search.className = 'opal-code-menu-search';
   search.placeholder = 'Search languages';
   search.setAttribute('aria-label', 'Search languages');
+  search.setAttribute('role', 'combobox');
+  search.setAttribute('aria-expanded', 'true');
+  search.setAttribute('aria-autocomplete', 'list');
   search.spellcheck = false;
   const list = document.createElement('div');
   list.className = 'opal-code-menu-list';
+  list.id = 'opal-code-menu-list';
   list.setAttribute('role', 'listbox');
+  search.setAttribute('aria-controls', list.id);
   menu.append(search, list);
   let shown = options;
   let active = Math.max(0, options.findIndex((option) => option.on));
   const close = () => {
     menu.remove();
     document.removeEventListener('mousedown', outside, true);
+    window.removeEventListener('scroll', scrolled, true);
+    window.removeEventListener('resize', close);
+    window.removeEventListener('blur', close);
     if (openMenu?.close === close) openMenu = null;
   };
   const pick = (id: string) => {
@@ -327,6 +335,7 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
       const row = document.createElement('div');
       row.className = 'opal-code-menu-item';
       row.setAttribute('role', 'option');
+      row.id = `opal-code-option-${index}`;
       row.setAttribute('aria-selected', String(index === active));
       if (index === active) row.dataset.active = 'true';
       row.textContent = option.label;
@@ -341,7 +350,10 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
       empty.textContent = 'No language matches';
       list.append(empty);
     }
-    list.querySelector('[data-active]')?.scrollIntoView?.({ block: 'nearest' });
+    const current = list.querySelector<HTMLElement>('[data-active]');
+    if (current) search.setAttribute('aria-activedescendant', current.id);
+    else search.removeAttribute('aria-activedescendant');
+    current?.scrollIntoView?.({ block: 'nearest' });
   };
   search.addEventListener('input', () => {
     const query = search.value.trim().toLowerCase();
@@ -366,7 +378,14 @@ function openLanguageMenu(view: EditorView, anchor: HTMLElement, at: number): vo
   const outside = (event: MouseEvent) => {
     if (!menu.contains(event.target as Node)) close();
   };
+  // Placed once from its label, so it closes when the page scrolls or the window changes.
+  const scrolled = (event: Event) => {
+    if (!menu.contains(event.target as Node)) close();
+  };
   document.addEventListener('mousedown', outside, true);
+  window.addEventListener('scroll', scrolled, true);
+  window.addEventListener('resize', close);
+  window.addEventListener('blur', close);
   render();
   document.body.append(menu);
   const box = anchor.getBoundingClientRect();
@@ -723,8 +742,10 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   const collapsed = collapsedOf(state, fence);
   if (collapsed) ctx.unit(lines[COLLAPSE_AFTER - 1].line.to, close && close.to < doc.length ? close.to + 1 : (close ?? lines[lines.length - 1].line).to);
 
+  // A line of text right above or below the box keeps a gap from it.
+  const text = (number: number) => number >= 1 && number <= doc.lines && !/^[\s>]*$/.test(doc.line(number).text);
   if (shown(open)) {
-    ctx.lineClass(open.from, 'cm-code-line cm-code-head', style);
+    ctx.lineClass(open.from, `cm-code-line cm-code-head${text(open.number - 1) ? ' cm-code-after-text' : ''}`, style);
     // A fence on a list item's line keeps the item's marker, which the list draws.
     if (!LIST_MARK_END.test(doc.sliceString(open.from, fence.node.from))) ctx.hide(open.from, fence.node.from);
     ctx.out.push(Decoration.replace({ widget: new CodeHeaderWidget(language.label, language.quiet, active, diagramFence(state, fence) !== null) }).range(fence.node.from, open.to));
@@ -748,7 +769,7 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
     if (last && !close) ctx.out.push(openEnd.range(line.to));
   });
   if (close && shown(close)) {
-    ctx.lineClass(close.from, after ? 'cm-code-after' : 'cm-code-line cm-code-foot', after ? undefined : style);
+    ctx.lineClass(close.from, after ? 'cm-code-after' : `cm-code-line cm-code-foot${text(close.number + 1) ? ' cm-code-before-text' : ''}`, after ? undefined : style);
     ctx.hide(close.from, close.to, true);
   }
 }
