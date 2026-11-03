@@ -180,11 +180,12 @@ describe('Paste and Match Style in a document', () => {
 
   it('pastes raw into inline code and into a formula', () => {
     expect(literal('Use `xy` now\n', 6, '*a* `b`')).toBe('Use `x*a* `b`y` now\n');
+    // Percent signs stand in for a formula's dollars, which documents draw as one object.
     const formula = protectedRanges.of((state) => {
-      const at = state.doc.toString().indexOf('$');
-      return at === -1 ? [] : [{ from: at, to: state.doc.toString().indexOf('$', at + 1) + 1 }];
+      const at = state.doc.toString().indexOf('%');
+      return at === -1 ? [] : [{ from: at, to: state.doc.toString().indexOf('%', at + 1) + 1 }];
     });
-    expect(literal('Area $a b$ end\n', 7, '*x*', [formula])).toBe('Area $a*x* b$ end\n');
+    expect(literal('Area %a b% end\n', 7, '*x*', [formula])).toBe('Area %a*x* b% end\n');
   });
 
   it('is what Edit > Paste and Match Style does, from the menu or ⌘⇧V, and ⌘V stays a paste', async () => {

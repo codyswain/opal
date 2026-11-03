@@ -413,9 +413,9 @@ export class TableWidget extends WidgetType {
   }
 
   /** An edit, an agent's included, redraws the table in place and keeps its sideways scroll. */
-  updateDOM(frame: HTMLElement) {
+  updateDOM(frame: HTMLElement, view: EditorView) {
     const left = frame.querySelector('.cm-md-table-scroll')?.scrollLeft ?? 0;
-    const fresh = this.toDOM();
+    const fresh = this.toDOM(view);
     frame.className = fresh.className;
     frame.style.cssText = fresh.style.cssText;
     frame.replaceChildren(...fresh.childNodes);
