@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import type { FilesPlatform } from './FilesService';
+import { hasClearCorner } from './thumbnails';
 
 /** What the files service asks of macOS, through Electron. Tests pass their own. */
 export function electronFilesPlatform(): FilesPlatform {
@@ -18,7 +19,9 @@ export function electronFilesPlatform(): FilesPlatform {
     thumbnail: async (file, px) => {
       const image = await nativeImage.createThumbnailFromPath(file, { width: px, height: px });
       if (image.isEmpty()) return null;
-      return px > 512 ? { bytes: image.toJPEG(85), type: 'image/jpeg' } : { bytes: image.toPNG(), type: 'image/png' };
+      // Its corners at 8 by 8 pixels: Quick Look's fallback icon has see-through ones.
+      const clearCorner = hasClearCorner(image.resize({ width: 8, height: 8 }).toBitmap(), 8, 8);
+      return px > 512 ? { bytes: image.toJPEG(85), type: 'image/jpeg', clearCorner } : { bytes: image.toPNG(), type: 'image/png', clearCorner };
     },
     // Slack, Gmail and Finder take a file URL on the pasteboard as the file itself.
     copyFileToClipboard: (file) => clipboard.writeBuffer('public.file-url', Buffer.from(pathToFileURL(file).href)),

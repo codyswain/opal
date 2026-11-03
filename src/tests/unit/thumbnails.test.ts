@@ -8,7 +8,7 @@ import { RootRegistry } from '@/main/fs/RootRegistry';
 import type { RunFile } from '@/main/files/FileStore';
 import { FilesService, type FilesPlatform } from '@/main/files/FilesService';
 import { Renditions, SIPS } from '@/main/files/renditions';
-import { DiskCache, Thumbnails, type Picture, type RunBytes, type ThumbnailProvider } from '@/main/files/thumbnails';
+import { DiskCache, hasClearCorner, Thumbnails, type Picture, type RunBytes, type ThumbnailProvider } from '@/main/files/thumbnails';
 import { jobQueue } from '@/main/mapLimited';
 import type { FileInfo } from '@/types/files';
 
@@ -42,6 +42,33 @@ describe('thumbnails', () => {
     expect(await readdir(path.join(temporary, 'cache'))).toHaveLength(1);
     expect(decode(await thumbnails().thumbnail(info('/vault/deck.pptx'), 100))).toBe('deck.pptx');
     expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('never shows the icon Quick Look answers for a deck, document, PDF or movie it cannot draw', async () => {
+    provider.mockImplementation(async (file) => ({ ...fixture(file), clearCorner: true }));
+    const pictures = thumbnails();
+    for (const name of ['deck.pptx', 'report.docx', 'sheet.xlsx', 'plan.pdf', 'clip.mov', 'talk.key']) {
+      expect(await pictures.thumbnail(info(`/vault/${name}`), 96), name).toBeNull();
+    }
+    // Pictures and models can be see-through at their corners and still be the file's own picture.
+    for (const name of ['logo.png', 'bracket.stl']) expect(decode(await pictures.thumbnail(info(`/vault/${name}`), 96)), name).toBe(name);
+    // An opaque picture of a deck is kept.
+    provider.mockImplementation(async (file) => ({ ...fixture(file), clearCorner: false }));
+    expect(decode(await pictures.thumbnail(info('/vault/kept.pptx'), 96))).toBe('kept.pptx');
+  });
+
+  it('finds a see-through corner in a bitmap of four bytes a pixel', () => {
+    const opaque = () => Buffer.alloc(8 * 8 * 4, 255);
+    expect(hasClearCorner(opaque(), 8, 8)).toBe(false);
+    for (const [x, y] of [[0, 0], [7, 0], [0, 7], [7, 7]]) {
+      const bitmap = opaque();
+      bitmap[(y * 8 + x) * 4 + 3] = 20;
+      expect(hasClearCorner(bitmap, 8, 8), `${x},${y}`).toBe(true);
+    }
+    const middle = opaque();
+    middle[(3 * 8 + 3) * 4 + 3] = 0;
+    expect(hasClearCorner(middle, 8, 8)).toBe(false);
+    expect(hasClearCorner(Buffer.alloc(4), 8, 8)).toBe(false);
   });
 
   it('draws nothing for HTML, SVG, text and archives, nor for a file that is not here', async () => {
