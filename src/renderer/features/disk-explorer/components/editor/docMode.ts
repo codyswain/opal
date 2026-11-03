@@ -371,9 +371,9 @@ const focusToolbar: Command = (view) => {
 /**
  * A click on a link puts the caret in it and shows its popover; Cmd+click
  * and middle-click still follow it. A click in a table's cell puts a cell
- * caret there (livePreview.ts), and a click elsewhere on a table frames it.
- * A click on a drawn code block puts the caret after it, and a double-click
- * on either shows its Markdown to edit.
+ * caret there (livePreview.ts), and a click elsewhere on a table or on a
+ * drawn code block frames it with the caret after it. A double-click on
+ * either shows its Markdown to edit.
  */
 const docClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
@@ -387,7 +387,7 @@ const docClicks = EditorView.domEventHandlers({
       if (cell) return clickInCell(view, event, cell, view.posAtDOM(blockElement));
       event.preventDefault();
       const after = { anchor: Math.min(block.to + 1, view.state.doc.length) };
-      const framed = table ? objectAt(view.state, block.from, 1) : null;
+      const framed = objectAt(view.state, block.from, 1);
       view.dispatch(event.detail >= 2
         ? { selection: { anchor: blockPosition(view, blockElement, target, event) }, effects: setOpenBlock.of(block) }
         : { selection: after, effects: framed ? setFrame.of(framed) : [] });

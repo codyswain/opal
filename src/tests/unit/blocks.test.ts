@@ -564,3 +564,14 @@ describe('a click on a rule in a document', () => {
     expect(mount('***\n', NOTE).contentDOM.querySelector('.cm-md-hr[data-object]')).toBeNull();
   });
 });
+
+describe('a click on a drawn code block in a document', () => {
+  it('frames it with the caret after it', async () => {
+    const view = mount('Text\n\n```\ncode\n```\n\nMore‸\n');
+    await focusPage(view);
+    const block = view.contentDOM.querySelector('.cm-md-codeblock-widget') as HTMLElement;
+    act(() => { block.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    expect(frame(view)).toMatchObject({ kind: 'code block' });
+    expect(caret(view)).toBe(text(view).indexOf('\nMore'));
+  });
+});
