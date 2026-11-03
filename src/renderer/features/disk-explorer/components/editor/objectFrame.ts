@@ -262,7 +262,10 @@ const frameEvents = EditorView.domEventHandlers({
     const obj = objectAt(view.state, view.posAtDOM(element), 1) ?? objectAt(view.state, view.posAtDOM(element), 0);
     if (!obj) return false;
     event.preventDefault();
-    view.dispatch({ effects: setFrame.of(event.detail >= 2 ? null : obj) });
+    // The caret goes after the object, so a key then works from there and no old selection is typed over.
+    const block = Boolean(objectKind(view.state, obj.kind)?.block);
+    const anchor = block ? Math.min(obj.to + 1, view.state.doc.length) : obj.to;
+    view.dispatch({ selection: { anchor }, effects: setFrame.of(event.detail >= 2 ? null : obj) });
     if (event.detail >= 2) objectKind(view.state, obj.kind)?.open(view, obj);
     view.focus();
     return true;

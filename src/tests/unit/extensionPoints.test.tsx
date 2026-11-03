@@ -151,6 +151,7 @@ describe('object kinds', () => {
     const block = view.contentDOM.querySelector('.test-block') as Element;
     act(() => { block.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
     expect(view.state.field(objectFrame)).toEqual({ kind: 'rule', from: 6, to: 9, node: 'HorizontalRule' });
+    expect(view.state.selection.main.head).toBe(10);
     // happy-dom has no layout, so the bar stays hidden where it would be measured.
     const bar = await screen.findByRole('toolbar', { name: 'rule, Horizontal line', hidden: true });
     expect(within(bar).getByText('Horizontal line')).toBeInTheDocument();
