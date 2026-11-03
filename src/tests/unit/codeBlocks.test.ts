@@ -7,9 +7,11 @@ import { codeText, collapsedBlocks, copiedCode, copyCode, fenceAt, setLanguage, 
 import { loadAllLanguages } from '@/renderer/features/disk-explorer/components/editor/codeLanguages';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { objectAt, objectKind } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
-import { clearFormatting, toggleInlineCode, toggleList, toggleMarker, setHeading } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { clearFormatting, clearFormattingAndCode, toggleInlineCode, toggleList, toggleMarker, setHeading } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { setDiagramCode } from '@/renderer/features/disk-explorer/components/editor/diagrams';
+import { blockPosition } from '@/renderer/features/disk-explorer/components/editor/livePreview';
 import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
-import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { focusObjectBar, objectFrame, setFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 
@@ -578,5 +580,272 @@ describe('code in a note', () => {
     const view = mount('> ```\n> a\n> b\n> ```\n', 0, NOTE);
     const fence = fenceAt(view.state, 3);
     expect(fence && codeText(view.state, fence)).toBe('a\nb');
+  });
+});
+
+describe('edits across fences', () => {
+  it('keeps fence lines when Enter or Shift+Enter replaces a selection that crosses one', async () => {
+    for (const init of [{}, { shiftKey: true }]) {
+      const down = mount('```\nab\n```\npara\n', 5);
+      await focusPage(down);
+      select(down, 5, 13);
+      key(down, 'Enter', init);
+      expect(text(down)).toBe('```\na\n\n```\nra\n');
+      const up = mount('para\n```\nab\n```\n', 2);
+      await focusPage(up);
+      select(up, 2, 10);
+      key(up, 'Enter', init);
+      expect(text(up)).toBe('pa\n\n```\nb\n```\n');
+    }
+  });
+
+  it('keeps the quote marks on Shift+Enter in quoted code', async () => {
+    const view = mount('> ```\n> ab\n> ```\n\nafter\n', 9);
+    await focusPage(view);
+    key(view, 'Enter', { shiftKey: true });
+    expect(text(view)).toBe('> ```\n> a\n> b\n> ```\n\nafter\n');
+  });
+
+  it('lengthens the block\'s fences when a line typed or pasted in it would close it', async () => {
+    const doc = 'Intro\n\n```markdown\nA fence looks like:\n\n# Heading\n```\n\nMore text';
+    const view = mount(doc, doc.indexOf('like:') + 5);
+    await focusPage(view);
+    key(view, 'Enter');
+    type(view, '```');
+    expect(text(view)).toBe('Intro\n\n````markdown\nA fence looks like:\n```\n\n# Heading\n````\n\nMore text');
+    expect(fenceAt(view.state, text(view).indexOf('# Heading'))?.close?.text).toBe('````');
+    const pasted = 'Intro\n\n```markdown\nexample:\n```\n\n# Heading';
+    const paste = mount(pasted, pasted.indexOf('example:') + 8);
+    await focusPage(paste);
+    act(() => { paste.dispatch({ ...paste.state.replaceSelection('\n```sh\nls\n```'), userEvent: 'input.paste' }); });
+    expect(text(paste)).toBe('Intro\n\n````markdown\nexample:\n```sh\nls\n```\n````\n\n# Heading');
+    expect(hasNode(paste, 'ATXHeading1')).toBe(true);
+  });
+
+  it('keeps fence lines when a drag moves text across one, and drops only the text that left', async () => {
+    const doc = 'Intro line\n\n```js\nlet a = 1\n```\n\nAfter the block\n\n# Heading';
+    const view = mount(doc);
+    await focusPage(view);
+    const from = doc.indexOf('= 1');
+    const to = doc.indexOf('the block');
+    act(() => { view.dispatch({ changes: [{ from: 0, insert: doc.slice(from, to) }, { from, to }], selection: { anchor: 0, head: to - from }, userEvent: 'move.drop' }); });
+    expect(text(view)).toBe('= 1\n\nAfter Intro line\n\n```js\nlet a \n```\nthe block\n\n# Heading');
+    expect(fenceAt(view.state, text(view).indexOf('let'))?.close).not.toBeNull();
+  });
+
+  it('puts only the removed text on the clipboard when a cut keeps a fence', async () => {
+    const doc = '```\nab\n```\npara\n\nend\n';
+    const view = mount(doc);
+    await focusPage(view);
+    select(view, 5, 13);
+    const setData = vi.fn();
+    const event = new Event('cut', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: { setData, clearData: vi.fn(), getData: () => '' } });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+    expect(setData).toHaveBeenLastCalledWith('text/plain', 'b\npa');
+    expect(text(view)).toBe('```\na\n```\nra\n\nend\n');
+  });
+
+  it('leaves a note\'s copy to CodeMirror, so quoted code keeps its marks', () => {
+    const doc = '> ```\n> abc\n> def\n> ```\n';
+    const view = mount(doc, 0, NOTE);
+    select(view, doc.indexOf('bc'), doc.indexOf('ef'));
+    const setData = vi.fn();
+    const event = new Event('copy', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: { setData, clearData: vi.fn(), getData: () => '' } });
+    act(() => { view.contentDOM.dispatchEvent(event); });
+    expect(setData.mock.calls.some(([, copied]) => copied === 'bc\nd')).toBe(false);
+  });
+
+  it('writes the line break before composed text at the page-edge stops', async () => {
+    const end = mount('```\nab\n```', 6);
+    await focusPage(end);
+    key(end, 'Escape');
+    expect(caret(end)).toBe(10);
+    act(() => { end.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); });
+    act(() => { end.dispatch({ changes: { from: caret(end), insert: 'é' }, selection: { anchor: caret(end) + 1 }, userEvent: 'input.type.compose' }); });
+    expect(text(end)).toBe('```\nab\n```\né');
+    const start = mount('```\nab\n```\nmore', 4);
+    await focusPage(start);
+    select(start, 0);
+    act(() => { start.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); });
+    act(() => { start.dispatch({ changes: { from: caret(start), insert: 'é' }, selection: { anchor: caret(start) + 1 }, userEvent: 'input.type.compose' }); });
+    expect(text(start)).toBe('é\n```\nab\n```\nmore');
+  });
+
+  it('gives a tab-indented list item\'s blank code line its tab back', async () => {
+    const doc = '- step\n\t```sh\n\techo a\n\n\techo b\n\t```\n- next';
+    const view = mount(doc, doc.indexOf('\n\n') + 1);
+    await focusPage(view);
+    type(view, 'x');
+    expect(text(view)).toBe('- step\n\t```sh\n\techo a\n\tx\n\techo b\n\t```\n- next');
+    expect(fenceAt(view.state, text(view).indexOf('echo a'))?.close).not.toBeNull();
+  });
+});
+
+describe('the stops beside a block', () => {
+  it('treats the caret after a final block, and before a first one, as outside it', async () => {
+    const view = mount('Intro\n\n```\nab\n```', 13);
+    await focusPage(view);
+    key(view, 'Escape');
+    expect(caret(view)).toBe(17);
+    expect(formatState(view.state).code).toBeNull();
+    toggleCodeBlock(view);
+    expect(text(view)).toBe('Intro\n\n```\nab\n```\n```\n\n```');
+    expect(caret(view)).toBe(text(view).length - 4);
+    const first = mount('```\nab\n```\n\nafter', 5);
+    await focusPage(first);
+    select(first, 0);
+    expect(formatState(first.state).code).toBeNull();
+    toggleCodeBlock(first);
+    expect(text(first)).toBe('```\n\n```\n```\nab\n```\n\nafter');
+    expect(caret(first)).toBe(4);
+  });
+});
+
+describe('fences on list items', () => {
+  it('keeps the bullet when a block is unwrapped or emptied, and wraps an item\'s text inside the item', async () => {
+    const unwrap = mount('- ```py\n  x = 1\n  ```\n- next\n', 10);
+    await focusPage(unwrap);
+    toggleCodeBlock(unwrap);
+    expect(text(unwrap)).toBe('- x = 1\n- next\n');
+    const empty = mount('- ```\n  \n  ```\n- next\n', 8);
+    await focusPage(empty);
+    key(empty, 'Backspace');
+    expect(text(empty)).toBe('- \n- next\n');
+    const wrap = mount('- one\n- two\n', 3);
+    await focusPage(wrap);
+    toggleCodeBlock(wrap);
+    expect(text(wrap)).toBe('- ```\n  one\n  ```\n- two\n');
+  });
+
+  it('still reads link definitions after a fence on a list item\'s line', () => {
+    const view = mount('See [the docs][ref].\n\n- ```js\n  x\n  ```\n\n[ref]: https://example.com\n', 0, NOTE);
+    expect(view.contentDOM.querySelector('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
+  });
+});
+
+describe('formatting next to code', () => {
+  it('leaves a one-line indented code block alone under select all and Bold, in documents and notes', () => {
+    for (const page of [DOC, NOTE]) {
+      const doc = 'Intro\n\n    npm run build\n\nOutro';
+      const view = mount(doc, 0, page);
+      act(() => { view.dispatch({ selection: EditorSelection.range(0, doc.length) }); });
+      toggleMarker('**')(view);
+      expect(text(view)).toBe('**Intro**\n\n    npm run build\n\n**Outro**');
+    }
+  });
+
+  it('puts Bold and links around inline code that fills its line, which can still become a heading', async () => {
+    const doc = 'Intro\n\n`npm install`\n';
+    const view = mount(doc, 9);
+    await focusPage(view);
+    select(view, 8, 19);
+    key(view, 'b', mod);
+    expect(text(view)).toBe('Intro\n\n**`npm install`**\n');
+    const caretOnly = mount(doc, 10);
+    await focusPage(caretOnly);
+    key(caretOnly, 'b', mod);
+    expect(text(caretOnly)).toBe('Intro\n\n**`npm install`**\n');
+    const linked = mount(doc, 10);
+    await focusPage(linked);
+    select(linked, 9, 12);
+    key(linked, 'k', mod);
+    expect([linked.state.selection.main.from, linked.state.selection.main.to]).toEqual([7, 20]);
+    const heading = mount(doc, 10);
+    setHeading(2)(heading);
+    expect(text(heading)).toBe('Intro\n\n## `npm install`\n');
+    const all = mount('Intro\n\n`npm run build`\n\nOutro');
+    act(() => { all.dispatch({ selection: EditorSelection.range(0, all.state.doc.length) }); });
+    toggleMarker('**')(all);
+    expect(text(all)).toBe('**Intro**\n\n**`npm run build`**\n\n**Outro**');
+  });
+
+  it('keeps a link\'s address and an embed when Cmd+E codes a selection holding them', () => {
+    const doc = 'See [the docs](https://example.com/docs) now';
+    const view = mount(doc);
+    act(() => { view.dispatch({ selection: EditorSelection.range(0, doc.length) }); });
+    toggleInlineCode(view);
+    expect(text(view)).toBe('`See `[`the docs`](https://example.com/docs)` now`');
+    const embed = 'Run ![[Library/files/2026-11/shot.abc.png]] here';
+    const embedded = mount(embed);
+    act(() => { embedded.dispatch({ selection: EditorSelection.range(0, embed.length) }); });
+    toggleInlineCode(embedded);
+    expect(text(embedded)).toBe('`Run `![[Library/files/2026-11/shot.abc.png]]` here`');
+  });
+
+  it('escapes a line-start block mark when code that fills its line comes off', () => {
+    const view = mount('`# not a heading`\n\n`- item`\n\n`1. x`\n\nsay `# hi`\n');
+    act(() => { view.dispatch({ selection: EditorSelection.range(0, view.state.doc.length) }); });
+    clearFormattingAndCode(view);
+    expect(text(view)).toBe('\\# not a heading\n\n\\- item\n\n1\\. x\n\nsay # hi\n');
+    const off = mount('Intro\n\n`- item`\n\nOutro', 9);
+    toggleInlineCode(off);
+    expect(text(off)).toBe('Intro\n\n\\- item\n\nOutro');
+  });
+});
+
+describe('reaching a block from the keyboard', () => {
+  it('puts the caret at the clicked character in a note\'s highlighted block', () => {
+    const doc = 'Top\n\n```js\nconst x = 1;\n```\n';
+    const view = mount(doc, 0, NOTE);
+    const block = view.contentDOM.querySelector('.cm-md-codeblock-widget') as HTMLElement;
+    const line = block.querySelector('[data-offset]') as HTMLElement;
+    const one = [...line.querySelectorAll('span')].find((span) => span.textContent === '1') as HTMLElement;
+    const original = document.caretRangeFromPoint;
+    document.caretRangeFromPoint = () => ({ startContainer: one.firstChild, startOffset: 0 }) as unknown as Range;
+    try {
+      expect(blockPosition(view, block, one, new MouseEvent('mousedown'))).toBe(doc.indexOf('1;'));
+    } finally {
+      document.caretRangeFromPoint = original;
+    }
+  });
+
+  it('focuses the framed block\'s bar on Option+F10', () => {
+    const doc = 'A\n\n```sh\nls\n```\n';
+    const view = mount(doc);
+    const obj = objectAt(view.state, doc.indexOf('```'), 1);
+    if (!obj) throw new Error('no code object');
+    act(() => { view.dispatch({ effects: setFrame.of(obj) }); });
+    const bar = document.createElement('div');
+    bar.dataset.objectBar = 'code';
+    bar.innerHTML = '<button data-bar-item="copy" tabindex="0">Copy</button>';
+    document.body.append(bar);
+    try {
+      expect(focusObjectBar(view)).toBe(true);
+      expect((document.activeElement as HTMLElement | null)?.dataset.barItem).toBe('copy');
+    } finally {
+      bar.remove();
+    }
+  });
+
+  it('moves through every header button with the arrow keys, Diagram and Code included', () => {
+    const doc = '```mermaid\nflowchart TD\n  A --> B\n```\n';
+    const view = mount(doc);
+    act(() => { view.dispatch({ effects: setDiagramCode.of({ at: 0, code: true }) }); });
+    const header = view.contentDOM.querySelector('.cm-code-header') as HTMLElement;
+    const label = header.querySelector('.cm-code-label') as HTMLElement;
+    label.focus();
+    const seen: string[] = [];
+    for (let press = 0; press < 4; press += 1) {
+      act(() => { (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+      seen.push((document.activeElement as HTMLElement).className);
+    }
+    expect(seen).toEqual(['cm-diagram-segment', 'cm-diagram-segment', 'cm-code-copy', 'cm-code-label']);
+  });
+
+  it('shows a collapsed block\'s hidden lines when the arrow keys reach them', async () => {
+    const code = Array.from({ length: 60 }, (_, line) => `line ${line}`).join('\n');
+    const doc = `Top\n\n\`\`\`\n${code}\n\`\`\`\nAfter\n`;
+    const view = mount(doc, doc.indexOf('line 39') + 2);
+    await focusPage(view);
+    key(view, 'ArrowDown');
+    expect(collapsedBlocks(view.state)).toEqual([]);
+    expect(view.state.doc.lineAt(caret(view)).text).toBe('line 40');
+    const back = mount(doc, doc.indexOf('After') + 2);
+    await focusPage(back);
+    key(back, 'ArrowUp');
+    expect(collapsedBlocks(back.state)).toEqual([]);
+    expect(back.state.doc.lineAt(caret(back)).text).toBe('line 59');
   });
 });

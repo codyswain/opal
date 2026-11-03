@@ -131,12 +131,23 @@ export interface TextRange {
   to: number;
 }
 
-export type ProtectedRanges = (state: EditorState, from: number, to: number) => readonly TextRange[];
+/**
+ * A range commands keep their marks out of. `lines` marks one that covers
+ * whole lines, such as a code block, even when it is one line long;
+ * `inline` marks one inside a line, such as inline code, whose line can
+ * still become a heading or a list item when it holds nothing else.
+ */
+export interface ProtectedRange extends TextRange {
+  lines?: boolean;
+  inline?: boolean;
+}
+
+export type ProtectedRanges = (state: EditorState, from: number, to: number) => readonly ProtectedRange[];
 
 export const protectedRanges = Facet.define<ProtectedRanges>();
 
 /** The protected ranges that touch `from` to `to`, in order. */
-export function protectedIn(state: EditorState, from: number, to: number): TextRange[] {
+export function protectedIn(state: EditorState, from: number, to: number): ProtectedRange[] {
   const sources = state.facet(protectedRanges);
   if (sources.length === 0) return [];
   return sources.flatMap((source) => source(state, from, to))

@@ -259,8 +259,8 @@ interface LinkDefinitions {
   long: readonly { line: number; from: number; to: number }[];
 }
 
-// A fence line: its marks and what follows them.
-const FENCE_LINE = /^[ \t>]*(`{3,}|~{3,})(.*)$/;
+// A fence line, which may follow a quote's marks or a list item's marker: its marks and what follows them.
+const FENCE_LINE = /^[ \t>]*(?:(?:[-+*]|\d+[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/;
 
 /**
  * Reads definitions off the text rather than the syntax tree: exports put
@@ -870,7 +870,13 @@ export function blockPosition(view: EditorView, block: HTMLElement, target: Elem
   if (block.classList.contains('cm-md-codeblock-widget')) {
     const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
     const length = spot.textContent?.replace('​', '').length ?? 0;
-    if (caret && spot.contains(caret.startContainer)) offset += Math.min(caret.startOffset, length);
+    if (caret && spot.contains(caret.startContainer)) {
+      // A highlighted line is several text nodes: count the line's characters before the caret.
+      const before = document.createRange();
+      before.setStart(spot, 0);
+      before.setEnd(caret.startContainer, caret.startOffset);
+      offset += Math.min(before.toString().replace('​', '').length, length);
+    }
   }
   return start + offset;
 }

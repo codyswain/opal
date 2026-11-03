@@ -63,7 +63,7 @@ function touchedLines(state: EditorState): Line[] {
 
 /** The lines the selection touches, less those a protected range covers whole, such as a table's. */
 export function selectedLines(state: EditorState): Line[] {
-  return touchedLines(state).filter((line) => !protectedIn(state, line.from, line.to).some((range) => range.from <= line.from && range.to >= line.to));
+  return touchedLines(state).filter((line) => !protectedIn(state, line.from, line.to).some((range) => !range.inline && range.from <= line.from && range.to >= line.to));
 }
 
 /**
@@ -77,7 +77,7 @@ function unprotected(state: EditorState, text: { from: number; to: number }): { 
   for (const range of protectedIn(state, from, to)) {
     const first = state.doc.lineAt(range.from);
     const last = state.doc.lineAt(range.to);
-    if (first.number === last.number && !(range.from === first.from && range.to === last.to)) {
+    if (!range.lines && first.number === last.number && !(range.from === first.from && range.to === last.to)) {
       if (range.from < from && from < range.to) from = range.from;
       if (range.from < to && to < range.to) to = range.to;
     } else {
@@ -854,11 +854,29 @@ export function literalText(text: string): string {
   return text.replace(/[\\`*_[\]<]/g, '\\$&').replace(/~~/g, '\\~\\~');
 }
 
-/** The text of `from` to `to` as the page shows it: without the marks of the formatting inside it. */
-function shownText(state: EditorState, from: number, to: number): string {
-  const marks = inlineSpans(state, from, to)
-    .filter((span) => span.from >= from && span.to <= to)
+// What a line can open with, past its quote marks and list markers.
+const LINE_CONTAINER = /^(?:[ \t]*>[ \t]?)*[ \t]*(?:(?:[-+*]|\d+[.)])[ \t]+)*$/;
+
+/** The text of inline code `span` once its marks come off, escaped so it reads as it showed, including a heading, list or quote mark at its line's start. */
+function uncodedText(state: EditorState, span: InlineSpan): string {
+  const text = literalText(codeContent(state.sliceDoc(span.textFrom, span.textTo)));
+  const line = state.doc.lineAt(span.from);
+  if (!LINE_CONTAINER.test(state.sliceDoc(line.from, span.from))) return text;
+  return text
+    .replace(/^(#{1,6}(?=[ \t]|$)|[-+](?=[ \t]|$)|>|-{3,}[ \t]*$|=+[ \t]*$)/, '\\$1')
+    .replace(/^(\d{1,9})([.)])(?=[ \t]|$)/, '$1\\$2');
+}
+
+// Links and embeds keep their targets when the text around them becomes code.
+const KEPT_IN_CODE = new Set(['Link', 'WikiLink', 'Embed', 'Autolink']);
+
+/** The text of `from` to `to` as the page shows it: without the marks of the formatting inside `within`, which holds it. */
+function shownText(state: EditorState, from: number, to: number, within: { from: number; to: number } = { from, to }): string {
+  const marks = inlineSpans(state, within.from, within.to)
+    .filter((span) => span.from >= within.from && span.to <= within.to && !KEPT_IN_CODE.has(span.name))
     .flatMap((span) => [[span.from, span.textFrom], [span.textTo, span.to]])
+    .map(([markFrom, markTo]) => [Math.max(markFrom, from), Math.min(markTo, to)])
+    .filter(([markFrom, markTo]) => markTo > markFrom)
     .sort((a, b) => a[0] - b[0]);
   let text = '';
   let at = from;
@@ -867,6 +885,29 @@ function shownText(state: EditorState, from: number, to: number): string {
     at = Math.max(at, markTo);
   }
   return text + state.sliceDoc(at, to);
+}
+
+/**
+ * `from` to `to` as inline code. Links and embeds in it stay as they are,
+ * with code on either side: a link's text becomes code inside the link,
+ * as in [`docs`](url), so no address is lost.
+ */
+function codedText(state: EditorState, from: number, to: number): string {
+  const within = { from, to };
+  const code = (a: number, b: number) => {
+    const text = shownText(state, a, b, within);
+    return text.trim() ? codeSpan(text) : text;
+  };
+  const kept = inlineSpans(state, from, to).filter((span) => KEPT_IN_CODE.has(span.name) && span.from >= from && span.to <= to).sort((a, b) => a.from - b.from);
+  let out = '';
+  let at = from;
+  for (const span of kept) {
+    if (span.from < at) continue;
+    out += code(at, span.from);
+    out += span.name === 'Link' ? state.sliceDoc(span.from, span.textFrom) + code(span.textFrom, span.textTo) + state.sliceDoc(span.textTo, span.to) : state.sliceDoc(span.from, span.to);
+    at = span.to;
+  }
+  return out + code(at, to);
 }
 
 /**
@@ -880,7 +921,7 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   const inside = inlineCodeAt(state, range.from, range.to);
   if (inside) {
-    const insert = literalText(codeContent(state.sliceDoc(inside.textFrom, inside.textTo)));
+    const insert = uncodedText(state, inside);
     dispatch(state.update({ changes: { from: inside.from, to: inside.to, insert }, selection: { anchor: inside.from + insert.length }, scrollIntoView: true, userEvent: 'input' }));
     return true;
   }
@@ -888,7 +929,7 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
   if (!target) return true;
   const parts = selectedText(state, target);
   if (parts.length === 0) return true;
-  const changes = ChangeSet.of(parts.map((part) => ({ from: part.from, to: part.to, insert: codeSpan(shownText(state, part.from, part.to)) })), state.doc.length);
+  const changes = ChangeSet.of(parts.map((part) => ({ from: part.from, to: part.to, insert: codedText(state, part.from, part.to) })), state.doc.length);
   const selection = range.empty
     ? EditorSelection.cursor(changes.mapPos(range.head))
     : EditorSelection.range(changes.mapPos(parts[0].from, 1), changes.mapPos(parts[parts.length - 1].to, -1));
@@ -908,7 +949,7 @@ export const clearFormattingAndCode: StateCommand = ({ state, dispatch }) => {
     .flatMap((text) => text.spans.filter((span) => span.name === 'InlineCode' && span.from >= text.from && span.to <= text.to));
   if (spans.length === 0) return clearFormatting({ state, dispatch });
   const unwrapped = state.update({
-    changes: spans.map((span) => ({ from: span.from, to: span.to, insert: literalText(codeContent(state.sliceDoc(span.textFrom, span.textTo))) })),
+    changes: spans.map((span) => ({ from: span.from, to: span.to, insert: uncodedText(state, span) })),
     filter: false,
   });
   let cleared: ChangeSet | null = null;
