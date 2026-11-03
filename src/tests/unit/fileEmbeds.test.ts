@@ -241,6 +241,28 @@ describe('file widgets', () => {
     expect(view.contentDOM.querySelector('video')).toBe(first);
   });
 
+  it('plays one video at a time in the window', async () => {
+    const view = await mount(`![[${CLIP}|300]]\n\n![[${CLIP}|400]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelectorAll('video')).toHaveLength(2));
+    const [first, second] = [...view.contentDOM.querySelectorAll('video')];
+    expect(first).not.toBe(second);
+    Object.defineProperty(first, 'paused', { configurable: true, value: false });
+    const pause = vi.spyOn(first, 'pause').mockImplementation(() => undefined);
+    act(() => { second.dispatchEvent(new Event('play')); });
+    expect(pause).toHaveBeenCalled();
+  });
+
+  it('marks a wiki link to a stored file that moved', async () => {
+    const { useDiskStore } = await import('@/renderer/features/disk-explorer/store/diskStore');
+    useDiskStore.setState({ roots: ['/Vault'] });
+    installFilesApi({ findMoved: vi.fn(async () => ({ success: true as const, data: '/Vault/Library/files/2026-10/gone.a3f9c2e1.pdf' })) });
+    const view = await mount('[[Library/files/2026-11/gone.a3f9c2e1.pdf|Gone.pdf]]\n');
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('Moved'));
+    expect(window.filesAPI.findMoved).toHaveBeenCalledWith('/Vault/Library/files/2026-11/gone.a3f9c2e1.pdf');
+    act(() => { (view.contentDOM.querySelector('.cm-file-card button') as HTMLButtonElement).click(); });
+    expect(text(view)).toBe('[[Library/files/2026-10/gone.a3f9c2e1.pdf|Gone.pdf]]\n');
+  });
+
   it('renders a page full of links without loading anything from the web except embedded web pictures', async () => {
     const page = [
       '[a](https://example.com/a.png) https://docs.google.com/document/d/1 [[https://x.com/y]]',

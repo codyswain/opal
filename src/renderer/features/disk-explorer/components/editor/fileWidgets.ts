@@ -3,6 +3,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from 
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
 import type { FileKind } from '@/common/fileKind';
+import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import type { FileInfo } from '@/types/files';
 import { nodeDecorators, objectKinds, type DecorateContext, type ObjectKind } from './extensionPoints';
@@ -28,6 +29,7 @@ import {
   type FileLook,
   type FileRef,
 } from './fileEmbeds';
+import { useDiskStore } from '../../store/diskStore';
 import { fileIcon, type FileIconName } from './fileIcons';
 import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt, removeRef, updateMovedLink } from './fileActions';
 import { objectFrame } from './objectFrame';
@@ -225,7 +227,10 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
     return;
   }
   if (ref.path === null) {
-    draw('missing', null);
+    // A stored file's wiki target is its path from the vault's top, so its twin can still be found.
+    const guess = storedPathOf(view, ref);
+    if (guess) void movedOrMissing(view, { ...ref, path: guess }, draw);
+    else draw('missing', null);
     return;
   }
   const path = ref.path;
@@ -240,6 +245,15 @@ function fillCard(view: EditorView, card: HTMLElement, ref: FileRef, name: strin
     });
   }
   void appFor(path);
+}
+
+/** Where a wiki link's target would be if it is a path from the vault's top, as Opal writes stored files. */
+function storedPathOf(view: EditorView, ref: FileRef): string | null {
+  if (ref.form !== 'wiki' && ref.form !== 'embed') return null;
+  if (!ref.target.includes('/')) return null;
+  const page = view.state.facet(pageContext).path;
+  const root = useDiskStore.getState().roots.filter((candidate) => isFsPathAtOrBelow(candidate, page)).sort((a, b) => b.length - a.length)[0];
+  return root ? `${root}/${ref.target}` : null;
 }
 
 const hostOf = (url: string) => {
