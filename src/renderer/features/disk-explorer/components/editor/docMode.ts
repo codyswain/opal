@@ -30,6 +30,7 @@ import {
   typingStyle,
 } from './formatCommands';
 import { imageFrame } from './imageFrame';
+import { firstLine } from './firstLine';
 import { insertImageItem } from './imageInsert';
 import { blockObjects } from './blockObjects';
 import { blockPosition, docMode, drawnBlockAt, hiddenRanges, setOpenBlock, type HiddenRange } from './livePreview';
@@ -440,6 +441,7 @@ export function docModeExtensions(): Extension {
   const input = { composing: false };
   return [
     docMode.of(true),
+    firstLine,
     objectFrameExtension,
     insertImageItem,
     insertTableItem,

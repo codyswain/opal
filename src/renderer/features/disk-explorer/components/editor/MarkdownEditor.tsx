@@ -12,6 +12,7 @@ import { linkEditor, type LinkEditor } from './docMode';
 import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
 import type { PageObject } from './extensionPoints';
+import { setFileProperties } from './firstLine';
 import { markdownEditorExtensions, replaceText, textChanges } from './editorSetup';
 import { formatState, sameFormat, type FormatState } from './formatState';
 import { LinkPopover } from './LinkPopover';
@@ -196,6 +197,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   useEffect(() => {
     view.current?.dispatch({ effects: setPageProperties.of(facts) });
   }, [facts]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: setFileProperties.of(document.properties > 0) });
+  }, [document.properties]);
 
   // The block opens under the title, so the page scrolls up to show it. Closing keeps the scroll.
   // In a stack the stack brings the section's top into view.
