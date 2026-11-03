@@ -51,6 +51,11 @@ const setFocused = StateEffect.define<boolean>();
 const setPointerDown = StateEffect.define<boolean>();
 /** Puts a cell caret at a position in a table, or with null turns it into the table's source. */
 export const setCellCaret = StateEffect.define<number | null>();
+
+/** Where a click in a drawn table put the cell caret, or null. */
+export function cellCaretOf(state: EditorState): number | null {
+  return state.field(revealState, false)?.cell ?? null;
+}
 /** In a document, shows the source of the table or code block over these lines, or with null draws it again. */
 export const setOpenBlock = StateEffect.define<{ from: number; to: number } | null>();
 

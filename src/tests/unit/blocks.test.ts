@@ -533,3 +533,21 @@ describe('an input method under a table', () => {
     expect(text(view)).toBe(`${TABLE}\n\n日本\n\nNext\n`);
   });
 });
+
+describe('Tab with a cell caret in a drawn table', () => {
+  it('moves the outlined cell, and the next key types there', async () => {
+    const view = mount(`Intro\n\n${TABLE}\n\nEnd\n`);
+    await focusPage(view);
+    const cell = view.contentDOM.querySelector('.cm-md-table th[data-offset]') as HTMLElement;
+    act(() => { cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
+    key(view, 'Tab');
+    expect(view.contentDOM.querySelector('.cm-md-cell-caret')?.textContent).toBe('b');
+    key(view, 'Tab');
+    expect(view.contentDOM.querySelector('.cm-md-cell-caret')?.textContent).toBe('1');
+    key(view, 'Tab', { shiftKey: true });
+    expect(view.contentDOM.querySelector('.cm-md-cell-caret')?.textContent).toBe('b');
+    key(view, 'x');
+    type(view, 'x');
+    expect(text(view)).toBe(`Intro\n\n| a | xb |\n|---|---|\n| 1 | 2 |\n\nEnd\n`);
+  });
+});

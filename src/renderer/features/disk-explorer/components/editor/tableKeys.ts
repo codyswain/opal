@@ -1,8 +1,8 @@
 import { EditorSelection, EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
-import { keymap, type Command } from '@codemirror/view';
+import { keymap, type Command, type EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree } from './extensionPoints';
-import { docMode, drawnBlockAt } from './livePreview';
+import { cellCaretOf, docMode, drawnBlockAt, setCellCaret } from './livePreview';
 
 /*
  * Keys in a table's Markdown, as in a spreadsheet: Tab and Shift+Tab go to
@@ -23,12 +23,18 @@ interface Cell {
   end: number;
 }
 
-/** The table node holding `at`, when its Markdown shows. */
-function tableAt(state: EditorState, at: number): SyntaxNode | null {
+/** The table node holding `at`, drawn or not. */
+function anyTableAt(state: EditorState, at: number): SyntaxNode | null {
   for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, -1); node; node = node.parent) {
-    if (node.name === 'Table') return drawnBlockAt(state, node.from) ? null : node;
+    if (node.name === 'Table') return node;
   }
   return null;
+}
+
+/** The table node holding `at`, when its Markdown shows. */
+function tableAt(state: EditorState, at: number): SyntaxNode | null {
+  const table = anyTableAt(state, at);
+  return table && !drawnBlockAt(state, table.from) ? table : null;
 }
 
 /** The rows of a table: header, delimiter and body rows, in order. */
@@ -82,9 +88,25 @@ function addRow(state: EditorState, table: SyntaxNode, line: Line, dispatch: Par
   return true;
 }
 
+/** Tab (1) or Shift+Tab (-1) with a cell caret in a drawn table: the outline moves to the next or previous cell. */
+function moveCellCaret(view: EditorView, dir: 1 | -1): boolean {
+  const { state } = view;
+  const caret = cellCaretOf(state);
+  const table = caret === null ? null : anyTableAt(state, caret);
+  if (caret === null || !table) return false;
+  const cells = rowsOf(table).filter((row) => row.name !== 'TableDelimiter').flatMap((row) => cellsOf(state, row));
+  const at = cells.findIndex((cell) => cell.start <= caret && caret <= cell.end);
+  const target = cells[at + dir];
+  if (at === -1 || !target) return true;
+  const anchor = target.to > target.from ? target.from : Math.min(target.end, target.start + 1);
+  view.dispatch({ selection: { anchor }, effects: setCellCaret.of(anchor), scrollIntoView: true });
+  return true;
+}
+
 /** Tab (1) or Shift+Tab (-1) in a table's Markdown. */
 function moveCell(dir: 1 | -1): Command {
   return (view) => {
+    if (moveCellCaret(view, dir)) return true;
     const { state } = view;
     const { main } = state.selection;
     const table = tableAt(state, main.head);
