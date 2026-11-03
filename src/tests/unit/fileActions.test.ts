@@ -7,6 +7,7 @@ import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/comp
 import type { ObjectAction } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import {
   cardText,
+  destinationOf,
   encodeAddress,
   escapeLinkText,
   fileActions,
@@ -126,6 +127,15 @@ describe('the bar', () => {
     const more = action(view, PNG, 'more').items?.map((item) => item.label);
     expect(more).toEqual(['Quick Look', 'Reveal in Finder', 'Copy image', 'Copy file', 'Copy as Markdown', 'Copy path', 'Save a copy…', 'Replace…', 'Remove']);
     expect(action(view, PPTX, 'more').items?.map((item) => item.label)).toContain('Rename…');
+  });
+
+  it('leads with the name the page shows, whole, then the kind and size', async () => {
+    const view = mount(`See [[${PPTX}|A very long name for the board deck.pptx]] today\n`);
+    await flush();
+    const at = text(view).indexOf('[[');
+    const ref = refAt(view.state, { from: at, to: at });
+    const destination = destinationOf(view.state, { kind: 'file-inline', from: ref?.from ?? 0, to: ref?.to ?? 0, node: '' });
+    expect(destination).toBe('A very long name for the board deck.pptx · PowerPoint · 2.4 MB');
   });
 
   it('names the app once main has said it, and never shows a placeholder for it', async () => {

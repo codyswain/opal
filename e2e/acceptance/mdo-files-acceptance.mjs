@@ -228,7 +228,7 @@ try {
   const barShown = await bar.waitFor({ timeout: 5000 }).then(() => true, () => false);
   const barText = barShown ? await bar.textContent() : '';
   // A deck is a card in either look, so its bar has no Show as.
-  check('a click on a card frames it and shows the bar: destination first, then the main action and More', barShown && /gob-deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && !/Show as/.test(barText) && /More/.test(barText), barText);
+  check('a click on a card frames it and shows the bar: destination first, then the main action and More', barShown && /Gob deck\.pptx · PowerPoint · 2 KB/.test(barText) && /Open in/.test(barText) && !/Show as/.test(barText) && /More/.test(barText), barText);
   const framed = await page.locator('.cm-file-card[data-file-framed]').count();
   check('the framed card draws its ring', framed === 1);
   if (shotsDir) {

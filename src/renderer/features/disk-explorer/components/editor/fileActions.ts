@@ -518,10 +518,11 @@ export function destinationOf(state: EditorState, obj: PageObject): string | nul
       return ref.url;
     }
   }
-  const name = fileName(ref);
+  // The name the page shows, whole, so a chip cut short with an ellipsis reads in full here.
+  const name = shownName(ref);
   const info = ref.path ? knownInfo(ref.path) : null;
   if (ref.path && info === undefined) void fileInfo(ref.path);
-  return [name, kindLabel(name, ref.kind), typeof info?.size === 'number' ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
+  return [name, kindLabel(fileName(ref), ref.kind), typeof info?.size === 'number' ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
 }
 
 const IMAGE_SIZES = [
