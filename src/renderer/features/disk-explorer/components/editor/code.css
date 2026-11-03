@@ -61,23 +61,23 @@
   line-height: 28px;
 }
 
-/* A block right under a line of text, or right over one, keeps a gap from it, inside the line. */
+/* A block right under a line of text, or right over one, keeps a 10px gap from it, inside the line, as other blocks do. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text {
-  padding-top: 0.5em;
+  padding-top: 10px;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text::before {
-  top: 0.5em;
+  top: 10px;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text {
-  height: 0.9em;
-  padding-bottom: 0.5em;
+  height: calc(0.4em + 10px);
+  padding-bottom: 10px;
   box-sizing: border-box;
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text::before {
-  bottom: 0.5em;
+  bottom: 10px;
 }
 
 /* A fence on a list item's line keeps the item's marker, just outside the box, with the label where code starts. */
@@ -111,7 +111,7 @@
 }
 
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-quiet.cm-code-after-text {
-  height: calc(0.4em + 0.5em);
+  height: calc(0.4em + 10px);
 }
 
 .opal-editor .cm-editor .cm-code-quiet .cm-code-header {
@@ -125,7 +125,7 @@
 }
 
 .opal-editor .cm-editor .cm-code-after-text.cm-code-quiet .cm-code-header {
-  top: calc(0.5em + 4px);
+  top: calc(10px + 4px);
 }
 
 /* The box's own grey, made opaque over the page, so code under the corner does not show through. */
