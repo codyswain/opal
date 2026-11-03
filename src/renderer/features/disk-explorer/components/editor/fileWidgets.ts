@@ -527,7 +527,7 @@ export class PdfPreviewWidget extends WidgetType {
     }
     const firstPage = async () => {
       const url = await thumbnailUrl(path, Math.max(240, Math.round(view.contentDOM.clientWidth || 700)));
-      if (!url || reading.has(this.key)) return;
+      if (!url || readers.has(this.key)) return;
       const image = element('img', 'cm-file-pdf-image');
       image.src = url;
       image.alt = `First page of ${name}`;
@@ -539,8 +539,9 @@ export class PdfPreviewWidget extends WidgetType {
     done.hidden = true;
     const read = button('Read here', () => openReader());
     read.classList.add('cm-file-pdf-read');
+    const readers = readersOf(view);
     const closeReader = () => {
-      reading.delete(this.key);
+      readers.delete(this.key);
       if (liveReader?.key === this.key) liveReader = null;
       page.classList.remove('cm-file-pdf-reading');
       page.style.height = `${height}px`;
@@ -552,14 +553,14 @@ export class PdfPreviewWidget extends WidgetType {
     };
     // Chromium's viewer, one per window; it stays through redraws until Done or Escape.
     const openReader = () => {
-      if (liveReader && liveReader.key !== this.key) liveReader.close();
-      let viewer = reading.get(this.key);
+      if (liveReader && (liveReader.key !== this.key || liveReader.page !== page)) liveReader.close();
+      let viewer = readers.get(this.key);
       if (!viewer) {
         viewer = document.createElement('embed');
         viewer.setAttribute('type', 'application/pdf');
         viewer.setAttribute('src', `${toOpalFileUrl(path)}#toolbar=0&view=FitH${fragmentValue(ref, 'page') ? `&page=${fragmentValue(ref, 'page')}` : ''}`);
         viewer.className = 'cm-file-pdf-viewer';
-        reading.set(this.key, viewer);
+        readers.set(this.key, viewer);
       }
       liveReader = { key: this.key, close: closeReader, view, page };
       page.classList.add('cm-file-pdf-reading');
@@ -577,8 +578,15 @@ export class PdfPreviewWidget extends WidgetType {
         return;
       }
       meta.textContent = [info?.pages ? `${info.pages} ${info.pages === 1 ? 'page' : 'pages'}` : null, info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
-      if (reading.has(this.key)) openReader();
-      else void firstPage();
+      if (!readers.has(this.key)) {
+        void firstPage();
+        return;
+      }
+      // Once CodeMirror has taken the old element off the page; a second embed of the same file leaves the reader where it is.
+      queueMicrotask(() => {
+        if (!readers.get(this.key)?.isConnected) openReader();
+        else void firstPage();
+      });
     };
     const known = knownInfo(path);
     if (known !== undefined) show(known);
@@ -591,8 +599,17 @@ export class PdfPreviewWidget extends WidgetType {
   }
 }
 
-/** The PDF viewers open with Read here, by widget, so a redraw keeps them; one is live in the window at a time. */
-const reading = new Map<string, HTMLElement>();
+/** The PDF viewers open with Read here, per page and by widget, so a redraw keeps them; one is live in the window at a time. */
+const reading = new WeakMap<EditorView, Map<string, HTMLElement>>();
+
+function readersOf(view: EditorView): Map<string, HTMLElement> {
+  let readers = reading.get(view);
+  if (!readers) {
+    readers = new Map();
+    reading.set(view, readers);
+  }
+  return readers;
+}
 let liveReader: { key: string; close: () => void; view: EditorView; page: HTMLElement } | null = null;
 
 // Escape in the page that holds the reader puts the first page back. Escape anywhere else, as in a menu, is left alone.
@@ -656,6 +673,7 @@ function restMedia(media: HTMLMediaElement): void {
     media.pause();
     media.removeAttribute('src');
     media.load();
+    observer?.unobserve(media);
   }, RELEASE_MS));
 }
 
@@ -732,7 +750,8 @@ export class VideoWidget extends WidgetType {
       if (info?.width && info.height) box.style.aspectRatio = `${info.width} / ${info.height}`;
       // After the old element, if CodeMirror is drawing this line again, has been put to rest.
       queueMicrotask(() => {
-        if (box.querySelector('video')) return;
+        // Not once CodeMirror has taken the preview off the page meanwhile: nothing would put that player to rest.
+        if (!wrap.isConnected || box.querySelector('video')) return;
         const media = takeMedia('video', src);
         media.addEventListener('error', () => {
           if (media.error && media.error.code !== MEDIA_ERR_ABORTED && wrap.contains(media)) fillAsCard(view, wrap, this.drawn, 'unplayable');
@@ -798,7 +817,7 @@ export class AudioWidget extends WidgetType {
       }
       meta.textContent = [info?.duration ? formatDuration(info.duration) : null, info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
       queueMicrotask(() => {
-        if (row.querySelector('audio')) return;
+        if (!wrap.isConnected || row.querySelector('audio')) return;
         const media = takeMedia('audio', toOpalFileUrl(path));
         media.addEventListener('error', () => {
           if (media.error && media.error.code !== MEDIA_ERR_ABORTED && wrap.contains(media)) fillAsCard(view, wrap, this.drawn, 'unplayable');
