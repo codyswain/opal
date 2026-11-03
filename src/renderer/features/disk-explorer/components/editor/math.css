@@ -47,8 +47,9 @@
   text-underline-offset: 2px;
 }
 
-/* A formula in link text carries the link's underline, which text-decoration can't reach inside an inline-block. */
+/* A formula in link text carries the link's underline, which text-decoration can't reach inside an inline-block. Square corners, so the line stays straight. */
 .opal-editor .cm-editor .cm-md-link .cm-math-inline {
+  border-radius: 0;
   box-shadow: inset 0 -1px 0 hsl(var(--text-tertiary) / 0.55);
 }
 

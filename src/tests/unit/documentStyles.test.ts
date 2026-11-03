@@ -36,4 +36,10 @@ describe('the look of documents', () => {
     expect(declarations).toMatch(/(^|[^-])box-decoration-break: clone/);
     expect(rule('files.css', '.opal-editor .cm-editor .cm-file-chip')).toMatch(/-webkit-box-decoration-break: clone/);
   });
+
+  it('draws the link underline under a formula in link text as a straight line', () => {
+    const declarations = rule('math.css', '.opal-editor .cm-editor .cm-md-link .cm-math-inline');
+    expect(declarations).toMatch(/box-shadow: inset 0 -1px 0/);
+    expect(declarations).toMatch(/border-radius: 0;/);
+  });
 });
