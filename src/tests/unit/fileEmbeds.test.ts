@@ -259,9 +259,9 @@ describe('file widgets', () => {
 
   it('makes no player for a preview taken off the page before its file was read', async () => {
     const observed: Element[] = [];
-    vi.stubGlobal('IntersectionObserver', class { observe(el: Element) { observed.push(el); } unobserve() { return undefined; } disconnect() { return undefined; } });
+    vi.stubGlobal('IntersectionObserver', class { observe(el: Element): void { observed.push(el); } unobserve(): void { observed.length += 0; } disconnect(): void { observed.length += 0; } });
     let answer: (value: { success: true; data: FileInfo }) => void = () => undefined;
-    installFilesApi({ info: vi.fn(() => new Promise((resolve) => { answer = resolve; })) });
+    installFilesApi({ info: vi.fn(() => new Promise<{ success: true; data: FileInfo }>((resolve) => { answer = resolve; })) });
     const other = `Library/files/2026-11/other-clip.a3f9c2e1.mp4`;
     const view = new EditorView({ parent: document.body, state: EditorState.create({ doc: `![[${other}|640]]\n`, extensions: markdownEditorExtensions('/Vault/Notes/A.mdo') }) });
     act(() => { view.dispatch({ effects: linksResolved.of({ [other]: `/Vault/${other}` }) }); });
@@ -272,6 +272,24 @@ describe('file widgets', () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     expect(observed.filter((el) => el instanceof HTMLMediaElement && el.getAttribute('src'))).toHaveLength(0);
     vi.unstubAllGlobals();
+  });
+
+  it('turns a card into File not found when its file is deleted while the page is open, and leaves the rest alone', async () => {
+    let changed: (payload: { directories: string[] }) => void = () => undefined;
+    installDiskApi({
+      listRoots: vi.fn(async () => ({ success: true as const, data: ['/Vault'] })),
+      onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => { changed = callback; return () => undefined; }),
+    });
+    const view = await mount(`[[${DECK}|Gob deck.pptx]]\n\n![[${PDF}|Q3.pdf]]\n`);
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('PowerPoint · 9.1 MB'));
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-pdf')).not.toBeNull());
+    const pdf = view.contentDOM.querySelector('.cm-file-pdf');
+    statuses[`/Vault/${DECK}`] = 'missing';
+    act(() => { changed({ directories: ['/Vault/Library/files/2026-11'] }); });
+    await waitFor(() => expect(view.contentDOM.querySelector('.cm-file-card')).toHaveTextContent('File not found'));
+    expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('data-state', 'missing');
+    // The PDF beside it, unchanged, keeps its element.
+    expect(view.contentDOM.querySelector('.cm-file-pdf')).toBe(pdf);
   });
 
   it('keeps a player across a redraw of its line', async () => {

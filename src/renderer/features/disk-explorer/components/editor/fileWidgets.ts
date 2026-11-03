@@ -1,3 +1,4 @@
+import { syntaxTree } from '@codemirror/language';
 import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
@@ -1067,6 +1068,45 @@ const framedFiles = ViewPlugin.fromClass(class {
   }
 });
 
+/**
+ * A file deleted, moved or replaced while its page is open, by a sync or in
+ * Finder: when its folder changes, the page asks about the files it shows
+ * from there again and redraws only those whose answer changed, so a card
+ * turns into File not found or Moved, and nothing else on the page moves.
+ */
+const changedFiles = ViewPlugin.define((view) => {
+  const changed = (directories: readonly string[]) => {
+    if (!view.dom.isConnected) return;
+    const folders = new Set(directories);
+    const links = view.state.field(resolvedLinks, false) ?? new Map<string, string | null>();
+    const page = view.state.facet(pageContext).path;
+    const paths = new Set<string>();
+    for (const { from, to } of view.visibleRanges) {
+      syntaxTree(view.state).iterate({
+        from,
+        to,
+        enter: (node) => {
+          if (!FILE_NODES.includes(node.name)) return;
+          const ref = fileRefOf(view.state, node.node, links, page);
+          if (ref?.path && folders.has(parentFsPath(ref.path) ?? '')) paths.add(ref.path);
+        },
+      });
+    }
+    for (const path of paths) {
+      const before = knownInfo(path);
+      if (before === undefined) continue;
+      forgetInfo(path);
+      void fileInfo(path).then((after) => {
+        if (!view.dom.isConnected) return;
+        if (before?.status === after?.status && before?.size === after?.size && before?.mtimeMs === after?.mtimeMs) return;
+        view.dispatch({ effects: fileChanged.of(toOpalFileUrl(path)) });
+      });
+    }
+  };
+  const stop = typeof window !== 'undefined' && window.diskAPI?.onChanged ? window.diskAPI.onChanged(({ directories }) => changed(directories)) : null;
+  return { destroy: () => stop?.() };
+});
+
 /** Files on every page: their looks, and in documents their objects and bar. */
 export const fileObjects: Extension = [
   nodeDecorators.of({ nodes: FILE_NODES, decorate: drawFile }),
@@ -1076,6 +1116,7 @@ export const fileObjects: Extension = [
   objectKinds.of(webPictureKind(false)),
   Prec.highest(fileClicks),
   framedFiles,
+  changedFiles,
   wikiNames,
   urlChips,
   linkPicker,
