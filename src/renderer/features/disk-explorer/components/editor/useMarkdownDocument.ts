@@ -1,0 +1,475 @@
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { useDocumentStatusStore } from '../../store/documentStatusStore';
+import { basenameFsPath, parentFsPath } from '@/common/fsPaths';
+import type { MarkdownCopyLabel, UnsavedPage } from '@/types/markdown';
+import { mergeText, type MergeResult } from './mergeText';
+import { registerPageFlush, trackPendingWrite } from './pendingSaves';
+
+export type MarkdownSaveState = 'clean' | 'dirty' | 'saving' | 'saved' | 'conflict' | 'error';
+
+export interface MarkdownDocumentState {
+  status: 'loading' | 'ready' | 'unavailable';
+  /** The text the editor opens with. Later disk changes reach the editor as edits, not here. */
+  body: string | null;
+  saveState: MarkdownSaveState;
+  error: string | null;
+  /** How many keys the hidden frontmatter holds. */
+  properties: number;
+  /** Set while the page and the disk changed the same lines: the disk's side, for the editor to show beside the page's. */
+  conflict: { disk: string } | null;
+}
+
+/** The open editor, as the document drives it. */
+export interface MarkdownEditorHandle {
+  getText: () => string;
+  /** Moves the editor to `text` with the smallest edit, keeping cursor and scroll, outside undo history. */
+  setText: (text: string) => void;
+}
+
+export interface MarkdownDocumentActions {
+  onChange: (text: string) => void;
+  flush: () => Promise<void>;
+  attach: (editor: MarkdownEditorHandle) => () => void;
+  /** Saves the page, which now holds a pick for every conflicting change, over the disk version. */
+  resolveConflict: () => void;
+}
+
+export const AUTOSAVE_DELAY_MS = 800;
+export const AUTOSAVE_MAX_WAIT_MS = 5000;
+/** How often a page held for git checks whether git is done. */
+export const GIT_HOLD_RETRY_MS = 250;
+/** How long the last save before a close or quit waits for git, well inside the 3 s the main process gives it. */
+const SETTLE_HOLD_LIMIT_MS = 1500;
+/** A merge takes git well under a second; a page held longer says it is not saved. */
+export const GIT_HOLD_NOTICE_MS = 2000;
+const GIT_HOLD_MESSAGE = 'Git is changing files in this folder. The page saves when git is done.';
+/** Git found busy this soon after a write may have stashed the file before that write landed. */
+const GIT_RACE_MS = 2000;
+
+const INITIAL: MarkdownDocumentState = {
+  status: 'loading', body: null, saveState: 'clean', error: null, properties: 0, conflict: null,
+};
+
+type ReadResponse = Awaited<ReturnType<typeof window.markdownAPI.read>>;
+type WriteResponse = Awaited<ReturnType<typeof window.markdownAPI.write>>;
+
+const noteName = (path: string) => basenameFsPath(path).replace(/\.md$/i, '');
+
+/** A copy next to the note goes by its name; one in the recovery folder by its full path. */
+function copyLocation(note: string, copy: string): string {
+  return parentFsPath(copy) === parentFsPath(note) ? noteName(copy) : copy;
+}
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One Markdown file's edit lifecycle. `saved` is the text at `revision` on
+ * disk and the base of every merge. Saves and disk checks run one at a time,
+ * so neither sees the other half done.
+ */
+class MarkdownDocumentSession {
+  private live = false;
+  private revision: string | null = null;
+  /** Every revision this page has had: loaded, saved or followed. */
+  private seen = new Set<string>();
+  /** The revisions this page had before its last save. One of them coming back takes the saved lines out of the file. */
+  private beforeSave = new Set<string>();
+  /** The text saved before the last write, and when that write ended. */
+  private lastWrite: { before: string; at: number } | null = null;
+  /** An earlier revision the last disk check found back on disk; the next check must find it again. */
+  private revert: string | null = null;
+  /** Set while git is rewriting the file's repo, or an earlier version waits for a second read: nothing saves meanwhile. */
+  private held = false;
+  private heldSince: number | null = null;
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private saved = '';
+  private latest = '';
+  private editor: MarkdownEditorHandle | null = null;
+  private conflict: { disk: string; revision: string } | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private dirtySince: number | null = null;
+  private queue: Promise<void> = Promise.resolve();
+  private unregister: (() => void) | null = null;
+  private saveState: MarkdownSaveState = 'clean';
+
+  constructor(private readonly path: string, private readonly update: (patch: Partial<MarkdownDocumentState>) => void) {}
+
+  open(): void {
+    this.live = true;
+    this.revision = null;
+    this.seen.clear();
+    this.beforeSave.clear();
+    this.lastWrite = null;
+    this.revert = null;
+    this.release();
+    this.conflict = null;
+    this.publish(INITIAL);
+    // Closing the window or quitting waits for this, and asks before dropping text that did not reach the file.
+    this.unregister = registerPageFlush(() => this.settle());
+    void this.serial(() => this.load());
+  }
+
+  /** Leaving the page saves what was typed; the write is tracked so a quit right after still waits for it. */
+  close(): void {
+    this.live = false;
+    this.cancelTimer();
+    this.cancelHold();
+    this.unregister?.();
+    trackPendingWrite(this.settle());
+  }
+
+  onChange = (text: string): void => {
+    this.latest = text;
+    // A conflict stays until every change has a pick; nothing saves meanwhile.
+    if (this.conflict) return;
+    if (text === this.saved) {
+      this.cancelTimer();
+      if (this.saveState === 'dirty') this.publish({ saveState: 'clean' });
+      return;
+    }
+    if (this.saveState !== 'dirty') this.publish({ saveState: 'dirty' });
+    this.schedule();
+  };
+
+  flush = async (): Promise<void> => {
+    this.cancelTimer();
+    await this.serial(() => this.write());
+    await this.drain();
+  };
+
+  attach = (editor: MarkdownEditorHandle): (() => void) => {
+    this.editor = editor;
+    // The disk may have moved on between load and mount.
+    if (editor.getText() !== this.latest) editor.setText(this.latest);
+    return () => { if (this.editor === editor) this.editor = null; };
+  };
+
+  resolveConflict = (): void => {
+    const conflict = this.conflict;
+    if (!conflict) return;
+    this.conflict = null;
+    this.saved = conflict.disk;
+    this.setRevision(conflict.revision);
+    this.publish({ conflict: null, saveState: this.latest === this.saved ? 'clean' : 'dirty' });
+    void this.serial(() => this.write());
+  };
+
+  /** Checks the disk after a change in the file's folder and folds what changed into the page. */
+  reconcile = (): Promise<void> => this.serial(() => this.reconcileNow());
+
+  private serial(task: () => Promise<void>): Promise<void> {
+    const run = this.queue.then(task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Waits until no save or disk check is queued, including ones queued while waiting. */
+  private async drain(): Promise<void> {
+    let tail: Promise<void>;
+    do {
+      tail = this.queue;
+      await tail;
+    } while (tail !== this.queue);
+  }
+
+  /**
+   * The last save before the page closes or the app quits. An open conflict
+   * keeps both sides. Text that still cannot reach the file goes to an
+   * unsaved copy, so it is never only in memory. Reports the page when its
+   * text is not in its file.
+   */
+  private async settle(): Promise<UnsavedPage | null> {
+    const name = noteName(this.path);
+    try {
+      this.cancelTimer();
+      await this.serial(() => this.write());
+      await this.drain();
+      // A merge takes git well under a second; text it holds longer goes to a copy below.
+      for (let waited = 0; this.held && waited < SETTLE_HOLD_LIMIT_MS; waited += GIT_HOLD_RETRY_MS) {
+        await delay(GIT_HOLD_RETRY_MS);
+        await this.serial(() => this.retry());
+      }
+      if (this.conflict) {
+        await this.serial(() => this.keepBoth());
+        // keepBoth said what happened; its copy failed in both places.
+        if (this.conflict) return { name, copy: null };
+      }
+      if (this.latest === this.saved) return null;
+      const unsaved = { name, copy: await this.saveCopy(this.latest, 'unsaved copy') };
+      // An open page shows the failure itself, and a quit asks about it.
+      if (!this.live) {
+        if (unsaved.copy) toast.error(`Could not save ${unsaved.name}. Your changes are in ${copyLocation(this.path, unsaved.copy)}.`);
+        else toast.error(`Could not save ${unsaved.name} or a copy of it. Your last changes are lost.`);
+      }
+      return unsaved;
+    } catch {
+      return { name, copy: null };
+    }
+  }
+
+  /** Writes text to a new copy next to the note, or in the recovery folder; null when neither took it. */
+  private async saveCopy(text: string, label: MarkdownCopyLabel): Promise<string | null> {
+    try {
+      const saved = await window.markdownAPI.saveCopy(this.path, text, label);
+      return saved.success ? saved.data.path : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Autosave about 800ms after the last change, and at least every 5s while typing goes on. */
+  private schedule(): void {
+    const now = Date.now();
+    this.dirtySince ??= now;
+    const wait = Math.max(0, Math.min(AUTOSAVE_DELAY_MS, this.dirtySince + AUTOSAVE_MAX_WAIT_MS - now));
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this.timer = null; void this.serial(() => this.write()); }, wait);
+  }
+
+  private cancelTimer(): void {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+  }
+
+  /**
+   * Git is rewriting the file's repo, as `git merge --autostash` does when
+   * it resets uncommitted files to HEAD and puts them back afterwards. A save
+   * now could be undone, or keep git from putting the stashed lines back, and
+   * the disk text may be on its way somewhere else. The page keeps its text,
+   * stays unsaved, and checks again in 250 ms.
+   *
+   * Git reads the files for its stash before it leaves any mark in its
+   * folder, so a write that ended just before may be missing from the stash:
+   * the reset takes its lines out and the stash puts back the text from
+   * before it. The page counts those lines as its own again, so the merge
+   * once git is done keeps them. If the write did survive, both sides hold
+   * the same lines and they merge cleanly.
+   */
+  private gitHold(): void {
+    if (this.lastWrite && Date.now() - this.lastWrite.at < GIT_RACE_MS) {
+      this.saved = this.lastWrite.before;
+      if (this.latest !== this.saved && this.saveState !== 'dirty') this.publish({ saveState: 'dirty' });
+    }
+    this.lastWrite = null;
+    this.hold();
+  }
+
+  /** Nothing saves until the next disk check finds git done. A hold that lasts says so. */
+  private hold(): void {
+    this.held = true;
+    this.heldSince ??= Date.now();
+    // Held this long, git has stopped partway or is stuck: the page is not saved, and says so.
+    if (Date.now() - this.heldSince >= GIT_HOLD_NOTICE_MS && this.latest !== this.saved && !this.conflict && this.saveState !== 'error') {
+      this.publish({ saveState: 'error', error: GIT_HOLD_MESSAGE });
+    }
+    if (this.holdTimer || !this.live) return;
+    this.holdTimer = setTimeout(() => { this.holdTimer = null; void this.serial(() => this.retry()); }, GIT_HOLD_RETRY_MS);
+  }
+
+  private release(): void {
+    this.held = false;
+    this.heldSince = null;
+  }
+
+  private cancelHold(): void {
+    if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null; }
+  }
+
+  /** Folds in the disk once git is done, then saves what is still unsaved. */
+  private async retry(): Promise<void> {
+    await this.reconcileNow();
+    await this.write();
+  }
+
+  private setRevision(revision: string): void {
+    this.seen.add(revision);
+    this.revision = revision;
+  }
+
+  private publish(patch: Partial<MarkdownDocumentState>): void {
+    if (!this.live) return;
+    if (patch.saveState) this.saveState = patch.saveState;
+    this.update(patch);
+  }
+
+  private show(text: string): void {
+    this.latest = text;
+    this.editor?.setText(text);
+  }
+
+  private async load(): Promise<void> {
+    let response: ReadResponse;
+    try {
+      response = await window.markdownAPI.read(this.path);
+    } catch {
+      response = { success: false, error: 'Could not open this note.' };
+    }
+    if (!response.success) {
+      this.publish({ status: 'unavailable', error: response.error, body: null });
+      return;
+    }
+    this.setRevision(response.data.revision);
+    this.saved = this.latest = response.data.body;
+    this.publish({ status: 'ready', body: response.data.body, saveState: 'clean', error: null, properties: response.data.properties });
+    // Opened while git was rewriting the repo: follow the disk once it is done.
+    if (response.data.gitBusy) this.gitHold();
+  }
+
+  private async write(): Promise<void> {
+    if (this.conflict || this.held || this.revision === null) return;
+    const text = this.latest;
+    if (text === this.saved) return;
+    this.dirtySince = null;
+    this.publish({ saveState: 'saving', error: null });
+    let response: WriteResponse;
+    try {
+      response = await window.markdownAPI.write(this.path, text, this.revision);
+    } catch {
+      response = { success: false, error: 'Could not save this note.' };
+    }
+    if (!response.success) {
+      if (response.gitBusy) {
+        // Still unsaved; the hold saves it once git is done.
+        this.publish({ saveState: 'dirty' });
+        return this.gitHold();
+      }
+      if (response.conflict) {
+        // Still unsaved until the disk check below folds the two versions together.
+        this.publish({ saveState: 'dirty' });
+        return this.reconcileNow();
+      }
+      this.publish({ saveState: 'error', error: response.error });
+      return;
+    }
+    this.beforeSave = new Set(this.seen);
+    this.beforeSave.delete(response.data.revision);
+    this.setRevision(response.data.revision);
+    this.lastWrite = { before: this.saved, at: Date.now() };
+    this.saved = text;
+    if (this.latest === text) {
+      this.publish({ saveState: 'saved' });
+    } else {
+      // Typing went on while the write was in flight; the next save covers it.
+      this.publish({ saveState: 'dirty' });
+      if (this.live) this.schedule();
+    }
+  }
+
+  /**
+   * A clean page follows the disk. A dirty one merges: changes on different
+   * lines combine and save; changes to the same lines become a conflict the
+   * editor shows, or, once the page is closed, a copy that keeps both. While
+   * git is rewriting the repo nothing merges. A version from before the
+   * page's last save coming back is shown as a conflict, never merged in,
+   * even on a clean page, since that save may be text git took out of the
+   * file. One that only takes back a change the page followed is followed.
+   */
+  private async reconcileNow(): Promise<void> {
+    if (this.revision === null) return;
+    let response: ReadResponse;
+    try { response = await window.markdownAPI.read(this.path); } catch { return; }
+    // A file that went away or became unreadable stays as typed; the next save reports it.
+    if (!response.success) { this.release(); return; }
+    const { body: disk, revision, properties, gitBusy } = response.data;
+    if (gitBusy) return this.gitHold();
+    this.release();
+    if (revision === (this.conflict?.revision ?? this.revision)) { this.revert = null; return; }
+    // Merging an old version would delete what was saved since, as a merge
+    // with the tree git reset to HEAD does. Read again in 250 ms, and if it
+    // is still there, show it beside the page. When the merge base is that
+    // old text already, as after a write git took out, the merge loses nothing.
+    if (revision !== this.revision && this.beforeSave.has(revision) && disk !== this.latest && disk !== this.saved) {
+      if (this.revert !== revision) {
+        this.revert = revision;
+        return this.hold();
+      }
+      this.revert = null;
+      this.cancelTimer();
+      this.conflict = { disk, revision };
+      this.publish({ saveState: 'conflict', conflict: { disk }, error: null, properties });
+      return;
+    }
+    this.revert = null;
+    const merged: MergeResult = this.latest === this.saved ? { clean: true, text: disk } : mergeText(this.saved, this.latest, disk);
+    if (merged.clean) {
+      this.conflict = null;
+      this.show(merged.text);
+      this.saved = disk;
+      this.setRevision(revision);
+      if (merged.text === disk) {
+        this.publish({ conflict: null, properties, saveState: 'clean' });
+        return;
+      }
+      this.publish({ conflict: null, properties, saveState: 'dirty' });
+      void this.serial(() => this.write());
+      return;
+    }
+    this.cancelTimer();
+    this.show(merged.mine);
+    this.conflict = { disk, revision };
+    this.publish({ saveState: 'conflict', conflict: { disk: merged.disk }, error: null, properties });
+  }
+
+  /**
+   * Settles an open conflict without a pick: the page's text goes to a copy
+   * next to the file, and the page takes the disk version.
+   */
+  private async keepBoth(): Promise<void> {
+    const conflict = this.conflict;
+    if (!conflict) return;
+    const name = noteName(this.path);
+    const copy = await this.saveCopy(this.latest, 'conflicted copy');
+    if (!copy) {
+      toast.error(this.live
+        ? `Could not save your version of ${name}. It is still open in the page.`
+        : `Could not save your version of ${name} or a copy of it. Your last changes are lost.`);
+      return;
+    }
+    toast(`Your version of ${name} was saved as ${copyLocation(this.path, copy)}.`);
+    this.conflict = null;
+    this.show(conflict.disk);
+    this.saved = conflict.disk;
+    this.setRevision(conflict.revision);
+    this.publish({ conflict: null, saveState: 'clean' });
+  }
+}
+
+/**
+ * Owns one Markdown file's edit lifecycle: load once, autosave against the
+ * loaded revision, follow disk changes, and merge them into unsaved edits.
+ * Nothing is written for a clean file.
+ */
+export function useMarkdownDocument(path: string): MarkdownDocumentState & MarkdownDocumentActions {
+  const [state, setState] = useState<MarkdownDocumentState>(INITIAL);
+  const session = useMemo(
+    () => new MarkdownDocumentSession(path, (patch) => setState((previous) => ({ ...previous, ...patch }))),
+    [path]
+  );
+
+  useEffect(() => {
+    session.open();
+    return () => session.close();
+  }, [session]);
+
+  useEffect(() => {
+    const folder = parentFsPath(path);
+    return window.diskAPI.onChanged(({ directories }) => {
+      if (folder && directories.includes(folder)) void session.reconcile();
+    });
+  }, [path, session]);
+
+  // A reload of the renderer gets no close request from the main process.
+  useEffect(() => {
+    const handler = () => { void session.flush(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [session]);
+
+  // Publish the save state so the tab strip can show an unsaved dot or a problem.
+  useEffect(() => {
+    useDocumentStatusStore.getState().set(path, state.saveState);
+  }, [path, state.saveState]);
+  useEffect(() => () => useDocumentStatusStore.getState().clear(path), [path]);
+
+  return { ...state, onChange: session.onChange, flush: session.flush, attach: session.attach, resolveConflict: session.resolveConflict };
+}

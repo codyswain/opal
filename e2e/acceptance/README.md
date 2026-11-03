@@ -1,0 +1,24 @@
+# Disposable acceptance scripts
+
+These drive the built app through Playwright's Electron launcher against a
+throwaway user-data directory and temp vault. `OPAL_TEST_USER_DATA_DIR` moves
+Electron's own profile (localStorage, session storage, caches) there as well,
+so a run never reads or writes the real profile's preferences. They are evidence
+runs, not part of the Playwright suite (`playwright.config.ts` only collects
+`e2e/tests`), so the ten-test budget is unaffected. Each script prints one
+`PASS`/`FAIL` line per check and exits non-zero on any failure. Nothing touches
+the real profile or opened folders.
+
+Build first (produces `.vite/build`):
+
+```bash
+npm run test:e2e
+```
+
+Then, from the repository root:
+
+```bash
+node e2e/acceptance/editor-acceptance.mjs        # Markdown editing: autosave, external edits, conflicts, new note
+node e2e/acceptance/stack-stress-acceptance.mjs  # The daily stream with 100 daily pages: frame times, memory, editor count, drift, Back and relaunch
+node e2e/acceptance/git-autostash-acceptance.mjs # Autosave during vault-pull.sh's `git merge --autostash` in a 3,000-file repo: 30 runs, no saved, typed or upstream line lost
+```

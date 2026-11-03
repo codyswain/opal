@@ -1,0 +1,91 @@
+Linear-inspired UX implementation baseline
+Recorded: 2026-09-04
+
+Repository
+----------
+Branch: dev
+Commit: 6cc1d6438ba18bcc8ea1bec056c2fef000c901d2
+Compared with origin/dev after fetch: 15 ahead, 0 behind
+Pre-existing untracked files:
+- docs/superpowers/plans/2026-09-04-linear-inspired-ux.md
+- docs/superpowers/specs/2026-09-04-linear-inspired-ux-design.md
+
+TypeScript
+----------
+Command: npx tsc --noEmit
+Result: failed with 13 pre-existing errors
+
+Known files:
+- src/renderer/features/file-explorer-v2/components/FolderView.tsx
+  - FSEntry is not exported
+  - three implicit-any callback parameters
+- src/renderer/features/file-explorer-v2/components/NoteView.tsx
+  - NoteEditorProps does not accept noteId
+- src/renderer/styles/common/components.ts
+  - eight missing styled-components DefaultTheme properties
+
+Unit and contract tests
+-----------------------
+Command: npm test
+Result: 54 files passed; 452 tests passed
+Vitest duration: 5.77 s
+Whole command including better-sqlite3 rebuild: approximately 20.8 s
+
+Pre-existing warnings:
+- React act() warnings from NameDialog and MarkdownPreview tests
+- Logger setup warning in itemRepository.test.ts
+- fs.rmdir recursive deprecation warnings
+- npm warns that the rebuild command's --build-from-source option is parsed
+  as an unknown config and will change behavior in a future npm version
+- The pre-commit hook's heavier full-suite run twice missed the first
+  DiskWatcher "file added" event. The clean baseline run passed, and an
+  immediate isolated rerun passed all 6 DiskWatcher tests in 2.92 s. Treat
+  this as a pre-existing timing flake, not a redesign regression.
+
+Electron end-to-end tests
+-------------------------
+Command: npm run test:e2e
+Result: 9 tests passed
+Playwright duration: 25.9 s
+Whole command including native rebuild and three Vite builds: approximately
+32.1 s
+E2E budget: 9 of 10 tests
+
+Pre-existing build warnings:
+- named-export warnings for node-html-parser and fs-extra
+- renderer bundle exceeds Vite's 500 kB warning threshold
+- caniuse-lite data is stale
+
+Manual visual baseline
+----------------------
+Captured from an isolated Electron launch at 1440 x 900 with a temporary vault
+and temporary user-data/database directories. Screenshots remain local under:
+/var/folders/z6/4_g615_14xs8nyfbqxzhxxc80000gn/T/opal-linear-baseline-screenshots
+
+Reviewed states:
+- /files with no selection
+- /files with markdown selected
+- /files in an image-heavy gallery
+- /explorer with an empty database
+- /settings
+
+Observed baseline:
+- Global navigation is a thin top route switch, while both product routes
+  render their own unrelated three-pane shells.
+- /files spends multiple stacked rows on breadcrumb, filtering, density,
+  sorting, count, and view controls before content.
+- The details header advertises Modified, Size, and Kind, but ordinary rows
+  expose only name and size.
+- The permanent preview pane consumes roughly one quarter of the window when
+  empty and is too narrow for comfortable markdown reading.
+- Navigating from a selected markdown file into Photos leaves the old markdown
+  preview visible, demonstrating that browse selection and preview state can
+  diverge.
+- /explorer presents a second tree/detail/sidebar grammar with a large empty
+  center and permanently visible Related/Chat rail.
+- Settings reads as a full-width web form and uses unrelated saturated green,
+  purple, and red action styling.
+- Surface levels, borders, typography, and selection states are too similar to
+  establish a strong shell/content/inspector hierarchy.
+
+No visual-regression assertions were added.

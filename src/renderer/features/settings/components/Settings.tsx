@@ -1,213 +1,127 @@
 import React, { useState } from "react";
-import { Input } from "@/renderer/shared/components/Input";
-import { Eye, EyeOff } from "lucide-react";
-import { useSettingsStore } from "@/renderer/store/settingsStore";
+import { Folder, FolderPlus, X } from "lucide-react";
+import { basenameFsPath } from "@/common/fsPaths";
+import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
+import { useRecentStore } from "@/renderer/features/disk-explorer/store/recentStore";
+import { useTheme, type Theme } from "@/renderer/features/theme";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  IconButton,
+  SegmentedControl,
+} from "@/renderer/shared/ui";
+import { useSettingsStore } from "../store/settingsStore";
 
-export const Settings: React.FC = () => {
-  const { settings, updateSettings } = useSettingsStore();
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [resetStatus, setResetStatus] = useState<string | null>(null);
-  const [embeddingsStatus, setEmbeddingsStatus] = useState<string | null>(null);
-  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <section aria-label={title} className="flex flex-col gap-2">
+    <h3 className="text-label text-foreground-tertiary">{title}</h3>
+    {children}
+  </section>
+);
 
-  const toggleApiKeyVisibility = () => {
-    setShowApiKey(!showApiKey);
-  };
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
-  const handleResetDatabase = async () => {
-    // Show confirmation dialog
-    if (
-      window.confirm(
-        "Are you sure you want to reset the database? This will delete all data in the database."
-      )
-    ) {
-      setResetStatus("Database reset in progress...");
-      try {
-        const result = await window.adminAPI.resetDatabase();
-        if (result.success) {
-          setResetStatus(
-            "Database reset successfully! You can now migrate your notes again."
-          );
-        } else {
-          setResetStatus(
-            `Database reset failed: ${result.message || "Unknown error"}`
-          );
-        }
-      } catch (error) {
-        setResetStatus(`Database reset error: ${error}`);
-      }
-    }
-  };
-
-  const handleBackupDatabase = async () => {
-    setBackupStatus("Backup in progress...");
-    try {
-      const result = await window.adminAPI.backupDatabase();
-      if (result.success && result.filePath) {
-        setBackupStatus(`Backup created successfully at ${result.filePath}!`);
-      } else {
-        setBackupStatus(`Backup failed: ${result.message || "Unknown error"}`);
-      }
-    } catch (error) {
-      setBackupStatus(`Backup error: ${error}`);
-    }
-  };
-
-  const handleRebuildEmbeddings = async () => {
-    // Show confirmation dialog
-    if (
-      window.confirm(
-        "Are you sure you want to rebuild all note embeddings? This may take a while but can fix issues with related notes."
-      )
-    ) {
-      setEmbeddingsStatus("Rebuilding embeddings in progress...");
-
-      try {
-        // Check if the clearVectorIndex function exists
-        if (!window.adminAPI.clearVectorIndex) {
-          setEmbeddingsStatus(
-            "This version of the application does not support the rebuild embeddings feature yet. Please restart the application first."
-          );
-          return;
-        }
-
-        // First, clear the vector index
-        const clearResult = await window.adminAPI.clearVectorIndex();
-        if (!clearResult.success) {
-          setEmbeddingsStatus(
-            `Failed to clear vector index: ${clearResult.message}`
-          );
-          return;
-        }
-
-        // Check if the regenerateAllEmbeddings function exists
-        if (!window.adminAPI.regenerateAllEmbeddings) {
-          setEmbeddingsStatus(
-            "This version of the application does not support the regenerate embeddings feature yet. Please restart the application first."
-          );
-          return;
-        }
-
-        // Then regenerate all embeddings
-        const result = await window.adminAPI.regenerateAllEmbeddings();
-        if (result.success) {
-          setEmbeddingsStatus(
-            `Successfully rebuilt embeddings for ${result.count} notes. Related notes should now work properly.`
-          );
-        } else {
-          setEmbeddingsStatus(
-            `Failed to rebuild embeddings: ${result.message}`
-          );
-        }
-      } catch (error) {
-        setEmbeddingsStatus(`Error rebuilding embeddings: ${error}`);
-      }
-    }
-  };
-
+const AppearanceSection: React.FC = () => {
+  const { theme, setTheme } = useTheme();
   return (
-    <div className="container mx-auto mt-2 pt-12 ">
-      <h2 className="text-2xl font-bold mb-4">Settings</h2>
-      <div className="mb-4">
-        <label htmlFor="apiKey" className="block text-sm font-medium mb-1">
-          OpenAI API Key
-        </label>
-        <div className="flex items-center">
-          <div className="flex-grow">
-            <Input
-              id="apiKey"
-              type={showApiKey ? "text" : "password"}
-              value={settings.openAIKey}
-              onChange={(e) => updateSettings({ openAIKey: e.target.value })}
-              className="w-full"
-              placeholder="Enter your OpenAI API key"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={toggleApiKeyVisibility}
-            className="ml-2 p-2 focus:outline-none"
-          >
-            {showApiKey ? (
-              <EyeOff className="h-5 w-5 text-gray-400" />
-            ) : (
-              <Eye className="h-5 w-5 text-gray-400" />
-            )}
-          </button>
-        </div>
+    <Section title="Appearance">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-ui text-foreground">Theme</span>
+        <SegmentedControl label="Theme" value={theme} onValueChange={(value) => setTheme(value as Theme)} options={THEME_OPTIONS} />
       </div>
-      <div className="mt-8 border-t pt-6">
-        <h2 className="text-xl font-semibold mb-4">Database Management</h2>
-        <p className="mb-4">
-          Manage your database settings and perform maintenance tasks.
-        </p>
-        <div className="flex flex-col space-y-4">
-          <button
-            onClick={handleBackupDatabase}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            Backup Database
-          </button>
-          {backupStatus && (
-            <div
-              className={`p-2 rounded ${
-                backupStatus.includes("failed") ||
-                backupStatus.includes("error")
-                  ? "bg-red-100 text-red-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {backupStatus}
-            </div>
-          )}
+    </Section>
+  );
+};
 
-          <button
-            onClick={handleRebuildEmbeddings}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
-            Fix Related Notes (Rebuild Embeddings)
-          </button>
-          {embeddingsStatus && (
-            <div
-              className={`p-2 rounded ${
-                embeddingsStatus.includes("Failed") ||
-                embeddingsStatus.includes("Error")
-                  ? "bg-red-100 text-red-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {embeddingsStatus}
-            </div>
-          )}
+const FoldersSection: React.FC = () => {
+  const roots = useDiskStore((state) => state.roots);
+  const openFolder = useDiskStore((state) => state.openFolder);
+  const closeRoot = useDiskStore((state) => state.closeRoot);
+  return (
+    <Section title="Folders">
+      <p className="text-ui text-foreground-secondary">The folders Opal can see. Nothing outside them is ever read.</p>
+      <ul className="flex flex-col gap-0.5" aria-label="Opened folders">
+        {roots.length === 0 ? <li className="text-ui text-foreground-tertiary">No folders are open yet.</li> : null}
+        {roots.map((root) => (
+          <li key={root} className="flex h-row items-center gap-2 rounded-row pl-2 transition-hover hover:bg-surface-hover" title={root}>
+            <Folder aria-hidden className="h-4 w-4 shrink-0 text-icon" />
+            <span className="shrink-0 text-ui text-foreground">{basenameFsPath(root)}</span>
+            <span className="min-w-0 flex-1 truncate text-metadata text-foreground-tertiary">{root}</span>
+            <IconButton label={`Close ${basenameFsPath(root)}`} onClick={() => void closeRoot(root)}>
+              <X aria-hidden className="h-3.5 w-3.5" />
+            </IconButton>
+          </li>
+        ))}
+      </ul>
+      <Button variant="outline" size="compact" className="self-start" onClick={() => void openFolder()}>
+        <FolderPlus aria-hidden className="h-3.5 w-3.5" />
+        Open folder…
+      </Button>
+    </Section>
+  );
+};
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <h3 className="text-lg font-semibold mb-2 text-red-600">
-              Danger Zone
-            </h3>
-            <p className="mb-4 text-sm text-gray-600">
-              These actions cannot be undone. Be careful!
-            </p>
-            <button
-              onClick={handleResetDatabase}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Reset Database
-            </button>
-            {resetStatus && (
-              <div
-                className={`mt-2 p-2 rounded ${
-                  resetStatus.includes("failed") ||
-                  resetStatus.includes("error")
-                    ? "bg-red-100 text-red-800"
-                    : "bg-green-100 text-green-800"
-                }`}
-              >
-                {resetStatus}
-              </div>
-            )}
-          </div>
+const RecentSection: React.FC = () => {
+  const clear = useRecentStore((state) => state.clear);
+  const [state, setState] = useState<"idle" | "confirming" | "cleared" | "failed">("idle");
+  const clearHistory = async () => {
+    setState((await clear()) ? "cleared" : "failed");
+  };
+  return (
+    <Section title="Recent">
+      {state === "confirming" ? (
+        <div role="group" aria-label="Confirm clearing recent history" className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-ui text-foreground">Clear all recent history? Files are not affected.</span>
+          <Button size="compact" onClick={() => void clearHistory()}>
+            Clear
+          </Button>
+          <Button size="compact" variant="ghost" onClick={() => setState("idle")}>
+            Cancel
+          </Button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <div className="flex items-center gap-4">
+          <span role="status" className="min-w-0 flex-1 text-ui text-foreground-secondary">
+            {state === "cleared"
+              ? "Recent history cleared."
+              : state === "failed"
+                ? "Recent history could not be cleared."
+                : "Recent lists the files you opened or edited."}
+          </span>
+          <Button size="compact" variant="outline" onClick={() => setState("confirming")}>
+            Clear history
+          </Button>
+        </div>
+      )}
+    </Section>
+  );
+};
+
+/** Settings is a dialog over the current page, opened by Cmd+, and the sidebar gear. */
+export const SettingsDialog: React.FC = () => {
+  const open = useSettingsStore((state) => state.open);
+  const setOpen = useSettingsStore((state) => state.setOpen);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent data-testid="settings-dialog" className="max-w-lg p-5">
+        <DialogHeader>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription className="sr-only">Theme, opened folders and recent history.</DialogDescription>
+        </DialogHeader>
+        <div className="mt-5 flex flex-col gap-6">
+          <AppearanceSection />
+          <FoldersSection />
+          <RecentSection />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };

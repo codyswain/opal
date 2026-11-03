@@ -4,13 +4,21 @@ import { BehaviorSubject, Observable } from "rxjs";
 
 export type CommandType = 'paneToggle' | 'navigation' | 'action';
 
+export interface CommandOptions {
+  newTab?: boolean;
+}
+
 export interface Command {
   id: string;
   name: string;
   type: CommandType;
+  /** Menu accelerators; the first is shown, the rest are hidden aliases. */
   shortcut?: string[];
   keywords: string[];
-  perform: () => void;
+  /** Kept out of the palette, as the Cmd+1 to Cmd+9 tab keys are. */
+  hidden?: boolean;
+  /** `newTab` comes from the palette's New Tab mode or Cmd+Enter; navigation commands honour it. */
+  perform: (options?: CommandOptions) => void;
 }
 
 class CommandRegistry {
@@ -48,12 +56,12 @@ class CommandRegistry {
     return Array.from(this.commands.values());
   }
 
-  executeCommand(id: string): void {
+  executeCommand(id: string, options?: CommandOptions): void {
     const command = this.commands.get(id);
     if (!command) {
       throw new Error(`Command with id ${id} does not exist`);
     }
-    command.perform();
+    command.perform(options);
   }
 
   getCommandsObservable(): Observable<Command[]> {

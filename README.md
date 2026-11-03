@@ -15,7 +15,6 @@ It's not there yet, but perhaps not far off. Feature wise, the following are sup
 - Light and dark theme
 - Auto-save functionality
 - Sidebar for quick note navigation
-- Related notes suggestion
 
 Aspirationally though, notes is just step 1. What's next? Photos. One of the shortfalls in Obsidian is photo management, and here I think taking inspiration from Lightroom (Classic) by supporting the "mounting" of directories from the OS Filesystem.
 
@@ -150,7 +149,6 @@ GitHub Actions are configured to run tests automatically on pull requests to the
 - TypeScript
 - Styled Components
 - React Router
-- React Markdown
 
 ## License
 

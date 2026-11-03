@@ -1,11 +1,13 @@
 import logger from "@/main/logger";
-import { IpcMain, Dialog, BrowserWindow } from "electron";
+import { isThemeReport, type ThemeReport } from "@/common/theme";
+import type { IpcMain, Dialog, BrowserWindow } from "electron";
 import * as fs from "fs-extra";
 
 interface SystemHandlerDependencies {
   ipc: IpcMain;
   dialog: Dialog;
   browserWindow: typeof BrowserWindow;
+  onThemeChanged: (report: ThemeReport) => void;
 }
 
 export class SystemHandlers {
@@ -18,8 +20,8 @@ export class SystemHandlers {
   registerAll(): void {
     this.registerCreateDirectoryOnDisk();
     this.registerOpenFolderDialog();
-    this.registerMinimizeWindow();
-    this.registerMaximizeWindow();
+    this.registerReportTheme();
+    this.registerFullScreenState();
     this.registerCloseWindow();
   }
 
@@ -53,26 +55,24 @@ export class SystemHandlers {
     });
   }
 
-  private registerMinimizeWindow(): void {
-    this.deps.ipc.on("system:minimize-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      window?.minimize();
-    });
+  /** The renderer asks once at startup; main.ts pushes every later change. */
+  private registerFullScreenState(): void {
+    this.deps.ipc.handle('system:is-full-screen', (event) =>
+      this.deps.browserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
+    );
   }
 
-  private registerMaximizeWindow(): void {
-    this.deps.ipc.on("system:maximize-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      if (window) {
-        window.isMaximized() ? window.unmaximize() : window.maximize();
-      }
-    });
-  }
-
+  /** Close Tab with no tab left closes the window, as in Safari. */
   private registerCloseWindow(): void {
-    this.deps.ipc.on("system:close-window", () => {
-      const window = this.deps.browserWindow.getFocusedWindow();
-      window?.close();
+    this.deps.ipc.on('system:close-window', (event) => {
+      this.deps.browserWindow.fromWebContents(event.sender)?.close();
+    });
+  }
+
+  private registerReportTheme(): void {
+    this.deps.ipc.on('system:report-theme', (_event, report: unknown) => {
+      if (!isThemeReport(report)) return;
+      this.deps.onThemeChanged(report);
     });
   }
 }

@@ -1,16 +1,17 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-echo "🧪 Running tests before commit..."
+# Abort on the first failing command.
+#
+# Without this, `npm test` failing is simply ignored: the old hook checked $?
+# after `npm run lint`, and $? only ever reflects the command immediately
+# before it. Commits landed with a red suite and printed a success message.
+set -e
+
+echo "🎨 Linting staged files..."
+npx lint-staged
+
+echo "🧪 Running tests..."
 npm test
 
-echo "🧹 Linting code..."
-npm run lint
-
-# Continue only if both tests and linting pass
-if [ $? -eq 0 ]; then
-  echo "✅ Pre-commit checks passed!"
-else
-  echo "❌ Pre-commit checks failed. Please fix the issues before committing."
-  exit 1
-fi
+echo "✅ Pre-commit checks passed!"

@@ -1,140 +1,113 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   HashRouter as Router,
-  Route,
-  Routes,
   Navigate,
+  useRoutes,
+  type RouteObject,
 } from "react-router-dom";
 import "@/renderer/styles/index.css";
 
-import { ThemeProvider } from "@/renderer/features/theme";
+import { ThemeProvider, useTheme } from "@/renderer/features/theme";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
-import { Navbar, navbarItems } from "@/renderer/features/navbar";
-import { Settings } from "@/renderer/features/settings";
-import useLocalStorage from "@/renderer/shared/hooks/useLocalStorage";
-import { useCommands } from "@/renderer/features/commands";
-import { Command } from "@/renderer/features/commands/services/commandRegistry";
-import { KBar, KBarActionsProvider } from "@/renderer/features/kbar";
-import { Explorer } from "@/renderer/features/file-explorer-v2";
-import { useSettingsStore } from "./store/settingsStore";
+import { SettingsDialog } from "@/renderer/features/settings";
+import { AppCommands, CommandPalette } from "@/renderer/features/commands";
+import { commandRegistry } from "@/renderer/features/commands/services/commandRegistry";
+import {
+  ConfirmDeleteDialog,
+  FilesRoute,
+  NameDialog,
+} from "@/renderer/features/disk-explorer";
+import {
+  FILES_ROUTE_PATH,
+  serializeFilesLocation,
+} from "@/renderer/features/disk-explorer/navigation";
+import {
+  selectCurrentLocation,
+  selectLaunchLocation,
+  useTabsStore,
+} from "@/renderer/features/disk-explorer/store/tabsStore";
+import { openDaily } from "@/renderer/features/shell/utils/openDaily";
+import {
+  AppShell,
+  PageLinks,
+  ShellProvider,
+  useShell,
+} from "@/renderer/features/shell";
+
+/**
+ * Launch brings back the tabs of the last session. Daily opens when nothing
+ * came back or the day has changed since; without a vault the page
+ * area is left to the files route.
+ */
+const StartPage: React.FC = () => {
+  const { navigateFiles, navigateTo } = useShell();
+  useEffect(() => {
+    const files = () => {
+      const shown = selectCurrentLocation(useTabsStore.getState());
+      navigateTo(
+        {
+          pathname: FILES_ROUTE_PATH,
+          search: shown ? serializeFilesLocation(shown) : "",
+        },
+        { replace: true },
+      );
+    };
+    if (selectLaunchLocation(useTabsStore.getState())) {
+      files();
+      return;
+    }
+    void openDaily(navigateFiles)
+      .then((opened) => {
+        if (!opened) files();
+      })
+      .catch(files);
+    // Runs once per landing on "/"; navigation replaces this route.
+  }, []);
+  return null;
+};
+
+const APP_ROUTES: RouteObject[] = [
+  { path: "/", element: <StartPage /> },
+  { path: "/files", element: <FilesRoute /> },
+  { path: "*", element: <Navigate to="/" replace /> },
+];
+
+const AppRoutes: React.FC = () => useRoutes(APP_ROUTES);
+
+/** Toasts follow the resolved theme, as menus do. */
+const AppToaster: React.FC = () => <Toaster theme={useTheme().resolvedTheme} />;
 
 const App: React.FC = () => {
-  const { registerCommand, unregisterCommand } = useCommands();
-  const loadSettings = useSettingsStore((state) => state.loadSettings);
-
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useLocalStorage(
-    "isLeftSidebarOpen",
-    true
-  );
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useLocalStorage(
-    "isRightSidebarOpen",
-    true
-  );
-  const [isBottomPaneOpen, setIsBottomPaneOpen] = useLocalStorage(
-    "isBottomPaneOpen",
-    true
-  );
-
-  const toggleLeftSidebar = useCallback(
-    () => setIsLeftSidebarOpen(!isLeftSidebarOpen),
-    [isLeftSidebarOpen]
-  );
-  const toggleRightSidebar = useCallback(
-    () => setIsRightSidebarOpen(!isRightSidebarOpen),
-    [isRightSidebarOpen]
-  );
-  const toggleBottomPane = useCallback(
-    () => setIsBottomPaneOpen(!isBottomPaneOpen),
-    [isBottomPaneOpen]
-  );
-
   useEffect(() => {
-    const commands: Command[] = [
-      {
-        id: "pane.toggleLeft",
-        name: "Toggle Left Pane",
-        type: "paneToggle",
-        keywords: ["pane", "toggle"],
-        perform: toggleLeftSidebar,
-      },
-      {
-        id: "pane.toggleRight",
-        name: "Toggle Right Pane",
-        type: "paneToggle",
-        keywords: ["pane", "toggle"],
-        perform: toggleRightSidebar,
-      },
-      {
-        id: "pane.toggleBottom",
-        name: "Toggle Bottom Pane",
-        type: "paneToggle",
-        keywords: ["pane", "toggle"],
-        perform: toggleBottomPane,
-      },
-    ];
-
-    commands.forEach(registerCommand);
-
-    return () => {
-      commands.forEach((command) => unregisterCommand(command));
-    };
-  }, [
-    registerCommand,
-    unregisterCommand,
-    toggleLeftSidebar,
-    toggleRightSidebar,
-    toggleBottomPane,
-  ]);
-
-  useEffect(() => {
-    loadSettings(); // load settings on app mount
-  }, [loadSettings]);
+    return window.systemAPI.onMenuCommand((commandId) => {
+      try {
+        commandRegistry.executeCommand(commandId);
+      } catch (error) {
+        console.warn(`Menu dispatched an unknown command: ${commandId}`, error);
+      }
+    });
+  }, []);
 
   return (
     <Router>
-      <KBarActionsProvider>
-        <KBar />
-        <ThemeProvider>
-          
-            <TooltipProvider>
-              <div className="flex flex-col h-screen w-screen overflow-hidden">
-                <Toaster />
-                <div className="flex flex-col flex-grow overflow-hidden">
-                  <Navbar
-                    toggleLeftSidebar={toggleLeftSidebar}
-                    toggleRightSidebar={toggleRightSidebar}
-                    isLeftSidebarOpen={isLeftSidebarOpen}
-                    isRightSidebarOpen={isRightSidebarOpen}
-                    items={navbarItems}
-                  />
-                  <main className="flex-grow overflow-hidden mt-10">
-                    <Routes>
-                      <Route
-                        path="/"
-                        element={<Navigate to="/explorer" replace />}
-                      />
-
-                      <Route path="/settings" element={<Settings />} />
-
-                      <Route
-                        path="/explorer"
-                        element={
-                          <Explorer
-                            isLeftSidebarOpen={isLeftSidebarOpen}
-                            isRightSidebarOpen={isRightSidebarOpen}
-                            setIsLeftSidebarOpen={setIsLeftSidebarOpen}
-                            setIsRightSidebarOpen={setIsRightSidebarOpen}
-                          />
-                        }
-                      />
-                    </Routes>
-                  </main>
-                </div>
-              </div>
-            </TooltipProvider>
-        </ThemeProvider>
-      </KBarActionsProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <AppToaster />
+          <ShellProvider>
+            <AppCommands />
+            <PageLinks />
+            <CommandPalette />
+            <SettingsDialog />
+            {/* The sidebar tree starts these file actions. */}
+            <NameDialog />
+            <ConfirmDeleteDialog />
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </ShellProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </Router>
   );
 };

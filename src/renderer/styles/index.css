@@ -1,4 +1,5 @@
-@import "katex/dist/katex.min.css";
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/inter/opsz-italic.css";
 
 @tailwind base;
 @tailwind components;
@@ -6,72 +7,288 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* White */
-    --foreground: 222 47% 11%; /* Near-black */
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 222 47% 11%; /* Near-black */
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 222 47% 11%; /* Near-black */
-    --primary: 212 92% 45%; /* Blue */
-    --primary-foreground: 0 0% 100%; /* White */
-    --secondary: 210 14% 97%; /* Light Gray */
-    --secondary-foreground: 222 47% 11%; /* Near-black */
-    --muted: 210 14% 97%; /* Light Gray */
-    --muted-foreground: 213 8% 43%; /* Gray  */
-    --accent: 215 28% 93%; /* Light Gray */
-    --accent-foreground: 222 47% 11%; /* Near-black */
-    --destructive: 0 72% 51%; /* Standard Red */
-    --destructive-foreground: 0 0% 100%; /* White */
-    --border: 212 13% 84%; /* Border Gray */
-    --input: 212 13% 84%; /* Border Gray */
-    --ring: 212 92% 45%; /* Blue for focus */
+    color-scheme: light;
+
+    /* Typography. Inter is bundled; the app never fetches fonts. */
+    --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --font-features: "cv01", "ss03";
+    --text-metadata-size: 0.6875rem;
+    --text-metadata-line: 0.875rem;
+    --text-label-size: 0.75rem;
+    --text-label-line: 1rem;
+    --text-control-size: 0.75rem;
+    --text-control-line: 1rem;
+    --text-ui-size: 0.8125rem;
+    --text-ui-line: 1.125rem;
+    --text-ui-tracking: -0.01em;
+    --text-heading-size: 0.9375rem;
+    --text-heading-line: 1.25rem;
+
+    /* Desktop geometry */
+    --control-height-compact: 1.75rem;
+    --control-height: 2rem;
+    --row-height-compact: 1.75rem;
+    --row-height: 2rem;
+    --header-height: 2.5rem;
+    --sidebar-width: 16.25rem;
+    --reading-width: 45rem;
+    --page-inset: 0.5rem;
+
+    /* Shape, elevation, and motion */
     --radius: 0.5rem;
-    /* Optional: Adjust gradient if used extensively in light mode */
-    /* --gradient-start: 212 92% 43%; */
-    /* --gradient-end: 212 92% 47%; */
+    --radius-row: 0.375rem;
+    --radius-control: 0.375rem;
+    --radius-card: 0.5rem;
+    --radius-overlay: 0.5rem;
+    --radius-dialog: 0.75rem;
+    --shadow-control: 0 1px 2px hsl(0 0% 0% / 0.08);
+    --shadow-overlay: 0 3px 12px hsl(0 0% 0% / 0.09);
+    --shadow-dialog: 0 7px 24px hsl(0 0% 0% / 0.06);
+    /* Hover appears at once and fades out over --duration-hover. */
+    --duration-hover: 150ms;
+    --duration-quick: 100ms;
+    --duration-overlay: 160ms;
+    --duration-disclosure: 200ms;
+    --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /*
+     * Semantic light palette. Black and white only: every token is a neutral
+     * grey, including focus, selection and the primary button. Emphasis comes
+     * from contrast and weight; the only colour on screen is in notes' images.
+     *
+     * Three surfaces (Cody's option 7, 2026-10-29): the chrome grey runs down
+     * both sidebars and across the 40px top row as one frame, the lighter
+     * ground shows only as the band around the page, and the page card is
+     * the brightest thing on screen.
+     */
+    --chrome: 0 0% 92.5%;
+    --ground: 0 0% 96.1%;
+    --canvas: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-raised: 0 0% 100%;
+    --surface-sunken: 0 0% 97.5%;
+    /* A control raised off a track, such as the selected segment. */
+    --surface-lift: 0 0% 100%;
+    /*
+     * Overlays carry their own alpha, so they take no opacity modifier. The
+     * selected row is #dddddd on the chrome and #efefef on the page.
+     */
+    --surface-hover: 0 0% 0% / 0.04;
+    --surface-active: 0 0% 0% / 0.07;
+    --surface-selected: 0 0% 0% / 0.064;
+    --border-subtle: 0 0% 88.6%;
+    --border-default: 0 0% 86.3%;
+    --border-strong: 0 0% 83.5%;
+    --border-overlay: 0 0% 0% / 0.08;
+    --page-ring: var(--border-subtle);
+    --text-primary: 0 0% 14.9%;
+    --text-secondary: 0 0% 24.7%;
+    --text-tertiary: 0 0% 42%;
+    /* The lightest grey that keeps 3:1 on the chrome. */
+    --icon: 0 0% 53%;
+    /* A dark ring on light grounds, a light one on dark grounds. */
+    --focus: 0 0% 40%;
+    --selection: hsl(0 0% 0% / 0.12);
+    --scrollbar-thumb: 0 0% 0% / 0.1;
+    --scrollbar-thumb-hover: 0 0% 0% / 0.2;
+
+    /* Compatibility aliases for existing shadcn-style components. */
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+    --card: var(--surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--surface-raised);
+    --popover-foreground: var(--text-primary);
+    /* The one filled button is near black with white text, inverted in dark mode. */
+    --primary: 0 0% 10%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--surface-hover);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--surface-sunken);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-active);
+    --accent-foreground: var(--text-primary);
+    --border: var(--border-default);
+    --input: var(--border-strong);
+    --ring: var(--focus);
   }
 
   .dark {
-    --background: 220 6% 10%;
-    --foreground: 210 6% 93%;
-    --card: 220 6% 13%;
-    --card-foreground: 210 6% 93%;
-    --popover: 220 6% 13%;
-    --popover-foreground: 210 6% 93%;
-    --primary: 220 70% 40%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 6% 16%;
-    --secondary-foreground: 210 6% 93%;
-    --muted: 220 6% 20%;
-    --muted-foreground: 217 8% 64%;
-    --accent: 220 6% 20%;
-    --accent-foreground: 210 6% 93%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 6% 18%;
-    --input: 220 6% 18%;
-    --ring: 142 76% 45%;
-    --gradient-start: 142 76% 42%;
-    --gradient-end: 142 76% 48%;
+    color-scheme: dark;
+    --chrome: 0 0% 4.3%;
+    --ground: 0 0% 7.5%;
+    --canvas: 0 0% 10.2%;
+    --surface: 0 0% 10.2%;
+    --surface-raised: 0 0% 14.1%;
+    --surface-sunken: 0 0% 12.2%;
+    /* #252525 on the chrome. At 0.1 the pill renders a channel off grey. */
+    --surface-lift: 0 0% 100% / 0.105;
+    /* The selected row is #1e1e1e on the chrome and #2c2c2c on the page. */
+    --surface-hover: 0 0% 100% / 0.03;
+    --surface-active: 0 0% 100% / 0.05;
+    --surface-selected: 0 0% 100% / 0.078;
+    --border-subtle: 0 0% 15.7%;
+    --border-default: 0 0% 18.8%;
+    --border-strong: 0 0% 22.4%;
+    --border-overlay: 0 0% 100% / 0.08;
+    --text-primary: 0 0% 92.9%;
+    --text-secondary: 0 0% 79.6%;
+    --text-tertiary: 0 0% 56.1%;
+    --icon: 0 0% 40.4%;
+    --focus: 0 0% 70%;
+    --selection: hsl(0 0% 100% / 0.2);
+    --scrollbar-thumb: 0 0% 100% / 0.1;
+    --scrollbar-thumb-hover: 0 0% 100% / 0.2;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 4%;
+    --shadow-control: 0 2px 4px hsl(0 0% 0% / 0.1);
+    --shadow-overlay: 0 4px 24px hsl(0 0% 0% / 0.2);
+    --shadow-dialog: 0 7px 32px hsl(0 0% 0% / 0.35);
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-chrome text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: var(--font-features);
+    font-optical-sizing: auto;
+    font-size: var(--text-ui-size);
+    line-height: var(--text-ui-line);
+    letter-spacing: var(--text-ui-tracking);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  /* A date field's focused part takes the selection grey, not the system's blue highlight. */
+  input[type='date']::-webkit-datetime-edit-month-field:focus,
+  input[type='date']::-webkit-datetime-edit-day-field:focus,
+  input[type='date']::-webkit-datetime-edit-year-field:focus {
+    background: var(--selection);
+    color: hsl(var(--foreground));
   }
 }
 
 @layer utilities {
-  .bg-gradient-primary {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--gradient-start)),
-      hsl(var(--gradient-end))
-    );
+  /* Rows and buttons: the hover fill appears at once and fades out. */
+  .transition-hover {
+    transition-property: color, background-color, border-color, opacity,
+      box-shadow;
+    transition-duration: var(--duration-hover);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  .transition-hover:hover {
+    transition-duration: 0s;
+  }
+}
+
+/*
+ * The tab row, as in Safari: a hairline parts inactive pills and hides beside
+ * the active or hovered one, and an edge fades while pills are scrolled out
+ * of view past it. :where keeps the hairline below the drop marker's
+ * before: utilities.
+ */
+:where(.tab-pill + .tab-pill)::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: -1.5px;
+  width: 1px;
+  background: hsl(var(--border-strong));
+}
+
+:where(
+    .tab-pill[aria-selected="true"],
+    .tab-pill:hover,
+    .tab-pill[aria-selected="true"] + .tab-pill,
+    .tab-pill:hover + .tab-pill
+  )::before {
+  background: transparent;
+}
+
+.tab-strip {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+}
+
+.tab-strip[data-fade-start] {
+  --fade-start: 1.5rem;
+}
+
+.tab-strip[data-fade-end] {
+  --fade-end: 1.5rem;
+}
+
+/* The right sidebar's column of cards fades at an edge while rows pass under it. */
+.day-column {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+}
+
+.day-column[data-fade-start] {
+  --fade-start: 1rem;
+}
+
+.day-column[data-fade-end] {
+  --fade-end: 2rem;
+}
+
+/* Inside its padding the sidebar's top row needs 14rem for every control,
+   and 12.25rem without Go forward. Narrower than 14rem, as at the sidebar's
+   13.5rem minimum, it drops Go forward (Cmd+] still works), so Collapse all
+   folders and Search keep their place. */
+.sidebar-top-row {
+  container-type: inline-size;
+}
+
+@container (width < 14rem) {
+  .sidebar-top-row .frame-forward {
+    display: none;
+  }
+}
+
+@container (width < 12.25rem) {
+  .sidebar-top-row .sidebar-collapse-all {
+    display: none;
   }
 }
 
@@ -80,30 +297,92 @@
   -webkit-app-region: drag;
 }
 
-.drag-handle button,
-.drag-handle a {
+.no-drag {
   -webkit-app-region: no-drag;
 }
 
-/* Custom scrollbar styling - inspired by Obsidian */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+.drag-handle button,
+.drag-handle a,
+.drag-handle input {
+  -webkit-app-region: no-drag;
 }
 
-::-webkit-scrollbar-track {
+/*
+ * Scrollbars, in every scroll area: no thumb at rest. A scroll, or the
+ * pointer on the scrollbar, marks the element data-scrollbar="shown"
+ * (shared/scrollbars/scrollbarVisibility.ts); about a second after the last
+ * scroll the mark turns to "hidden" and the thumb fades out. The thumb is a
+ * grey pill 6px wide, 3px in from the container's outer edge. An element
+ * that sets scrollbar-width or scrollbar-color loses these rules, so none
+ * does except the tab row, which never shows one.
+ */
+@property --scrollbar-alpha {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@layer base {
+  [data-scrollbar] {
+    transition: --scrollbar-alpha 240ms var(--ease-standard);
+  }
+
+  /* It shows at once and fades out. */
+  [data-scrollbar="shown"] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0s;
+  }
+
+  /* The thumb reads the value from its own scroll area, never from one it sits inside. */
+  :where([data-scrollbar]) > :where(:not([data-scrollbar])) {
+    --scrollbar-alpha: 0;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsla(var(--muted-foreground) / 0.3);
-  border-radius: 3px;
+  min-width: 2rem;
+  min-height: 2rem;
+  border: 0 solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(
+    in srgb,
+    hsl(var(--scrollbar-thumb-hover)) calc(var(--scrollbar-alpha) * 100%),
+    transparent
+  );
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: hsla(var(--muted-foreground) / 0.5);
+::-webkit-scrollbar-thumb:vertical {
+  border-width: 2px 3px 2px 1px;
 }
 
-::-webkit-scrollbar-corner {
-  background: transparent;
+::-webkit-scrollbar-thumb:horizontal {
+  border-width: 1px 2px 3px 2px;
+}
+
+[data-scrollbar]::-webkit-scrollbar-thumb:hover,
+[data-scrollbar]::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--text-tertiary) / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

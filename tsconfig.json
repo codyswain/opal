@@ -12,10 +12,26 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "jsx": "react-jsx",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "node-diff3": [
+        "node_modules/node-diff3/src/diff3.d.ts"
+      ]
     },
     "forceConsistentCasingInFileNames": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "out",
+    "dist",
+    ".vite",
+    ".worktrees"
+  ]
 }

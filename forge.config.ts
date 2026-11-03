@@ -12,9 +12,6 @@ import path from 'path';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: false,
-    extraResource: [
-      path.resolve(__dirname, 'src', 'main', 'database', 'schema.sql')
-    ],
     icon: path.resolve(__dirname, 'assets', 'icons', 'opal.icns')
   },
   rebuildConfig: {},

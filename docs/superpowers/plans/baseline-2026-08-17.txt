@@ -1,0 +1,4 @@
+Baseline recorded before native-shell-polish, against eafecf5
+tsc errors (pre-existing, do not fix): 13
+unit tests: Tests 348 passed (43 files)
+e2e tests: 9 of 10 allowed
