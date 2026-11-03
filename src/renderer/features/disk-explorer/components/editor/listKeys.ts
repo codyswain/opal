@@ -1,7 +1,7 @@
 import { ChangeSet, Prec, type ChangeSpec, type EditorState, type Extension, type Line, type StateCommand, type Transaction } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import { deleteHandlers, latestTree } from './extensionPoints';
+import { deleteHandlers, latestTree, protectedIn } from './extensionPoints';
 import { listItemOf, selectedLines } from './formatCommands';
 import { docMode } from './livePreview';
 
@@ -82,8 +82,20 @@ function renumber(state: EditorState, mark: SyntaxNode, value: number): ChangeSp
   return String(value) === digits ? [] : [{ from: mark.from, to: mark.from + digits.length, insert: String(value) }];
 }
 
+/** Whether a line of `item` after its first is all inside a protected block, such as code, a table or a formula. */
+function holdsBlock(state: EditorState, item: Item): boolean {
+  const end = state.doc.lineAt(item.node.to).from === item.node.to && item.node.to > item.node.from ? item.node.to - 1 : item.node.to;
+  for (let number = item.line.number + 1; number <= state.doc.lineAt(end).number; number += 1) {
+    const line = state.doc.line(number);
+    if (line.length > 0 && protectedIn(state, line.from, line.to).some((range) => range.from <= line.from && range.to >= line.to)) return true;
+  }
+  return false;
+}
+
 /** Tab: `item` under the item above it, as its last child. */
 function nest(state: EditorState, item: Item): ChangeSpec[] {
+  // Only the item's first line moves, so an item that holds a block on a later line stays rather than leave the block behind.
+  if (holdsBlock(state, item)) return [];
   let previous = item.node.prevSibling;
   while (previous && previous.name !== 'ListItem') previous = previous.prevSibling;
   const parent = previous && itemOf(state, previous);

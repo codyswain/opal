@@ -63,6 +63,11 @@ describe('Tab and Shift+Tab in lists', () => {
     expect(after('- a‸\n- b', 'Tab')).toBe('- a\n- b');
   });
 
+  it('leaves an item that holds a block on a later line where it is, so the block stays in it', () => {
+    expect(after('- a\n- b‸\n  ```\n  x\n  ```\n- c', 'Tab')).toBe('- a\n- b\n  ```\n  x\n  ```\n- c');
+    expect(after('- a\n- b‸\n  More text\n- c', 'Tab')).toBe('- a\n  - b\n  More text\n- c');
+  });
+
   it('moves an item out a level with Shift+Tab, in the list\'s own characters', () => {
     expect(after('- a\n\t- b\n\t\t- c‸', 'Tab', { shiftKey: true })).toBe('- a\n\t- b\n\t- c');
     expect(after('1. a\n   1. b‸', 'Tab', { shiftKey: true })).toBe('1. a\n2. b');
