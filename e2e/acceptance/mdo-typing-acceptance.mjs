@@ -210,10 +210,26 @@ try {
     return item ? { role: item.role ?? null, accelerator: item.accelerator ?? null } : null;
   });
   check('Edit > Paste and Match Style runs the page\'s literal paste', pasteItem !== null && !pasteItem.role && pasteItem.accelerator === 'CmdOrCtrl+Shift+V', JSON.stringify(pasteItem));
+  // A click on the item, with the page's clipboard read stubbed so the system clipboard is never read or written.
+  await page.evaluate(() => {
+    const editor = document.querySelector('.cm-content').cmTile.root.view;
+    const end = editor.state.doc.length;
+    editor.dispatch({ changes: { from: end, insert: '\nPasted: ' }, selection: { anchor: end + 9 } });
+    editor.focus();
+    Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: async () => '**x** and _y_' });
+  });
+  await app.evaluate(({ Menu }) => {
+    const find = (items) => items.flatMap((item) => [item, ...(item.submenu ? find(item.submenu.items) : [])]);
+    find(Menu.getApplicationMenu().items).find((entry) => entry.label === 'Paste and Match Style').click();
+  });
+  await page.waitForTimeout(400);
+  const pasted = (await text()).split('\n').find((line) => line.startsWith('Pasted: '));
+  check('a click on Paste and Match Style pastes literally, once', pasted === 'Pasted: \\*\\*x\\*\\* and \\_y\\_', JSON.stringify(pasted));
 
+  const final = await text();
   await page.keyboard.press('Meta+s');
-  const bytes = await saved((written) => written.includes('roadmap'));
-  check('the file holds what the page shows', bytes === replaced, JSON.stringify(bytes.slice(0, 120)));
+  const bytes = await saved((written) => written === final);
+  check('the file holds what the page shows', bytes === final && final.startsWith(replaced), JSON.stringify(bytes.slice(0, 120)));
 
   // The gallery fixture's lower half, with a selection so the footer counts its words.
   const fixture = `${vault}/Notes/typing-gallery.mdo`;
