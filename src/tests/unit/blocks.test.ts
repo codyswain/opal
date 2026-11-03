@@ -521,3 +521,15 @@ describe('formatting inside a table cell', () => {
     expect(onAll(doc, toggleMarker('**'), NOTE)).toBe(doc);
   });
 });
+
+describe('an input method under a table', () => {
+  it('gets the blank line above the composed text once the composition ends', async () => {
+    const view = mount(`${TABLE}\n‸\n\nNext\n`);
+    act(() => { view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); });
+    act(() => { view.dispatch({ changes: { from: caret(view), insert: '日本' }, selection: { anchor: caret(view) + 2 }, userEvent: 'input.type.compose' }); });
+    expect(text(view)).toBe(`${TABLE}\n日本\n\nNext\n`);
+    act(() => { view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(text(view)).toBe(`${TABLE}\n\n日本\n\nNext\n`);
+  });
+});

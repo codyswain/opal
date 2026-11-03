@@ -252,9 +252,46 @@ const ruleFrame = EditorView.decorations.compute([objectFrame], (state) => {
   return frame?.kind === 'horizontal rule' ? Decoration.set(framedRule.range(state.doc.lineAt(frame.from).from)) : Decoration.none;
 });
 
+/**
+ * An input method writes on the blank line under a table without the
+ * separator, since nothing may move while it composes. When it ends, the
+ * composed text gets its blank line above, as typed text does.
+ */
+function separateComposed(view: EditorView, line: number): void {
+  const { state } = view;
+  if (line < 2 || line > state.doc.lines) return;
+  const composed = state.doc.line(line);
+  if (blank(composed.text)) return;
+  // The table above took the composed line in as a row.
+  let node: SyntaxNode | null = latestTree(state).resolveInner(composed.from + quoteOf(composed.text).length, 1);
+  while (node && node.name !== 'Table') node = node.parent;
+  if (!node || state.doc.lineAt(node.from).number >= line) return;
+  const { prefix, blank: gap } = containerOf(state, { node, first: state.doc.lineAt(node.from), last: composed }, composed);
+  const lead = /^[\s>]*/.exec(composed.text)?.[0].length ?? 0;
+  view.dispatch({ changes: { from: composed.from, to: composed.from + lead, insert: `${gap}\n${prefix}` }, userEvent: 'input' });
+}
+
+const composedLines = new WeakMap<EditorView, number>();
+
+const compositionSeparators = EditorView.domEventObservers({
+  compositionstart: (_event, view) => {
+    const { state } = view;
+    const line = state.doc.lineAt(state.selection.main.head);
+    const under = line.number > 1 && blank(line.text) ? blockOn(state, state.doc.line(line.number - 1), -1) : null;
+    if (under?.node.name === 'Table') composedLines.set(view, line.number);
+    else composedLines.delete(view);
+  },
+  compositionend: (_event, view) => {
+    const line = composedLines.get(view);
+    composedLines.delete(view);
+    if (line !== undefined) setTimeout(() => { if (view.dom.isConnected && !view.composing) separateComposed(view, line); }, 0);
+  },
+});
+
 /** The block objects, their separators and the Backspace rule under a table. Documents only. */
 export const blockObjects: Extension = [
   ruleFrame,
+  compositionSeparators,
   objectKinds.of(tableKind),
   objectKinds.of(ruleKind),
   objectKinds.of(htmlKind),
