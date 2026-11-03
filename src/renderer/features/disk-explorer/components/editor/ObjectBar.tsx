@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { EditorView } from '@codemirror/view';
 import { ChevronDown } from 'lucide-react';
-import { IconButton, Menu, MenuContent, MenuItem, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/renderer/shared/ui';
+import { IconButton, Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/renderer/shared/ui';
 import { objectAt, objectKind, type ObjectAction, type PageObject } from './extensionPoints';
 import { objectBars, objectFrame, setFrame } from './objectFrame';
 import './objects.css';
@@ -82,6 +82,9 @@ const MenuItems: React.FC<ActionsProps> = ({ view, obj, actions }) => (
             <MenuSubContent><MenuItems view={view} obj={obj} actions={action.items} /></MenuSubContent>
           </MenuSub>
         );
+      }
+      if (action.checked !== undefined) {
+        return <MenuCheckboxItem key={action.id} checked={action.checked} disabled={action.disabled} onSelect={() => action.run?.(view, obj)}>{action.label}</MenuCheckboxItem>;
       }
       return (
         <MenuItem key={action.id} className="gap-2" disabled={action.disabled} onSelect={() => action.run?.(view, obj)}>

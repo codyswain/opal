@@ -13,7 +13,6 @@ import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type
 import { CalloutIconWidget } from './callouts';
 import {
   CalloutTitleWidget,
-  CodeBlockWidget,
   EllipsisWidget,
   HorizontalRuleWidget,
   ImageWidget,
@@ -22,7 +21,6 @@ import {
   TableWidget,
   fileVersions,
   type BlockContext,
-  type CodeLine,
   type InlinePiece,
   type TableCell,
   type TableModel,
@@ -38,11 +36,13 @@ import { openPathLink, openWikiLink, opensNewTab, pageContext, parseWikiTarget, 
  * page opened to read looks like Obsidian's reading view, and a read-only
  * log always does.
  *
- * Tables and fenced code blocks span lines, so they come from a state field
- * as block widgets. Everything else is drawn per line for the viewport.
+ * Tables span lines, so they come from a state field as block widgets.
+ * Everything else is drawn per line for the viewport. Code blocks register
+ * through the extension points (codeBlocks.ts).
  *
- * A document (.mdo) never reveals its marks: only a table or code block
- * opened with a double-click shows its Markdown, until the caret leaves it.
+ * A document (.mdo) never reveals its marks: only a table opened with a
+ * double-click shows its Markdown, until the caret leaves it. Its code is
+ * edited in place.
  */
 
 /** On for a document, which always reads as rendered. */
@@ -259,16 +259,24 @@ interface LinkDefinitions {
   long: readonly { line: number; from: number; to: number }[];
 }
 
+// A fence line, which may follow a quote's marks or a list item's marker: its marks and what follows them.
+const FENCE_LINE = /^[ \t>]*(?:(?:[-+*]|\d+[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/;
+
 /**
  * Reads definitions off the text rather than the syntax tree: exports put
- * them at the end of long notes, past where the parser has read.
+ * them at the end of long notes, past where the parser has read. A
+ * "[label]: url" line inside a fenced code block is code, not a definition.
  */
 function findDefinitions(doc: Text): LinkDefinitions {
   const targets = new Map<string, string>();
   const long: { line: number; from: number; to: number }[] = [];
   let at = 0;
+  let fence: string | null = null;
   for (const line of doc.iterLines()) {
-    const match = line.includes(']:') ? DEFINITION.exec(line) : null;
+    const marks = line.includes('``') || line.includes('~~') ? FENCE_LINE.exec(line) : null;
+    if (marks && fence === null && !(marks[1][0] === '`' && marks[2].includes('`'))) fence = marks[1];
+    else if (marks && fence !== null && marks[1][0] === fence[0] && marks[1].length >= fence.length && !marks[2].trim()) fence = null;
+    const match = fence === null && line.includes(']:') ? DEFINITION.exec(line) : null;
     if (match) {
       const key = referenceKey(match[1]);
       if (!targets.has(key)) targets.set(key, unwrap(match[2]));
@@ -414,24 +422,6 @@ function tableModel(state: EditorState, table: SyntaxNode, start: number): Table
   return model;
 }
 
-/** The code between the fences, without the indentation or quote marks the block sits in. */
-function codeLines(state: EditorState, block: SyntaxNode, start: number, inQuote: boolean): CodeLine[] {
-  const doc = state.doc;
-  const first = doc.lineAt(block.from);
-  const last = lastLine(doc, block);
-  const closed = block.getChildren('CodeMark').length > 1 && last.number > first.number;
-  const container = inQuote ? quotePrefix(first.text) : 0;
-  const indent = block.from - first.from - container;
-  const lines: CodeLine[] = [];
-  for (let number = first.number + 1; number <= (closed ? last.number - 1 : last.number); number += 1) {
-    const line = doc.line(number);
-    let from = line.from + (inQuote ? quotePrefix(line.text) : 0);
-    for (let spaces = 0; spaces < indent && doc.sliceString(from, from + 1) === ' '; spaces += 1) from += 1;
-    lines.push({ offset: from - start, text: doc.sliceString(from, line.to) });
-  }
-  return lines;
-}
-
 interface PreviewBlock {
   from: number;
   to: number;
@@ -469,17 +459,12 @@ function findBlocks(state: EditorState): PreviewBlock[] {
         }
       }
       if (LEAF_BLOCKS.has(ref.name)) return false;
-      if (ref.name !== 'Table' && ref.name !== 'FencedCode') return;
+      if (ref.name !== 'Table') return;
       const node = ref.node;
       const from = state.doc.lineAt(node.from).from;
       const to = lastLine(state.doc, node).to;
       const { context, indent } = blockLayout(state.doc, node, to);
-      const source = state.sliceDoc(from, to);
-      const inQuote = within(node, 'Blockquote') !== null;
-      const widget = ref.name === 'Table'
-        ? new TableWidget(source, tableModel(state, node, from), context, indent)
-        : new CodeBlockWidget(source, codeLines(state, node, from, inQuote), context, indent);
-      blocks.push({ from, to, widget });
+      blocks.push({ from, to, widget: new TableWidget(state.sliceDoc(from, to), tableModel(state, node, from), context, indent) });
       return false;
     },
   });
@@ -578,6 +563,8 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
   const ctx: DecorateContext = {
     state, reveal, docMode: state.facet(docMode), page, links, versions, picked, out, hide, lineClass, covered,
     unit: (from, to) => { if (to > from) units?.push({ from, to }); },
+    from: top,
+    to: bottom,
   };
 
   syntaxTree(state).iterate({
@@ -585,18 +572,16 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
     to: bottom,
     enter: (ref) => {
       const node = ref.node;
+      // Code keeps its own indent, so a list item's later lines never take its lines.
+      if (ref.name === 'FencedCode' || ref.name === 'CodeBlock') {
+        for (let number = doc.lineAt(ref.from).number, last = lastLine(doc, node).number; number <= last; number += 1) continued.delete(number);
+      }
       if (decorators.get(ref.name)?.some((decorator) => decorator.decorate(ctx, node) === true)) return false;
       switch (ref.name) {
-        case 'Table':
-        case 'FencedCode':
-        case 'CodeBlock': {
+        case 'Table': {
           if (covered(ref.from)) return false;
-          const kind = ref.name === 'Table' ? 'cm-md-table-source' : 'cm-md-codeblock';
-          // An indented code block drops its four-space indent while no selection is in it.
-          const indented = ref.name === 'CodeBlock' && !reveal.lines(ref.from, ref.to);
           linesOf(ref.from, lastLine(doc, node).to, (line, first, last) => {
-            lineClass(line.from, `${kind}${first ? ` ${kind}-first` : ''}${last ? ` ${kind}-last` : ''}`);
-            if (indented) hide(line.from, line.from + (/^(?: {1,4}|\t)/.exec(line.text)?.[0].length ?? 0), true);
+            lineClass(line.from, `cm-md-table-source${first ? ' cm-md-table-source-first' : ''}${last ? ' cm-md-table-source-last' : ''}`);
           });
           return false;
         }
@@ -885,7 +870,13 @@ export function blockPosition(view: EditorView, block: HTMLElement, target: Elem
   if (block.classList.contains('cm-md-codeblock-widget')) {
     const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
     const length = spot.textContent?.replace('​', '').length ?? 0;
-    if (caret && spot.contains(caret.startContainer)) offset += Math.min(caret.startOffset, length);
+    if (caret && spot.contains(caret.startContainer)) {
+      // A highlighted line is several text nodes: count the line's characters before the caret.
+      const before = document.createRange();
+      before.setStart(spot, 0);
+      before.setEnd(caret.startContainer, caret.startOffset);
+      offset += Math.min(before.toString().replace('​', '').length, length);
+    }
   }
   return start + offset;
 }

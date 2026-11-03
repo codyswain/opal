@@ -127,19 +127,20 @@ describe('Find and Replace in a document', () => {
   });
 
   it('frames the object a match inside a protected range belongs to', () => {
-    // Inline code stands in for a formula: one object, protected from Replace.
+    // Strikethrough stands in for a formula: one object, protected from Replace.
     const asObject = [
-      objectKinds.of({ kind: 'formula', nodes: ['InlineCode'], block: false, open: () => undefined, actions: () => [] }),
+      objectKinds.of({ kind: 'formula', nodes: ['Strikethrough'], block: false, open: () => undefined, actions: () => [] }),
       protectedRanges.of((state, from, to) => {
         const found: { from: number; to: number }[] = [];
-        syntaxTree(state).iterate({ from, to, enter: (ref) => { if (ref.name === 'InlineCode') found.push({ from: ref.from, to: ref.to }); } });
+        syntaxTree(state).iterate({ from, to, enter: (ref) => { if (ref.name === 'Strikethrough') found.push({ from: ref.from, to: ref.to }); } });
         return found;
       }),
     ];
-    const view = mount('See `frac x` here\n', DOC, asObject);
+    const view = mount('See ~~frac x~~ here\n', DOC, asObject);
     query(view, 'frac');
     run(view, findNext);
-    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'formula', from: 4, to: 12 });
+    expect(view.state.field(objectFrame)).toMatchObject({ kind: 'formula', from: 4, to: 14 });
+    // The caret rests after the text, before the hidden closing marks.
     expect(view.state.selection.main.head).toBe(12);
   });
 

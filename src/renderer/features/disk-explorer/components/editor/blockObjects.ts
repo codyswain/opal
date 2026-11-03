@@ -11,11 +11,12 @@ import { objectFrame, removeObject, setFrame } from './objectFrame';
 import './blocks.css';
 
 /*
- * Tables, rules, HTML blocks and drawn code blocks as objects in a
- * document: framed on the first Backspace or Delete beside them, removed on
- * a second press, with Edit, Copy as Markdown and Remove in their bar. Text
- * typed or pasted next to a table or rule starts a paragraph of its own, so
- * it never becomes a table row, a setext underline or part of the block.
+ * Tables, rules and HTML blocks as objects in a document: framed on the
+ * first Backspace or Delete beside them, removed on a second press, with
+ * Edit, Copy as Markdown and Remove in their bar. Text typed or pasted next
+ * to a table or rule starts a paragraph of its own, so it never becomes a
+ * table row, a setext underline or part of the block. Code registers its own
+ * kind in codeBlocks.ts.
  */
 
 /** The line a node ends on; a node that ends at a line break belongs to the line before it. */
@@ -89,15 +90,6 @@ const htmlKind: ObjectKind = {
   block: true,
   open: () => undefined,
   actions: () => [copy, remove],
-};
-
-/** Code blocks drawn as one block, until code is edited in place and registers its own kind. */
-const codeKind: ObjectKind = {
-  kind: 'code block',
-  nodes: ['FencedCode'],
-  block: true,
-  open: openSource,
-  actions: () => [{ id: 'edit', label: 'Edit', run: openSource }, copy, remove],
 };
 
 /** Tables and rules, which typed text must never join. */
@@ -409,7 +401,6 @@ export const blockObjects: Extension = [
   objectKinds.of(tableKind),
   objectKinds.of(ruleKind),
   objectKinds.of(htmlKind),
-  objectKinds.of(codeKind),
   deleteBesideBlocks,
   EditorState.transactionFilter.of((tr) => {
     const fixed = separated(tr);

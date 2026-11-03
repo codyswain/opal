@@ -54,7 +54,7 @@ describe('the document toolbar', () => {
     await openEditor(DOC, 'Some **bold** text.\n');
     const names = within(screen.getByRole('toolbar', { name: 'Formatting' })).getAllByRole('button').map((item) => item.getAttribute('aria-label'));
     expect(names).toEqual([
-      'Undo', 'Redo', 'Style, Normal text', 'Bold', 'Italic', 'Link', 'Insert',
+      'Undo', 'Redo', 'Style, Normal text', 'Bold', 'Italic', 'Code', 'Link', 'Insert',
       'Checklist', 'Bulleted list', 'Numbered list', 'Decrease indent', 'Increase indent', 'Clear formatting',
     ]);
     installMarkdownApi({ [NOTE]: 'Plain.\n' });

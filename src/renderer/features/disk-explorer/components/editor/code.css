@@ -1,0 +1,697 @@
+/*
+ * Code blocks. In a document the code lines are the page's own lines: each
+ * draws its slice of the grey box with ::before, so the box can sit inside a
+ * callout or a list item, and the text wraps with a hanging indent. Code is
+ * set at 0.85em, so lengths that line up with the page's text are divided
+ * by 0.85. Black and white only: weight, italic and three greys.
+ */
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line {
+  --code-box-left: calc((var(--quote-indent, 0px) + var(--code-indent, 0px)) / 0.85);
+  position: relative;
+  z-index: 0;
+  padding-left: calc(var(--code-box-left) + 1em + 2ch);
+  padding-right: calc(var(--code-right, 0px) + 1em);
+  text-indent: -2ch;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: var(--code-box-left);
+  right: var(--code-right, 0px);
+  background-color: var(--editor-sunken);
+  content: "";
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+/* In a callout the box keeps the callout's right padding, and its grey deepens. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-md-callout {
+  --code-right: calc(1em / 0.85);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-md-callout::before {
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+/* The header row: the opening fence's line, 28px tall. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head {
+  padding-left: calc(var(--code-box-left) + 1em);
+  text-indent: 0;
+  line-height: 28px;
+}
+
+/* A block right under a line of text, or right over one, keeps a gap from it, inside the line. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text {
+  padding-top: 0.5em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-after-text::before {
+  top: 0.5em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text {
+  height: 0.9em;
+  padding-bottom: 0.5em;
+  box-sizing: border-box;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-before-text::before {
+  bottom: 0.5em;
+}
+
+/* A fence on a list item's line keeps the item's marker, just outside the box, with the label where code starts. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-md-list {
+  text-indent: calc(-1em - var(--list-indent));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-md-list .cm-md-list-marker {
+  margin-right: 1em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head::before {
+  border-top-left-radius: var(--radius-row);
+  border-top-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head:has(.cm-code-header:hover)::before {
+  background-color: hsl(var(--foreground) / 0.07);
+}
+
+/* The closing fence's line: the box's bottom edge. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot {
+  height: 0.4em;
+  overflow: hidden;
+  line-height: 0.4em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom::before {
+  border-bottom-left-radius: var(--radius-row);
+  border-bottom-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom {
+  padding-bottom: 0.35em;
+}
+
+/* No closing fence: a dashed bottom edge and a footer saying so. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-unclosed::before {
+  border-bottom: 1px dashed hsl(var(--border-default));
+}
+
+.opal-editor .cm-editor .cm-code-open-end {
+  display: block;
+  /* Out of the code's hanging indent, in the code's own font, so the footer lines up with the code. */
+  margin-left: -2ch;
+  padding: 0.4em 0 0.15em;
+  text-indent: 0;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-code-open-end-text {
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+}
+
+.opal-editor .cm-editor .cm-code-end-here {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: hsl(var(--text-secondary));
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary) / 0.55);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-code-end-here:hover {
+  color: hsl(var(--foreground));
+}
+
+/* An indented code block: the same box, with no header. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-first {
+  padding-top: 0.35em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-first::before {
+  border-top-left-radius: var(--radius-row);
+  border-top-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-last {
+  padding-bottom: 0.35em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-last::before {
+  border-bottom-left-radius: var(--radius-row);
+  border-bottom-right-radius: var(--radius-row);
+}
+
+/* A long block: its last shown line fades into the grey, then "Show all N lines". */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-fade::after,
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-fade::after {
+  position: absolute;
+  left: var(--code-box-left, 0);
+  right: var(--code-right, 0px);
+  bottom: 0;
+  height: 1.6em;
+  background:
+    linear-gradient(to bottom, transparent, var(--editor-sunken)),
+    linear-gradient(to bottom, hsl(var(--canvas) / 0), hsl(var(--canvas)));
+  content: "";
+  pointer-events: none;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-fade {
+  position: relative;
+}
+
+.opal-editor .cm-editor .cm-code-collapsed-box {
+  display: flex;
+  justify-content: center;
+  padding: 2px 1em 6px;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+}
+
+.opal-editor .cm-editor .cm-md-in-callout .cm-code-collapsed-box {
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-box .cm-code-collapsed-box {
+  padding: 4px 0 0;
+  background: none;
+}
+
+.opal-editor .cm-editor .cm-code-show-all {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-show-all:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-show-all:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+/* The header's contents: the language on the left, Copy on the right. */
+.opal-editor .cm-editor .cm-code-header {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  vertical-align: top;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 28px;
+  cursor: default;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-code-header[data-object]:hover {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-code-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  margin-left: -6px;
+  padding: 0 4px 0 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-label:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-label:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+  opacity: 1;
+}
+
+/* The chevron shows on hover or with the caret in the block. */
+.opal-editor .cm-editor .cm-code-chevron {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-header:hover .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-header[data-hover] .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-header[data-active] .cm-code-chevron,
+.opal-editor .cm-editor .cm-code-label:focus-visible .cm-code-chevron {
+  opacity: 1;
+}
+
+.opal-editor .cm-editor .cm-code-copy {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 22px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard), background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-copy:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-copy:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+  opacity: 1;
+}
+
+/* A quiet block shows only its label; Copy and "Plain text" show on hover or with the caret in the block. */
+.opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label {
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-header:hover .cm-code-copy,
+.opal-editor .cm-editor .cm-code-header[data-hover] .cm-code-copy,
+.opal-editor .cm-editor .cm-code-header[data-active] .cm-code-copy,
+.opal-editor .cm-editor .cm-code-copy[data-copied],
+.opal-editor .cm-editor .cm-code-header[data-quiet]:hover .cm-code-label,
+.opal-editor .cm-editor .cm-code-header[data-quiet][data-hover] .cm-code-label,
+.opal-editor .cm-editor .cm-code-header[data-quiet][data-active] .cm-code-label {
+  opacity: 1;
+}
+
+/* A line break inside inline code, shown as a space between its pieces. */
+.opal-editor .cm-editor .cm-code-join {
+  padding: 0.1em 0;
+  background-color: var(--editor-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* The pieces either side of a join read as one span. CodeMirror puts an image buffer on either side of the join. */
+.opal-editor .cm-editor .cm-md-code:has(+ .cm-code-join),
+.opal-editor .cm-editor .cm-md-code:has(+ .cm-widgetBuffer + .cm-code-join) {
+  padding-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.opal-editor .cm-editor .cm-code-join + .cm-md-code,
+.opal-editor .cm-editor .cm-code-join + .cm-widgetBuffer + .cm-md-code {
+  padding-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* An empty block's one line. */
+.opal-editor .cm-editor .cm-code-placeholder {
+  color: hsl(var(--text-tertiary));
+  pointer-events: none;
+  user-select: none;
+}
+
+/*
+ * A framed block: the ring every block object has, a 1px gap then 2px of
+ * the foreground, outside the box and following its corners. Each line
+ * draws its part from copies of its own box moved outward: the lines in
+ * between only to the sides, the header up as well and the bottom edge
+ * down, so no part of the ring crosses the box.
+ */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-code-framed::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-framed + .cm-code-collapsed .cm-code-collapsed-box {
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-framed::before {
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), 0 -1px 0 0 hsl(var(--canvas)), -1px -1px 0 0 hsl(var(--canvas)), 1px -1px 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground)), 0 -3px 0 0 hsl(var(--foreground)), -2px -2px 0 0 hsl(var(--foreground)), 2px -2px 0 0 hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-framed::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom.cm-code-framed::before {
+  box-shadow: -1px 0 0 0 hsl(var(--canvas)), 1px 0 0 0 hsl(var(--canvas)), 0 1px 0 0 hsl(var(--canvas)), -1px 1px 0 0 hsl(var(--canvas)), 1px 1px 0 0 hsl(var(--canvas)), -3px 0 0 0 hsl(var(--foreground)), 3px 0 0 0 hsl(var(--foreground)), 0 3px 0 0 hsl(var(--foreground)), -2px 2px 0 0 hsl(var(--foreground)), 2px 2px 0 0 hsl(var(--foreground));
+}
+
+/* The bottom edge's line clips what it holds, but not the ring. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-framed {
+  overflow: clip;
+  overflow-clip-margin: 3px;
+}
+
+.opal-editor .cm-editor .cm-code-line .cm-object-framed {
+  box-shadow: none;
+}
+
+/* Highlighting: weight, italic and three greys. */
+.opal-editor .cm-editor .cm-code-keyword {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.opal-editor .cm-editor .cm-code-string {
+  color: hsl(var(--text-secondary));
+}
+
+.opal-editor .cm-editor .cm-code-comment {
+  color: hsl(var(--text-tertiary));
+  font-style: italic;
+}
+
+.opal-editor .cm-editor .cm-code-literal {
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-name {
+  font-weight: 500;
+}
+
+.opal-editor .cm-editor .cm-code-punctuation {
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-code-em {
+  font-style: italic;
+}
+
+/* Diff lines: added on a grey fill with a bold sign, removed struck through, hunk headers muted. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-diff-add::before,
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-diff-add {
+  background-color: hsl(var(--foreground) / 0.08);
+}
+
+.opal-editor .cm-editor .cm-code-diff-sign {
+  font-weight: 700;
+}
+
+.opal-editor .cm-editor .cm-code-diff-del {
+  color: hsl(var(--text-tertiary));
+  text-decoration: line-through;
+}
+
+.opal-editor .cm-editor .cm-code-diff-meta {
+  color: hsl(var(--text-tertiary));
+}
+
+/* Notes: the drawn block scrolls sideways inside the column, never past it. */
+.opal-editor .cm-editor .cm-md-codeblock-widget {
+  max-width: 100%;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-box {
+  max-width: 100%;
+}
+
+/* The language menu: the popover surface, a search field over the list. */
+.opal-code-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  box-sizing: border-box;
+  width: 220px;
+  max-height: 300px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid hsl(var(--border-overlay));
+  border-radius: var(--radius-overlay);
+  background-color: hsl(var(--surface-raised));
+  box-shadow: var(--shadow-overlay);
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: 13px;
+}
+
+.opal-code-menu-search {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border-default));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font: inherit;
+  outline: none;
+}
+
+.opal-code-menu-search:focus {
+  border-color: hsl(var(--foreground) / 0.4);
+}
+
+.opal-code-menu-list {
+  overflow-y: auto;
+}
+
+.opal-code-menu-item {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  user-select: none;
+}
+
+.opal-code-menu-item[data-active],
+.opal-code-menu-item:hover {
+  background-color: hsl(var(--surface-hover));
+}
+
+.opal-code-menu-empty {
+  padding: 6px 8px;
+  color: hsl(var(--text-tertiary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-code-chevron,
+  .opal-editor .cm-editor .cm-code-show-all,
+  .opal-editor .cm-editor .cm-code-label,
+  .opal-editor .cm-editor .cm-code-copy,
+  .opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label,
+  .opal-editor .cm-editor .cm-content > .cm-line.cm-code-line::before {
+    transition: none;
+  }
+}
+
+/* Diagrams: on the page's colour with a quiet edge, the picture centred at most full width. */
+.opal-editor .cm-editor .cm-diagram {
+  padding-top: 0.25em;
+  padding-bottom: 0.25em;
+}
+
+.opal-editor .cm-editor .cm-diagram-box {
+  box-sizing: border-box;
+  padding: 0 16px 16px;
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-row);
+  background-color: hsl(var(--canvas));
+  transition: border-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-diagram-preview .cm-diagram-box {
+  padding-top: 16px;
+}
+
+.opal-editor .cm-editor .cm-diagram[data-object]:hover {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-diagram[data-object]:hover .cm-diagram-box {
+  border-color: hsl(var(--border-default));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-diagram[data-object-framed] {
+  box-shadow: none;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-diagram[data-object-framed] .cm-diagram-box {
+  box-shadow: 0 0 0 1px hsl(var(--canvas)), 0 0 0 3px hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-diagram-header {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 28px;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-diagram-canvas {
+  display: flex;
+  min-height: 2em;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-source {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.opal-editor .cm-editor .cm-diagram-error {
+  align-self: stretch;
+  padding-top: 6px;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+}
+
+/* A diagram's Copy shows on hover, as a code block's does, left of Diagram and Code so nothing moves. */
+.opal-editor .cm-editor .cm-diagram-header .cm-code-copy {
+  margin-left: auto;
+}
+
+.opal-editor .cm-editor .cm-diagram-header .cm-code-copy + .cm-diagram-modes {
+  margin-left: 4px;
+}
+
+.opal-editor .cm-editor .cm-diagram:hover .cm-diagram-header .cm-code-copy,
+.opal-editor .cm-editor .cm-diagram[data-object-framed] .cm-diagram-header .cm-code-copy {
+  opacity: 1;
+}
+
+/* Diagram and Code: a two-part control in greys. */
+.opal-editor .cm-editor .cm-diagram-modes {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+.opal-editor .cm-editor .cm-code-header .cm-diagram-modes {
+  margin-right: 4px;
+}
+
+.opal-editor .cm-editor .cm-diagram-segment {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-diagram-segment[aria-pressed="true"] {
+  background-color: hsl(var(--canvas));
+  box-shadow: 0 0 0 1px hsl(var(--border-subtle));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-diagram-segment:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+/* Pocket's flowcharts: a top-to-bottom chain of boxes. */
+.opal-editor .cm-editor .cm-diagram-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-ui-size);
+}
+
+.opal-editor .cm-editor .cm-diagram-step {
+  max-width: min(24rem, 100%);
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--foreground));
+  border-radius: 4px;
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  line-height: 1.4;
+  text-align: center;
+}
+
+.opal-editor .cm-editor .cm-diagram-arrow {
+  display: flex;
+  height: 24px;
+  align-items: center;
+  color: hsl(var(--text-tertiary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-diagram-box {
+    transition: none;
+  }
+}

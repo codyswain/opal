@@ -9,7 +9,7 @@ import type { FileStatus } from '@/types/files';
 export type BlockContext = 'callout' | 'callout-last' | 'quote' | null;
 
 /** The frame of a table or code block, inside its callout or quote and indented to its list item's text. */
-function blockFrame(base: string, context: BlockContext, indent: number): HTMLDivElement {
+export function blockFrame(base: string, context: BlockContext, indent: number): HTMLDivElement {
   const frame = document.createElement('div');
   frame.className = `cm-md-block ${base}`;
   if (context) frame.classList.add(context === 'quote' ? 'cm-md-in-quote' : 'cm-md-in-callout');
@@ -433,46 +433,6 @@ export class TableWidget extends WidgetType {
   }
 
   get estimatedHeight() { return (this.model.rows.length + 1) * 34 + 16; }
-
-  ignoreEvent() { return false; }
-}
-
-export interface CodeLine {
-  /** Where the line's code starts, from the start of the block. */
-  offset: number;
-  text: string;
-}
-
-/**
- * A fenced code block, shown as a sunken block that scrolls sideways rather
- * than wrapping while no selection is in it. A click puts the caret where it
- * landed in the code.
- */
-export class CodeBlockWidget extends WidgetType {
-  constructor(readonly source: string, readonly lines: CodeLine[], readonly context: BlockContext, readonly indent: number) { super(); }
-
-  eq(other: CodeBlockWidget) {
-    return other.source === this.source && other.context === this.context && other.indent === this.indent;
-  }
-
-  toDOM() {
-    const frame = blockFrame('cm-md-codeblock-widget', this.context, this.indent);
-    const box = document.createElement('div');
-    box.className = 'cm-md-codeblock-box';
-    const code = document.createElement('div');
-    code.className = 'cm-md-codeblock-lines';
-    for (const line of this.lines) {
-      const element = document.createElement('div');
-      element.dataset.offset = String(line.offset);
-      element.textContent = line.text || '\u200b';
-      code.append(element);
-    }
-    box.append(code);
-    frame.append(box);
-    return frame;
-  }
-
-  get estimatedHeight() { return this.lines.length * 21 + 26; }
 
   ignoreEvent() { return false; }
 }

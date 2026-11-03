@@ -12,6 +12,7 @@ import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './a
 import { blockGuards } from './blockGuards';
 import { callouts } from './callouts';
 import { guardedLineMoves } from './firstLine';
+import { codeBlocks } from './codeBlocks';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
 import { nestListItems, withoutRenumbering } from './listKeys';
@@ -184,6 +185,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     guardedLineMoves,
     tableKeys,
     callouts,
+    codeBlocks,
     pageProperties,
     search({ top: true }),
     keymap.of([
