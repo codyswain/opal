@@ -377,6 +377,16 @@ describe('a code block in a document', () => {
     expect(line).toMatch(/text-indent: calc\(-2ch - var\(--code-hang, 0ch\)\)/);
   });
 
+  it('stops a block that ends a callout above the callout\'s bottom padding', () => {
+    const view = mount('> [!note] Code in a callout\n> ```sh\n> git pull\n> ```\n\nAfter\n');
+    const foot = view.contentDOM.querySelector('.cm-code-foot');
+    expect(foot?.classList.contains('cm-md-callout-last')).toBe(true);
+    const css = readFileSync(path.join(__dirname, '../../renderer/features/disk-explorer/components/editor/code.css'), 'utf8');
+    const rule = (selector: string) => new RegExp(`${selector.replace(/[.()[\]:]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)')).toMatch(/padding-bottom: calc\(0\.45em \/ 0\.85\)/);
+    expect(rule('.cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before')).toMatch(/bottom: calc\(0\.45em \/ 0\.85\)/);
+  });
+
   it('draws diff lines', () => {
     const view = mount('```diff\n@@ -1 +1 @@\n-old\n+new\n same\n```\n');
     expect(view.contentDOM.querySelector('.cm-code-diff-add')?.textContent).toBe('+new');

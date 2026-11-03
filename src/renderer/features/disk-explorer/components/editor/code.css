@@ -40,6 +40,15 @@
   background-color: hsl(var(--foreground) / 0.05);
 }
 
+/* A block that ends a callout stops above the callout's bottom padding, as text does. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last) {
+  padding-bottom: calc(0.45em / 0.85);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line:is(.cm-md-callout-last, .cm-md-in-callout-last)::before {
+  bottom: calc(0.45em / 0.85);
+}
+
 /* The header row: the opening fence's line, 28px tall. */
 .opal-editor .cm-editor .cm-content > .cm-line.cm-code-head {
   padding-left: calc(var(--code-box-left) + 1em);
