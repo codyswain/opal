@@ -279,6 +279,53 @@ try {
   await waitForFile((written) => written === ORIGINAL, 3_000);
   check('undo goes back to the original bytes after the $$ block', (await readFile(DOC, 'utf8')) === ORIGINAL);
 
+  // $$ then Enter, a formula and Done: one Cmd+Z takes the block back to the typed $$, the next takes that $$.
+  await page.locator('.cm-line', { hasText: 'Broken' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('$$');
+  await page.keyboard.press('Enter');
+  await popover.waitFor({ timeout: 5_000 });
+  await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).pressSequentially('k^2', { delay: 20 });
+  await page.getByTestId('math-popover').getByRole('button', { name: 'Done' }).click();
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  const doneBlock = await waitForFile((written) => written.includes('shows its source.\n\n$$\nk^2\n$$\n'));
+  check('$$, Enter, a formula and Done write the block', doneBlock.includes('shows its source.\n\n$$\nk^2\n$$\n'), JSON.stringify(doneBlock.slice(doneBlock.indexOf('Broken'), doneBlock.indexOf('Broken') + 60)));
+  await page.keyboard.press('Meta+z');
+  const backToDollars = await waitForFile((written) => !written.includes('k^2'));
+  check('one Cmd+Z after Done takes the block back to the typed $$', backToDollars.includes('shows its source.\n\n$$\n\n| Quantity'), JSON.stringify(backToDollars.slice(backToDollars.indexOf('Broken'), backToDollars.indexOf('Broken') + 60)));
+  await page.keyboard.press('Meta+z');
+  const noDollars = await waitForFile((written) => !written.includes('shows its source.\n\n$$'));
+  check('the next Cmd+Z takes the typed $$', !noDollars.includes('$$\n\n$$') && !noDollars.includes('shows its source.\n\n$$'), JSON.stringify(noDollars.slice(noDollars.indexOf('Broken'), noDollars.indexOf('Broken') + 60)));
+  for (let index = 0; index < 3 && (await readFile(DOC, 'utf8')) !== ORIGINAL; index += 1) {
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(400);
+  }
+  await waitForFile((written) => written === ORIGINAL, 3_000);
+  check('undo goes back to the original bytes after Done', (await readFile(DOC, 'utf8')) === ORIGINAL);
+
+  // A new inline formula that ends the page, closed with Enter: text typed next goes after it.
+  const CASES = 'f(x)=\\begin{cases} 1 & x>0 \\\\ 0 & \\text{else} \\end{cases}';
+  await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
+  await page.keyboard.press('Meta+ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Rule: ');
+  await page.keyboard.press('Meta+Shift+E');
+  await popover.waitFor({ timeout: 5_000 });
+  await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).pressSequentially(CASES, { delay: 10 });
+  await page.getByTestId('math-popover').getByRole('textbox', { name: 'TeX' }).press('Enter');
+  await popover.waitFor({ state: 'detached', timeout: 5_000 });
+  await page.keyboard.type(' done.', { delay: 20 });
+  const typedAfter = await waitForFile((written) => written.includes(' done.'));
+  check('text typed after a new formula that ends the page goes after it', typedAfter.includes(`Rule: $${CASES}$ done.`), JSON.stringify(typedAfter.slice(typedAfter.indexOf('Rule'))));
+  await shoot('math-typed-after');
+  for (let index = 0; index < 8 && (await readFile(DOC, 'utf8')) !== ORIGINAL; index += 1) {
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(400);
+  }
+  check('undo goes back to the original bytes after the new formula', (await readFile(DOC, 'utf8')) === ORIGINAL);
+
   // Typing a formula in a document: it renders on the closing $, and Backspace then takes only that $.
   await page.locator('.cm-line', { hasText: 'Money stays text' }).click();
   await page.keyboard.press('End');
@@ -348,7 +395,8 @@ try {
   });
   check('a macro definition shows as its source', Boolean(definition && definition.width > 0 && definition.text.includes('\\gdef')), JSON.stringify(definition));
   await shoot('math-long');
-  await formula(LONG_TEX).click();
+  // A long formula flows over two lines, so the middle of its box can be the text beside it: click its first part.
+  await formula(LONG_TEX).locator('.katex-base').first().click();
   await popover.waitFor({ timeout: 5_000 });
   const longField = await page.evaluate(() => {
     const field = document.querySelector('.opal-math-field');

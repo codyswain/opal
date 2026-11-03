@@ -1,7 +1,8 @@
 import { renderToString } from 'katex';
 import { syntaxTree } from '@codemirror/language';
+import { getSearchQuery, SearchQuery, searchPanelOpen } from '@codemirror/search';
 import { StateField, type EditorState, type Extension, type Text } from '@codemirror/state';
-import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { blockRenderers, latestTree, nodeDecorators, protectedRanges, type BlockLayout, type TextRange } from './extensionPoints';
 import { cellMath } from './previewWidgets';
@@ -503,5 +504,47 @@ const editingWidgets = ViewPlugin.fromClass(class {
   }
 });
 
+const matchMark = Decoration.mark({ class: 'cm-math-match', inclusive: true });
+
+/** The formulas in view whose TeX holds a match for the open Find bar's query. */
+function formulasMatching(view: EditorView): DecorationSet {
+  const { state } = view;
+  if (!state.facet(docMode) || !searchPanelOpen(state)) return Decoration.none;
+  const query = getSearchQuery(state);
+  if (!query.valid) return Decoration.none;
+  // The TeX as written: Find's own query reads the page's visible text, where a formula is one character.
+  const raw = new SearchQuery({ search: query.search, caseSensitive: query.caseSensitive, literal: query.literal, regexp: query.regexp, wholeWord: query.wholeWord });
+  const tree = syntaxTree(state);
+  const marks = [];
+  for (const { from, to } of view.visibleRanges) {
+    for (const node of mathNodes(tree, from, to)) {
+      if (node.name === 'BlockMath') continue;
+      const span = mathSpan(state.doc, node);
+      if (!raw.getCursor(state, span.texFrom, span.texTo).next().done) marks.push(matchMark.range(node.from, node.to));
+    }
+  }
+  return Decoration.set(marks, true);
+}
+
+/**
+ * A formula draws its TeX as one object, so Find's highlight can't show a
+ * match inside it; while the Find bar is open, a formula that holds one
+ * takes the match fill. An outer mark, so it wraps the formula's widget.
+ */
+const searchMatches = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = formulasMatching(view);
+  }
+
+  update(update: ViewUpdate) {
+    const { startState, state } = update;
+    if (update.docChanged || update.viewportChanged || getSearchQuery(startState) !== getSearchQuery(state) || searchPanelOpen(startState) !== searchPanelOpen(state)) {
+      this.decorations = formulasMatching(update.view);
+    }
+  }
+}, { provide: (plugin) => EditorView.outerDecorations.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none) });
+
 /** Math in the page editor: the parser's reparse guard, drawing, the page's macros and, in documents, editing. */
-export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, editingMarks, editingWidgets, mathEditing, insertEquationItem];
+export const math: Extension = [mathReparse, pageMacros, inlineMath, blockSource, blockMath, protectedMath, tableMath, editingMarks, editingWidgets, searchMatches, mathEditing, insertEquationItem];

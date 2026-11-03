@@ -224,7 +224,7 @@ describe('the formula popover on the page', () => {
     expect(view.state.field(mathEditor)).toBeNull();
   });
 
-  it('keeps no room for a message until there is one, then keeps it while the popover is open', async () => {
+  it('keeps room for a message only while there is one', async () => {
     const view = await openEditor('Energy $E=mc^2$ is famous.\n');
     const popover = await clickFormula(view, 'E=mc^2');
     const row = () => popover.querySelector('.opal-math-problem');
@@ -235,6 +235,6 @@ describe('the formula popover on the page', () => {
     expect(row()?.classList.contains('opal-math-problem-none')).toBe(false);
     typeInto(field, 'E=mc^3');
     expect(row()?.textContent).toBe('');
-    expect(row()?.classList.contains('opal-math-problem-none')).toBe(false);
+    expect(row()?.classList.contains('opal-math-problem-none')).toBe(true);
   });
 });

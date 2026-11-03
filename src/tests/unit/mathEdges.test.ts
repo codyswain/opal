@@ -231,3 +231,16 @@ describe('typing after a new formula', () => {
     expect(text(view)).toBe(`Intro\nRule: $${tex}$ done.`);
   });
 });
+
+describe('Find on a page with formulas', () => {
+  it('shows which formula holds a match while the query is typed', async () => {
+    const { openSearchPanel, setSearchQuery, SearchQuery } = await import('@codemirror/search');
+    const view = mount('Let $\\mathbb{R}^n$ be a space and $x$ a point.\n');
+    act(() => { openSearchPanel(view); });
+    act(() => { view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: 'mathbb' })) }); });
+    const marked = [...view.contentDOM.querySelectorAll('.cm-math-match .cm-math')].map((element) => element.getAttribute('aria-label'));
+    expect(marked).toEqual(['\\mathbb{R}^n']);
+    act(() => { view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: 'point' })) }); });
+    expect(view.contentDOM.querySelectorAll('.cm-math-match').length).toBe(0);
+  });
+});

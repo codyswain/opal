@@ -174,10 +174,9 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
   const problem = editor.problem ?? rendered?.error ?? null;
   const at = rendered?.errorAt ?? null;
   const spot = at !== null && editor.problem === null ? lineColumn(field.trim(), at) : null;
-  // The message's row takes room only once there is a message, then keeps it, so the footer stays put as errors come and go while typing.
-  // A popover above a new block grows upward, which would move the field, so it keeps the room from the start.
-  const roomForProblem = useRef(false);
-  roomForProblem.current = roomForProblem.current || problem !== null || side === 'top';
+  // The message's row takes room only while there is a message. Below the formula the popover grows downward, so the field
+  // stays where it is; above a new block it would grow upward and move the field, so there the row always keeps its room.
+  const roomForProblem = problem !== null || side === 'top';
 
   return (
     <Popover open onOpenChange={(open) => { if (!open) close(); outside.current = false; }}>
@@ -228,7 +227,7 @@ export const MathPopover: React.FC<MathPopoverProps> = ({ view, editor }) => {
             onChange={onInput}
             onKeyDown={onKeyDown}
           />
-          <div className={roomForProblem.current ? 'opal-math-problem' : 'opal-math-problem opal-math-problem-none'} role="status" aria-live="polite">
+          <div className={roomForProblem ? 'opal-math-problem' : 'opal-math-problem opal-math-problem-none'} role="status" aria-live="polite">
             {problem && spot && spot.line === 0 && spot.column < 48 ? (
               <span className="opal-math-problem-caret" aria-hidden>{`${' '.repeat(spot.column)}^`}</span>
             ) : null}

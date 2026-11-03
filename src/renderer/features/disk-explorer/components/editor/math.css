@@ -139,6 +139,11 @@
   background-color: hsl(var(--surface-hover));
 }
 
+/* While Find is open, a formula whose TeX holds a match takes the match fill. */
+.opal-editor .cm-editor .cm-math-match .cm-math {
+  background-color: hsl(var(--foreground) / 0.12);
+}
+
 .opal-editor .cm-editor .cm-object-framed-inline .cm-math {
   background-color: hsl(var(--surface-selected));
 }
