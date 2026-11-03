@@ -6,6 +6,7 @@ import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorSelection, EditorState, type StateCommand, type Transaction } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { calloutMarker } from '@/renderer/features/disk-explorer/components/editor/blockGuards';
+import { pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
 import { CalloutTypeMenu } from '@/renderer/features/disk-explorer/components/editor/CalloutTypeMenu';
 import { refoldCallout } from '@/renderer/features/disk-explorer/components/editor/callouts';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
@@ -335,5 +336,36 @@ describe('bold typed into an empty cell of a table whose source shows', () => {
     press(view, 'b', /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
     for (const character of 'Lead') type(view, character);
     expect(text(view)).toContain('| Alex | **Lead** |');
+  });
+});
+
+describe('a wiki link split by its alias pipe in a drawn table', () => {
+  it('draws both halves as one broken link, and Fix link writes the backslash', () => {
+    const view = mount('Intro\n\n| File | Size |\n|---|---|\n| [[deck.4f2a|Board deck]] | 26 MB |\n\nEnd\n');
+    const split = view.contentDOM.querySelectorAll('.cm-md-cell-split');
+    expect([...split].map((cell) => cell.textContent?.replace('Fix link', ''))).toEqual(['[[deck.4f2a', 'Board deck]]']);
+    const fix = view.contentDOM.querySelector('.cm-md-fix-link') as HTMLElement;
+    act(() => { fix.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); });
+    expect(text(view)).toContain('| [[deck.4f2a\\|Board deck]] | 26 MB |');
+    expect(view.contentDOM.querySelector('.cm-md-cell-split')).toBeNull();
+  });
+});
+
+describe('a list pasted on an empty list item', () => {
+  it('takes the empty item\'s place at its level, never nesting under it', () => {
+    const state = (doc: string) => {
+      const created = EditorState.create({ doc, selection: { anchor: doc.length }, extensions: markdownEditorExtensions(DOC) });
+      ensureSyntaxTree(created, doc.length, 1_000);
+      return created.update({}).state;
+    };
+    const apply = (doc: string, pasted: string) => {
+      const before = state(doc);
+      const spec = pasteSpec(before, pasted, false);
+      return spec ? before.update(spec).state.doc.toString() : null;
+    };
+    expect(apply('- Launch\n  1. Docs\n     - [ ] Review\n     - [ ] ', '- alpha\n- beta\n  - gamma')).toBe('- Launch\n  1. Docs\n     - [ ] Review\n     - alpha\n     - beta\n       - gamma');
+    expect(apply('- one\n\t- two\n\t- ', '- alpha\n  - beta\n')).toBe('- one\n\t- two\n\t- alpha\n\t\t- beta');
+    // Text that is not a list pastes as before.
+    expect(apply('- one\n- ', 'plain text')).toBeNull();
   });
 });

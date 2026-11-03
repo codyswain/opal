@@ -3,7 +3,7 @@ import { Annotation, ChangeSet, EditorSelection, EditorState, Transaction, type 
 import { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, outsideProtected } from './extensionPoints';
-import { inlineSpans, linkAt, withoutEdgeMarks, writeLink } from './formatCommands';
+import { inlineSpans, linkAt, listItemOf, withoutEdgeMarks, writeLink } from './formatCommands';
 import { docMode } from './livePreview';
 import { literalText, rawAt } from './typing';
 
@@ -167,12 +167,45 @@ export function pasteSpec(state: EditorState, text: string, literal: boolean): T
     }
     return writeLink(state, range, state.sliceDoc(range.from, range.to), url, null);
   }
-  if (!literal) return null;
+  if (!literal) return listIntoItem(state, pasted);
   const prefix = containerPrefix(state, range.from);
   const insert = literalText(state, range.from, range.to, pasted, { prefix, table: inTable(state, range.from) });
   return {
     changes: { from: range.from, to: range.to, insert },
     selection: { anchor: range.from + insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.paste',
+    annotations: prefixed.of(true),
+  };
+}
+
+const LIST_LINE = /^[ \t]*(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)/;
+
+/**
+ * A pasted list on an empty list item, as Enter at a list's end leaves it:
+ * the pasted items take the empty item's place at its level, nested items
+ * one level deeper each, in the list's own indent character.
+ */
+function listIntoItem(state: EditorState, pasted: string): TransactionSpec | null {
+  const range = state.selection.main;
+  if (!range.empty || !state.facet(docMode)) return null;
+  const line = state.doc.lineAt(range.head);
+  const item = listItemOf(state, line);
+  const lines = pasted.replace(/\n+$/, '').split('\n');
+  if (!item || item.textFrom !== line.to || range.head !== line.to || !lines.every((each) => !/\S/.test(each) || LIST_LINE.test(each)) || !LIST_LINE.test(lines[0])) return null;
+  const lead = line.text.slice(0, item.markFrom - line.from);
+  const indents = lines.map((each) => /^[ \t]*/.exec(each)?.[0] ?? '');
+  const unit = Math.min(...indents.map((indent) => indent.replace(/\t/g, '    ').length).filter((width) => width > 0), Infinity);
+  const tabs = /\t/.test(lead) || /^[ \t>]*\t/.test(state.doc.lineAt(Math.max(0, line.from - 1)).text);
+  const insert = lines.map((each, index) => {
+    if (!/\S/.test(each)) return lead.replace(/[ \t]+$/, '');
+    const width = indents[index].replace(/\t/g, '    ').length;
+    const level = unit === Infinity ? 0 : Math.round(width / unit);
+    return `${lead}${tabs ? '\t'.repeat(level) : indents[index]}${each.slice(indents[index].length)}`;
+  }).join('\n');
+  return {
+    changes: { from: line.from, to: line.to, insert },
+    selection: { anchor: line.from + insert.length },
     scrollIntoView: true,
     userEvent: 'input.paste',
     annotations: prefixed.of(true),
