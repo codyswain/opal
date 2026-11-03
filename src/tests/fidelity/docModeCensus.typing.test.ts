@@ -12,7 +12,7 @@ import { hiddenRanges } from '@/renderer/features/disk-explorer/components/edito
 import { VisibleQuery, replaceEdits } from '@/renderer/features/disk-explorer/components/editor/visibleSearch';
 import { visibleLines, visibleOffset, visibleSlice } from '@/renderer/features/disk-explorer/components/editor/visibleText';
 import { wordStep } from '@/renderer/features/disk-explorer/components/editor/wordMotion';
-import { expectTyped, openedLine, pendingOwner, sampleSpots, vaultFiles } from './censusHelpers';
+import { blockSeparators, expectTyped, openedLine, pendingOwner, sampleSpots, vaultFiles } from './censusHelpers';
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
@@ -315,7 +315,8 @@ describe.skipIf(!ROOT)('doc mode typing census', () => {
           for (const typed of TYPED) {
             counts.typed += 1;
             const { before, after, caret } = typeAt(state, at, typed);
-            let problems = expectTyped(before, after, typed, caret, { escapes: '\\' });
+            // Typed text beside a table or rule starts a paragraph of its own (PR 1), so its line break counts as a separator.
+            let problems = expectTyped(before, after, typed, caret, { escapes: '\\', separators: blockSeparators(before, caret) });
             // A space typed at the end of bold goes after its closing marks, splitting the typed bytes around them.
             if (problems.length > 0 && problems.every((problem) => problem.startsWith('bytes at the caret')) && insertedAround(before.doc.toString(), after.doc.toString(), typed)) problems = [];
             // `N. ` under an ordered item continues the list, as decided.
