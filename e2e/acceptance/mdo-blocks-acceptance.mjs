@@ -23,7 +23,7 @@ const check = (name, ok, detail = '') => {
 };
 
 const TABLE = '| Area | Owner |\n|---|---|\n| Blocks | PR 1 |\n| Typing | PR 2 |';
-const BODY = `Intro paragraph.\n\n${TABLE}\n\n***\n\n> [!note] A callout\n> With a body line.\n\n1. one\n2. two\n3. three\n\n- top\n- next\n`;
+const BODY = `Intro paragraph.\n\n${TABLE}\n\n***\n\n> [!note] A callout\n> With a body line.\n\n1. one\n2. two\n3. three\n\n- top\n- next\n\n> [!tip]- A folded tip\n> Hidden until opened.\n\n> [!WARNING]+ An open warning\n> > A nested quote in it.\n`;
 
 const userData = await mkdtemp(path.join(os.tmpdir(), 'opal-blocks-userdata-'));
 const vaultParent = await mkdtemp(path.join(os.tmpdir(), 'opal-blocks-vault-'));
@@ -143,12 +143,23 @@ try {
   await page.locator('.cm-line', { hasText: /next$/ }).first().click();
   await page.keyboard.press('Tab');
   saved = await waitForFile((text) => text.includes('  - next'));
-  check('Tab nests a list item under the one above', saved.endsWith('- top\n  - next\n'));
+  check('Tab nests a list item under the one above', saved.includes('- top\n  - next\n'));
   await page.locator('.cm-line', { hasText: /^Intro paragraph\.$/ }).first().click();
   await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   await page.waitForTimeout(800);
   check('two Tabs in a paragraph change nothing', (await readDoc()).startsWith('Intro paragraph.\n'));
+
+  // A folded callout opens from its chevron, writing nothing.
+  const before = await readDoc();
+  check('a "-" callout starts folded', await page.locator('.cm-line', { hasText: 'Hidden until opened.' }).count() === 0);
+  await page.locator('.cm-md-callout-fold').first().dispatchEvent('mousedown');
+  await page.waitForTimeout(300);
+  check('its chevron opens it', await page.locator('.cm-line', { hasText: 'Hidden until opened.' }).count() === 1);
+  await page.waitForTimeout(800);
+  check('folding writes nothing', (await readDoc()) === before);
+  await page.locator('.cm-md-callout-fold').first().dispatchEvent('mousedown');
+  await page.locator('.cm-md-callout-icon').last().scrollIntoViewIfNeeded();
   await shoot('page');
   check('the editor still holds the file', (await editorText()) === null || (await editorText()) === (await readDoc()));
 } catch (error) {

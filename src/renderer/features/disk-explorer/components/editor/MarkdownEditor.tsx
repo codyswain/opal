@@ -9,6 +9,7 @@ import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePr
 import { useTabsStore } from '../../store/tabsStore';
 import { isLogPage } from './activityLog';
 import { linkEditor, type LinkEditor } from './docMode';
+import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
 import { EditorStatus } from './EditorStatus';
 import type { PageObject } from './extensionPoints';
@@ -244,6 +245,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
       {docView && framed ? <ObjectBar view={docView} frame={framed} /> : null}
       {docView ? <ObjectMenu view={docView} /> : null}
+      {docView ? <CalloutTypeMenu view={docView} /> : null}
       <EditorStatus
         saveState={document.saveState}
         error={document.error}

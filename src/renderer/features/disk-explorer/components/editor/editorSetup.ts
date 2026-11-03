@@ -10,6 +10,7 @@ import { GFM } from '@lezer/markdown';
 import { isDocFile } from '@/common/fileKind';
 import { isDailyLog, isLogPage, readOnlyActivityLog, readOnlyLogPage } from './activityLog';
 import { blockGuards } from './blockGuards';
+import { callouts } from './callouts';
 import { guardedLineMoves } from './firstLine';
 import { docModeExtensions } from './docMode';
 import { indentInQuote, toggleMarker } from './formatCommands';
@@ -182,6 +183,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     blockGuards,
     guardedLineMoves,
     tableKeys,
+    callouts,
     pageProperties,
     search({ top: true }),
     keymap.of([

@@ -142,7 +142,7 @@ describe('live preview', () => {
     expect(view.hasFocus).toBe(false);
   });
 
-  it('draws a callout as a box with its title, an [!ai] one with the bot icon, and plain quotes with a rule', () => {
+  it('draws a callout as a box with its title and its type\'s icon, the bot for [!ai], and plain quotes with a rule', () => {
     const { view } = mount('> [!ai] AI\n> Text the agent wrote.\n\n> [!note]\n> Body.\n\n> Plain quote\n');
     const callouts = [...view.contentDOM.querySelectorAll('.cm-md-callout')];
     expect(callouts.map((line) => line.getAttribute('data-callout'))).toEqual(['ai', 'ai', 'note', 'note']);
@@ -152,7 +152,8 @@ describe('live preview', () => {
     expect(callouts[0].querySelector('.cm-md-callout-icon svg')).not.toBeNull();
     expect(callouts[1].textContent).toBe('Text the agent wrote.');
     expect(callouts[2].querySelector('.cm-md-callout-title')).toHaveTextContent('Note');
-    expect(callouts[2].querySelector('.cm-md-callout-icon')).toBeNull();
+    expect(callouts[2].querySelector<HTMLElement>('.cm-md-callout-icon')?.dataset.calloutIcon).toBe('note');
+    expect(view.contentDOM.querySelector('.cm-md-quote .cm-md-callout-icon')).toBeNull();
     expect(view.contentDOM.querySelector('.cm-md-quote')).toHaveTextContent(/^Plain quote$/);
   });
 

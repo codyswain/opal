@@ -123,6 +123,56 @@
   }
 }
 
+/* Callout icons draw in the page's tertiary grey; in a document a click opens the type menu. */
+.opal-editor .cm-editor .cm-md-callout-icon {
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor:has(.opal-doc-toolbar) .cm-editor .cm-md-callout-icon {
+  cursor: pointer;
+}
+
+/* The fold chevron after a callout's title: 14px, turning 90 degrees when open. */
+.opal-editor .cm-editor .cm-md-callout-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  color: hsl(var(--text-tertiary));
+  vertical-align: -0.2em;
+  transition: background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-callout-fold:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-md-callout-fold svg {
+  transition: transform var(--duration-disclosure) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-md-callout-fold[data-open="true"] svg {
+  transform: rotate(90deg);
+}
+
+/* A folded callout's title line closes its box. */
+.opal-editor .cm-editor .cm-md-callout.cm-md-callout-folded {
+  padding-bottom: 0.45em;
+  border-bottom-left-radius: var(--radius-row);
+  border-bottom-right-radius: var(--radius-row);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-md-callout-fold,
+  .opal-editor .cm-editor .cm-md-callout-fold svg {
+    transition: none;
+  }
+}
+
 /* The style menu on a callout's title, which takes no heading. */
 .opal-editor .opal-doc-toolbar-style:disabled {
   pointer-events: none;

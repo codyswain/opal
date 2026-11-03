@@ -96,20 +96,6 @@ export class CalloutTitleWidget extends WidgetType {
   }
 }
 
-const BOT_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
-
-/** The bot icon before an [!ai] callout's title, so text an agent wrote reads as such at a glance. */
-export class CalloutIconWidget extends WidgetType {
-  eq() { return true; }
-
-  toDOM() {
-    const icon = document.createElement('span');
-    icon.className = 'cm-md-callout-icon';
-    icon.innerHTML = BOT_ICON;
-    return icon;
-  }
-}
-
 export class HorizontalRuleWidget extends WidgetType {
   eq() { return true; }
 

@@ -9,8 +9,8 @@ import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
 import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type TextRange } from './extensionPoints';
+import { CalloutIconWidget } from './callouts';
 import {
-  CalloutIconWidget,
   CalloutTitleWidget,
   CodeBlockWidget,
   EllipsisWidget,
@@ -755,7 +755,7 @@ function lineDecorations(state: EditorState, top: number, bottom: number, units?
           calloutHeads.add(head.from);
           if (callout.title) out.push(calloutTitle.range(callout.titleFrom, head.to));
           if (!reveal.lines(head.from, head.to)) {
-            if (callout.type === 'ai') out.push(Decoration.widget({ widget: new CalloutIconWidget(), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
+            out.push(Decoration.widget({ widget: new CalloutIconWidget(callout.type), side: -1 }).range(callout.title ? callout.titleFrom : head.from));
             if (callout.title) hide(head.from, callout.titleFrom, true);
             else out.push(Decoration.replace({ widget: new CalloutTitleWidget(callout.type[0].toUpperCase() + callout.type.slice(1)), caretAfter: true }).range(head.from, head.to));
           }
