@@ -123,6 +123,16 @@ describe('typing a fence in a document', () => {
     expect(text(listed)).toBe('- ```\n  \n  ```');
   });
 
+  it('writes \\, \\., *, _, a backtick, 1984. , <!-- and --- in code exactly as typed', async () => {
+    for (const typed of ['\\', '\\.', '*', '_', '`', '1984. ', '<!--', '---']) {
+      const doc = '> ```\n> a b\n> ```\n';
+      const view = mount(doc, doc.indexOf(' b'));
+      await focusPage(view);
+      type(view, typed);
+      expect(text(view)).toBe(doc.replace('a b', `a${typed} b`));
+    }
+  });
+
   it('writes typed backticks as they are inside code and inline code', async () => {
     const view = mount('```\nab\n```\n\nx `cd` y\n', 4);
     await focusPage(view);
