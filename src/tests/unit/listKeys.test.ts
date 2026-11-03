@@ -3,6 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { indentList } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 
 const DOC = '/Vault/Notes/Plan.mdo';
 const NOTE = '/Vault/Notes/Plan.md';
@@ -170,5 +171,26 @@ describe('Enter in code inside a list item or quote', () => {
     expect(after('- item\n\n  ```\n  code‸\n  ```\n', 'Enter')).not.toContain('- \n');
     expect(after('> ```\n> one\n> ‸\n> ```\n', 'Enter')).toContain('> ```\n> one\n');
     expect(after('> ```\n> one\n> ‸\n> ```\n', 'Enter')).not.toBe('> ```\n> one\n\n\n> ```\n');
+  });
+});
+
+describe('list keys next to inline objects and formatting', () => {
+  it('nests and outdents an item that holds an inline protected range, such as a formula', () => {
+    const formulas = protectedRanges.of((state, from, to) => [...state.sliceDoc(from, to).matchAll(/\$[^$\n]+\$/g)].map((match) => ({ from: from + (match.index ?? 0), to: from + (match.index ?? 0) + match[0].length })));
+    const make = (doc: string) => {
+      const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, selection: { anchor: doc.length }, extensions: [markdownEditorExtensions(DOC), formulas] }) });
+      views.push(view);
+      return view;
+    };
+    const view = make('- a\n- b $x$');
+    press(view, 'Tab');
+    expect(text(view)).toBe('- a\n  - b $x$');
+    press(view, 'Tab', { shiftKey: true });
+    expect(text(view)).toBe('- a\n- b $x$');
+  });
+
+  it('starts the next item on Enter after a later paragraph that ends in formatting', () => {
+    expect(after('- a\n\n  more *x*‸\n- b\n', 'Enter')).toBe('- a\n\n  more *x*\n- \n- b\n');
+    expect(after('- a\n\n  more [x](y)‸\n- b\n', 'Enter')).toBe('- a\n\n  more [x](y)\n- \n- b\n');
   });
 });

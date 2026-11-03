@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { undo } from '@codemirror/commands';
+import { isolateHistory, undo } from '@codemirror/commands';
 import { ensureSyntaxTree } from '@codemirror/language';
-import { EditorState, type StateCommand } from '@codemirror/state';
+import { EditorState, StateEffect, type StateCommand } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions, replaceText } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
@@ -10,6 +10,7 @@ import { formatState } from '@/renderer/features/disk-explorer/components/editor
 import { linkEditor } from '@/renderer/features/disk-explorer/components/editor/docMode';
 import { insertItems, objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
+import { setCellCaret, setOpenBlock } from '@/renderer/features/disk-explorer/components/editor/livePreview';
 import { insertTable } from '@/renderer/features/disk-explorer/components/editor/tableInsert';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
@@ -492,7 +493,7 @@ describe('quotes and callouts in a document', () => {
     expect(marked(view)).toBe('Text\n\n> [!note] Note\n> ‸\n\nMore\n');
     const rule = mount('Text‸\n');
     act(() => { void rule.state.facet(insertItems).find((item) => item.id === 'rule')?.run(rule); });
-    expect(marked(rule)).toBe('Text\n\n***\n‸\n');
+    expect(marked(rule)).toBe('Text\n\n***\n‸');
   });
 });
 
@@ -573,5 +574,172 @@ describe('a click on a drawn code block in a document', () => {
     act(() => { block.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 })); });
     expect(frame(view)).toMatchObject({ kind: 'code block' });
     expect(caret(view)).toBe(text(view).indexOf('\nMore'));
+  });
+});
+
+describe('file inserts beside tables and rules', () => {
+  it('leaves an insert that brings its own blank line and effects alone: one blank line, the effect kept, the caret where it was', () => {
+    const marker = StateEffect.define<string>();
+    const seen: string[] = [];
+    const listen = EditorView.updateListener.of((update) => {
+      for (const tr of update.transactions) for (const effect of tr.effects) if (effect.is(marker)) seen.push(effect.value);
+    });
+    for (const [doc, at] of [[`${TABLE}\n\nMore`, TABLE.length], ['Text\n\n---\n\nMore', 'Text\n\n---'.length]] as const) {
+      const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, selection: { anchor: 0 }, extensions: [markdownEditorExtensions(DOC), listen] }) });
+      views.push(view);
+      act(() => { view.dispatch({ changes: { from: at, insert: '\n\n![[files/x.png]]' }, effects: marker.of('drop'), annotations: isolateHistory.of('full'), userEvent: 'input.drop' }); });
+      expect(text(view)).toBe(`${doc.slice(0, at)}\n\n![[files/x.png]]${doc.slice(at)}`);
+      expect(caret(view)).toBe(0);
+    }
+    expect(seen).toEqual(['drop', 'drop']);
+  });
+});
+
+describe('Backspace and Delete on the blank line beside a table, HTML block or rule', () => {
+  it('frames the table instead of joining the text to it', () => {
+    const under = mount(`${TABLE}\n‸\ntext\n`);
+    key(under, 'Delete');
+    expect(text(under)).toBe(`${TABLE}\n\ntext\n`);
+    expect(frame(under)).toMatchObject({ kind: 'table' });
+    const back = mount(`${TABLE}\n‸\ntext\n`);
+    key(back, 'Backspace');
+    expect(text(back)).toBe(`${TABLE}\n\ntext\n`);
+    expect(frame(back)).toMatchObject({ kind: 'table' });
+    const over = mount(`See [[Plan|the plan]]\n‸\n${TABLE}\n`);
+    key(over, 'Backspace');
+    expect(text(over)).toBe(`See [[Plan|the plan]]\n\n${TABLE}\n`);
+    expect(frame(over)).toMatchObject({ kind: 'table' });
+    const overDelete = mount(`See [[Plan|the plan]]\n‸\n${TABLE}\n`);
+    key(overDelete, 'Delete');
+    expect(frame(overDelete)).toMatchObject({ kind: 'table' });
+    // With two blank lines, one can go.
+    const roomy = mount(`${TABLE}\n‸\n\ntext\n`);
+    key(roomy, 'Delete');
+    expect(text(roomy)).toBe(`${TABLE}\n\ntext\n`);
+    expect(frame(roomy)).toBeNull();
+  });
+
+  it('frames an HTML block above a heading on Backspace at the heading\'s start', () => {
+    const view = mount('<div>x</div>\n\n# ‸Title\n');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('<div>x</div>\n\n# Title\n');
+    expect(frame(view)).toMatchObject({ kind: 'HTML block' });
+  });
+
+  it('frames a "---" rule rather than let the text above underline itself', () => {
+    const view = mount('text\n‸\n---\n\nmore\n');
+    key(view, 'Backspace');
+    expect(text(view)).toBe('text\n\n---\n\nmore\n');
+    expect(frame(view)).toMatchObject({ kind: 'horizontal rule' });
+    const below = mount('text\n‸\n---\n\nmore\n');
+    key(below, 'Delete');
+    expect(frame(below)).toMatchObject({ kind: 'horizontal rule' });
+    const end = mount('text‸\n\n---\n\nmore\n');
+    key(end, 'Delete');
+    expect(text(end)).toBe('text\n\n---\n\nmore\n');
+    expect(frame(end)).toMatchObject({ kind: 'horizontal rule' });
+    // A "***" rule never underlines, so its blank line goes as any other.
+    const stars = mount('text\n‸\n***\n\nmore\n');
+    key(stars, 'Backspace');
+    expect(text(stars)).toBe('text\n***\n\nmore\n');
+  });
+});
+
+describe('Insert with the caret in a block or a container', () => {
+  const run = (view: EditorView, id: string) => {
+    view.focus = vi.fn();
+    act(() => { void view.state.facet(insertItems).find((item) => item.id === id)?.run(view); });
+  };
+
+  it('puts a table, callout or rule after a table whose cell was clicked, never between its rows', () => {
+    const doc = '| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\nAfter\n';
+    for (const [id, block] of [['table', '| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n|  |  |  |\n|  |  |  |'], ['callout', '> [!note] Note\n> '], ['rule', '***']] as const) {
+      const view = mount(doc);
+      const at = doc.indexOf('1 |');
+      act(() => { view.dispatch({ selection: { anchor: at }, effects: setCellCaret.of(at) }); });
+      run(view, id);
+      expect(text(view)).toBe(`| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\n${block}\n\nAfter\n`);
+    }
+  });
+
+  it('keeps a callout or rule inside the list item or callout the caret is in', () => {
+    const list = mount('1. First\n1. Lazy two‸\n\t1. Nested from one\n1. [ ] A numbered task\n');
+    run(list, 'callout');
+    expect(marked(list)).toBe('1. First\n1. Lazy two\n\n   > [!note] Note\n   > ‸\n\n\t1. Nested from one\n1. [ ] A numbered task\n');
+    const callout = mount('> [!note] A callout\n> With a body line.‸\n> > Nested quote in callout.\n');
+    run(callout, 'rule');
+    expect(marked(callout)).toBe('> [!note] A callout\n> With a body line.\n>\n> ***\n>‸\n> > Nested quote in callout.\n');
+    const table = mount('- item‸\n  - child\n');
+    run(table, 'table');
+    expect(text(table)).toBe('- item\n\n  | Column 1 | Column 2 | Column 3 |\n  |---|---|---|\n  |  |  |  |\n  |  |  |  |\n\n  - child\n');
+  });
+
+  it('leaves one blank line under a rule when text follows', () => {
+    const view = mount('text‸\nmore\n');
+    run(view, 'rule');
+    expect(marked(view)).toBe('text\n\n***\n‸\nmore\n');
+  });
+});
+
+describe('input methods in table cells and callout titles', () => {
+  const end = async (view: EditorView) => {
+    act(() => { view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  };
+
+  it('writes composed text into a cell as it comes, and spaces it once the composition ends', async () => {
+    const doc = '| a | b |\n|---|---|\n|    |  |\n';
+    const cellAt = doc.lastIndexOf('|    |') + 1;
+    const view = mount(`${doc.slice(0, cellAt)}‸${doc.slice(cellAt)}`);
+    await focusPage(view);
+    act(() => { view.dispatch({ effects: setOpenBlock.of({ from: 0, to: doc.length - 1 }) }); });
+    act(() => { view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); });
+    act(() => { view.dispatch(view.state.update({ changes: { from: cellAt, insert: 'k' }, selection: { anchor: cellAt + 1 }, userEvent: 'input.type.compose' })); });
+    expect(text(view)).toBe('| a | b |\n|---|---|\n|k    |  |\n');
+    await end(view);
+    expect(marked(view)).toBe('| a | b |\n|---|---|\n| k‸ |  |\n');
+  });
+
+  it('writes a composed callout title as it comes, and puts the space before it once the composition ends', async () => {
+    const title = mount('> [!note]‸\n> body\n');
+    const at = caret(title);
+    act(() => { title.dispatch(title.state.update({ changes: { from: at, insert: 'k' }, selection: { anchor: at + 1 }, userEvent: 'input.type.compose' })); });
+    expect(text(title)).toBe('> [!note]k\n> body\n');
+    await end(title);
+    expect(text(title)).toBe('> [!note] k\n> body\n');
+  });
+});
+
+describe('Tab in a note\'s quoted code', () => {
+  it('indents after the quote marks, as before', () => {
+    const code = mount('> ```\n> co‸de\n> ```\n', NOTE);
+    act(() => { runScopeHandlers(code, new KeyboardEvent('keydown', { key: 'Tab' }), 'editor'); });
+    expect(text(code)).toBe('> ```\n>   code\n> ```\n');
+    const html = mount('> <div>\n> x‸\n> </div>\n', NOTE);
+    act(() => { runScopeHandlers(html, new KeyboardEvent('keydown', { key: 'Tab' }), 'editor'); });
+    expect(text(html)).toBe('> <div>\n>   x\n> </div>\n');
+  });
+});
+
+describe('a table that starts on a list item\'s line', () => {
+  it('adds rows at the item\'s content indent on Enter and on Tab in the last cell', async () => {
+    const view = mount('- | a | b |\n  | - | - |\n  | 1 | 2‸ |\n', NOTE);
+    await focusPage(view);
+    key(view, 'Enter');
+    expect(marked(view)).toBe('- | a | b |\n  | - | - |\n  | 1 | 2 |\n  | ‸ |  |\n');
+    const tab = mount('- | a | b |\n  | - | - |\n  | 1 | 2‸ |\n', NOTE);
+    await focusPage(tab);
+    key(tab, 'Tab');
+    expect(marked(tab)).toBe('- | a | b |\n  | - | - |\n  | 1 | 2 |\n  | ‸ |  |\n');
+  });
+});
+
+describe('formatting in a table\'s delimiter row', () => {
+  it('never writes marks there', () => {
+    const doc = '| a | b |\n|---|---|\n| 1 | 2 |\n';
+    const state = EditorState.create({ doc, selection: { anchor: 11, head: 14 }, extensions: markdownEditorExtensions(DOC) });
+    let out = doc;
+    toggleMarker('**')({ state, dispatch: (tr) => { out = tr.newDoc.toString(); } });
+    expect(out).toBe(doc);
   });
 });

@@ -1,7 +1,8 @@
 import { Prec, type EditorState, type Extension, type Line } from '@codemirror/state';
-import { keymap, type Command } from '@codemirror/view';
+import { keymap, type Command, type EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { deleteHandlers, latestTree } from './extensionPoints';
+import { rewriteSetext } from './formatCommands';
 import { docMode } from './livePreview';
 
 /*
@@ -64,7 +65,8 @@ export const headingEnter: Command = (view) => {
   const quote = quoteOf(line.text);
   const atx = atxOf(state, line, node);
   if (atx) {
-    if (main.head <= atx.textFrom) {
+    // An empty heading: a normal line under it, as at the end of one.
+    if (main.head <= atx.textFrom && atx.textTo > atx.textFrom) {
       const insert = `${blankOf(line)}\n`;
       view.dispatch({ changes: { from: line.from, insert }, selection: { anchor: atx.textFrom + insert.length }, scrollIntoView: true, userEvent: 'input' });
       return true;
@@ -98,16 +100,49 @@ export const headingEnter: Command = (view) => {
 };
 
 /**
+ * Delete at the end of a setext heading's text: the underline is part of
+ * the heading, so the key takes a blank line after it, or brings the next
+ * paragraph's text up into the heading, and never takes the underline.
+ */
+function setextDelete(view: EditorView): boolean {
+  const { state } = view;
+  const { main } = state.selection;
+  const line = state.doc.lineAt(main.head);
+  const node = headingNode(state, line);
+  const underline = node && underlineOf(state, node);
+  if (!underline || line.number !== underline.number - 1 || main.head < line.from + line.text.trimEnd().length) return false;
+  const next = underline.number < state.doc.lines ? state.doc.line(underline.number + 1) : null;
+  if (next && isBlank(next) && next.number < state.doc.lines) {
+    view.dispatch({ changes: { from: underline.to, to: next.to }, scrollIntoView: true, userEvent: 'delete.forward' });
+  } else if (next && !isBlank(next) && blockOf(state, next)?.name === 'Paragraph' && state.doc.lineAt(blockOf(state, next)?.from ?? 0).number === next.number) {
+    const text = next.text.slice(quoteOf(next.text).length);
+    view.dispatch({ changes: [{ from: main.head, to: line.to, insert: text }, { from: underline.to, to: next.to }], selection: { anchor: main.head }, scrollIntoView: true, userEvent: 'delete.forward' });
+  }
+  return true;
+}
+
+/** The block that holds a line's text. */
+function blockOf(state: EditorState, line: Line): SyntaxNode | null {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(line.from + quoteOf(line.text).length, 1); node; node = node.parent) {
+    if (node.name === 'Paragraph' || node.name === 'Document' || node.name === 'ListItem' || node.name === 'Blockquote') return node;
+  }
+  return null;
+}
+
+/**
  * Backspace at the start of a heading under a blank line takes the blank
- * line; on the line under a setext heading it goes to the heading's end,
- * taking that line when it is empty.
+ * line; a setext heading is written in "#" form as it goes, so the text
+ * above never joins it. On the line under a setext heading Backspace goes
+ * to the heading's end, taking that line when it is empty. Delete at a
+ * setext heading's end keeps its underline.
  */
 const headingBackspace = deleteHandlers.of({
   priority: 15,
   run: (view, dir) => {
     const { state } = view;
     const { main } = state.selection;
-    if (dir > 0 || !state.facet(docMode) || !main.empty || state.selection.ranges.length > 1) return false;
+    if (!state.facet(docMode) || !main.empty || state.selection.ranges.length > 1) return false;
+    if (dir > 0) return setextDelete(view);
     const line = state.doc.lineAt(main.head);
     if (line.number === 1) return false;
     const above = state.doc.line(line.number - 1);
@@ -115,6 +150,12 @@ const headingBackspace = deleteHandlers.of({
     const atx = node && atxOf(state, line, node);
     if (atx && main.head <= atx.textFrom && isBlank(above)) {
       view.dispatch({ changes: { from: above.from, to: line.from }, selection: { anchor: main.head - (line.from - above.from) }, scrollIntoView: true, userEvent: 'delete.backward' });
+      return true;
+    }
+    const setext = node && underlineOf(state, node);
+    if (node && setext && isBlank(above) && state.doc.lineAt(node.from).number === line.number && main.head === line.from + quoteOf(line.text).length) {
+      const changes = state.changes([{ from: above.from, to: line.from }, ...rewriteSetext(state, line, node, node.name.endsWith('1') ? 1 : 2)]);
+      view.dispatch({ changes, selection: { anchor: changes.mapPos(main.head, 1) }, scrollIntoView: true, userEvent: 'delete.backward' });
       return true;
     }
     if (main.head !== line.from + quoteOf(line.text).length) return false;

@@ -151,11 +151,14 @@ function containerOf(state: EditorState, block: Separated, line: Line): { prefix
  */
 export function separated(tr: Transaction): TransactionSpec | null {
   if (!tr.docChanged || !tr.isUserEvent('input') || tr.isUserEvent('input.type.compose')) return null;
+  // A file insert places its own lines and carries effects that must arrive.
+  if (tr.effects.length > 0) return null;
   const state = tr.startState;
   if (!state.facet(docMode)) return null;
   const edits: { from: number; to: number; text: string }[] = [];
   tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, text: inserted.toString() }));
-  if (edits.length !== 1 || !/\S/.test(edits[0].text)) return null;
+  // Text that opens with a blank line is already separated.
+  if (edits.length !== 1 || !/\S/.test(edits[0].text) || /^\n[ \t>]*\n/.test(edits[0].text)) return null;
   const { from, to, text } = edits[0];
   const { doc } = state;
   const line = doc.lineAt(from);
@@ -202,30 +205,58 @@ export function separated(tr: Transaction): TransactionSpec | null {
   return { changes, selection: { anchor: line.from + head.length + text.length }, scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) };
 }
 
-// Blocks that take in a text line right under them: the line would become a row or part of the HTML.
+// Blocks that take in a text line next to them: the line would become a row or part of the HTML.
 const ABSORBING = new Set(['Table', 'HTMLBlock']);
+const RULE = new Set(['HorizontalRule']);
+const KIND_OF: Record<string, string> = { Table: 'table', HTMLBlock: 'HTML block', HorizontalRule: 'horizontal rule' };
 
-/** The table or HTML block that a blank line next to `line` separates it from, on the side of `dir`. */
-function absorberAcrossBlank(state: EditorState, line: Line, dir: -1 | 1): SyntaxNode | null {
-  const gap = line.number + dir;
-  const beyond = line.number + 2 * dir;
-  if (beyond < 1 || beyond > state.doc.lines || !blank(state.doc.line(gap).text)) return null;
-  const edge = state.doc.line(beyond);
-  const tree = latestTree(state);
-  const at = dir < 0 ? edge.to : edge.from + (/^[\s>]*/.exec(edge.text)?.[0].length ?? 0);
-  for (let node: SyntaxNode | null = tree.resolveInner(at, dir < 0 ? -1 : 1); node; node = node.parent) {
-    if (!ABSORBING.has(node.name)) continue;
-    const reaches = dir < 0 ? lastLineOf(state, node).number === edge.number : state.doc.lineAt(node.from).number === edge.number;
+/** The block of one of `names` whose last (`edge` -1) or first (1) line is `line`. */
+function blockEdge(state: EditorState, line: Line, edge: -1 | 1, names: ReadonlySet<string>): SyntaxNode | null {
+  const at = edge < 0 ? line.to : line.from + (/^[\s>]*/.exec(line.text)?.[0].length ?? 0);
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, edge); node; node = node.parent) {
+    if (!names.has(node.name)) continue;
+    const reaches = edge < 0 ? lastLineOf(state, node).number === line.number : state.doc.lineAt(node.from).number === line.number;
     return reaches ? node : null;
   }
   return null;
 }
 
+/** Whether `line` is paragraph text in the container that holds `rule`, which a "---" under it would underline. */
+function paragraphOver(state: EditorState, line: Line, rule: SyntaxNode): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(line.to, -1); node; node = node.parent) {
+    if (node.name === 'Paragraph') return node.parent?.name === rule.parent?.name && node.parent?.from === rule.parent?.from;
+  }
+  return false;
+}
+
 /**
- * Backspace at the start of the text right under a table or HTML block and
- * one blank line, or Delete at the end of the text right above one, frames
- * the block, since taking the blank line out would make the text a table
- * row or part of the HTML.
+ * The block that the blank line `gap` keeps apart from the text on its
+ * other side: a table or HTML block, which would take the text in, or a
+ * "---" rule under a paragraph, which would become its setext underline.
+ * Null when taking the blank line out joins nothing.
+ */
+function guardedGap(state: EditorState, gap: Line): SyntaxNode | null {
+  if (gap.number < 2 || gap.number >= state.doc.lines || !blank(gap.text)) return null;
+  const above = state.doc.line(gap.number - 1);
+  const below = state.doc.line(gap.number + 1);
+  if (blank(above.text) || blank(below.text)) return null;
+  const absorber = blockEdge(state, above, -1, ABSORBING) ?? blockEdge(state, below, 1, ABSORBING);
+  if (absorber) return absorber;
+  const rule = /^[\s>]*-/.test(below.text) ? blockEdge(state, below, 1, RULE) : null;
+  return rule && paragraphOver(state, above, rule) ? rule : null;
+}
+
+// Where a line's text starts for Backspace: past quote marks and a heading's hidden "#" marks.
+const textStarts = (line: Line) => [
+  line.from + quoteOf(line.text).length,
+  line.from + (/^(?:[ \t]*>[ \t]?)*#{1,6}(?:[ \t]+|$)/.exec(line.text)?.[0].length ?? -1),
+];
+
+/**
+ * Backspace or Delete that would take out the only blank line between text
+ * and a table, an HTML block or a "---" rule frames the block instead: on
+ * the blank line itself, at the start of the text under it, or at the end
+ * of the text above it.
  */
 const deleteAcrossBlank = deleteHandlers.of({
   priority: 20,
@@ -234,10 +265,12 @@ const deleteAcrossBlank = deleteHandlers.of({
     const { main } = state.selection;
     if (!main.empty || state.selection.ranges.length > 1 || !state.facet(docMode)) return false;
     const line = state.doc.lineAt(main.head);
-    if (blank(line.text)) return false;
-    if (dir < 0 ? main.head !== line.from + quoteOf(line.text).length : main.head !== line.to) return false;
-    const node = absorberAcrossBlank(state, line, dir);
-    const kind = node && objectKind(state, node.name === 'Table' ? 'table' : 'HTML block');
+    let gap: Line | null = null;
+    if (blank(line.text)) gap = line;
+    else if (dir < 0 && line.number > 1 && textStarts(line).includes(main.head)) gap = state.doc.line(line.number - 1);
+    else if (dir > 0 && line.number < state.doc.lines && main.head === line.to) gap = state.doc.line(line.number + 1);
+    const node = gap && guardedGap(state, gap);
+    const kind = node && objectKind(state, KIND_OF[node.name]);
     if (!node || !kind) return false;
     view.dispatch({ effects: setFrame.of(objectOf(state, kind, node)), scrollIntoView: true });
     return true;

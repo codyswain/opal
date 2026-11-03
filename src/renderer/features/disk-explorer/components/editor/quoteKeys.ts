@@ -1,10 +1,11 @@
 import { syntaxTree } from '@codemirror/language';
 import { EditorState, Prec, Transaction, type Extension, type TransactionSpec } from '@codemirror/state';
-import { keymap, type Command, type EditorView } from '@codemirror/view';
+import { EditorView, keymap, type Command } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { Minus, MessageSquareQuote } from 'lucide-react';
 import { calloutMarker } from './blockGuards';
 import { deleteHandlers, insertItems } from './extensionPoints';
+import { blockInsertion } from './tableInsert';
 import { docMode } from './livePreview';
 
 /*
@@ -54,7 +55,8 @@ const plainQuote = deleteHandlers.of({
 
 /** Text typed right after a title-less callout's "[!type]" starts with a space, so it reads as the title. */
 export function spacedTitle(tr: Transaction): TransactionSpec | null {
-  if (!tr.isUserEvent('input.type') || !tr.docChanged || !tr.startState.facet(docMode)) return null;
+  // An input method's text moves nothing while it composes; compositionend adds the space.
+  if (!tr.isUserEvent('input.type') || tr.isUserEvent('input.type.compose') || !tr.docChanged || !tr.startState.facet(docMode)) return null;
   const state = tr.startState;
   const { main } = state.selection;
   if (!main.empty) return null;
@@ -71,21 +73,19 @@ export function spacedTitle(tr: Transaction): TransactionSpec | null {
   return { changes: { from: main.head, insert: ` ${typed}` }, selection: { anchor: main.head + typed.length + 1 }, scrollIntoView: true, userEvent: 'input.type' };
 }
 
-/** Writes `lines` on a line of their own at the caret, with blank lines around them, and puts the caret at `caret` in them. */
-function insertBlock(view: EditorView, lines: string, caret: number): void {
+/**
+ * Writes `rows` as a block of their own at the caret (tableInsert.ts says
+ * where), and puts the caret at the end of the last row, or with `below` on
+ * the line under the block.
+ */
+function insertBlock(view: EditorView, rows: readonly string[], below = false): void {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.head);
-  const empty = !/[^\s]/.test(line.text);
-  const from = empty ? line.from : line.to;
-  const before = empty ? (line.number > 1 && /\S/.test(state.doc.line(line.number - 1).text) ? '\n' : '') : '\n\n';
-  const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
-  const after = next && /\S/.test(next.text) ? '\n' : '';
-  view.dispatch({
-    changes: { from, to: empty ? line.to : from, insert: before + lines + after + (next ? '' : '\n') },
-    selection: { anchor: from + before.length + caret },
-    scrollIntoView: true,
-    userEvent: 'insert.block',
-  });
+  const { from, to, insert, end } = blockInsertion(state, rows);
+  const changes = state.changes({ from, to, insert });
+  const doc = changes.apply(state.doc);
+  const last = doc.lineAt(end);
+  const anchor = below && last.number < doc.lines ? doc.line(last.number + 1).to : end;
+  view.dispatch({ changes, selection: { anchor }, scrollIntoView: true, userEvent: 'insert.block' });
   view.focus();
 }
 
@@ -94,7 +94,7 @@ export const insertCalloutItem = insertItems.of({
   label: 'Callout',
   icon: MessageSquareQuote,
   order: 30,
-  run: (view) => insertBlock(view, '> [!note] Note\n> ', '> [!note] Note\n> '.length),
+  run: (view) => insertBlock(view, ['> [!note] Note', '> ']),
 });
 
 export const insertRuleItem = insertItems.of({
@@ -102,7 +102,20 @@ export const insertRuleItem = insertItems.of({
   label: 'Horizontal line',
   icon: Minus,
   order: 40,
-  run: (view) => insertBlock(view, '***\n', '***\n'.length),
+  run: (view) => insertBlock(view, ['***'], true),
+});
+
+/** Once an input method has written a title right after "[!type]", a space goes between them. */
+const spacedComposedTitle = EditorView.domEventObservers({
+  compositionend: (_event, view) => {
+    setTimeout(() => {
+      if (!view.dom.isConnected || view.composing || !view.state.facet(docMode)) return;
+      const line = view.state.doc.lineAt(view.state.selection.main.head);
+      const marker = calloutMarker(view.state, line);
+      if (!marker || marker.to >= line.to || /[ \t]/.test(view.state.sliceDoc(marker.to - 1, marker.to))) return;
+      view.dispatch({ changes: { from: marker.to, insert: ' ' }, userEvent: 'input' });
+    }, 0);
+  },
 });
 
 /** A document's quote and callout keys, and its Insert items for them. */
@@ -111,5 +124,6 @@ export const quoteKeys: Extension = [
   insertCalloutItem,
   insertRuleItem,
   EditorState.transactionFilter.of((tr) => spacedTitle(tr) ?? tr),
+  spacedComposedTitle,
   Prec.high(keymap.of([{ key: 'Enter', run: leaveQuote }])),
 ];

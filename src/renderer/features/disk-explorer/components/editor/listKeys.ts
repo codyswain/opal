@@ -1,7 +1,7 @@
 import { ChangeSet, Prec, type ChangeSpec, type EditorState, type Extension, type Line, type StateCommand, type Transaction } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import { deleteHandlers, latestTree, protectedIn } from './extensionPoints';
+import { deleteHandlers, latestTree } from './extensionPoints';
 import { listItemOf, selectedLines } from './formatCommands';
 import { docMode } from './livePreview';
 
@@ -133,7 +133,6 @@ export function nestListItems(more: boolean): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     const items = selectedLines(state)
-      .filter((line) => protectedIn(state, line.from, line.to).length === 0)
       .map((line) => itemOn(state, line))
       .filter((item): item is Item => item !== null);
     const changes = items.flatMap((item) => (more ? nest(state, item) : outdent(state, item)));
@@ -170,6 +169,16 @@ function nextMarker(state: EditorState, item: Item): string {
   return `${state.sliceDoc(item.line.from, item.mark.from)}${marker}${box} `;
 }
 
+// Blocks a line's text can be in, past the inline formatting around it.
+const BLOCKS = new Set(['Paragraph', 'FencedCode', 'CodeBlock', 'Table', 'HTMLBlock', 'CommentBlock', 'LinkReference', 'ListItem', 'Blockquote', 'Document']);
+
+/** The block that holds the text before `at`. */
+function blockAt(state: EditorState, at: number): SyntaxNode | null {
+  let node: SyntaxNode | null = latestTree(state).resolveInner(at, -1);
+  while (node && !BLOCKS.has(node.name)) node = node.parent;
+  return node;
+}
+
 /**
  * Enter at the end of a list item's later paragraph starts the next item,
  * as it does at the end of the item's first line.
@@ -180,7 +189,7 @@ const enterAfterParagraph: StateCommand = ({ state, dispatch }) => {
   const line = state.doc.lineAt(main.head);
   if (main.head !== line.to || !/[^\s>]/.test(line.text) || itemOn(state, line)) return false;
   // Only a paragraph's line: Enter in code, a table or HTML inside an item stays theirs.
-  if (latestTree(state).resolveInner(line.to, -1).name !== 'Paragraph') return false;
+  if (blockAt(state, line.to)?.name !== 'Paragraph') return false;
   const node = itemAround(state, line.to);
   const item = node && itemOf(state, node);
   if (!item || item.line.number === line.number) return false;

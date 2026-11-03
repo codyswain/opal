@@ -97,3 +97,21 @@ describe('setext headings in a document', () => {
     expect(out).toBe('Title\n\nnext\n');
   });
 });
+
+describe('heading edges', () => {
+  it('starts a normal line under an empty heading on Enter', () => {
+    expect(press('# ‸\n', 'Enter')).toBe('# \n‸\n');
+  });
+
+  it('writes a setext heading in "#" form when Backspace takes the blank line above it, so the text above never joins it', () => {
+    expect(press('Para\n\n‸Title\n===\n', 'Backspace')).toBe('Para\n# ‸Title\n');
+    expect(press('Para\n\n‸Title\n---\n\nnext\n', 'Backspace')).toBe('Para\n## ‸Title\n\nnext\n');
+  });
+
+  it('keeps a setext underline on Delete at the heading\'s end, taking the blank line after it or bringing the next paragraph up', () => {
+    expect(press('Title‸\n===\n\nnext\n', 'Delete')).toBe('Title‸\n===\nnext\n');
+    expect(press('Title‸\n===\nnext\n', 'Delete')).toBe('Title‸next\n===\n');
+    expect(press('Title‸\n===\n| a |\n|---|\n', 'Delete')).toBe('Title‸\n===\n| a |\n|---|\n');
+    expect(press('Title‸\n===\n', 'Delete')).toBe('Title‸\n===\n');
+  });
+});

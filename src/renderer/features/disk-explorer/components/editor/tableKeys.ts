@@ -1,5 +1,5 @@
 import { EditorSelection, EditorState, Prec, Transaction, type Extension, type Line, type TransactionSpec } from '@codemirror/state';
-import { keymap, type Command, type EditorView } from '@codemirror/view';
+import { EditorView, keymap, type Command } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree } from './extensionPoints';
 import { cellCaretOf, docMode, drawnBlockAt, setCellCaret } from './livePreview';
@@ -70,11 +70,14 @@ function enter(cell: Cell): EditorSelection {
   return EditorSelection.single(Math.min(cell.end, cell.start + 1));
 }
 
+/** What a new row starts with: the quote marks and indent before the table, a list item's marker as spaces. */
+function rowPrefix(state: EditorState, table: SyntaxNode): string {
+  return state.sliceDoc(state.doc.lineAt(table.from).from, table.from).replace(/[^\s>]/g, ' ');
+}
+
 /** An empty row as wide as the header, with the quote marks or indent the table sits in. */
 function emptyRow(state: EditorState, table: SyntaxNode, header: SyntaxNode): string {
-  const first = state.doc.lineAt(table.from);
-  const prefix = state.sliceDoc(first.from, table.from);
-  return `${prefix}|${'  |'.repeat(Math.max(1, cellsOf(state, header).length))}`;
+  return `${rowPrefix(state, table)}|${'  |'.repeat(Math.max(1, cellsOf(state, header).length))}`;
 }
 
 /** Adds an empty row after `line`, with the caret in its first cell. */
@@ -82,8 +85,7 @@ function addRow(state: EditorState, table: SyntaxNode, line: Line, dispatch: Par
   const header = rowsOf(table).find((row) => row.name === 'TableHeader');
   if (!header) return false;
   const row = emptyRow(state, table, header);
-  const prefix = state.sliceDoc(state.doc.lineAt(table.from).from, table.from);
-  const caret = line.to + 1 + prefix.length + 2;
+  const caret = line.to + 1 + rowPrefix(state, table).length + 2;
   dispatch(state.update({ changes: { from: line.to, insert: `\n${row}` }, selection: { anchor: caret }, scrollIntoView: true, userEvent: 'input' }));
   return true;
 }
@@ -159,7 +161,8 @@ const newRow: Command = (view) => {
  */
 export function spacedCell(tr: Transaction): TransactionSpec | null {
   const state = tr.startState;
-  if (!tr.isUserEvent('input.type') || !state.facet(docMode)) return null;
+  // An input method's text moves nothing while it composes; compositionend spaces it.
+  if (!tr.isUserEvent('input.type') || tr.isUserEvent('input.type.compose') || !state.facet(docMode)) return null;
   const { main } = state.selection;
   if (!main.empty || state.selection.ranges.length > 1) return null;
   let typed = '';
@@ -185,6 +188,24 @@ export function spacedCell(tr: Transaction): TransactionSpec | null {
   return null;
 }
 
+/** Once an input method has written into a cell, the cell's text gets its space on each side. */
+function spaceComposedCell(view: EditorView): void {
+  const { state } = view;
+  const head = state.selection.main.head;
+  const table = state.facet(docMode) ? tableAt(state, head) : null;
+  const row = table && rowsOf(table).find((each) => each.name !== 'TableDelimiter' && each.from <= head && head <= each.to);
+  const cell = row && cellsOf(state, row).find((each) => each.start <= head && head <= each.end);
+  if (!cell || cell.to === cell.from || (cell.from > cell.start && cell.to < cell.end)) return;
+  const insert = ` ${state.sliceDoc(cell.from, cell.to)} `;
+  view.dispatch({ changes: { from: cell.start, to: cell.end, insert }, selection: { anchor: cell.start + 1 + (head - cell.from) }, userEvent: 'input' });
+}
+
+const composedCells = EditorView.domEventObservers({
+  compositionend: (_event, view) => {
+    setTimeout(() => { if (view.dom.isConnected && !view.composing) spaceComposedCell(view); }, 0);
+  },
+});
+
 /** A table's keys, for notes and documents, and a document's cell spacing. */
 export const tableKeys: Extension = [
   Prec.high(keymap.of([
@@ -192,4 +213,5 @@ export const tableKeys: Extension = [
     { key: 'Enter', run: newRow },
   ])),
   EditorState.transactionFilter.of((tr) => spacedCell(tr) ?? tr),
+  composedCells,
 ];

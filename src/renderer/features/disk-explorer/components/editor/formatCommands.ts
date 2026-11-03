@@ -48,21 +48,20 @@ function textStart(state: EditorState, line: Line, marks: ReadonlySet<string> = 
   }
 }
 
-/**
- * The lines the selection touches. A selection that ends at the start of a
- * line leaves that line out, and so does a protected range that covers a
- * line whole, such as a table's.
- */
-export function selectedLines(state: EditorState): Line[] {
+/** The lines the selection touches. A selection that ends at the start of a line leaves that line out. */
+function touchedLines(state: EditorState): Line[] {
   const lines = new Map<number, Line>();
   for (const range of state.selection.ranges) {
     const last = state.doc.lineAt(range.to);
     const end = !range.empty && range.to === last.from && last.from > range.from ? last.number - 1 : last.number;
     for (let number = state.doc.lineAt(range.from).number; number <= end; number += 1) lines.set(number, state.doc.line(number));
   }
-  return [...lines.values()]
-    .filter((line) => !protectedIn(state, line.from, line.to).some((range) => range.from <= line.from && range.to >= line.to))
-    .sort((a, b) => a.number - b.number);
+  return [...lines.values()].sort((a, b) => a.number - b.number);
+}
+
+/** The lines the selection touches, less those a protected range covers whole, such as a table's. */
+export function selectedLines(state: EditorState): Line[] {
+  return touchedLines(state).filter((line) => !protectedIn(state, line.from, line.to).some((range) => range.from <= line.from && range.to >= line.to));
 }
 
 /**
@@ -429,7 +428,7 @@ function setextLater(state: EditorState, line: Line): boolean {
  * form, its lines joined and the underline gone, or as normal text with a
  * blank line where the underline was when text follows it.
  */
-function rewriteSetext(state: EditorState, line: Line, node: SyntaxNode, level: number): ChangeSpec[] {
+export function rewriteSetext(state: EditorState, line: Line, node: SyntaxNode, level: number): ChangeSpec[] {
   const mark = node.getChild('HeaderMark');
   if (!mark) return [];
   const underline = state.doc.lineAt(mark.from);
@@ -578,7 +577,8 @@ const QUOTE_MARKS = /^ {0,3}(?:> ?)+/;
 export function indentInQuote(more: boolean): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const quoted = selectedLines(state).map((line) => ({ line, quote: QUOTE_MARKS.exec(line.text)?.[0] ?? '' }));
+    // Every touched line, code and HTML included: a note's Tab indents them after the quote marks.
+    const quoted = touchedLines(state).map((line) => ({ line, quote: QUOTE_MARKS.exec(line.text)?.[0] ?? '' }));
     if (quoted.some(({ quote }) => !quote)) return false;
     const unit = state.facet(indentUnit);
     const changes = quoted.flatMap(({ line, quote }): ChangeSpec[] => {
