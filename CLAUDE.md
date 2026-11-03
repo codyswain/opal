@@ -36,7 +36,7 @@ not exist.
   is in `src/common/dayModel.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
-    `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`
+    `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`
 - **Pins:** each opened folder keeps its pinned files in `.opal/pins.json`
   (paths from the folder's top), so git syncs them across Macs. `PinsService`
   in `src/main/pins` reads and writes it (`pins:list`, `pins:set`, which
@@ -44,6 +44,13 @@ not exist.
   `pinsStore` in `disk-explorer` follows renames, moves and Move to Trash
   through `pathMutationCoordinator`, and `PinnedSection` shows the pins
   under the sidebar's nav
+- **Files:** pages embed files by their path from the vault's top. `src/main/files`
+  copies a dropped, pasted or picked file into the folder `.opal/files.json`
+  names (`files/` when there is none) as `YYYY-MM/<stem>.<hash>.<ext>`, turning
+  HEIC and TIFF into JPEG and scaling large photos with `sips`. Its `git-lfs`
+  store reads Git LFS placeholders: `opal-file://` serves their bytes from
+  git's object store, and Download runs `git lfs fetch` for one file. Opal
+  never writes LFS files into the working tree
 - **Feature-based structure:** Self-contained modules under `src/renderer/features/`
   (`disk-explorer` is the Files feature; `shell` is the workspace frame;
   `day-sidebar` is the right sidebar, one vault day beside the page)

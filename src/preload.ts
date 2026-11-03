@@ -1,10 +1,12 @@
 import type { VaultAPI } from "./types/vault";
 import type { PinsAPI } from "./types/pins";
 import type { VaultDayChange } from "./types/day";
-import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from "electron";
 import type { ThemeReport } from "./common/theme";
 import type { OpenPageRequest } from "./common/opalLink";
 import type { MarkdownCopyLabel, PageExtension, UnsavedPage } from "./types/markdown";
+import type { FilesAPI } from "./renderer/shared/types/filesApi";
+import { FILE_IMPORT_LIMIT, fileTooLarge } from "./types/files";
 
 /* 
   The preload script runs in an isolated context. (since contextIsolation is 
@@ -178,3 +180,19 @@ const pinsAPI: PinsAPI = {
   set: (root, paths, base) => ipcRenderer.invoke("pins:set", root, paths, base),
 };
 contextBridge.exposeInMainWorld("pinsAPI", pinsAPI);
+
+const filesAPI: FilesAPI = {
+  // A file from Finder goes by its path; File.path is gone in Electron 32.
+  // A file with no path is sent as bytes, after the size check main also makes.
+  import: async (page, file) => {
+    const dropped = webUtils.getPathForFile(file);
+    if (dropped) return ipcRenderer.invoke("files:import", page, { path: dropped });
+    if (file.size > FILE_IMPORT_LIMIT) return { success: false, error: fileTooLarge(file.name) };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return ipcRenderer.invoke("files:import", page, { bytes, name: file.name });
+  },
+  pickAndImport: (page) => ipcRenderer.invoke("files:pick-and-import", page),
+  status: (target) => ipcRenderer.invoke("files:status", target),
+  fetch: (target) => ipcRenderer.invoke("files:fetch", target),
+};
+contextBridge.exposeInMainWorld("filesAPI", filesAPI);
