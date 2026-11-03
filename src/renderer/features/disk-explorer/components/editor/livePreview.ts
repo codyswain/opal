@@ -8,6 +8,7 @@ import { classifyFile, pageName } from '@/common/fileKind';
 import { normalizeFsPath, parentFsPath } from '@/common/fsPaths';
 import { toOpalFileUrl } from '@/common/opalFileUrl';
 import { activityLogSection } from './activityLog';
+import { followLink } from './linkSchemes';
 import { blockRenderers, nodeDecorators, type DecorateContext, type Reveal, type TextRange } from './extensionPoints';
 import { CalloutIconWidget } from './callouts';
 import {
@@ -899,9 +900,9 @@ function linkRevealed(state: EditorState, at: number): boolean {
   return false;
 }
 
-/** Opens a Markdown link: one with a scheme in the default app, which the main process allows for web and mail, and a path in Opal. */
+/** Opens a Markdown link: one with a scheme by `followLink`, which keeps vault links in Opal, and a path in Opal. */
 export function openLink(view: EditorView, href: string, newTab: boolean): void {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) window.open(href, '_blank');
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) void followLink(view, href, newTab);
   else void openPathLink(view, href, newTab);
 }
 
