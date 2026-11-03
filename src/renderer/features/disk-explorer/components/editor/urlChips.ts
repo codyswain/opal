@@ -1,0 +1,168 @@
+import { isolateHistory } from '@codemirror/commands';
+import { StateField, type EditorState, type Extension } from '@codemirror/state';
+import { Decoration, WidgetType } from '@codemirror/view';
+import type { SyntaxNode } from '@lezer/common';
+import { toast } from 'sonner';
+import { nodeDecorators, objectKinds, type DecorateContext } from './extensionPoints';
+import { fileIcon, type FileIconName } from './fileIcons';
+import { videoService } from './fileEmbeds';
+import { autolinkHref, openLink } from './livePreview';
+
+/*
+ * Bare addresses of the services Cody works in, drawn as chips with a grey
+ * glyph and a label read from the address alone: "SW-640", "opal#13",
+ * "Google Doc", "Email". Nothing is fetched. A chip forms once the address
+ * is ended by a space, Enter or a paste, so typing one is never interrupted.
+ * A YouTube or Loom address alone on its line is a card (fileWidgets.ts).
+ * Written links with their own text stay ordinary links.
+ */
+
+export interface UrlChip {
+  label: string;
+  icon: FileIconName;
+  service: string;
+}
+
+const segments = (url: URL) => url.pathname.split('/').filter(Boolean).map((part) => {
+  try { return decodeURIComponent(part); } catch { return part; }
+});
+
+/** The chip for a known service's address, or null for any other. */
+export function urlChip(address: string): UrlChip | null {
+  let url: URL;
+  try { url = new URL(address); } catch { return null; }
+  if (!/^https?:$/.test(url.protocol)) return null;
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  const path = segments(url);
+  if (host === 'linear.app') {
+    const issue = path.indexOf('issue');
+    if (issue !== -1 && path[issue + 1]) return { label: path[issue + 1].toUpperCase(), icon: 'squareKanban', service: 'Linear' };
+    if (path.includes('project')) return { label: 'Linear project', icon: 'squareKanban', service: 'Linear' };
+    return { label: 'Linear', icon: 'squareKanban', service: 'Linear' };
+  }
+  if (host === 'github.com' && path.length >= 2) {
+    const [owner, repo, kind, id] = path;
+    if ((kind === 'pull' || kind === 'issues') && id) return { label: `${repo}#${id}`, icon: 'github', service: 'GitHub' };
+    if (kind === 'commit' && id) return { label: `${repo}@${id.slice(0, 7)}`, icon: 'github', service: 'GitHub' };
+    if ((kind === 'blob' || kind === 'tree') && path.length > 4) return { label: path[path.length - 1], icon: 'github', service: 'GitHub' };
+    return { label: `${owner}/${repo}`, icon: 'github', service: 'GitHub' };
+  }
+  if (host === 'docs.google.com') {
+    if (path[0] === 'document') return { label: 'Google Doc', icon: 'fileText', service: 'Google Docs' };
+    if (path[0] === 'spreadsheets') return { label: 'Google Sheet', icon: 'sheet', service: 'Google Sheets' };
+    if (path[0] === 'presentation') return { label: 'Google Slides', icon: 'presentation', service: 'Google Slides' };
+    if (path[0] === 'forms') return { label: 'Google Form', icon: 'fileText', service: 'Google Forms' };
+    return null;
+  }
+  if (host === 'drive.google.com') return { label: path.includes('folders') ? 'Drive folder' : 'Drive file', icon: path.includes('folders') ? 'folder' : 'file', service: 'Google Drive' };
+  if (host === 'calendar.google.com') return { label: 'Calendar event', icon: 'calendar', service: 'Google Calendar' };
+  if (host === 'mail.google.com') return { label: 'Email', icon: 'mail', service: 'Gmail' };
+  if (host.endsWith('.slack.com') || host === 'slack.com') {
+    return { label: path[0] === 'archives' && path[2] ? 'Slack message' : path[0] === 'archives' ? 'Slack channel' : 'Slack', icon: 'slack', service: 'Slack' };
+  }
+  if (host === 'figma.com') {
+    const name = path.length >= 3 && ['file', 'design', 'board', 'proto'].includes(path[0]) ? path[2].replace(/-/g, ' ').trim() : '';
+    return { label: name || 'Figma file', icon: 'figma', service: 'Figma' };
+  }
+  if (host.endsWith('onshape.com') && path[0] === 'documents') return { label: 'Onshape document', icon: 'box', service: 'Onshape' };
+  if (host === 'notion.so' || host.endsWith('.notion.site')) {
+    const slug = path[path.length - 1] ?? '';
+    const title = slug.replace(/-?[0-9a-f]{32}$/i, '').replace(/-/g, ' ').trim();
+    return { label: title || 'Notion page', icon: 'fileText', service: 'Notion' };
+  }
+  const video = videoService(url.href);
+  if (video) return { label: `${video} video`, icon: 'play', service: video };
+  return null;
+}
+
+/** Where an address being typed ends, while the caret sits right after it; null once a space, Enter, paste or move ends it. */
+const typingAddress = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    if (tr.isUserEvent('input.type')) {
+      const head = tr.state.selection.main.head;
+      return /\S/.test(tr.state.sliceDoc(head - 1, head)) ? head : null;
+    }
+    if (!tr.docChanged && !tr.selection) return value;
+    return null;
+  },
+});
+
+class UrlChipWidget extends WidgetType {
+  constructor(readonly href: string, readonly chip: UrlChip) { super(); }
+
+  eq(other: UrlChipWidget) {
+    return other.href === this.href && other.chip.label === this.chip.label;
+  }
+
+  toDOM() {
+    const chip = document.createElement('span');
+    chip.className = 'cm-file-chip cm-url-chip';
+    chip.dataset.object = 'url';
+    chip.dataset.href = this.href;
+    chip.setAttribute('role', 'link');
+    chip.setAttribute('aria-label', `${this.chip.service}, ${this.chip.label}`);
+    chip.title = this.href;
+    const icon = document.createElement('span');
+    icon.className = 'cm-file-chip-icon';
+    icon.append(fileIcon(this.chip.icon, 16));
+    const label = document.createElement('span');
+    label.className = 'cm-file-chip-name';
+    label.textContent = this.chip.label;
+    chip.append(icon, label);
+    return chip;
+  }
+
+  ignoreEvent() { return false; }
+}
+
+/** A bare address of a known service, not inside a written link. */
+function bareAddress(state: EditorState, node: SyntaxNode): { href: string; chip: UrlChip } | null {
+  const parent = node.parent?.name;
+  if (parent === 'Link' || parent === 'Image' || parent === 'LinkReference' || parent === 'Autolink') return null;
+  const href = autolinkHref(state.sliceDoc(node.from, node.to));
+  const chip = urlChip(href);
+  return chip ? { href, chip } : null;
+}
+
+function drawUrl(ctx: DecorateContext, node: SyntaxNode): boolean {
+  const found = bareAddress(ctx.state, node);
+  if (!found || ctx.covered(node.from) || ctx.reveal.span(node.from, node.to)) return false;
+  if (ctx.state.field(typingAddress, false) === node.to) return false;
+  ctx.out.push(Decoration.replace({ widget: new UrlChipWidget(found.href, found.chip) }).range(node.from, node.to));
+  return true;
+}
+
+async function copy(text: string, done: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    toast.error('Could not copy.');
+  }
+}
+
+/** In a document, a service chip is one object: one Backspace takes it, and its bar opens or copies the address. */
+const urlObject = objectKinds.of({
+  kind: 'url',
+  nodes: ['URL'],
+  block: false,
+  test: (state, node) => bareAddress(state, node) !== null,
+  open: (view, obj) => openLink(view, autolinkHref(view.state.sliceDoc(obj.from, obj.to)), false),
+  destination: (state, obj) => {
+    try {
+      const url = new URL(autolinkHref(state.sliceDoc(obj.from, obj.to)));
+      return `${url.hostname.replace(/^www\./, '')}${url.pathname === '/' ? '' : url.pathname}`;
+    } catch {
+      return null;
+    }
+  },
+  actions: () => [
+    { id: 'open', label: 'Open', run: (view, obj) => openLink(view, autolinkHref(view.state.sliceDoc(obj.from, obj.to)), false) },
+    { id: 'copy-link', label: 'Copy link', run: (view, obj) => { void copy(autolinkHref(view.state.sliceDoc(obj.from, obj.to)), 'Link copied.'); } },
+    { id: 'remove', label: 'Remove', run: (view, obj) => view.dispatch({ changes: { from: obj.from, to: obj.to }, annotations: isolateHistory.of('full'), userEvent: 'delete' }) },
+  ],
+});
+
+/** Service chips on every page. */
+export const urlChips: Extension = [typingAddress, nodeDecorators.of({ nodes: ['URL'], decorate: drawUrl }), urlObject];

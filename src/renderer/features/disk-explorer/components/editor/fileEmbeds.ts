@@ -17,7 +17,7 @@ import { namesFile, parseWikiTarget } from './wikiLinks';
  */
 
 /** The syntax nodes a file link can be. */
-export const FILE_NODES: readonly string[] = ['Embed', 'WikiLink', 'Image', 'Link'];
+export const FILE_NODES: readonly string[] = ['Embed', 'WikiLink', 'Image', 'Link', 'URL'];
 
 export type FileForm = 'wiki' | 'embed' | 'image' | 'link';
 export type FileLook = 'chip' | 'card' | 'preview';
@@ -146,6 +146,16 @@ export function fileRefOf(state: EditorState, node: SyntaxNode, links: ReadonlyM
       kind,
       alone,
       inTable,
+    };
+  }
+  if (node.name === 'URL') {
+    // A bare YouTube or Loom address alone on its line is a card; in text it is a chip (urlChips.ts).
+    const parent = node.parent?.name;
+    const address = state.sliceDoc(node.from, node.to);
+    if (!alone || parent === 'Link' || parent === 'Image' || parent === 'Autolink' || parent === 'LinkReference' || !videoService(address)) return null;
+    return {
+      form: 'link', from: node.from, to: node.to, textFrom: node.from, textTo: node.to, urlFrom: node.from, urlTo: node.to,
+      target: address, fragment: null, slot: null, text: null, path: null, url: address, kind: 'video', alone, inTable,
     };
   }
   if (node.name !== 'Image' && node.name !== 'Link') return null;

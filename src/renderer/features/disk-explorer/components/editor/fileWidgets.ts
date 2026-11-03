@@ -35,6 +35,7 @@ import { destinationOf, fileActions, locateFile, openFile, quickLookFile, refAt,
 import { objectFrame } from './objectFrame';
 import { ImageWidget, fileChanged } from './previewWidgets';
 import { linkPicker } from './linkPicker';
+import { urlChips } from './urlChips';
 import { opensNewTab, pageContext, resolvedLinks, wikiNames } from './wikiLinks';
 import './files.css';
 
@@ -776,5 +777,6 @@ export const fileObjects: Extension = [
   noteClicks,
   framedFiles,
   wikiNames,
+  urlChips,
   linkPicker,
 ];
