@@ -19,6 +19,7 @@ import {
 } from '@/renderer/features/disk-explorer/components/editor/fileEmbeds';
 import { objectFrame } from '@/renderer/features/disk-explorer/components/editor/objectFrame';
 import { objectKinds } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
+import { metaLine } from '@/renderer/features/disk-explorer/components/editor/fileWidgets';
 import { linksResolved, resolvedLinks } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installFilesApi } from '@/tests/helpers/filesApi';
@@ -290,6 +291,12 @@ describe('file widgets', () => {
     expect(view.contentDOM.querySelector('.cm-file-card')).toHaveAttribute('data-state', 'missing');
     // The PDF beside it, unchanged, keeps its element.
     expect(view.contentDOM.querySelector('.cm-file-pdf')).toBe(pdf);
+  });
+
+  it('gives an empty file its size and a notebook its kind', () => {
+    const base = { path: '/Vault/x', mtimeMs: 0, kind: 'text' as const, status: 'local' as const };
+    expect(metaLine('empty.txt', 'text', { ...base, name: 'empty.txt', size: 0 })).toBe('Text · 0 B');
+    expect(metaLine('Analysis.ipynb', 'other', { ...base, name: 'Analysis.ipynb', size: 25, kind: 'other' })).toBe('Jupyter notebook · 25 B');
   });
 
   it('keeps a player across a redraw of its line', async () => {

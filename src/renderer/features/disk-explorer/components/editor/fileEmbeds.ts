@@ -334,6 +334,7 @@ export function kindLabel(name: string, kind: FileKind): string {
     aif: 'AIFF audio', aiff: 'AIFF audio', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', gif: 'GIF image',
     webp: 'WebP image', heic: 'HEIC image', heif: 'HEIF image', tif: 'TIFF image', tiff: 'TIFF image', svg: 'SVG image',
     avif: 'AVIF image', bmp: 'BMP image', sh: 'Shell script', py: 'Python script', command: 'Command', app: 'App', jar: 'Java archive',
+    ipynb: 'Jupyter notebook', xml: 'XML', toml: 'TOML',
   };
   if (labels[extension]) return labels[extension];
   if (kind === 'text') return 'Text';

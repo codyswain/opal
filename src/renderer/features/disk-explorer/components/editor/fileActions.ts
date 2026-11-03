@@ -521,7 +521,7 @@ export function destinationOf(state: EditorState, obj: PageObject): string | nul
   const name = fileName(ref);
   const info = ref.path ? knownInfo(ref.path) : null;
   if (ref.path && info === undefined) void fileInfo(ref.path);
-  return [name, kindLabel(name, ref.kind), info?.size ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
+  return [name, kindLabel(name, ref.kind), typeof info?.size === 'number' ? formatBytes(info.size) : null].filter(Boolean).join(' · ');
 }
 
 const IMAGE_SIZES = [

@@ -84,7 +84,8 @@ export function metaLine(name: string, kind: FileKind, info: FileInfo | null | u
   const parts = [kindLabel(name, kind)];
   if (info?.pages) parts.push(`${info.pages} ${info.pages === 1 ? 'page' : 'pages'}`);
   if (info?.duration) parts.push(formatDuration(info.duration));
-  if (info?.size) parts.push(formatBytes(info.size));
+  // An empty file says 0 B like any other.
+  if (typeof info?.size === 'number') parts.push(formatBytes(info.size));
   return parts.join(' · ');
 }
 
