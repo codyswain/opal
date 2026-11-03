@@ -1120,4 +1120,11 @@ describe('code edge cases, second pass', () => {
     expect(pickFor('rust')).toBe('```rust\ncode\n```\n');
     expect(pickFor('swi')).toBe('```swift\ncode\n```\n');
   });
+  it('resolves link definitions after an unclosed fence in a quote or on a list item\'s line', () => {
+    for (const opening of ['> ```\n> code', '- ```\n  code']) {
+      const doc = `${opening}\n\nSee [docs][ref].\n\n[ref]: https://example.com\n`;
+      const view = mount(doc, 0, NOTE);
+      expect(view.contentDOM.querySelector('[data-href]')?.getAttribute('data-href')).toBe('https://example.com');
+    }
+  });
 });

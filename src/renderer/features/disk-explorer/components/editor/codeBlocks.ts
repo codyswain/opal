@@ -4,7 +4,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type Command, t
 import type { SyntaxNode } from '@lezer/common';
 import { Copy, SquareCode, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { CODE_LANGUAGES, fenceLanguage, matchLanguages, onLanguageLoaded, type FenceLanguage } from './codeLanguages';
+import { CODE_LANGUAGES, fenceLanguage, hasLoaded, matchLanguages, onLanguageLoaded, type FenceLanguage } from './codeLanguages';
 import { firstMarkAfter, highlightMarks, onHighlightReady } from './codeHighlight';
 import {
   blockRenderers,
@@ -524,7 +524,7 @@ export class CodeBlockWidget extends WidgetType {
       });
     }
     // A language still loading colours the block once it is ready.
-    if (this.language.language && highlightMarks(this.code, this.language.language).length === 0 && this.code.trim()) {
+    if (this.language.language && !hasLoaded(this.language.language) && this.code.trim()) {
       const stop = onLanguageLoaded(() => {
         stop();
         if (lines.isConnected) this.fill(lines, limit);
@@ -774,9 +774,12 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
   // A line of text right above or below the box keeps a gap from it.
   const text = (number: number) => number >= 1 && number <= doc.lines && !/^[\s>]*$/.test(doc.line(number).text);
   if (shown(open)) {
-    ctx.lineClass(open.from, `cm-code-line cm-code-head${text(open.number - 1) ? ' cm-code-after-text' : ''}`, style);
+    const marked = LIST_MARK_END.test(doc.sliceString(open.from, fence.node.from));
+    // A block with no language has no header row: its label and Copy show over the box's corner, so its top matches its bottom.
+    const quiet = language.quiet && !marked && !diagramFence(state, fence);
+    ctx.lineClass(open.from, `cm-code-line cm-code-head${quiet ? ' cm-code-quiet' : ''}${text(open.number - 1) ? ' cm-code-after-text' : ''}`, style);
     // A fence on a list item's line keeps the item's marker, which the list draws.
-    if (!LIST_MARK_END.test(doc.sliceString(open.from, fence.node.from))) ctx.hide(open.from, fence.node.from);
+    if (!marked) ctx.hide(open.from, fence.node.from);
     ctx.out.push(Decoration.replace({ widget: new CodeHeaderWidget(language.label, language.quiet, active, diagramFence(state, fence) !== null) }).range(fence.node.from, open.to));
   }
   const diff = language.language?.id === 'diff';
@@ -786,7 +789,7 @@ function drawInPlace(ctx: DecorateContext, fence: Fence): void {
     const classes = ['cm-code-line'];
     if (collapsed && index === COLLAPSE_AFTER - 1) classes.push('cm-code-fade');
     if (last && (after || !close)) classes.push('cm-code-bottom');
-    if (last && !close) classes.push('cm-code-unclosed');
+    if (last && !close) classes.push(from === line.to && lines.length > 1 ? 'cm-code-unclosed cm-code-unclosed-empty' : 'cm-code-unclosed');
     if (diff) {
       const kind = diffClass(doc.sliceString(from, line.to));
       classes.push(kind);

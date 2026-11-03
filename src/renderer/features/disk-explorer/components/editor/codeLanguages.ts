@@ -127,6 +127,11 @@ export function parserFor(language: CodeLanguage): Parser | null {
   return null;
 }
 
+/** Whether a language's parser has loaded. */
+export function hasLoaded(language: CodeLanguage): boolean {
+  return loaded.has(language.id);
+}
+
 /** Calls `listener` whenever a language finishes loading, until the returned function is called. */
 export function onLanguageLoaded(listener: () => void): () => void {
   listeners.add(listener);

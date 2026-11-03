@@ -205,7 +205,8 @@ export function drawMermaid(source: string, theme: DiagramTheme): Promise<Drawn>
       theme: 'base',
       securityLevel: 'strict',
       htmlLabels: false,
-      flowchart: { htmlLabels: false },
+      // Tighter than Mermaid's own spacing and smooth edges, so a small chart stays small and a back edge has no kinks.
+      flowchart: { htmlLabels: false, curve: 'basis', nodeSpacing: 28, rankSpacing: 32, padding: 8, diagramPadding: 8 },
       maxTextSize: MAX_TEXT,
       maxEdges: MAX_EDGES,
       suppressErrorRendering: true,
@@ -296,6 +297,8 @@ function drawInto(canvas: HTMLElement, kind: DiagramKind, source: string, showSo
     image.width = result.width;
     image.height = result.height;
     canvas.append(image);
+    // Pictures of widgets that are gone go when the next one is drawn.
+    for (const picture of pictures) if (!picture.image.isConnected) pictures.delete(picture);
     pictures.add({ image, source });
     watchTheme();
   });
@@ -306,6 +309,12 @@ export function sizeLimit(message: string): string | null {
   if (/edge limit exceeded|maxEdges/i.test(message)) return `Too large to draw (over ${MAX_EDGES.toLocaleString('en-US')} connections)`;
   if (/maximum text size|maxTextSize/i.test(message)) return `Too large to draw (over ${MAX_TEXT.toLocaleString('en-US')} characters)`;
   return null;
+}
+
+/** The first line of Mermaid's message, naming a line the source has: an error at the end of the text is on its last line. */
+export function errorLine(message: string, source: string): string {
+  const lines = source.replace(/\s+$/, '').split('\n').length;
+  return (message.split('\n')[0] ?? message).replace(/:\s*$/, '').replace(/\bon line (\d+)/, (text, line: string) => (Number(line) > lines ? `on line ${lines}` : text));
 }
 
 function showError(canvas: HTMLElement, source: string, message: string, showSource: boolean): void {
@@ -319,7 +328,7 @@ function showError(canvas: HTMLElement, source: string, message: string, showSou
   const line = document.createElement('div');
   line.className = 'cm-diagram-error';
   const limit = sizeLimit(message) ?? (/no diagram type detected/i.test(message) ? START.mermaid : null);
-  line.textContent = limit ?? (message.split('\n')[0] ?? message).replace(/:\s*$/, '');
+  line.textContent = limit ?? errorLine(message, source);
   if (!limit) line.title = message;
   canvas.append(line);
 }
@@ -488,6 +497,11 @@ class DiagramPreviewWidget extends WidgetType {
   }
 
   get estimatedHeight() { return 200; }
+
+  destroy(dom: HTMLElement) {
+    const timer = Number(dom.querySelector<HTMLElement>('.cm-diagram-canvas')?.dataset.timer ?? 0);
+    if (timer) window.clearTimeout(timer);
+  }
 
   ignoreEvent() { return true; }
 }

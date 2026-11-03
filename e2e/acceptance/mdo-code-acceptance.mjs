@@ -33,6 +33,7 @@ const EDGES = path.join(vault, 'Docs', 'edges.mdo');
 const HUGE = path.join(vault, 'Docs', 'huge.mdo');
 const COMPOSE = path.join(vault, 'Docs', 'compose.mdo');
 const CROSS = path.join(vault, 'Docs', 'cross.mdo');
+const DIAGRAM = path.join(vault, 'Docs', 'diagram.mdo');
 const CROSS_TEXT = 'Intro line\n\n```markdown\nA fence looks like:\n\nlet a = 1\n```\n\nAfter the block\n\n# Heading\n';
 const KEYS_TEXT = 'Top\n\n> ```py\n> def f():\n>     return 1\n> ```\n\nAfter words\n';
 await writeFile(TYPING, 'Intro\n\nNext paragraph.\n');
@@ -40,6 +41,7 @@ await writeFile(KEYS, KEYS_TEXT);
 await writeFile(EDGES, '```js\nlet a = 1;\n```');
 await writeFile(COMPOSE, '```js\nlet a = 1;\n```');
 await writeFile(CROSS, CROSS_TEXT);
+await writeFile(DIAGRAM, 'The flow:\n\n');
 await writeFile(HUGE, `A diagram past Mermaid's limits:\n\n\`\`\`mermaid\ngraph TD\n${Array.from({ length: 600 }, (_, index) => `  n${index} --> n${index + 1}`).join('\n')}\n\`\`\`\n\nAfter.\n`);
 await copyFile(path.join(PROJECT_ROOT, 'e2e', 'fixtures', 'gallery', 'code.mdo'), GALLERY);
 await writeFile(NOTE, `# A note\n\nA drawn block scrolls sideways inside the column:\n\n\`\`\`ts\nconst wide = '${'a long line that keeps going '.repeat(8)}';\nexport const short = 1;\n\`\`\`\n\nAfter.\n`);
@@ -153,6 +155,26 @@ try {
   const copied = await page.evaluate(() => window.__copied);
   check('Copy puts only the code on the clipboard', copied.length === 1 && copied[0] === 'const a = 1;', JSON.stringify(copied));
   check('Copy shows Copied', (await page.locator('.cm-code-copy').first().textContent()) === 'Copied');
+
+  // A new Mermaid block stays code while it is typed, and draws once the caret leaves it.
+  await open(DIAGRAM);
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Meta+ArrowDown');
+  await page.keyboard.type('```mermaid');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('graph TD');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('  A[Start] --> B[End]');
+  const typedDiagram = await editorText();
+  check('typing a new Mermaid block puts every line inside it', typedDiagram === 'The flow:\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```', JSON.stringify(typedDiagram));
+  check('the new block shows as code while the caret is in it', (await page.locator('.cm-diagram:not(.cm-diagram-preview)').count()) === 0);
+  await setTheme('light');
+  await shot('light-new-diagram-typing', page.locator('.cm-code-head').first(), { above: 60, below: 320 });
+  await page.keyboard.press('Meta+Enter');
+  await page.keyboard.type('Done.');
+  await page.locator('.cm-diagram:not(.cm-diagram-preview) img').first().waitFor({ timeout: 8_000 }).catch(() => undefined);
+  check('the diagram draws once the caret leaves it', (await page.locator('.cm-diagram:not(.cm-diagram-preview) img').count()) === 1);
+  await shot('light-new-diagram-drawn', page.locator('.cm-diagram').first(), { above: 60, below: 60 });
 
   // Keys in a quoted block, with the real keyboard.
   await open(KEYS);
@@ -340,6 +362,29 @@ try {
     if (await empty.count()) await shot(`${theme}-state-empty`, empty, { above: 60, below: 40 });
     const diff = await scrollTo('.cm-code-diff-add');
     if (await diff.count()) await shot(`${theme}-state-diff`, diff, { above: 80, below: 80 });
+    // A block with no language: its top matches its bottom, and hovering shows the corner without moving anything.
+    const quiet = await scrollTo('.cm-code-quiet');
+    if (await quiet.count()) {
+      const body = quiet.locator('xpath=following-sibling::div[1]');
+      await body.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(150);
+      const before = await body.boundingBox();
+      await body.hover();
+      await page.waitForTimeout(250);
+      const after = await body.boundingBox();
+      await shot(`${theme}-state-plain-hover`, quiet, { above: 30, below: 90 });
+      if (theme === 'light') {
+        const heights = await quiet.evaluate((head) => {
+          let foot = head.nextElementSibling;
+          while (foot && !foot.classList.contains('cm-code-foot')) foot = foot.nextElementSibling;
+          return { head: head.getBoundingClientRect().height, foot: foot?.getBoundingClientRect().height ?? -1 };
+        });
+        check('a block with no language is as tall above its code as below', Math.abs(heights.head - heights.foot) < 0.5, JSON.stringify(heights));
+        check('hovering a block with no language moves nothing', before !== null && after !== null && before.y === after.y && before.height === after.height, JSON.stringify({ before, after }));
+        const label = await quiet.locator('.cm-code-label').evaluate((element) => getComputedStyle(element).opacity);
+        check('hovering it shows "Plain text"', label === '1', label);
+      }
+    }
   }
   // Show all on a long block is one of its header's buttons, and shows its lines writing nothing.
   await scrollTo('.cm-code-show-all');
