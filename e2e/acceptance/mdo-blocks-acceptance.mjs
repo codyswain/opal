@@ -266,7 +266,8 @@ try {
   const beforeFold = await readEnd();
   await page.locator('.cm-line', { hasText: 'Remember the demo.' }).first().click();
   await page.keyboard.press('Meta+Enter');
-  await page.waitForTimeout(600);
+  // Longer than the autosave's wait, so a change would be on disk.
+  await page.waitForTimeout(2_000);
   check('Cmd+Enter in a callout that cannot fold changes nothing', (await readEnd()) === beforeFold);
 
   // The type menu and its fold choice.

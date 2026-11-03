@@ -225,7 +225,8 @@ const toggleFoldHere: Command = (view) => {
     view.dispatch({ effects: toggleFold.of(callout.head) });
     return true;
   }
-  const start = calloutHeadAt(state, head);
+  // Read at the line's first quote mark or text: the caret at the line's end can sit past the quote's node.
+  const start = /\S/.test(line.text) ? calloutHeadAt(state, line.from + (/^[ \t]*/.exec(line.text)?.[0].length ?? 0)) : null;
   return start !== null && state.facet(EditorView.editable) && CALLOUT_HEAD.test(state.doc.lineAt(start).text) && isDocument(state);
 };
 

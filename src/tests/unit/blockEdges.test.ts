@@ -212,7 +212,7 @@ describe('Option+Up and Option+Down in tables and code', () => {
 
 describe('callouts in a document', () => {
   it('does nothing on Cmd+Enter in a callout that cannot fold, rather than split it', () => {
-    for (const doc of ['> [!warning] No‸te\n> Remember the demo.\n', '> [!warning] Note\n> Remember‸ the demo.\n']) {
+    for (const doc of ['> [!warning] No‸te\n> Remember the demo.\n', '> [!warning] Note\n> Remember‸ the demo.\n', '> [!warning] Note\n> Remember the demo.‸\n', '> [!warning] Note\n> ‸\n']) {
       const view = mount(doc);
       press(view, 'Enter', /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
       expect(text(view)).toBe(doc.replace('‸', ''));
