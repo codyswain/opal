@@ -58,6 +58,9 @@ describe('visible text', () => {
     expect(rule.text).toBe(OBJECT);
     const row = visibleLine(state, state.doc.line(7).from);
     expect(row.text).toBe(`${OBJECT} c ${OBJECT} d ${OBJECT}`);
+    const marked = open('| a | b |\n|---|---|\n| **c** | [d](https://x.com) `e` \\| |\n');
+    expect(visibleLine(marked, marked.doc.line(2).from).text).toBe('');
+    expect(visibleLine(marked, marked.doc.line(3).from).text).toBe(`${OBJECT} c ${OBJECT} d e | ${OBJECT}`);
   });
 
   it('reads the hidden ranges once per state for the same lines', () => {

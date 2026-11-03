@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { fitMarks, literalText } from '@/renderer/features/disk-explorer/components/editor/typing';
+import { visibleLine } from '@/renderer/features/disk-explorer/components/editor/visibleText';
+import { countWords, pageWords } from '@/renderer/features/disk-explorer/components/editor/wordMotion';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
 
@@ -152,6 +154,13 @@ describe('typing in a document', () => {
     expect(text(equals)).toBe('abc\n\n===\n');
   });
 
+  it('puts a letter that would unmake a mark on the mark\'s other side', () => {
+    const view = mount('say — *"hi"* now\n');
+    at(view, text(view).indexOf('*'));
+    type(view, 'x');
+    expect(text(view)).toBe('say — *x"hi"* now\n');
+  });
+
   it('leaves a note as typed', () => {
     const view = mount('\n', NOTE);
     at(view, 0);
@@ -195,6 +204,14 @@ describe('bold, italic and strikethrough next to punctuation', () => {
     }
   });
 
+  it('takes a style off without leaving a mark against punctuation', () => {
+    const view = mount('it cites *every point it makes,* with\n');
+    const from = text(view).indexOf('makes');
+    act(() => { view.dispatch({ selection: { anchor: from, head: from + 5 } }); });
+    act(() => { toggleMarker('*')(view); });
+    expect(text(view)).toBe('it cites *every point it* makes, with\n');
+  });
+
   it('widens to the word when moving inward leaves nothing', () => {
     expect(fitMarks(state('a.b\n'), 1, 2)).toEqual({ from: 0, to: 3 });
     expect(fitMarks(state('x ... y\n'), 2, 5)).toEqual({ from: 2, to: 5 });
@@ -216,5 +233,62 @@ describe('literal text', () => {
   it('goes in raw in inline code', () => {
     const view = mount('Use `x` here\n');
     expect(literalText(view.state, 5, 5, '*a* `b`')).toBe('*a* `b`');
+  });
+});
+
+describe('Enter inside formatting in a document', () => {
+  const enter = (view: EditorView) => act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter' }), 'editor'); });
+
+  it('closes bold, italic, code and a link before the break and opens them again after it', () => {
+    const cases: [string, string, string][] = [
+      ['**bold text** end', 'bold', '**bold**\n**text** end'],
+      ['*it here*', 'it', '*it*\n*here*'],
+      ['`co de`', 'co', '`co`\n`de`'],
+      ['[link text](https://x.com) b', 'link', '[link](https://x.com)\n[text](https://x.com) b'],
+      ['**a [bc](https://x.com) d**', 'a [b', '**a [b](https://x.com)**\n**[c](https://x.com) d**'],
+    ];
+    for (const [doc, before, written] of cases) {
+      const view = mount(`${doc}\n`);
+      at(view, doc.indexOf(before) + before.length);
+      enter(view);
+      expect(text(view)).toBe(`${written}\n`);
+    }
+  });
+
+  it('keeps a list item\'s marker on the new line', () => {
+    const view = mount('- **bold text**\n');
+    at(view, 8);
+    enter(view);
+    expect(text(view)).toBe('- **bold**\n- **text**\n');
+  });
+
+  it('leaves a break outside formatting as it is', () => {
+    const view = mount('plain **bold**\n');
+    at(view, 3);
+    enter(view);
+    expect(text(view)).toBe('pla\nin **bold**\n');
+  });
+});
+
+describe('the word count', () => {
+  it('counts the words the system segments, in visible text, and those selected', () => {
+    expect(countWords('one two, three')).toBe(3);
+    expect(countWords('日本語のテキストです')).toBeGreaterThan(1);
+    const view = mount('# Title\n\nSome **bold** [link](https://example.com/a/b/c) text.\n');
+    expect(pageWords(view.state)).toEqual({ words: 5, selected: null });
+    act(() => { view.dispatch({ selection: { anchor: 9, head: 18 } }); });
+    expect(pageWords(view.state).selected).toBe(2);
+  });
+});
+
+describe('hard breaks in a document', () => {
+  it('hide the backslash or spaces, and typing at the line\'s end lands before them', () => {
+    for (const [doc, typedDoc] of [['one\\\ntwo\n', 'onex\\\ntwo\n'], ['one  \ntwo\n', 'onex  \ntwo\n']]) {
+      const view = mount(doc);
+      expect(visibleLine(view.state, 0).text).toBe('one');
+      at(view, doc.indexOf('\n'));
+      type(view, 'x');
+      expect(text(view)).toBe(typedDoc);
+    }
   });
 });

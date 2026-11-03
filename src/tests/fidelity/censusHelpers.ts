@@ -212,6 +212,15 @@ export function expectTyped(before: EditorState, after: EditorState, typed: stri
       const rest = middleAfter.slice(0, at) + middleAfter.slice(at + typed.length);
       fits = strip(rest, allowed) === strip(middleBefore, allowed) && rest.length >= middleBefore.length;
     }
+    // Escapes may sit inside the typed text too, as in `1984\. `.
+    if (!fits && declared.escapes) {
+      const bare = strip(typed, allowed);
+      const after = strip(middleAfter, allowed);
+      const before = strip(middleBefore, allowed);
+      for (let at = after.indexOf(bare); at !== -1 && !fits; at = after.indexOf(bare, at + 1)) {
+        fits = after.slice(0, at) + after.slice(at + bare.length) === before;
+      }
+    }
     if (!fits) problems.push(`bytes at the caret: ${JSON.stringify(middleBefore)} became ${JSON.stringify(middleAfter)}`);
   }
   // The visible text of the caret's line, which typing may split into lines with a separator.
@@ -262,15 +271,13 @@ export function blockSeparators(state: EditorState, caret: number): string {
 }
 
 const BLOCKS = new Set(['FencedCode']);
-const DELIMITERS = '*_~`';
 
 /**
  * The later work that fixes a failed typing check, for the bugs known when
  * `expectTyped` came in: typing beside a fence joins or reshapes it
- * (PR 3), and a typed character changes how a nearby
- * `*`, `_`, `~` or backtick reads (PR 2), and text typed into a long link
- * definition's target hides with it (Later, step 3). Null for anything
- * else, which is a new failure. Each PR deletes its rule when its fix lands.
+ * (PR 3), and text typed into a long link definition's target hides with
+ * it (Later, step 3). Null for anything else, which is a new failure. Each
+ * PR deletes its rule when its fix lands.
  */
 export function pendingOwner(before: EditorState, after: EditorState, typed: string, caret: number): string | null {
   const { doc } = before;
@@ -288,10 +295,5 @@ export function pendingOwner(before: EditorState, after: EditorState, typed: str
   });
   if (nearBlock) return 'PR 3: typing beside a fence';
   if (/^ {0,3}(?:> ?)*\[(?:[^\]\\]|\\.)+\]:/.test(line.text)) return 'Later, step 3: typing in a link definition\'s shortened target';
-  const shown = visibleText(before, line.from, line.to);
-  const offset = shown.offsetOf(caret);
-  const expected = shown.text.slice(0, offset) + typed + shown.text.slice(offset);
-  const got = visibleText(after, line.from, Math.min(after.doc.length, line.to + after.doc.length - doc.length)).text;
-  const letters = (text: string) => strip(text, DELIMITERS).trimStart();
-  return letters(got) === letters(expected) ? 'PR 2: a typed character changes how a delimiter reads' : null;
+  return null;
 }

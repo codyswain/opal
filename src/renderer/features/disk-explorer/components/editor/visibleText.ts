@@ -1,4 +1,5 @@
 import type { EditorState, Line } from '@codemirror/state';
+import { latestTree } from './extensionPoints';
 import { drawnBlockAt, hiddenRanges, type HiddenRange } from './livePreview';
 
 /*
@@ -47,18 +48,61 @@ export function hiddenOn(state: EditorState, from: number, to: number): HiddenRa
   return found;
 }
 
-/** Unescaped pipes of a table row: cell breaks. */
-const PIPE = /(?<!\\)\|/g;
 const FENCE = /^[ \t>]*(?:```|~~~)/;
+// Marks a drawn table's cells do not show.
+const CELL_MARKS = new Set(['EmphasisMark', 'StrikethroughMark', 'CodeMark', 'LinkMark', 'LinkTitle', 'WikiLinkMark']);
 
-function blockLine(line: Line): { text: string; starts: number[]; ends: number[] } {
-  const text = FENCE.test(line.text) ? OBJECT.repeat(line.length) : line.text.replace(PIPE, OBJECT);
-  const starts = Array.from({ length: text.length }, (_, index) => line.from + index);
-  return { text, starts, ends: starts.map((at) => at + 1) };
+/**
+ * A line of a drawn table or code block: a table row shows its cells' text
+ * with each pipe as an object and no inline marks; a code line shows as
+ * written, and a fence line as objects.
+ */
+function blockLine(state: EditorState, line: Line): { text: string; starts: number[]; ends: number[] } {
+  const marks: { from: number; to: number; object: boolean }[] = [];
+  if (FENCE.test(line.text)) marks.push({ from: line.from, to: line.to, object: true });
+  else {
+    latestTree(state).iterate({
+      from: line.from,
+      to: line.to,
+      enter: (ref) => {
+        if (ref.name === 'FencedCode' || ref.name === 'CodeBlock') return false;
+        if (ref.name === 'TableDelimiter') marks.push({ from: ref.from, to: ref.to, object: !state.sliceDoc(ref.from, ref.to).includes('-') });
+        else if (CELL_MARKS.has(ref.name)) marks.push({ from: ref.from, to: ref.to, object: false });
+        else if (ref.name === 'URL' && (ref.node.parent?.name === 'Link' || ref.node.parent?.name === 'Image')) marks.push({ from: ref.from, to: ref.to, object: false });
+        else if (ref.name === 'Escape') marks.push({ from: ref.from, to: ref.from + 1, object: false });
+        return undefined;
+      },
+    });
+  }
+  marks.sort((a, b) => a.from - b.from);
+  let text = '';
+  const starts: number[] = [];
+  const ends: number[] = [];
+  let at = line.from;
+  for (const mark of marks) {
+    for (; at < Math.min(mark.from, line.to); at += 1) {
+      text += state.doc.sliceString(at, at + 1);
+      starts.push(at);
+      ends.push(at + 1);
+    }
+    if (mark.to <= at) continue;
+    if (mark.object) {
+      text += OBJECT;
+      starts.push(Math.max(at, mark.from));
+      ends.push(Math.min(mark.to, line.to));
+    }
+    at = Math.min(Math.max(at, mark.to), line.to);
+  }
+  for (; at < line.to; at += 1) {
+    text += state.doc.sliceString(at, at + 1);
+    starts.push(at);
+    ends.push(at + 1);
+  }
+  return { text, starts, ends };
 }
 
 function buildLine(state: EditorState, line: Line, hidden: readonly HiddenRange[]): VisibleLine {
-  if (drawnBlockAt(state, line.from) && drawnBlockAt(state, line.to)) return { line, ...blockLine(line) };
+  if (drawnBlockAt(state, line.from) && drawnBlockAt(state, line.to)) return { line, ...blockLine(state, line) };
   let text = '';
   const starts: number[] = [];
   const ends: number[] = [];

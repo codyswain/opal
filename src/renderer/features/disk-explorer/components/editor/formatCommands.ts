@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
 import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
-import { fitMarks, keepsVisibleText } from './typing';
+import { closesAt, fitMarks, keepsVisibleText, opensAt } from './typing';
 import { parseWikiTarget } from './wikiLinks';
 
 /*
@@ -292,12 +292,17 @@ function removeStyle(state: EditorState, text: SelectedText, name: string, remov
     while (closeAt > span.textFrom && skip(closeAt - 1)) closeAt -= 1;
     let openAt = to;
     while (openAt < span.textTo && skip(openAt)) openAt += 1;
+    // Marks go where Markdown reads them: punctuation they would touch is left without the style.
+    if (span.name !== 'InlineCode') {
+      while (closeAt > span.textFrom && !closesAt(state, closeAt)) closeAt -= 1;
+      while (openAt < span.textTo && !opensAt(state, openAt)) openAt += 1;
+    }
     const size = span.to - span.from;
     return [
-      textBounds(state, text.spans, span.textFrom, from)
+      closeAt > span.textFrom && textBounds(state, text.spans, span.textFrom, closeAt)
         ? { from: closeAt, to: closeAt, insert: state.sliceDoc(span.textTo, span.to), nesting: size }
         : { from: span.from, to: span.textFrom, insert: '' },
-      textBounds(state, text.spans, to, span.textTo)
+      openAt < span.textTo && textBounds(state, text.spans, openAt, span.textTo)
         ? { from: openAt, to: openAt, insert: state.sliceDoc(span.from, span.textFrom), nesting: -size }
         : { from: span.textTo, to: span.to, insert: '' },
     ];
@@ -404,14 +409,24 @@ export function toggleMarker(marker: string): StateCommand {
 }
 
 const CLEARED = ['StrongEmphasis', 'Emphasis', 'Strikethrough', 'InlineCode'];
+// Characters that would read as Markdown once code around them is gone.
+const MARKDOWN_IN_CODE = /[*_~`[\]<\\]/;
 
-/** Takes bold, italic, strikethrough and code off the selection: only marks the syntax tree reads as formatting. */
+/**
+ * Takes bold, italic, strikethrough and code off the selection: only marks
+ * the syntax tree reads as formatting. Code whose text would turn into
+ * Markdown stays code, and a document refuses a change that would show a mark.
+ */
 export const clearFormatting: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
   if (!treeFor(state, selectionEnd(state))) return true;
   const changes = state.selection.ranges.flatMap((range) => selectedText(state, range))
+    .map((text) => ({ ...text, spans: text.spans.filter((span) => span.name !== 'InlineCode' || !MARKDOWN_IN_CODE.test(state.sliceDoc(span.textFrom, span.textTo))) }))
     .flatMap((text) => CLEARED.flatMap((name) => removeStyle(state, text, name, CLEARED)));
-  if (changes.length > 0) dispatch(state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' }));
+  if (changes.length === 0) return true;
+  const tr = state.update({ changes: ordered(changes), scrollIntoView: true, userEvent: 'input' });
+  if (state.facet(docMode) && !keepsVisibleText(tr)) toast('Clear formatting would leave marks showing here, so nothing changed.');
+  else dispatch(tr);
   return true;
 };
 
