@@ -1,6 +1,7 @@
 import { getSearchQuery, SearchQuery, searchPanelOpen, setSearchQuery } from '@codemirror/search';
 import { Annotation, ChangeSet, EditorSelection, EditorState, RangeSetBuilder, StateEffect, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
-import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import { redo, undo } from '@codemirror/commands';
 import type { SyntaxNode } from '@lezer/common';
 import { toast } from 'sonner';
 import { latestTree, objectAt, protectedIn } from './extensionPoints';
@@ -193,7 +194,12 @@ class VisibleQueryType {
   /** Only matches Replace changes; `keptMatches` draws the others. */
   highlight(state: EditorState, from: number, to: number, add: (from: number, to: number) => void): void {
     const { doc } = state;
-    for (const match of matchesIn(state, this.spec, doc.lineAt(from).number, doc.lineAt(to).number)) if (match.precise) add(match.from, match.to);
+    for (const match of matchesIn(state, this.spec, doc.lineAt(from).number, doc.lineAt(to).number)) if (this.replaces(state, match)) add(match.from, match.to);
+  }
+
+  /** Whether Replace changes `match`. */
+  replaces(state: EditorState, match: VisibleMatch): boolean {
+    return match.precise && !endsEarly(state, { from: match.from, insert: this.getReplacement(match) });
   }
 }
 
@@ -238,6 +244,15 @@ function inNode(state: EditorState, at: number, name: string): boolean {
   return false;
 }
 
+/** Whether Replace changes `edit`'s match: never in kept text, and never where the new text would end inline code or a wiki link's text early. */
+export function replaceable(state: EditorState, edit: { from: number; to: number; insert: string }): boolean {
+  return !keptText(state, edit.from, edit.to) && !endsEarly(state, edit);
+}
+
+function endsEarly(state: EditorState, edit: { from: number; insert: string }): boolean {
+  return (edit.insert.includes('`') && inNode(state, edit.from, 'InlineCode')) || (/[[\]|\n]/.test(edit.insert) && inWikiLink(state, edit.from));
+}
+
 /**
  * The changes that replace each of `edits` with its text as the page shows
  * it: escaped where it would read as Markdown, marks kept around it.
@@ -248,10 +263,7 @@ export function replaceEdits(
   edits: readonly { from: number; to: number; insert: string }[],
   replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] },
 ): ChangeSet {
-  // A backtick would end inline code early, and a bracket or bar a wiki link's text, so a match there keeps its text.
-  const replaced = edits.filter((edit) => !keptText(state, edit.from, edit.to)
-    && !(edit.insert.includes('`') && inNode(state, edit.from, 'InlineCode'))
-    && !(/[[\]|\n]/.test(edit.insert) && inWikiLink(state, edit.from)));
+  const replaced = edits.filter((edit) => replaceable(state, edit));
   const texts = literalTexts(state, replaced.map((edit) => ({ ...edit, table: inNode(state, edit.from, 'Table') })));
   const specs: ChangeSpec[] = [];
   replaced.forEach((edit, index) => {
@@ -293,10 +305,11 @@ const keptMatches = ViewPlugin.fromClass(class {
     const query = getSearchQuery(state);
     if (!searchPanelOpen(state) || !query.valid || !(query instanceof VisibleQuery)) return Decoration.none;
     const builder = new RangeSetBuilder<Decoration>();
+    const type = query.create();
     let last = 0;
     for (const { from, to } of view.visibleRanges) {
       for (const match of matchesIn(state, query, state.doc.lineAt(from).number, state.doc.lineAt(to).number)) {
-        if (match.precise || match.from < last || match.to <= match.from) continue;
+        if (type.replaces(state, match) || match.from < last || match.to <= match.from) continue;
         builder.add(match.from, match.to, keptMark);
         last = match.to;
       }
@@ -322,17 +335,13 @@ const searchTheme = [EditorView.editorAttributes.of({ class: 'opal-docFind' }), 
   },
 })];
 
-// The Find bar's labels in sentence case.
-const searchPhrases = EditorState.phrases.of({
-  next: 'Next',
-  previous: 'Previous',
-  all: 'All',
-  'match case': 'Match case',
-  regexp: 'Regex',
-  'by word': 'Whole word',
-  replace: 'Replace',
-  'replace all': 'Replace all',
-  close: 'Close',
+/**
+ * Doc mode's Find bar floats, so a match scrolled to by Next clears it
+ * rather than sitting under it.
+ */
+const clearOfBar = EditorView.scrollMargins.of((view) => {
+  const bar = searchPanelOpen(view.state) ? view.dom.querySelector<HTMLElement>('.cm-panel.cm-search') : null;
+  return bar ? { top: bar.offsetHeight + 16 } : null;
 });
 
 /**
@@ -341,7 +350,7 @@ const searchPhrases = EditorState.phrases.of({
  * opens its source, a protected range frames its object.
  */
 export function visibleSearch(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
-  return [keptMatches, searchTheme, searchPhrases, EditorState.transactionFilter.of((tr) => {
+  return [keptMatches, searchTheme, clearOfBar, EditorState.transactionFilter.of((tr) => {
     if (!tr.startState.facet(docMode)) return tr;
     const queries = tr.effects.filter((effect) => effect.is(setSearchQuery) && !(effect.value instanceof VisibleQuery));
     if (queries.length > 0) {
@@ -355,7 +364,8 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
     }
     if (tr.isUserEvent('input.replace') && tr.docChanged) {
       const edits: { from: number; to: number; insert: string }[] = [];
-      tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, insert: inserted.toString() }));
+      // One edit per match, side-by-side matches included.
+      tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, insert: inserted.toString() }), true);
       const changes = replaceEdits(tr.startState, edits, replace);
       // Positions after CodeMirror's changes, such as the next match to scroll to, moved onto the changes written instead.
       const back = tr.changes.invert(tr.startState.doc);
@@ -367,8 +377,9 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
       if (tr.isUserEvent('input.replace.all')) {
         const query = getSearchQuery(tr.startState);
         const found = query instanceof VisibleQuery ? query.create().matchAll(tr.startState, 1e9) ?? [] : [];
-        const kept = found.length - edits.length;
-        if (kept > 0) annotations.push(keptByReplace.of({ replaced: edits.length, kept }));
+        const replaced = edits.filter((edit) => replaceable(tr.startState, edit)).length;
+        const kept = found.length - replaced;
+        if (kept > 0) annotations.push(keptByReplace.of({ replaced, kept }));
       }
       const spec: TransactionSpec = { changes, selection, effects, annotations, scrollIntoView: tr.scrollIntoView, userEvent: tr.annotation(Transaction.userEvent) };
       return spec;
@@ -388,3 +399,116 @@ export function visibleSearch(replace: (state: EditorState, from: number, to: nu
     return tr;
   })];
 }
+
+/*
+ * The Find bar in notes and documents alike: labels in sentence case, the
+ * number of matches beside the query, and ⌘Z or ⇧⌘Z on its buttons and
+ * toggles going to the page, so a Replace is undone where it was clicked.
+ */
+
+const findPhrases = EditorState.phrases.of({
+  next: 'Next',
+  previous: 'Previous',
+  all: 'Select all',
+  'match case': 'Match case',
+  regexp: 'Regex',
+  'by word': 'Whole word',
+  replace: 'Replace',
+  'replace all': 'Replace all',
+  close: 'Close',
+});
+
+// Past this many, the count stops and says so.
+const COUNTED = 1_000;
+
+/** The matches of the panel's query, at most `COUNTED` and one more. */
+function countMatches(state: EditorState): { from: number; to: number }[] {
+  const query = getSearchQuery(state);
+  if (!query.valid) return [];
+  if (query instanceof VisibleQuery) {
+    const found = query.create().matchAll(state, COUNTED);
+    return found ?? Array.from({ length: COUNTED + 1 }, () => ({ from: -1, to: -1 }));
+  }
+  const found: { from: number; to: number }[] = [];
+  const cursor = query.getCursor(state);
+  for (let next = cursor.next(); !next.done && found.length <= COUNTED; next = cursor.next()) found.push(next.value);
+  return found;
+}
+
+/** The text of the count: "3 of 12", "12 matches" when no match is selected, or "No results". */
+export function countText(matches: readonly { from: number; to: number }[], selection: { from: number; to: number }): string {
+  if (matches.length === 0) return 'No results';
+  if (matches.length > COUNTED) return `${COUNTED.toLocaleString('en-US')}+ matches`;
+  const index = matches.findIndex((match) => match.from === selection.from && match.to === selection.to);
+  if (index !== -1) return `${index + 1} of ${matches.length}`;
+  return matches.length === 1 ? '1 match' : `${matches.length} matches`;
+}
+
+const matchCount = ViewPlugin.fromClass(class {
+  matches: { from: number; to: number }[] = [];
+  timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(readonly view: EditorView) {
+    this.recount();
+  }
+
+  update(update: ViewUpdate) {
+    if (!searchPanelOpen(update.state)) return;
+    const queried = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(setSearchQuery))) || !searchPanelOpen(update.startState);
+    if (queried) this.recount();
+    else if (update.docChanged) {
+      // Typing in the page counts again once it pauses.
+      this.matches = this.matches.map((match) => ({ from: update.changes.mapPos(match.from, 1), to: update.changes.mapPos(match.to, -1) }));
+      this.later();
+      this.show();
+    } else if (update.selectionSet) this.show();
+  }
+
+  later() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this.timer = null; this.recount(); }, 150);
+  }
+
+  recount() {
+    if (!searchPanelOpen(this.view.state)) return;
+    this.matches = getSearchQuery(this.view.state).search ? countMatches(this.view.state) : [];
+    this.show();
+  }
+
+  show() {
+    const field = this.view.dom.querySelector<HTMLInputElement>('.cm-search input[name=search]');
+    if (!field) {
+      // The panel is drawn after this plugin's update: count once it is there.
+      this.view.requestMeasure({ read: () => null, write: () => { if (this.view.dom.querySelector('.cm-search input[name=search]')) this.show(); } });
+      return;
+    }
+    let count = field.nextElementSibling;
+    if (!count?.classList.contains('opal-searchCount')) {
+      count = document.createElement('span');
+      count.className = 'opal-searchCount';
+      count.setAttribute('aria-live', 'polite');
+      field.after(count);
+    }
+    const { main } = this.view.state.selection;
+    count.textContent = getSearchQuery(this.view.state).search ? countText(this.matches, main) : '';
+  }
+
+  destroy() {
+    if (this.timer) clearTimeout(this.timer);
+  }
+});
+
+/** Whether a key went to one of the Find bar's buttons or toggles, which have no text of their own to undo. */
+const onBarControl = () => {
+  const active = document.activeElement;
+  return active instanceof HTMLButtonElement || (active instanceof HTMLInputElement && active.type === 'checkbox');
+};
+
+const barHistory = keymap.of([
+  { key: 'Mod-z', run: (view) => onBarControl() && undo(view), scope: 'search-panel' },
+  { key: 'Mod-Shift-z', run: (view) => onBarControl() && redo(view), scope: 'search-panel' },
+  { key: 'Mod-y', run: (view) => onBarControl() && redo(view), scope: 'search-panel' },
+]);
+
+/** The Find bar's parts every page has. */
+export const findBar: Extension = [findPhrases, matchCount, barHistory];

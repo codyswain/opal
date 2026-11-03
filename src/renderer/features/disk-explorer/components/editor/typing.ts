@@ -256,6 +256,8 @@ const provisional = StateField.define<{ number: number | null; blank: { from: nu
 
 // A line that is a rule or a heading's underline.
 const RULE_LINE = /^(?:-+|=+)[ \t]*$/;
+// What comes before a line's own text when it carries on a quote or a list item: quote marks and the indent.
+const LINE_LEAD = /^(?:[ \t]*>[ \t]?)*[ \t]*/;
 
 /** The links a typed `]`, `)` or `>` finishes: a Markdown link or image, a wiki link or embed, an autolink. */
 const TYPED_LINKS = new Set(['Link', 'Image', 'WikiLink', 'Embed', 'Autolink']);
@@ -312,7 +314,7 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
 
   // A line under the blank line written above a rule that stops being a rule or underline: the blank line goes again.
   if (blank && blank.to === lineBefore.from) {
-    const quoted = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
+    const quoted = LINE_LEAD.exec(line.text)?.[0] ?? '';
     if (!RULE_LINE.test(line.text.slice(quoted.length))) {
       const length = blank.to - blank.from;
       return { changes: { from: blank.from, to: blank.to }, selection: { anchor: at + text.length - length }, sequential: true };
@@ -343,11 +345,12 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     return hidesBackslash(after, at - 3) ? insertBefore(at - 3, '\\') : null;
   }
 
-  // A rule or underline typed under a paragraph: a blank line keeps the paragraph a paragraph.
-  const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
-  if ((text === '-' || text === '=') && /^(?:-+|=+)$/.test(after.sliceDoc(line.from + quote.length, line.to)) && line.number > 1) {
-    const mark = latestTree(after).resolveInner(line.from + quote.length, 1);
+  // A rule or underline typed under a paragraph, or a list item's text: a blank line keeps the paragraph a paragraph.
+  const indent = LINE_LEAD.exec(line.text)?.[0] ?? '';
+  if ((text === '-' || text === '=') && /^(?:-+|=+)$/.test(after.sliceDoc(line.from + indent.length, line.to)) && line.number > 1) {
+    const mark = latestTree(after).resolveInner(line.from + indent.length, 1);
     if (mark.name === 'HeaderMark' && /^SetextHeading/.test(mark.parent?.name ?? '')) {
+      const quote = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
       const insert = `${quote.replace(/[ \t]+$/, '')}\n`;
       return { ...insertBefore(line.from, insert), effects: ruleBlank.of({ from: line.from, to: line.from + insert.length }) };
     }
@@ -380,6 +383,8 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   for (const from of [at, openerClosedAt(after, at)]) {
     if (from !== null && visibleLine(withBackslash(after, from), at + 1).text === expected) return insertBefore(from, '\\');
   }
+  // A typed backslash right before it escaped it: the backslash is written `\\` and the character escaped too.
+  if (after.sliceDoc(at - 1, at) === '\\' && visibleLine(withBackslash(withBackslash(after, at), at), at + 2).text === expected) return insertBefore(at, '\\\\');
   return null;
 }
 

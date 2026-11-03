@@ -188,12 +188,12 @@ function inTable(state: EditorState, at: number): boolean {
 
 /**
  * Edit > Paste and Match Style, from the menu or ⌘⇧V: the clipboard's text
- * pasted literally into the editor that holds `target`, or as plain text
- * into another field. The menu runs this rather than the system's paste,
- * whose paste event looks the same as ⌘V's.
+ * pasted literally into the page that holds `target`, or as plain text
+ * into another field, such as the Find bar's. The menu runs this rather
+ * than the system's paste, whose paste event looks the same as ⌘V's.
  */
 export async function pasteAndMatchStyle(target: Element | null = document.activeElement): Promise<void> {
-  const host = target?.closest('.cm-editor');
+  const host = target?.closest('.cm-content')?.closest('.cm-editor');
   const view = host instanceof HTMLElement ? EditorView.findFromDOM(host) : null;
   let text = '';
   try {

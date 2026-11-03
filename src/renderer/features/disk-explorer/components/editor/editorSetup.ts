@@ -23,6 +23,7 @@ import { mathSyntax } from './math';
 import { math } from './mathWidget';
 import { pageProperties } from './pageProperties';
 import { tableKeys } from './tableKeys';
+import { findBar } from './visibleSearch';
 import { pageContext, wikiLinkSyntax, wikiLinks, type OpenNote } from './wikiLinks';
 
 /** The edits that turn `current` into `next`, as small as a character diff finds them. */
@@ -194,6 +195,7 @@ export function markdownEditorExtensions(path: string, openNote: OpenNote = () =
     codeBlocks,
     pageProperties,
     search({ top: true }),
+    findBar,
     keymap.of([
       { key: 'Enter', run: insertNewlineInList },
       { key: 'Backspace', run: deleteMarkupInList },

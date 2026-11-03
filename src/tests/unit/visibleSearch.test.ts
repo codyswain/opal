@@ -12,6 +12,10 @@ import { drawnBlockAt } from '@/renderer/features/disk-explorer/components/edito
 import { VisibleQuery } from '@/renderer/features/disk-explorer/components/editor/visibleSearch';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { visibleLine } from '@/renderer/features/disk-explorer/components/editor/visibleText';
+
+const toasts = vi.hoisted(() => [] as string[]);
+vi.mock('sonner', () => ({ toast: Object.assign((message: string) => { toasts.push(message); }, { error: (message: string) => { toasts.push(message); }, success: (): void => undefined }), Toaster: (): null => null }));
 
 const DOC = '/Vault/Notes/Plan.mdo';
 const NOTE = '/Vault/Notes/Plan.md';
@@ -257,5 +261,77 @@ describe('Find and Replace in a document', () => {
     query(view, 'this', 'this [Zq]');
     run(view, replaceAll);
     expect(text(view)).toBe('see [this \\[Zq\\] one](https://x.com) now\n');
+  });
+});
+
+describe('Find and Replace, second pass', () => {
+  it('Replace and Replace All across a bold opener move the opener to the next word', () => {
+    const view = mount('Intro with **bold words**, more.\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'with bold', 'with Strong');
+    run(view, replaceAll);
+    expect(text(view)).toBe('Intro with Strong **words**, more.\n');
+    const one = mount('Intro with **bold words**, more.\n');
+    act(() => { openSearchPanel(one); });
+    query(one, 'with bold', 'with Strong');
+    run(one, findNext);
+    run(one, replaceNext);
+    expect(text(one)).toBe('Intro with Strong **words**, more.\n');
+  });
+
+  it('moves a link\'s opening bracket the same way', () => {
+    const view = mount('See the [docs page](https://example.com) now\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'the docs', 'our');
+    run(view, replaceAll);
+    expect(text(view)).toBe('See our [page](https://example.com) now\n');
+    expect(visibleLine(view.state, 0).text).toBe('See our page now');
+  });
+
+  it('counts side-by-side matches one by one, so all replaced says nothing', () => {
+    toasts.length = 0;
+    const view = mount('haha and ha\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'ha', 'he');
+    run(view, replaceAll);
+    expect(text(view)).toBe('hehe and he\n');
+    expect(toasts).toEqual([]);
+  });
+
+  it('counts matches Replace leaves, such as a backtick going into inline code', () => {
+    toasts.length = 0;
+    const view = mount('Run `npm x` and npm\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'npm', 'a`b');
+    run(view, replaceAll);
+    expect(text(view)).toBe('Run `npm x` and a`b\n');
+    expect(toasts).toEqual(['Replaced 1 of 2. Link addresses and formulas stay as they are.']);
+  });
+
+  it('Cmd+Z on the bar\'s buttons undoes the replace', () => {
+    const MOD = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    const view = mount('A plan and a plan\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'plan', 'roadmap');
+    run(view, replaceAll);
+    expect(text(view)).toBe('A roadmap and a roadmap\n');
+    const button = view.dom.querySelector('.cm-search button[name=replaceAll]') as HTMLButtonElement;
+    button.focus();
+    act(() => { button.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', bubbles: true, cancelable: true, ...MOD })); });
+    expect(text(view)).toBe('A plan and a plan\n');
+    act(() => { button.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', shiftKey: true, bubbles: true, cancelable: true, ...MOD })); });
+    expect(text(view)).toBe('A roadmap and a roadmap\n');
+  });
+
+  it('shows how many matches there are, and which one is selected', () => {
+    const view = mount('A plan and a plan, no Plan\n');
+    act(() => { openSearchPanel(view); });
+    query(view, 'plan');
+    const count = () => view.dom.querySelector('.cm-search .opal-searchCount')?.textContent;
+    expect(count()).toBe('3 matches');
+    run(view, findNext);
+    expect(count()).toBe('1 of 3');
+    query(view, 'nothing');
+    expect(count()).toBe('No results');
   });
 });

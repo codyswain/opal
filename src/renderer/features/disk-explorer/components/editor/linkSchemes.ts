@@ -1,5 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import { toast } from 'sonner';
+import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, MARKDOWN_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import { openPathLink, pageContext } from './wikiLinks';
 
@@ -75,4 +76,27 @@ export async function followLink(view: EditorView, href: string, newTab: boolean
   else if (route.kind === 'vault') await openVaultPath(view, route.target, newTab);
   else if (route.kind === 'outside') toast('Outside the vault');
   else toast("Opal doesn't open these links");
+}
+
+// A host name typed without a scheme, with an optional port and path after it.
+const DOMAIN = /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+([a-z]{2,24})(?::\d+)?(?:[/?#]\S*)?$/i;
+const EMAIL = /^[^\s@/:]+@[^\s@/]+\.[a-z]{2,24}$/i;
+// Names that end like a file are files: `report.pdf` is a path, `example.com` a site.
+const FILE_ENDINGS: ReadonlySet<string> = new Set([
+  ...IMAGE_EXTENSIONS, ...MARKDOWN_EXTENSIONS, ...TEXT_EXTENSIONS, ...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS,
+  'pdf', 'doc', 'docx', 'ppt', 'pptx', 'key', 'xls', 'xlsx', 'numbers', 'pages', 'zip', 'canvas', 'excalidraw',
+]);
+
+/**
+ * An address typed in the link form, as a link writes it: a bare domain such
+ * as `www.example.com` or `example.com/step` gets `https://`, and an email
+ * address `mailto:`, as Google Docs does. Paths, names that end like a file,
+ * and anything with a scheme stay as typed.
+ */
+export function webAddress(typed: string): string {
+  const address = typed.trim();
+  if (EMAIL.test(address)) return `mailto:${address}`;
+  if (/^www\.[^\s.]+\.\S+$/i.test(address)) return `https://${address}`;
+  const domain = DOMAIN.exec(address);
+  return domain && !FILE_ENDINGS.has(domain[1].toLowerCase()) ? `https://${address}` : address;
 }

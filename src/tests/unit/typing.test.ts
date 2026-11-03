@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { ensureSyntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
 import { fitMarks, literalText } from '@/renderer/features/disk-explorer/components/editor/typing';
-import { visibleLine } from '@/renderer/features/disk-explorer/components/editor/visibleText';
+import { visibleLine, visibleSlice } from '@/renderer/features/disk-explorer/components/editor/visibleText';
+import { pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
 import { countWords, pageWords } from '@/renderer/features/disk-explorer/components/editor/wordMotion';
 import { installDiskApi } from '@/tests/helpers/diskApi';
 import { installMarkdownApi } from '@/tests/helpers/markdownApi';
@@ -485,5 +486,60 @@ describe('undo right after an autoformat', () => {
     expect(text(view)).toBe('see **x**\n');
     act(() => { undo(view); });
     expect(text(view)).toBe('see \\*\\*x\\*\\*\n');
+  });
+});
+
+describe('typing edge cases, second pass', () => {
+  it('keeps the item text a paragraph when "=" or "-" is typed on its next line', () => {
+    for (const [doc, typed] of [['- Plan for the week\n  ', '='], ['- Plan for the week\n  ', '=='], ['> - Plan\n>   ', '=']] as const) {
+      const view = mount(doc);
+      at(view, view.state.doc.length);
+      type(view, typed);
+      const names: string[] = [];
+      syntaxTree(view.state).iterate({ enter: (node) => { if (/Heading/.test(node.name)) names.push(node.name); } });
+      expect(names).toEqual([]);
+      expect(visibleSlice(view.state, 0, view.state.doc.length)).toContain(typed);
+    }
+  });
+
+  it('shows punctuation typed over a selection that half covers italic, with no star', () => {
+    for (const marker of ['*', '**']) {
+      const doc = `a ${marker}it${marker} b\n`;
+      const view = mount(doc);
+      const from = 2 + marker.length + 1;
+      const to = from + 1 + marker.length + 1;
+      act(() => { view.dispatch({ selection: { anchor: from, head: to } }); });
+      const expected = visibleSlice(view.state, 0, from) + '_' + visibleSlice(view.state, to, view.state.doc.length);
+      typeOver(view, '_');
+      expect(visibleSlice(view.state, 0, view.state.doc.length)).toBe(expected);
+    }
+  });
+
+  it('pastes literal text over a selection that half covers italic, with no star', () => {
+    const view = mount('a *it* b\n');
+    act(() => { view.dispatch({ selection: { anchor: 4, head: 7 } }); });
+    const spec = pasteSpec(view.state, '_z_', true);
+    if (!spec) throw new Error('no paste');
+    act(() => { view.dispatch(spec); });
+    expect(visibleSlice(view.state, 0, view.state.doc.length)).toBe('a i_z_b\n');
+  });
+
+  it('keeps both typed backslashes of \\*stars\\* on the page', () => {
+    const view = mount('\n');
+    at(view, 0);
+    type(view, 'and \\*stars\\*');
+    expect(visible(view)).toBe('and \\*stars\\*');
+  });
+
+  it('typing over a selection from plain text into bold leaves the rest bold, with no stars', () => {
+    const view = mount('Intro with **bold words**, more.\n');
+    act(() => { view.dispatch({ selection: { anchor: 6, head: 17 } }); });
+    typeOver(view, 'x');
+    expect(text(view)).toBe('Intro x **words**, more.\n');
+    const deleted = mount('Intro with **bold words**, more.\n');
+    act(() => { deleted.dispatch({ selection: { anchor: 6, head: 17 } }); });
+    act(() => { runScopeHandlers(deleted, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
+    expect(visible(deleted)).toBe('Intro  words, more.');
+    expect(text(deleted)).toBe('Intro **words**, more.\n'.replace('Intro ', 'Intro  '));
   });
 });
