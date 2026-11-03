@@ -91,6 +91,9 @@ export interface DecorateContext {
   unit: (from: number, to: number) => void;
   /** Whether a drawn block covers `at`. */
   covered: (at: number) => boolean;
+  /** The lines being drawn, so a long node draws only those. */
+  from: number;
+  to: number;
 }
 
 export interface NodeDecorator {

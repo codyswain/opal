@@ -1,7 +1,8 @@
 import { redoDepth, undoDepth } from '@codemirror/commands';
 import type { EditorState } from '@codemirror/state';
 import { calloutMarker } from './blockGuards';
-import { allStyled, headingOf, linkAt, listItemOf, selectedLines, selectedText, styledAt, typingStyle, type ListKind, type SelectedText } from './formatCommands';
+import { allStyled, headingOf, inlineCodeAt, linkAt, listItemOf, selectedLines, selectedText, styledAt, typingStyle, type ListKind, type SelectedText } from './formatCommands';
+import { inCodeBlock } from './codeBlocks';
 
 /** What a document's toolbar shows as on. A style counts only when the whole selection has it. */
 export interface FormatState {
@@ -16,6 +17,8 @@ export interface FormatState {
   /** Whether a selected line is a list item, so indent and outdent apply. */
   inList: boolean;
   link: boolean;
+  /** In a code block, where formatting does not apply, or in inline code. */
+  code: 'block' | 'inline' | null;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -51,6 +54,7 @@ export function formatState(state: EditorState): FormatState {
     list: kind && items.every((item) => item?.kind === kind) ? kind : null,
     inList: items.some(Boolean),
     link: link !== null && main.to <= link.textTo,
+    code: inCodeBlock(state) ? 'block' : inlineCodeAt(state, main.from, main.to) ? 'inline' : null,
     canUndo: undoDepth(state) > 0,
     canRedo: redoDepth(state) > 0,
   };

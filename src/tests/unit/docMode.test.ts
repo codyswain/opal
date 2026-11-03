@@ -160,25 +160,25 @@ describe('doc mode', () => {
     expect(text(view)).toBe('IntroHead\n');
   });
 
-  it('never rests the caret on a drawn block\'s lines, even between two blocks with no line between them', async () => {
+  it('never rests the caret on a code block\'s fence lines, even between two blocks with no line between them', async () => {
     const doc = 'A\n```\none\n```\n```\ntwo\n```\nB\n';
     const view = mount(doc);
     await focusPage(view);
-    // The end of the first block's closing fence is nearer its end, so the caret goes on past the second block.
+    // The end of the first block's closing fence goes to the code beside it.
     select(view, doc.indexOf('```\n```') + 3);
-    expect(caret(view)).toBe(doc.indexOf('B'));
-    // The second block's code is nearer its start, so the caret goes back past the first block.
-    select(view, doc.indexOf('two'));
-    expect(caret(view)).toBe(1);
+    expect([doc.indexOf('one') + 3, doc.indexOf('two')]).toContain(caret(view));
+    // The opening fence's line goes to the end of the line above or the code below.
+    select(view, doc.indexOf('```') + 1);
+    expect([1, doc.indexOf('one')]).toContain(caret(view));
   });
 
   it('frames a drawn block on the first Backspace and removes it whole on the second, keeping the lines around it apart; a picture goes whole', async () => {
-    const view = mount('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
+    const view = mount('Text\n\n| a |\n|---|\n| b |\n\nMore ![a](https://example.com/a.png) end\n');
     await focusPage(view);
     const after = text(view).indexOf('\nMore') + 1;
     select(view, after - 1);
     key(view, 'Backspace');
-    expect(text(view)).toBe('Text\n\n```\ncode\n```\n\nMore ![a](https://example.com/a.png) end\n');
+    expect(text(view)).toBe('Text\n\n| a |\n|---|\n| b |\n\nMore ![a](https://example.com/a.png) end\n');
     key(view, 'Backspace');
     expect(text(view)).toBe('Text\n\nMore ![a](https://example.com/a.png) end\n');
     select(view, text(view).indexOf(' end'));

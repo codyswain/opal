@@ -28,7 +28,7 @@ afterEach(() => {
 /** A block kind for rules and an inline kind for inline code, registered by the test the way a feature would. */
 const kinds = (): Extension => [
   objectKinds.of({ kind: 'rule', nodes: ['HorizontalRule'], block: true, open: (view, obj) => open(obj), actions: () => [] } satisfies ObjectKind),
-  objectKinds.of({ kind: 'code', nodes: ['InlineCode'], block: false, open: () => undefined, actions: () => [] } satisfies ObjectKind),
+  objectKinds.of({ kind: 'inline-code', nodes: ['InlineCode'], block: false, open: () => undefined, actions: () => [] } satisfies ObjectKind),
 ];
 
 function mount(doc: string, at: number) {

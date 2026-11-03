@@ -826,3 +826,72 @@ export function removeLink(state: EditorState, link: LinkAt): TransactionSpec | 
   const text = state.sliceDoc(link.textFrom, link.textTo);
   return { changes: { from: link.from, to: link.to, insert: text }, selection: { anchor: link.from + text.length }, userEvent: 'input' };
 }
+
+/** The inline code that holds `from` to `to`, its marks included. */
+export function inlineCodeAt(state: EditorState, from: number, to = from): InlineSpan | null {
+  return inlineSpans(state, from, to).find((span) => span.name === 'InlineCode' && span.from <= from && to <= span.to) ?? null;
+}
+
+/** Inline code's text as it shows: one space of padding on both sides comes off, as CommonMark reads it. */
+export function codeContent(raw: string): string {
+  return raw.length >= 2 && raw.startsWith(' ') && raw.endsWith(' ') && raw.trim() !== '' ? raw.slice(1, -1) : raw;
+}
+
+/**
+ * `text` as inline code: fenced by one backtick more than its longest run of
+ * backticks, with a space inside when it starts or ends with a backtick or
+ * has a space at both ends, so it reads back as written.
+ */
+export function codeSpan(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const ticks = '`'.repeat(longest + 1);
+  const pad = text.startsWith('`') || text.endsWith('`') || (text.startsWith(' ') && text.endsWith(' ') && text.trim() !== '') ? ' ' : '';
+  return `${ticks}${pad}${text}${pad}${ticks}`;
+}
+
+/** Text that came out of code, escaped where it would otherwise read as Markdown, such as two backticks that would pair. */
+export function literalText(text: string): string {
+  return text.replace(/[\\`*_[\]<]/g, '\\$&').replace(/~~/g, '\\~\\~');
+}
+
+/** The text of `from` to `to` as the page shows it: without the marks of the formatting inside it. */
+function shownText(state: EditorState, from: number, to: number): string {
+  const marks = inlineSpans(state, from, to)
+    .filter((span) => span.from >= from && span.to <= to)
+    .flatMap((span) => [[span.from, span.textFrom], [span.textTo, span.to]])
+    .sort((a, b) => a[0] - b[0]);
+  let text = '';
+  let at = from;
+  for (const [markFrom, markTo] of marks) {
+    if (markFrom > at) text += state.sliceDoc(at, markFrom);
+    at = Math.max(at, markTo);
+  }
+  return text + state.sliceDoc(at, to);
+}
+
+/**
+ * The Code button and Cmd+E: the selection becomes inline code, keeping what
+ * the page shows, or stops being code when it is in inline code. With
+ * nothing selected in a document, the word the caret is in.
+ */
+export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  if (!treeFor(state, selectionEnd(state))) return true;
+  const range = state.selection.main;
+  const inside = inlineCodeAt(state, range.from, range.to);
+  if (inside) {
+    const insert = literalText(codeContent(state.sliceDoc(inside.textFrom, inside.textTo)));
+    dispatch(state.update({ changes: { from: inside.from, to: inside.to, insert }, selection: { anchor: inside.from + insert.length }, scrollIntoView: true, userEvent: 'input' }));
+    return true;
+  }
+  const target = range.empty ? (state.facet(docMode) ? wordAround(state, range.head) : null) : range;
+  if (!target) return true;
+  const parts = selectedText(state, target);
+  if (parts.length === 0) return true;
+  const changes = ChangeSet.of(parts.map((part) => ({ from: part.from, to: part.to, insert: codeSpan(shownText(state, part.from, part.to)) })), state.doc.length);
+  const selection = range.empty
+    ? EditorSelection.cursor(changes.mapPos(range.head))
+    : EditorSelection.range(changes.mapPos(parts[0].from, 1), changes.mapPos(parts[parts.length - 1].to, -1));
+  dispatch(state.update({ changes, selection, scrollIntoView: true, userEvent: 'input' }));
+  return true;
+};

@@ -16,6 +16,7 @@ import {
   type TransactionSpec,
 } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, keymap, type Command, type ViewUpdate } from '@codemirror/view';
+import { codeDocExtension } from './codeBlocks';
 import {
   EMPHASIS,
   STYLES,
@@ -25,6 +26,7 @@ import {
   setHeading,
   setTypingStyle,
   styledAt,
+  toggleInlineCode,
   toggleList,
   toggleMarker,
   typingStyle,
@@ -471,6 +473,7 @@ export function docModeExtensions(): Extension {
     docMode.of(true),
     firstLine,
     objectFrameExtension,
+    codeDocExtension({ toggleInline: toggleInlineCode, editLink }),
     insertImageItem,
     insertTableItem,
     docListKeys,

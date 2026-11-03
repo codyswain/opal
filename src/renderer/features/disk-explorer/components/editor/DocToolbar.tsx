@@ -5,6 +5,7 @@ import type { EditorView } from '@codemirror/view';
 import {
   Bold,
   ChevronDown,
+  Code,
   Ellipsis,
   IndentDecrease,
   IndentIncrease,
@@ -33,9 +34,10 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from '@/renderer/shared/ui';
+import { toggleCodeBlock } from './codeBlocks';
 import { editLink } from './docMode';
 import { insertItems } from './extensionPoints';
-import { clearFormatting, indentList, setHeading, toggleList, toggleMarker } from './formatCommands';
+import { clearFormatting, indentList, setHeading, toggleInlineCode, toggleList, toggleMarker } from './formatCommands';
 import type { FormatState } from './formatState';
 
 const STYLES = ['Normal text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'];
@@ -108,6 +110,8 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
 
   const command = (run: StateCommand) => () => { run(view); };
   const inserts = view.state.facet(insertItems);
+  // Formatting does not apply in a code block.
+  const inCode = format.code === 'block';
 
   const items: Item[] = [
     { id: 'undo', label: 'Undo', icon: Undo2, shortcut: '⌘Z', disabled: !format.canUndo, run: command(undo) },
@@ -115,20 +119,21 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     'separator',
     'style',
     'separator',
-    { id: 'bold', label: 'Bold', icon: Bold, shortcut: '⌘B', pressed: format.bold, run: command(toggleMarker('**')) },
-    { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, run: command(toggleMarker('*')) },
+    { id: 'bold', label: 'Bold', icon: Bold, shortcut: '⌘B', pressed: format.bold, disabled: inCode, run: command(toggleMarker('**')) },
+    { id: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘I', pressed: format.italic, disabled: inCode, run: command(toggleMarker('*')) },
+    { id: 'code', label: 'Code', icon: Code, shortcut: '⌘E', pressed: format.code === 'inline', disabled: inCode, run: command(toggleInlineCode) },
     'separator',
-    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, run: () => { editLink(view); } },
+    { id: 'link', label: 'Link', icon: Link, shortcut: '⌘K', pressed: format.link, disabled: inCode, run: () => { editLink(view); } },
     'insert',
     'separator',
-    { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', run: command(toggleList('task')) },
-    { id: 'bullets', label: 'Bulleted list', icon: List, shortcut: '⇧⌘8', pressed: format.list === 'bullet', run: command(toggleList('bullet')) },
-    { id: 'numbers', label: 'Numbered list', icon: ListOrdered, shortcut: '⇧⌘7', pressed: format.list === 'number', run: command(toggleList('number')) },
+    { id: 'checklist', label: 'Checklist', icon: ListTodo, shortcut: '⇧⌘9', pressed: format.list === 'task', disabled: inCode, run: command(toggleList('task')) },
+    { id: 'bullets', label: 'Bulleted list', icon: List, shortcut: '⇧⌘8', pressed: format.list === 'bullet', disabled: inCode, run: command(toggleList('bullet')) },
+    { id: 'numbers', label: 'Numbered list', icon: ListOrdered, shortcut: '⇧⌘7', pressed: format.list === 'number', disabled: inCode, run: command(toggleList('number')) },
     'separator',
     { id: 'outdent', label: 'Decrease indent', icon: IndentDecrease, shortcut: '⇧Tab', disabled: !format.inList, run: command(indentList(false)) },
     { id: 'indent', label: 'Increase indent', icon: IndentIncrease, shortcut: 'Tab', disabled: !format.inList, run: command(indentList(true)) },
     'separator',
-    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, run: command(clearFormatting) },
+    { id: 'clear', label: 'Clear formatting', icon: RemoveFormatting, disabled: inCode, run: command(clearFormatting) },
   ];
   const count = fitting(items, width);
   const shown = items.slice(0, count);
@@ -157,7 +162,7 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     event.preventDefault();
     view.focus();
   };
-  const styleName = format.heading === null ? 'Mixed styles' : STYLES[format.heading];
+  const styleName = inCode ? 'Code block' : format.heading === null ? 'Mixed styles' : STYLES[format.heading];
   const insertMenuItems = inserts.map((item) => {
     const Icon = item.icon;
     return (
@@ -169,11 +174,17 @@ export const DocToolbar: React.FC<DocToolbarProps> = ({ view, format }) => {
     );
   });
   const styleItems = (
-    <MenuRadioGroup value={String(format.heading ?? '')} onValueChange={(level) => setHeading(Number(level))(view)}>
-      {STYLES.map((name, level) => (
-        <MenuRadioItem key={name} value={String(level)}>{name}</MenuRadioItem>
-      ))}
-    </MenuRadioGroup>
+    <>
+      <MenuRadioGroup value={inCode ? '' : String(format.heading ?? '')} onValueChange={(level) => setHeading(Number(level))(view)}>
+        {STYLES.map((name, level) => (
+          <MenuRadioItem key={name} value={String(level)} disabled={inCode}>{name}</MenuRadioItem>
+        ))}
+      </MenuRadioGroup>
+      <MenuCheckboxItem checked={inCode} onSelect={() => { toggleCodeBlock(view); }}>
+        Code block
+        <MenuShortcut>⌥⌘C</MenuShortcut>
+      </MenuCheckboxItem>
+    </>
   );
 
   return (

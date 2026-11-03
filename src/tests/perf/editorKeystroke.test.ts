@@ -78,6 +78,7 @@ describe('keystroke budget in the editor', () => {
     ['next to an inline formula', spot((text) => text.indexOf('$x_50^2') - 1)],
     ['between display formulas', spot((text) => text.indexOf('$$\n\n$$', text.indexOf('a_50')) + 3)],
     ['under a 1,627-line JSON fence', spot((text) => text.indexOf('The end.'))],
+    ['inside the 1,627-line JSON fence, edited in place', spot((text) => text.indexOf('"key800"') + 4)],
   ];
 
   it.each(spots)('types at %s within one frame', (_name, place) => {

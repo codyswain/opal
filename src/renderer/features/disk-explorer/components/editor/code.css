@@ -1,0 +1,295 @@
+/*
+ * Code blocks. In a document the code lines are the page's own lines: each
+ * draws its slice of the grey box with ::before, so the box can sit inside a
+ * callout or a list item, and the text wraps with a hanging indent. Code is
+ * set at 0.85em, so lengths that line up with the page's text are divided
+ * by 0.85. Black and white only: weight, italic and three greys.
+ */
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line {
+  --code-box-left: calc((var(--quote-indent, 0px) + var(--code-indent, 0px)) / 0.85);
+  position: relative;
+  z-index: 0;
+  padding-left: calc(var(--code-box-left) + 1em + 2ch);
+  padding-right: calc(var(--code-right, 0px) + 1em);
+  text-indent: -2ch;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: var(--code-box-left);
+  right: var(--code-right, 0px);
+  background-color: var(--editor-sunken);
+  content: "";
+}
+
+/* In a callout the box keeps the callout's right padding, and its grey deepens. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-md-callout {
+  --code-right: calc(1em / 0.85);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-md-callout::before {
+  background-color: hsl(var(--foreground) / 0.05);
+}
+
+/* The header row: the opening fence's line, 28px tall. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head {
+  padding-left: calc(var(--code-box-left) + 1em);
+  text-indent: 0;
+  line-height: 28px;
+}
+
+/* A fence on a list item's line keeps the item's marker, outside the box. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-md-list {
+  text-indent: calc(-1 * var(--list-indent) / 0.85);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head::before {
+  border-top-left-radius: var(--radius-row);
+  border-top-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head:has(.cm-code-header:hover)::before {
+  background-color: hsl(var(--foreground) / 0.07);
+}
+
+/* The closing fence's line: the box's bottom edge. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot {
+  height: 0.4em;
+  overflow: hidden;
+  line-height: 0.4em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom::before {
+  border-bottom-left-radius: var(--radius-row);
+  border-bottom-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom {
+  padding-bottom: 0.35em;
+}
+
+/* No closing fence: a dashed bottom edge and a footer saying so. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-unclosed::before {
+  border-bottom: 1px dashed hsl(var(--border-default));
+}
+
+.opal-editor .cm-editor .cm-code-open-end {
+  display: block;
+  padding: 0.4em 0 0.15em;
+  text-indent: 0;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-code-end-here {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: hsl(var(--text-secondary));
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary) / 0.55);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.opal-editor .cm-editor .cm-code-end-here:hover {
+  color: hsl(var(--foreground));
+}
+
+/* An indented code block: the same box, with no header. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-first {
+  padding-top: 0.35em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-first::before {
+  border-top-left-radius: var(--radius-row);
+  border-top-right-radius: var(--radius-row);
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-last {
+  padding-bottom: 0.35em;
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-indented.cm-md-codeblock-last::before {
+  border-bottom-left-radius: var(--radius-row);
+  border-bottom-right-radius: var(--radius-row);
+}
+
+/* The header's contents: the language on the left, Copy on the right. */
+.opal-editor .cm-editor .cm-code-header {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  vertical-align: top;
+  color: hsl(var(--text-tertiary));
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  font-size: var(--text-label-size);
+  line-height: 28px;
+  cursor: default;
+  user-select: none;
+}
+
+.opal-editor .cm-editor .cm-code-header[data-object]:hover {
+  background-color: transparent;
+}
+
+.opal-editor .cm-editor .cm-code-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.opal-editor .cm-editor .cm-code-copy {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: hsl(var(--text-tertiary));
+  font: inherit;
+  line-height: 22px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard), background-color var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-copy:hover {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-copy:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+  opacity: 1;
+}
+
+/* A quiet block shows only its label; Copy and "Plain text" show on hover or with the caret in the block. */
+.opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label {
+  opacity: 0;
+  transition: opacity var(--duration-hover) var(--ease-standard);
+}
+
+.opal-editor .cm-editor .cm-code-header:hover .cm-code-copy,
+.opal-editor .cm-editor .cm-code-header[data-hover] .cm-code-copy,
+.opal-editor .cm-editor .cm-code-header[data-active] .cm-code-copy,
+.opal-editor .cm-editor .cm-code-copy[data-copied],
+.opal-editor .cm-editor .cm-code-header[data-quiet]:hover .cm-code-label,
+.opal-editor .cm-editor .cm-code-header[data-quiet][data-hover] .cm-code-label,
+.opal-editor .cm-editor .cm-code-header[data-quiet][data-active] .cm-code-label {
+  opacity: 1;
+}
+
+/* An empty block's one line. */
+.opal-editor .cm-editor .cm-code-placeholder {
+  color: hsl(var(--text-tertiary));
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A framed block: a ring inside the box, following its corners. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-line.cm-code-framed::before {
+  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-head.cm-code-framed::before {
+  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground)), inset 0 2px 0 0 hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-foot.cm-code-framed::before,
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-bottom.cm-code-framed::before {
+  box-shadow: inset 2px 0 0 0 hsl(var(--foreground)), inset -2px 0 0 0 hsl(var(--foreground)), inset 0 -2px 0 0 hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-line .cm-object-framed {
+  box-shadow: none;
+}
+
+/* Highlighting: weight, italic and three greys. */
+.opal-editor .cm-editor .cm-code-keyword {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.opal-editor .cm-editor .cm-code-string {
+  color: hsl(var(--text-secondary));
+}
+
+.opal-editor .cm-editor .cm-code-comment {
+  color: hsl(var(--text-tertiary));
+  font-style: italic;
+}
+
+.opal-editor .cm-editor .cm-code-literal {
+  color: hsl(var(--foreground));
+}
+
+.opal-editor .cm-editor .cm-code-name {
+  font-weight: 500;
+}
+
+.opal-editor .cm-editor .cm-code-punctuation {
+  color: hsl(var(--text-tertiary));
+}
+
+.opal-editor .cm-editor .cm-code-em {
+  font-style: italic;
+}
+
+/* Diff lines: added on a grey fill with a bold sign, removed struck through, hunk headers muted. */
+.opal-editor .cm-editor .cm-content > .cm-line.cm-code-diff-add::before,
+.opal-editor .cm-editor .cm-md-codeblock-lines .cm-code-diff-add {
+  background-color: hsl(var(--foreground) / 0.08);
+}
+
+.opal-editor .cm-editor .cm-code-diff-sign {
+  font-weight: 700;
+}
+
+.opal-editor .cm-editor .cm-code-diff-del {
+  color: hsl(var(--text-tertiary));
+  text-decoration: line-through;
+}
+
+.opal-editor .cm-editor .cm-code-diff-meta {
+  color: hsl(var(--text-tertiary));
+}
+
+/* Notes: the drawn block scrolls sideways inside the column, never past it. */
+.opal-editor .cm-editor .cm-md-codeblock-widget {
+  max-width: 100%;
+}
+
+.opal-editor .cm-editor .cm-md-codeblock-box {
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-editor .cm-editor .cm-code-copy,
+  .opal-editor .cm-editor .cm-code-header[data-quiet] .cm-code-label {
+    transition: none;
+  }
+}
