@@ -60,6 +60,14 @@ describe('inline code', () => {
     expect(view.contentDOM.querySelector('.cm-md-code')?.textContent).toBe('`tick`');
   });
 
+  it('shows a double-backtick span over three lines as one span on one line, keeping its bytes', () => {
+    const doc = 'Run ``npm\ninstall\n  opal`` now.\n';
+    const view = mount(doc);
+    const lines = [...view.contentDOM.querySelectorAll('.cm-line')].map((line) => line.textContent);
+    expect(lines[0]).toBe('Run npm install opal now.');
+    expect(text(view)).toBe(doc);
+  });
+
   it('writes delimiters one longer than the longest run inside, padded when needed', () => {
     expect(codeSpan('a')).toBe('`a`');
     expect(codeSpan('a`b')).toBe('``a`b``');

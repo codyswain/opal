@@ -1,4 +1,6 @@
-import { EditorState, Prec, Transaction, type Extension, type TransactionSpec } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
+import { EditorState, Prec, StateField, Transaction, type Extension, type Range, type TransactionSpec } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { codeSpan, inlineCodeAt } from './formatCommands';
 import { nodeDecorators } from './extensionPoints';
 
@@ -6,7 +8,9 @@ import { nodeDecorators } from './extensionPoints';
  * Inline code. A space of padding on both sides is hidden, as CommonMark
  * reads it. A backtick typed inside a span stays a literal backtick: the
  * span's delimiters grow past the longest run inside, so the span stays
- * whole instead of closing early.
+ * whole instead of closing early. In a document a span that runs over line
+ * breaks shows on one line, its line breaks as spaces, as CommonMark reads
+ * them.
  */
 
 /** Hides one space of padding on both sides of inline code, as CommonMark drops it. */
@@ -52,9 +56,72 @@ export function literalBacktick(tr: Transaction): TransactionSpec | null {
   };
 }
 
+/** A line break inside inline code, shown as the space CommonMark reads it as. */
+class SpaceWidget extends WidgetType {
+  eq() { return true; }
+
+  toDOM() {
+    const space = document.createElement('span');
+    space.className = 'cm-md-code';
+    space.textContent = ' ';
+    return space;
+  }
+}
+
+const space = Decoration.replace({ widget: new SpaceWidget() });
+
+/** The line breaks, with the next line's leading spaces, inside the inline code of paragraphs between `from` and `to`. */
+function lineBreaks(state: EditorState, from: number, to: number): Range<Decoration>[] {
+  const found: Range<Decoration>[] = [];
+  syntaxTree(state).iterate({
+    from,
+    to,
+    enter: (ref) => {
+      if (ref.name === 'Paragraph') {
+        const text = state.sliceDoc(ref.from, ref.to);
+        return text.includes('`') && text.includes('\n') ? undefined : false;
+      }
+      if (ref.name !== 'InlineCode') return undefined;
+      const text = state.sliceDoc(ref.from, ref.to);
+      for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
+        const start = ref.from + at;
+        let end = start + 1;
+        while (end < ref.to && /[ \t>]/.test(state.sliceDoc(end, end + 1))) end += 1;
+        found.push(space.range(start, end));
+      }
+      return false;
+    },
+  });
+  return found;
+}
+
+/** A document's inline code over line breaks, on one line. Line breaks can only be replaced from a state field. */
+const joinedCode = StateField.define<DecorationSet>({
+  create: (state) => Decoration.set(lineBreaks(state, 0, state.doc.length), true),
+  update(value, tr) {
+    if (tr.docChanged) {
+      let next = value.map(tr.changes);
+      tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+        // The paragraph around a change, as far as a blank line either side.
+        const { doc } = tr.state;
+        let first = doc.lineAt(fromB).number;
+        let last = doc.lineAt(toB).number;
+        while (first > 1 && doc.line(first - 1).text.trim()) first -= 1;
+        while (last < doc.lines && doc.line(last + 1).text.trim()) last += 1;
+        const from = doc.line(first).from;
+        const to = doc.line(last).to;
+        next = next.update({ filterFrom: from, filterTo: to, filter: () => false, add: lineBreaks(tr.state, from, to), sort: true });
+      });
+      return next;
+    }
+    return syntaxTree(tr.startState) !== syntaxTree(tr.state) ? Decoration.set(lineBreaks(tr.state, 0, tr.state.doc.length), true) : value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 /** Inline code in every page: the hidden padding. */
 export const inlineCode: Extension = padding;
 
-/** Inline code in a document, where its delimiters never show: a typed backtick stays literal. */
+/** Inline code in a document, where its delimiters never show: a typed backtick stays literal, and a span over line breaks shows on one line. */
 // Filters run lowest precedence first, so this runs before doc mode places the caret.
-export const inlineCodeDoc: Extension = Prec.low(EditorState.transactionFilter.of((tr) => literalBacktick(tr) ?? tr));
+export const inlineCodeDoc: Extension = [joinedCode, Prec.low(EditorState.transactionFilter.of((tr) => literalBacktick(tr) ?? tr))];
