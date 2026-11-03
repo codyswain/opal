@@ -53,6 +53,17 @@ function at(view: EditorView, anchor: number) {
   act(() => { view.dispatch({ selection: { anchor } }); });
 }
 
+/** Types one character over the selection, as the browser does. */
+function typeOver(view: EditorView, character: string) {
+  act(() => {
+    const { from, to } = view.state.selection.main;
+    const insert = () => view.state.update({ changes: { from, to, insert: character }, selection: { anchor: from + 1 }, userEvent: 'input.type' });
+    if (!view.state.facet(EditorView.inputHandler).some((handler) => handler(view, from, to, character, insert))) view.dispatch(insert());
+  });
+}
+
+const visible = (view: EditorView) => visibleLine(view.state, 0).text;
+
 describe('typing in a document', () => {
   it('writes exactly the typed bytes inside inline code', () => {
     const view = mount('Use `xy` here\n');
@@ -178,6 +189,49 @@ describe('typing in a document', () => {
     at(view, text(view).indexOf('*'));
     type(view, 'x');
     expect(text(view)).toBe('say — *x"hi"* now\n');
+  });
+
+  it('types wiki links, embeds, links and autolinks as written: no backslash before the last bracket', () => {
+    for (const typed of ['[[Note]]', '![[img.png]]', 'see [text](https://x.com)', '<https://x.com>']) {
+      const view = mount('\n');
+      at(view, 0);
+      type(view, typed);
+      expect(text(view)).toBe(`${typed}\n`);
+    }
+  });
+
+  it('closes an old star some other way when a backslash would land in a bare URL, and never moves typed letters', () => {
+    const view = mount('\n');
+    at(view, 0);
+    type(view, 'a*b and https://x.com/c*d*e ok');
+    expect(visible(view)).toBe('a*b and https://x.com/c*d*e ok');
+  });
+
+  it('leaves numbers with a decimal point at a line start as typed', () => {
+    for (const typed of ['3.14 is pi', '2.5 hours', '10.5% growth', '11.03 meeting']) {
+      const view = mount('\n');
+      at(view, 0);
+      type(view, typed);
+      expect(text(view)).toBe(`${typed}\n`);
+    }
+  });
+
+  it('takes the blank line out again when a line under a paragraph stops being a rule or underline', () => {
+    const view = mount('Total\n');
+    act(() => { view.dispatch({ changes: { from: 5, insert: '\n' }, selection: { anchor: 6 }, userEvent: 'input' }); });
+    type(view, '= 5 + 3');
+    expect(text(view)).toBe('Total\n= 5 + 3\n');
+    const dashes = mount('Total\n');
+    act(() => { dashes.dispatch({ changes: { from: 5, insert: '\n' }, selection: { anchor: 6 }, userEvent: 'input' }); });
+    type(dashes, '--- x');
+    expect(text(dashes)).toBe('Total\n--- x\n');
+  });
+
+  it('escapes a delimiter typed over a selection', () => {
+    const view = mount('*nix c\n');
+    act(() => { view.dispatch({ selection: { anchor: 4, head: 6 } }); });
+    typeOver(view, '*');
+    expect(visible(view)).toBe('*nix*');
   });
 
   it('leaves a note as typed', () => {
@@ -311,6 +365,18 @@ describe('the word count', () => {
     act(() => { view.dispatch({ selection: { anchor: 9, head: 18 } }); });
     expect(pageWords(view.state).selected).toBe(2);
   });
+
+  it('keeps a note\'s count when the caret moves onto a line that shows its Markdown', async () => {
+    const view = mount('Intro line here.\n\nSee [the site](https://example.com/a-long/path-name) now.\n', NOTE);
+    view.focus = vi.fn();
+    Object.defineProperty(view, 'hasFocus', { configurable: true, get: () => true });
+    act(() => { view.contentDOM.dispatchEvent(new FocusEvent('focus')); });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    at(view, 2);
+    const away = pageWords(view.state).words;
+    at(view, 25);
+    expect(pageWords(view.state).words).toBe(away);
+  });
 });
 
 describe('hard breaks in a document', () => {
@@ -321,6 +387,15 @@ describe('hard breaks in a document', () => {
     type(view, 'next');
     expect(text(view)).toBe('see C:\\\\\nnext');
     expect(visibleLine(view.state, 0).text).toBe('see C:\\');
+  });
+
+  it('go with the line break when Backspace joins the lines', () => {
+    for (const [doc, caret] of [['one\\\ntwo\n', 5], ['First line  \nSecond line\n', 13]] as const) {
+      const view = mount(doc);
+      at(view, caret);
+      act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Backspace' }), 'editor'); });
+      expect(text(view)).toBe(doc.replace(/(\\| {2,})\n/, ''));
+    }
   });
 
   it('hide the backslash or spaces, and typing at the line\'s end lands before them', () => {

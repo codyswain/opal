@@ -191,18 +191,58 @@ const LINE_SHORTCUTS = new Set(['ListMark', 'QuoteMark', 'HeaderMark']);
 // Marks a typed space turns into formatting: a heading, a list item, a task's box.
 const LINE_FORMATS = new Set(['HeaderMark', 'ListMark', 'TaskMarker']);
 
-/** The one character typed at a caret by `tr`: where it went in the new text, or null. */
-function typedCharacter(tr: Transaction): { at: number; text: string } | null {
+/**
+ * The one character typed by `tr`, at a caret or over a selection on one
+ * line: where it went in the new text, and the old text it replaced. Null
+ * for anything else.
+ */
+function typedCharacter(tr: Transaction): { at: number; text: string; from: number; to: number } | null {
   if (!tr.isUserEvent('input.type') || tr.isUserEvent('input.type.compose') || tr.startState.selection.ranges.length > 1) return null;
-  const inserts: { at: number; text: string }[] = [];
-  let removed = false;
-  tr.changes.iterChanges((fromA, toA, fromB, _toB, inserted) => {
-    if (toA > fromA) removed = true;
-    inserts.push({ at: fromB, text: inserted.toString() });
-  });
-  if (removed || inserts.length !== 1) return null;
+  const inserts: { at: number; text: string; from: number; to: number }[] = [];
+  tr.changes.iterChanges((fromA, toA, fromB, _toB, inserted) => inserts.push({ at: fromB, text: inserted.toString(), from: fromA, to: toA }));
+  if (inserts.length !== 1) return null;
+  const [typed] = inserts;
+  if (typed.to > typed.from && tr.startState.doc.lineAt(typed.from).number !== tr.startState.doc.lineAt(typed.to).number) return null;
   // Text a typing style wraps in its marks is more than the one character typed, and is left as it is.
-  return inserts[0].text.length === 1 ? inserts[0] : null;
+  return typed.text.length === 1 ? typed : null;
+}
+
+/** The backslash written before "N." at a line start, taken out again when the next key is not a space. */
+const numberEscape = StateEffect.define<number | null>();
+/** The blank line written above `---` or `===` under a paragraph, taken out again when the line stops being one. */
+const ruleBlank = StateEffect.define<{ from: number; to: number }>();
+
+const provisional = StateField.define<{ number: number | null; blank: { from: number; to: number } | null }>({
+  create: () => ({ number: null, blank: null }),
+  update(value, tr) {
+    let { number, blank } = value;
+    if (tr.docChanged) {
+      number = number === null ? null : tr.changes.mapPos(number, 1, MapMode.TrackDel);
+      if (blank) {
+        const from = tr.changes.mapPos(blank.from, 1, MapMode.TrackDel);
+        const to = tr.changes.mapPos(blank.to, -1, MapMode.TrackDel);
+        blank = from === null || to === null || to - from !== blank.to - blank.from ? null : { from, to };
+      }
+    }
+    for (const effect of tr.effects) {
+      if (effect.is(numberEscape)) number = effect.value;
+      if (effect.is(ruleBlank)) blank = effect.value;
+    }
+    return number === value.number && blank === value.blank ? value : { number, blank };
+  },
+});
+
+// A line that is a rule or a heading's underline.
+const RULE_LINE = /^(?:-+|=+)[ \t]*$/;
+
+/** The links a typed `]`, `)` or `>` finishes: a Markdown link or image, a wiki link or embed, an autolink. */
+const TYPED_LINKS = new Set(['Link', 'Image', 'WikiLink', 'Embed', 'Autolink']);
+
+function finishesLink(state: EditorState, at: number): boolean {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at + 1, -1); node; node = node.parent) {
+    if (TYPED_LINKS.has(node.name)) return node.to === at + 1;
+  }
+  return false;
 }
 
 /** An extra change that keeps a typed character as typed, or null when it shows as typed already. */
@@ -210,7 +250,7 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   const typed = typedCharacter(tr);
   if (!typed) return null;
   const { startState: before, state: after } = tr;
-  const caret = tr.changes.invertedDesc.mapPos(typed.at);
+  const caret = typed.from;
   const { text, at } = typed;
   const line = after.doc.lineAt(at);
   // While the parser has not reached the line, what the page shows there is not known: nothing is escaped.
@@ -222,13 +262,29 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   const lineBefore = before.doc.lineAt(caret);
   const prefix = CONTAINER.exec(before.sliceDoc(lineBefore.from, caret))?.[0] ?? '';
   const lead = after.sliceDoc(line.from + prefix.length, at);
+  const { number, blank } = before.field(provisional, false) ?? { number: null, blank: null };
+
+  // "3\." followed by anything but a space never reads as a list item: the backslash goes again.
+  if (number !== null && caret === number + 2 && caret === typed.to && text !== ' ' && before.sliceDoc(number, number + 1) === '\\') {
+    return { changes: { from: number, to: number + 1 }, selection: { anchor: at + text.length - 1 }, effects: numberEscape.of(null), sequential: true };
+  }
+
+  // A line under the blank line written above a rule that stops being a rule or underline: the blank line goes again.
+  if (blank && blank.to === lineBefore.from) {
+    const quoted = /^(?:[ \t]*>[ \t]?)*/.exec(line.text)?.[0] ?? '';
+    if (!RULE_LINE.test(line.text.slice(quoted.length))) {
+      const length = blank.to - blank.from;
+      return { changes: { from: blank.from, to: blank.to }, selection: { anchor: at + text.length - length }, sequential: true };
+    }
+  }
 
   // A numbered item other than 1 starts only where it continues an ordered list.
   if ((text === '.' || text === ')' || text === ' ') && /^\d+[.)]?$/.test(lead + (text === ' ' ? '' : text)) && !/^\\/.test(lead)) {
     const marker = text === ' ' ? lead : lead + text;
     const match = /^(\d+)([.)])$/.exec(marker);
     if (match && Number(match[1]) !== 1 && !inOrderedItem(before, lineBefore.number - 1, prefix.length)) {
-      return insertBefore(line.from + prefix.length + match[1].length, '\\');
+      const from = line.from + prefix.length + match[1].length;
+      return { ...insertBefore(from, '\\'), effects: numberEscape.of(from) };
     }
     if (text !== ' ') return null;
   }
@@ -251,19 +307,21 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
   if ((text === '-' || text === '=') && /^(?:-{3,}|=+)$/.test(after.sliceDoc(line.from + quote.length, line.to)) && line.number > 1) {
     const mark = latestTree(after).resolveInner(line.from + quote.length, 1);
     if (mark.name === 'HeaderMark' && /^SetextHeading/.test(mark.parent?.name ?? '')) {
-      return insertBefore(line.from, `${quote.replace(/[ \t]+$/, '')}\n`);
+      const insert = `${quote.replace(/[ \t]+$/, '')}\n`;
+      return { ...insertBefore(line.from, insert), effects: ruleBlank.of({ from: line.from, to: line.from + insert.length }) };
     }
     return null;
   }
 
   // Punctuation is checked against what the page shows; letters only where they touch a mark.
-  if (!ASCII_PUNCTUATION.test(text)) return otherSide(tr, caret, text);
+  if (!ASCII_PUNCTUATION.test(text)) return typed.to === typed.from ? otherSide(tr, caret, text) : null;
   // A bullet, quote or heading mark typed at the end of a line is a shortcut; before text it stays text.
   const mark = latestTree(after).resolveInner(at, 1);
   if (LINE_SHORTCUTS.has(mark.name) && mark.from === at && !/\S/.test(after.sliceDoc(at + text.length, line.to))) return null;
+  // The last bracket of a link or wiki link, or the ">" of an autolink, finishes a link typed by hand.
+  if ((text === ']' || text === ')' || text === '>') && finishesLink(after, at)) return null;
   const shown = visibleLine(before, caret);
-  const offset = visibleOffset(shown, caret);
-  const expected = shown.text.slice(0, offset) + text + shown.text.slice(offset);
+  const expected = shown.text.slice(0, visibleOffset(shown, caret)) + text + shown.text.slice(visibleOffset(shown, typed.to));
   if (visibleLine(after, at).text === expected) return null;
   const marks = shortcutMarks(after, at);
   if (marks) {
@@ -271,7 +329,26 @@ function escapeTyped(tr: Transaction): TransactionSpec | null {
     for (const range of [marks.open, marks.close]) for (let index = range.from; index < range.to; index += 1) positions.push(index);
     return autoformatSpec(at, text.length, positions);
   }
-  return insertBefore(at, '\\');
+  // A backslash before the typed character, or where that does nothing (in a bare URL), before the opener it closes.
+  for (const from of [at, openerClosedAt(after, at)]) {
+    if (from === null) continue;
+    const trial = after.update({ changes: { from, insert: '\\' }, filter: false }).state;
+    ensureSyntaxTree(trial, trial.doc.lineAt(at + 1).to, 50);
+    if (visibleLine(trial, at + 1).text === expected) return insertBefore(from, '\\');
+  }
+  return null;
+}
+
+/** Where the opening mark of the emphasis whose closing mark holds `at` starts, or null. */
+function openerClosedAt(state: EditorState, at: number): number | null {
+  for (let node: SyntaxNode | null = latestTree(state).resolveInner(at, 1); node; node = node.parent) {
+    if (!EMPHASIS_NODES.has(node.name)) continue;
+    const marks = node.getChildren(MARK_OF[node.name]);
+    if (marks.length < 2) return null;
+    const close = marks[marks.length - 1];
+    return close.from <= at && at < close.to ? marks[0].from : null;
+  }
+  return null;
 }
 
 /**
@@ -360,8 +437,28 @@ function keepBackslash(tr: Transaction): TransactionSpec | null {
   return found;
 }
 
+/**
+ * Backspace or Delete that joins a line ending in a hard break takes the
+ * hidden break with the line break, so the backslash or spaces never show.
+ */
+function joinAcrossBreak(tr: Transaction): TransactionSpec | null {
+  if (!tr.isUserEvent('delete')) return null;
+  const edits: { from: number; to: number; inserted: number }[] = [];
+  tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => edits.push({ from, to, inserted: inserted.length }));
+  if (edits.length !== 1 || edits[0].inserted > 0 || edits[0].to - edits[0].from !== 1) return null;
+  const state = tr.startState;
+  const { from } = edits[0];
+  if (state.sliceDoc(from, from + 1) !== '\n' || rawAt(state, from)) return null;
+  let start: number | null = null;
+  latestTree(state).iterate({ from: state.doc.lineAt(from).from, to: from + 1, enter: (ref) => { if (ref.name === 'HardBreak' && ref.to === from + 1) start = ref.from; } });
+  if (start === null) return null;
+  return { changes: { from: start, to: from + 1 }, selection: { anchor: start }, scrollIntoView: true, userEvent: tr.annotation(Transaction.userEvent) };
+}
+
 const typingFilter = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !tr.startState.facet(docMode)) return tr;
+  const joined = joinAcrossBreak(tr);
+  if (joined) return joined;
   const split = splitAtBreak(tr);
   if (split) return split;
   const backslash = keepBackslash(tr);
@@ -639,5 +736,5 @@ function compositionHooks(replace: (state: EditorState, from: number, to: number
 
 /** Doc mode's typing: the session's typed marks, the escapes, Enter in formatting, hidden hard breaks and input methods. */
 export function typingExtension(replace: (state: EditorState, from: number, to: number, insert: string) => { changes: ChangeSpec[] }): Extension {
-  return [typedMarks, justFormatted, typeThenFormat, applyFormatting, Prec.high(undoFormatting), Prec.high(typingFilter), hardBreaks, compositionHooks(replace)];
+  return [typedMarks, provisional, justFormatted, typeThenFormat, applyFormatting, Prec.high(undoFormatting), Prec.high(typingFilter), hardBreaks, compositionHooks(replace)];
 }
