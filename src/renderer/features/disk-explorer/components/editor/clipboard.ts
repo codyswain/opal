@@ -1,6 +1,6 @@
 import { isolateHistory } from '@codemirror/commands';
 import { Annotation, ChangeSet, EditorSelection, EditorState, Transaction, type ChangeSpec, type Extension, type TransactionSpec } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { latestTree, outsideProtected } from './extensionPoints';
 import { inlineSpans, linkAt, withoutEdgeMarks, writeLink } from './formatCommands';
@@ -186,19 +186,29 @@ function inTable(state: EditorState, at: number): boolean {
   return false;
 }
 
-// When ⌘⇧V was pressed: the paste event that follows it is Paste and Match Style.
-const literalPresses = new WeakMap<EditorView, number>();
-const LITERAL_MS = 1_000;
-
-/** The next paste in `view` is literal, as Paste and Match Style. */
-export function pasteLiterallyNext(view: EditorView): void {
-  literalPresses.set(view, Date.now());
-}
-
-function takeLiteral(view: EditorView): boolean {
-  const at = literalPresses.get(view);
-  literalPresses.delete(view);
-  return at !== undefined && Date.now() - at < LITERAL_MS;
+/**
+ * Edit > Paste and Match Style, from the menu or ⌘⇧V: the clipboard's text
+ * pasted literally into the editor that holds `target`, or as plain text
+ * into another field. The menu runs this rather than the system's paste,
+ * whose paste event looks the same as ⌘V's.
+ */
+export async function pasteAndMatchStyle(target: Element | null = document.activeElement): Promise<void> {
+  const host = target?.closest('.cm-editor');
+  const view = host instanceof HTMLElement ? EditorView.findFromDOM(host) : null;
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    return;
+  }
+  if (!text) return;
+  if (!view) {
+    document.execCommand('insertText', false, text);
+    return;
+  }
+  if (view.state.readOnly) return;
+  const spec = view.state.facet(docMode) ? pasteSpec(view.state, text, true) : null;
+  view.dispatch(spec ?? { ...view.state.replaceSelection(text.replace(/\r\n?/g, '\n')), scrollIntoView: true, userEvent: 'input.paste' });
 }
 
 const clipboardEvents = EditorView.domEventHandlers({
@@ -213,11 +223,10 @@ const clipboardEvents = EditorView.domEventHandlers({
     return true;
   },
   paste(event, view) {
-    const literal = takeLiteral(view);
     if (!view.state.facet(docMode) || view.state.readOnly) return false;
     const text = event.clipboardData?.getData('text/plain') ?? '';
     if (!text) return false;
-    const spec = pasteSpec(view.state, text, literal);
+    const spec = pasteSpec(view.state, text, false);
     if (!spec) return false;
     event.preventDefault();
     view.dispatch(spec);
@@ -231,7 +240,5 @@ export function clipboard(replace: (state: EditorState, from: number, to: number
     balancedOutput,
     clipboardEvents,
     containedLines(replace),
-    // ⌘⇧V reaches the menu's Paste and Match Style, whose paste event comes next.
-    keymap.of([{ key: 'Mod-Shift-v', run: (view) => { pasteLiterallyNext(view); return false; } }]),
   ];
 }

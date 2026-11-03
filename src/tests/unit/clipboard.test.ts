@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
-import { balancedText, containerPrefix, pasteLiterallyNext, pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
+import { balancedText, containerPrefix, pasteAndMatchStyle, pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
 import { protectedRanges } from '@/renderer/features/disk-explorer/components/editor/extensionPoints';
 import { linkAt, writeLink } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
@@ -63,7 +63,6 @@ function clipboardEvent(view: EditorView, type: 'copy' | 'cut' | 'paste', data =
 
 /** Pastes `pasted` as ⌘V, or as ⌘⇧V with `literal`. */
 function paste(view: EditorView, pasted: string, literal = false) {
-  if (literal) pasteLiterallyNext(view);
   const spec = pasteSpec(view.state, pasted, literal);
   act(() => {
     if (spec) view.dispatch(spec);
@@ -188,14 +187,17 @@ describe('Paste and Match Style in a document', () => {
     expect(literal('Area $a b$ end\n', 7, '*x*', [formula])).toBe('Area $a*x* b$ end\n');
   });
 
-  it('is what the paste event does after ⌘⇧V', () => {
+  it('is what Edit > Paste and Match Style does, from the menu or ⌘⇧V, and ⌘V stays a paste', async () => {
+    const readText = vi.fn(async () => '*x*');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText } });
     const view = mount('See \n');
     select(view, 4);
-    const mod = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
-    // The browser names the key "V" with Shift held; CodeMirror matches its key code.
-    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'V', keyCode: 86, shiftKey: true, ...mod }), 'editor'); });
-    clipboardEvent(view, 'paste', clipboardData({ 'text/plain': '*x*' }));
+    await act(() => pasteAndMatchStyle(view.contentDOM));
     expect(text(view)).toBe('See \\*x\\*\n');
+    const plain = mount('See \n');
+    select(plain, 4);
+    clipboardEvent(plain, 'paste', clipboardData({ 'text/plain': '*x*' }));
+    expect(text(plain)).toBe('See *x*\n');
   });
 });
 

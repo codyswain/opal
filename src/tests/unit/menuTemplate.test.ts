@@ -10,6 +10,7 @@ const COMMANDS: MenuCommand[] = [
   { id: COMMAND_IDS.toggleLeftPane, label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\' },
   { id: COMMAND_IDS.toggleRightPane, label: 'Toggle Right Sidebar', accelerator: 'CmdOrCtrl+Shift+\\' },
   { id: COMMAND_IDS.toggleProperties, label: 'Show Properties', accelerator: 'CmdOrCtrl+Shift+I' },
+  { id: COMMAND_IDS.pasteAndMatchStyle, label: 'Paste and Match Style', accelerator: 'CmdOrCtrl+Shift+V' },
   { id: COMMAND_IDS.collapseAllFolders, label: 'Collapse All Folders', accelerator: 'Alt+CmdOrCtrl+Left' },
   { id: COMMAND_IDS.nextSection, label: 'Next Section', accelerator: 'Alt+CmdOrCtrl+Down' },
   { id: COMMAND_IDS.previousSection, label: 'Previous Section', accelerator: 'Alt+CmdOrCtrl+Up' },
@@ -138,6 +139,12 @@ describe('buildMenuTemplate', () => {
     expect(roles).toEqual(
       expect.arrayContaining(['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'])
     );
+  });
+
+  it('runs Paste and Match Style in the renderer, so a click pastes literally as Cmd+Shift+V does', () => {
+    const edit = menu(build(), 'Edit');
+    const paste = edit.findIndex((item) => item.role === 'paste');
+    expect(edit[paste + 1]).toMatchObject({ label: 'Paste and Match Style', commandId: COMMAND_IDS.pasteAndMatchStyle, accelerator: 'CmdOrCtrl+Shift+V' });
   });
 
   it('never emits an item that has neither a role nor a commandId', () => {
