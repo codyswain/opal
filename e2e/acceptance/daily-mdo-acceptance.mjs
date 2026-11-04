@@ -2,12 +2,14 @@
 // older .md days, one .mdo day, a date with both files and no page for today.
 // Daily makes today's page as a .mdo from the template, lists the days in
 // order with the date as each label, and shows one toolbar above the stream.
-// The toolbar acts on the document that last had focus (Bold, a list,
-// Insert > Table, Undo), greys out in a note, is reached with Option+F10 and
-// gives the caret back with Escape. The object bar, link popover, Find bar,
+// The toolbar acts on the document that last had focus (Bold, a list on the
+// line under a paragraph, Insert > Table, Undo), greys out in a note, is
+// reached with Option+F10 and gives the caret back with Escape. A day folded
+// and unfolded keeps its undo. The object bar, link popover, Find bar,
 // formula popover and [[ picker open inside a document day. Daily's "+"
-// makes tomorrow's page as a .mdo, and a log's daily link opens the .mdo.
-// After every edit it checks the files' bytes. Saves light and dark
+// makes tomorrow's page as a .mdo with the caret in it, a log's daily link
+// opens the .mdo, and one to a day with no page makes it as a .mdo. After
+// every edit it checks the files' bytes. Saves light and dark
 // screenshots at 700 and 420px for people to look at; nothing compares them.
 // Own userData and temp vault; run from the repository root after the Vite
 // bundles are built (see README.md here):
@@ -64,6 +66,10 @@ await writeFile(file(DOC_DAY, 'mdo'), `${filled(DOC_DAY)}A document day.\n`);
 for (const date of NOTE_DAYS) await writeFile(file(date, 'md'), `${filled(date)}Notes from ${date}.\n- [ ] A task\n`);
 const LOG = path.join(LOGS, `${DOC_DAY} log.md`);
 await writeFile(LOG, `---\ntype: log\ndate: ${DOC_DAY}\ndaily: "[[Library/daily/${DOC_DAY}]]"\n---\n- 09:00 Wrote the plan. · agent turn\n`);
+// A log written before its day's page exists, as the morning's first run does.
+const LATER = day(3);
+const LATER_LOG = path.join(LOGS, `${LATER} log.md`);
+await writeFile(LATER_LOG, `---\ntype: log\ndate: ${LATER}\ndaily: "[[Library/daily/${LATER}]]"\n---\n- 07:00 Wrote the digest. · routine run\n`);
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 await mkdir(shotsDir, { recursive: true });
 
@@ -263,6 +269,8 @@ try {
   check('the stream lists today, both of yesterday\'s files (the .mdo first), the .mdo day and the .md days', JSON.stringify(order.map((row) => row.path)) === JSON.stringify(wanted), order.map((row) => path.basename(row.path)).join(', '));
   check('each section is labelled by its date, never its extension', order.every((row) => /^\d{4}-\d\d-\d\d$/.test(row.label) && row.path.includes(`/${row.label}.`)), order.map((row) => row.label).join(', '));
   check('today and yesterday read Today and Yesterday', order[0]?.detail === 'Today' && order[1]?.detail === 'Yesterday' && order[2]?.detail === 'Yesterday');
+  const folds = await page.evaluate((paths) => paths.map((target) => document.querySelector(`[data-stack-section="${CSS.escape(target)}"] .opal-stack-chevron`)?.getAttribute('aria-label')), [file(YESTERDAY, 'mdo'), file(YESTERDAY, 'md'), file(DOC_DAY, 'mdo')]);
+  check('a date with both files names each by its file for screen readers, and other dates by the date', JSON.stringify(folds) === JSON.stringify([`Fold ${YESTERDAY}.mdo`, `Fold ${YESTERDAY}.md`, `Fold ${DOC_DAY}`]), folds.join(', '));
 
   // 3. Today's new document shows no Markdown: its properties are hidden as on any page, the body empty and focused.
   const todayDoc = file(TODAY, 'mdo');
@@ -289,11 +297,11 @@ try {
   }, `${filled(TODAY)}Plan the **week**`);
   check('Bold left the caret in the text', (await focusIn()) === todayDoc, String(await focusIn()));
   check('Bold shows as pressed', (await tool('Bold').getAttribute('aria-pressed')) === 'true');
-  // A typed line, then the toolbar's list. (On an empty line right under a paragraph, "- " reads as a heading underline: see the run's notes.)
-  today = await edit('the toolbar\'s Bulleted list makes the next line a list item', todayDoc, async () => {
+  // A line, Enter, then the toolbar's list on the empty line, then the item's text.
+  today = await edit('Enter, the toolbar\'s Bulleted list and typing put a list item right under the line', todayDoc, async () => {
     await press('ArrowRight', 'End', 'Enter');
-    await type('First item');
     await tool('Bulleted list').click();
+    await type('First item');
   }, `${filled(TODAY)}Plan the **week**\n- First item`);
   today = await edit('Enter carries the list on', todayDoc, async () => {
     await press('End', 'Enter');
@@ -330,6 +338,18 @@ try {
   await clickWord(todayDoc, 'Plan');
   await edit('the toolbar\'s Undo in today\'s page takes back only its own last step', todayDoc, () => tool('Undo').click(), (bytes) => bytes !== today && bytes.includes('| Column 1 |'));
   check('the .mdo day keeps its Bold', (await read(docDay)) === docBytes);
+
+  // 8b. A day whose editor goes and comes back keeps its undo: here today is folded and unfolded.
+  const afterUndo = await read(todayDoc);
+  await clickWord(docDay, 'day');
+  await section(todayDoc).locator('.opal-stack-label').click();
+  await content(todayDoc).waitFor({ state: 'detached', timeout: 5_000 });
+  await section(todayDoc).locator('.opal-stack-label').click();
+  await content(todayDoc).waitFor({ timeout: 5_000 });
+  await clickWord(todayDoc, 'Plan');
+  check('after its editor went and came back, today\'s Undo is live', await enabled('Undo'));
+  await edit('and takes back today\'s step before', todayDoc, () => tool('Undo').click(), (bytes) => bytes !== afterUndo && bytes.startsWith(`${filled(TODAY)}Plan the **week**`));
+  await edit('Redo puts it back', todayDoc, () => tool('Redo').click(), afterUndo);
 
   // 9. Option+F10 reaches the toolbar from a document; Escape gives the caret back to it.
   await clickWord(docDay, 'day');
@@ -389,6 +409,8 @@ try {
       await page.evaluate(() => { document.querySelector('[data-testid="files-stack"]').scrollTop = 0; });
       await page.waitForTimeout(300);
       if (width === 420) check(`at 420px in ${theme} the toolbar keeps one row and moves the rest into More`, (await toolbar().boundingBox()).height <= 44 && (await tool('More').count()) === 1);
+      const rows = await page.evaluate((paths) => paths.map((target) => Math.round(document.querySelector(`[data-stack-section="${CSS.escape(target)}"] .opal-stack-title-row`)?.getBoundingClientRect().height ?? 0)), [todayDoc, yesterdayDoc, file(YESTERDAY, 'md')]);
+      check(`at ${width}px in ${theme} a date with both files keeps its title on one line, as today's`, rows[0] > 0 && rows.every((height) => height === rows[0]), rows.join(', '));
       await shoot(`daily-${theme}-${width}-document`);
       await clickWord(noteDay, 'Notes');
       await page.evaluate(() => { document.querySelector('[data-testid="files-stack"]').scrollTop = 0; });
@@ -407,6 +429,10 @@ try {
   check('Daily\'s "+" writes tomorrow\'s page as <date>.mdo from the template', tomorrow === filled(TOMORROW), JSON.stringify(tomorrow));
   check('and no <date>.md', !(await exists(file(TOMORROW, 'md'))));
   await section(file(TOMORROW, 'mdo')).waitFor({ timeout: 5_000 });
+  await page.waitForFunction((target) => document.activeElement?.closest('[data-stack-section]')?.getAttribute('data-stack-section') === target, file(TOMORROW, 'mdo'), { timeout: 5_000 }).catch(() => undefined);
+  check('tomorrow\'s empty page has the caret, and the toolbar acts on it', (await focusIn()) === file(TOMORROW, 'mdo') && (await enabled('Bold')), String(await focusIn()));
+  await edit('typing right after the pick goes into tomorrow\'s page', file(TOMORROW, 'mdo'), () => type('Prep'), `${filled(TOMORROW)}Prep`);
+  await shoot('daily-light-900-tomorrow');
   const first = await page.evaluate(() => document.querySelector('[data-stack-section]')?.getAttribute('data-stack-section'));
   check('tomorrow\'s page comes above today\'s, labelled by its date', first === file(TOMORROW, 'mdo') && (await section(file(TOMORROW, 'mdo')).locator('.opal-stack-label').textContent()) === TOMORROW);
   check('the daily folder holds only the expected files', JSON.stringify((await readdir(DAILY)).sort()) === JSON.stringify([...wanted, file(TOMORROW, 'mdo')].map((target) => path.basename(target)).sort()), (await readdir(DAILY)).sort().join(', '));
@@ -432,6 +458,17 @@ try {
   });
   check('the log\'s daily link opens the .mdo day as a document', opened.text.includes('document day') && opened.toolbar && opened.tab.endsWith(`${DOC_DAY}.mdo`), JSON.stringify(opened));
   check('its tab is named by the date', opened.label.trim().startsWith(DOC_DAY) && !opened.label.includes('.mdo'), opened.label);
+
+  // 14. A log's link to a day with no page makes the page as Daily does: a document from the template.
+  await page.evaluate((target) => { window.location.hash = `#/files?mode=focus&file=${encodeURIComponent(target)}`; }, LATER_LOG);
+  await page.waitForFunction(() => document.querySelector('.opal-editor[data-layout="page"] .cm-content')?.textContent?.includes('Wrote the digest'), null, { timeout: 10_000 });
+  const laterEditor = page.locator('.opal-editor[data-layout="page"]');
+  await page.waitForTimeout(500);
+  if (!(await laterEditor.locator('.cm-md-properties-link').count())) await laterEditor.locator('[data-properties-toggle]').click();
+  await laterEditor.locator('.cm-md-properties-link', { hasText: LATER }).click();
+  const made = await onDisk(file(LATER, 'mdo'), filled(LATER));
+  check('a log\'s link to a day with no page writes <date>.mdo from the template', made === filled(LATER), JSON.stringify(made));
+  check('and no empty <date>.md', !(await exists(file(LATER, 'md'))));
 } catch (error) {
   check('the run finished', false, String(error));
 } finally {
