@@ -1,8 +1,9 @@
 import React, { memo, useId } from 'react';
-import type { Extension } from '@codemirror/state';
+import type { EditorState, Extension } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { ChevronRight, FileText } from 'lucide-react';
 import { pageName } from '@/common/fileKind';
+import { basenameFsPath } from '@/common/fsPaths';
 import type { StackSection } from '@/types/stack';
 import { cn } from '@/renderer/shared/utils/cn';
 import { MarkdownEditor } from '../editor/MarkdownEditor';
@@ -19,6 +20,8 @@ export interface SectionActions {
   extensions: (path: string) => Extension;
   onLoadedFor: (path: string) => () => void;
   onViewFor: (path: string) => (view: EditorView | null) => void;
+  /** The state a section's editor had when it last went, once, so its undo history comes back. */
+  keptStateFor: (path: string) => () => EditorState | null;
   togglePropertiesFor: (path: string) => () => void;
   refFor: (path: string) => (element: HTMLElement | null) => void;
 }
@@ -29,6 +32,8 @@ interface StackSectionViewProps {
   first: boolean;
   /** The label uses the page title's size; otherwise the smaller heading size. */
   large: boolean;
+  /** Another section has the same name, as a date's document and note do: the buttons name the file with its extension. */
+  twin: boolean;
   /** The stack's only file, as a recording not split yet: it reads as a page, with nothing to fold or open alone. */
   lone: boolean;
   open: boolean;
@@ -73,12 +78,12 @@ function clearStart(event: React.PointerEvent<HTMLElement>) {
  * folded.
  */
 export const StackSectionView = memo(function StackSectionView({
-  section, first, large, lone, open, live, height, status, autoFocusEmpty, propertiesShown, position, setSize, actions,
+  section, first, large, twin, lone, open, live, height, status, autoFocusEmpty, propertiesShown, position, setSize, actions,
 }: StackSectionViewProps) {
   const id = useId();
   const titleId = `${id}-title`;
   const problem = status ? PROBLEM[status] : undefined;
-  const shownName = pageName(section.path);
+  const shownName = twin ? basenameFsPath(section.path) : pageName(section.path);
   const quiet = open && !lone && section.textHeading !== null;
   const lead = quiet ? ({ '--stack-lead': section.textHeading?.line ?? 0 } as React.CSSProperties) : undefined;
 
@@ -166,6 +171,7 @@ export const StackSectionView = memo(function StackSectionView({
               propertiesShown={propertiesShown}
               onToggleProperties={actions.togglePropertiesFor(section.path)}
               onView={actions.onViewFor(section.path)}
+              restoreState={actions.keptStateFor(section.path)}
               onLoaded={actions.onLoadedFor(section.path)}
               extensions={actions.extensions(section.path)}
               loadingHeight={height}

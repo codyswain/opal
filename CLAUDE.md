@@ -69,9 +69,10 @@ not exist.
   the stream of daily pages, a recording (the summary file, then
   `transcripts/<stem> transcript.md`) and a chat (the thread card, then its
   sessions, newest first). Sections near the view have a live editor and the
-  rest are placeholders. A stack that holds a `.mdo` has one `DocToolbar`
-  above its scroll (`StackToolbar.tsx`), for the document that last had
-  focus and grey while a note has it
+  rest are placeholders. Daily, and any stack that holds a `.mdo`, has one
+  `DocToolbar` above its scroll (`StackToolbar.tsx`), for the document that
+  last had focus and grey while a note has it. A section's undo history
+  stays while its editor is away
 - **Main area:** each tab shows one file, a stack or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
   plain text, otherwise "Open in default app"). There is no folder view:

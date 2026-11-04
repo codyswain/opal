@@ -95,7 +95,10 @@ export async function openDailyPage(
   recordOpened(page);
   const head = date > today ? await dayPage(root, today) : null;
   // Until the cleanup commit either page can be an old Inbox/Logs page, which the stream does not hold.
-  if (head && dailyHeadDate(head) && dailyHeadDate(page)) showInStream(navigateFiles, head, page, options);
-  else navigateFiles(focusFile(page), options);
+  if (head && dailyHeadDate(head) && dailyHeadDate(page)) {
+    // A page just made is empty and takes the caret, as today's does when Daily opens.
+    useStackStore.getState().askCaret(page);
+    showInStream(navigateFiles, head, page, options);
+  } else navigateFiles(focusFile(page), options);
   return true;
 }

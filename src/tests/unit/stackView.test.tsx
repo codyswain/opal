@@ -121,7 +121,7 @@ beforeEach(() => {
   useDiskStore.setState({ roots: [ROOT], rootsLoaded: true, listings: {} });
   usePagePropertiesStore.setState({ open: false });
   useStackFoldsStore.setState({ folds: {} });
-  useStackStore.setState({ live: {}, viewed: null, reveal: null, move: null });
+  useStackStore.setState({ live: {}, viewed: null, reveal: null, caret: null, move: null });
   openTabs([stackLocation('daily', HEAD)]);
 });
 
@@ -527,6 +527,8 @@ describe('recording and chat pages', () => {
     expect(within(quiet).queryByRole('button', { name: 'Transcript' })).toBeNull();
     expect(within(quiet).getByText(`${STEM} transcript`)).toBeInTheDocument();
     expect(scroller()).not.toHaveAttribute('data-lone');
+    // A recording of notes has no toolbar.
+    expect(screen.queryByRole('toolbar')).toBeNull();
 
     const transcript = viewOf(TRANSCRIPT) as EditorView;
     act(() => transcript.dispatch({ changes: { from: transcript.state.doc.length, insert: 'Lucas: Fixed a speaker label.\n' } }));
@@ -674,13 +676,69 @@ describe('the toolbar of a stack that holds documents', () => {
     openTabs([stackLocation('daily', TODAY_DOC)]);
   });
 
-  it('shows no toolbar on a stack of notes', async () => {
+  it('draws the toolbar on Daily from the first frame, greyed while only notes are there, so the stream never moves', async () => {
     installMarkdownApi(Object.fromEntries(paths.map((path) => [path, `Notes from ${label(path)}.\n`])));
     installVault();
     openTabs([stackLocation('daily', HEAD)]);
     renderStack();
+    // Before the list arrives the head, a note, is the only section.
+    expect(screen.getAllByRole('toolbar', { name: 'Formatting' })).toHaveLength(1);
     await waitFor(() => expect(viewOf(paths[2])).toBeTruthy());
-    expect(screen.queryByRole('toolbar')).toBeNull();
+    expect(screen.getAllByRole('toolbar', { name: 'Formatting' })).toHaveLength(1);
+    focusIn(paths[1]);
+    expect(buttons().every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it('names each file of a date with both in its fold and open buttons, and shows the date as the label', async () => {
+    renderStack(stackLocation('daily', TODAY_DOC));
+    await waitFor(() => expect(viewOf(OLDER_DOC)).toBeTruthy());
+    expect(within(article(TODAY_DOC)).getByRole('button', { name: '2026-10-29' })).toBeInTheDocument();
+    expect(within(article(TODAY_DOC)).getByRole('button', { name: 'Fold 2026-10-29.mdo' })).toBeInTheDocument();
+    expect(within(article(TODAY_NOTE)).getByRole('button', { name: 'Fold 2026-10-29.md' })).toBeInTheDocument();
+    expect(within(article(TODAY_NOTE)).getByRole('button', { name: 'Open 2026-10-29.md on its own' })).toHaveAttribute('title', 'Open 2026-10-29.md on its own');
+    // A date with one file keeps the date alone.
+    expect(within(article(OLDER_DOC)).getByRole('button', { name: 'Fold 2026-10-28' })).toBeInTheDocument();
+  });
+
+  it('keeps a document’s undo history while its editor is away, and brings it back with the editor', async () => {
+    renderStack(stackLocation('daily', TODAY_DOC));
+    await waitFor(() => expect(viewOf(OLDER_DOC)).toBeTruthy());
+    const today = focusIn(TODAY_DOC);
+    act(() => today.dispatch({ changes: { from: today.state.doc.length, insert: 'Book the room.' }, selection: { anchor: today.state.doc.length + 14 }, userEvent: 'input.type' }));
+    expect(await act(() => flushPendingSaves())).toEqual([]);
+    // Another day takes focus, and today's editor goes, here by folding it, as the planner does far from the view.
+    focusIn(OLDER_DOC);
+    fireEvent.click(within(article(TODAY_DOC)).getByRole('button', { name: '2026-10-29' }));
+    await waitFor(() => expect(viewOf(TODAY_DOC)).toBeNull());
+    fireEvent.click(within(article(TODAY_DOC)).getByRole('button', { name: '2026-10-29' }));
+    const back = await waitFor(() => {
+      const view = viewOf(TODAY_DOC);
+      if (!view) throw new Error('no editor yet');
+      return view;
+    });
+    expect(back).not.toBe(today);
+    expect(text(TODAY_DOC)).toBe('Plan the week.\nBook the room.');
+    focusIn(TODAY_DOC);
+    expect(tool('Undo')).toBeEnabled();
+    fireEvent.click(tool('Undo'));
+    expect(text(TODAY_DOC)).toBe('Plan the week.\n');
+    expect(tool('Redo')).toBeEnabled();
+  });
+
+  it('puts the caret in an empty page it is asked to, once its editor is up, and not in one with text', async () => {
+    installMarkdownApi({ [TODAY_DOC]: '', [TODAY_NOTE]: 'Written in Obsidian.\n', [OLDER_DOC]: 'Older plan.\n' });
+    renderStack(stackLocation('daily', OLDER_DOC));
+    await waitFor(() => expect(viewOf(TODAY_DOC)).toBeTruthy());
+    expect(viewOf(TODAY_DOC)?.hasFocus).toBe(false);
+    act(() => useStackStore.getState().askCaret(TODAY_NOTE));
+    await frames(2);
+    expect(viewOf(TODAY_NOTE)?.hasFocus).toBe(false);
+    expect(useStackStore.getState().caret).toBeNull();
+    act(() => useStackStore.getState().askCaret(TODAY_DOC));
+    await waitFor(() => expect(viewOf(TODAY_DOC)?.hasFocus).toBe(true));
+    expect(useStackStore.getState().caret).toBeNull();
+    // The toolbar binds to it.
+    expect(tool('Bold')).toBeEnabled();
   });
 
   it('shows one toolbar above the scroll, greyed out in place until a document has focus', async () => {

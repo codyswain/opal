@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { validDate } from "@/common/vaultModel";
 import {
   Button,
@@ -64,18 +64,34 @@ function DateForm({ defaultDate, onCancel, onCreate }: { defaultDate: string; on
   );
 }
 
-/** Picks the day of a new daily page. Any day works; a day whose page exists opens that page. */
-export const DailyDateDialog: React.FC<DailyDateDialogProps> = ({ open, defaultDate, onOpenChange, onCreate }) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent data-testid="daily-date-dialog" className="max-w-xs" showCloseButton={false}>
-      <DateForm
-        defaultDate={defaultDate}
-        onCancel={() => onOpenChange(false)}
-        onCreate={(date) => {
-          onOpenChange(false);
-          onCreate(date);
+/**
+ * Picks the day of a new daily page. Any day works; a day whose page exists
+ * opens that page. After Create the page takes the caret, so the dialog
+ * does not hand focus back to where it was opened from.
+ */
+export const DailyDateDialog: React.FC<DailyDateDialogProps> = ({ open, defaultDate, onOpenChange, onCreate }) => {
+  const created = useRef(false);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        data-testid="daily-date-dialog"
+        className="max-w-xs"
+        showCloseButton={false}
+        onCloseAutoFocus={(event) => {
+          if (created.current) event.preventDefault();
+          created.current = false;
         }}
-      />
-    </DialogContent>
-  </Dialog>
-);
+      >
+        <DateForm
+          defaultDate={defaultDate}
+          onCancel={() => onOpenChange(false)}
+          onCreate={(date) => {
+            created.current = true;
+            onOpenChange(false);
+            onCreate(date);
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+};

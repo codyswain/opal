@@ -17,12 +17,16 @@ interface StackRuntimeState {
   viewed: { tabId: string; path: string } | null;
   /** Asks a stack opened by `head` to scroll `path`, one of its sections, to the top of the view; `seq` makes each ask new. */
   reveal: { head: string; path: string; seq: number } | null;
+  /** A section that takes the caret once its editor is up, if it is empty: a daily page just made from Daily's "+". */
+  caret: string | null;
   /** The mounted stack's handler for View > Next Section and Previous Section. */
   move: ((direction: StackMove) => boolean) | null;
   setLive: (tabId: string, paths: readonly string[]) => void;
   setViewed: (tabId: string, path: string | null) => void;
   /** Asks for the head itself unless `path` names another section, such as a daily page just made for a later day. */
   scrollToSection: (head: string, path?: string) => void;
+  /** Asks for the caret in `path`, as `caret` says; the stack takes the ask back once that editor is up. */
+  askCaret: (path: string | null) => void;
   setMove: (move: ((direction: StackMove) => boolean) | null) => void;
 }
 
@@ -34,6 +38,7 @@ export const useStackStore = create<StackRuntimeState>((set) => ({
   live: {},
   viewed: null,
   reveal: null,
+  caret: null,
   move: null,
   setLive: (tabId, paths) =>
     set((state) => {
@@ -52,6 +57,7 @@ export const useStackStore = create<StackRuntimeState>((set) => ({
     }),
   scrollToSection: (head, path = head) =>
     set((state) => ({ reveal: { head: normalizeFsPath(head), path: normalizeFsPath(path), seq: (state.reveal?.seq ?? 0) + 1 } })),
+  askCaret: (path) => set({ caret: path === null ? null : normalizeFsPath(path) }),
   setMove: (move) => set({ move }),
 }));
 

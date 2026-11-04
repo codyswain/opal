@@ -238,7 +238,7 @@ describe("a new daily page", () => {
     createDay = vi.fn(async (_root: string, date: string) => ({ success: true as const, data: { path: `${DAILY}/${date}.md` } }));
     discover = vi.fn(async () => ({ success: true as const, data: [{ path: ROOT, name: "Vault" }] }));
     (window as unknown as { vaultAPI: unknown }).vaultAPI = { discover, createDay };
-    useStackStore.setState({ reveal: null });
+    useStackStore.setState({ reveal: null, caret: null });
   });
 
   afterEach(() => {
@@ -261,6 +261,9 @@ describe("a new daily page", () => {
     expect(createDay).toHaveBeenCalledWith(ROOT, "2026-10-31");
     expect(createDay).toHaveBeenCalledWith(ROOT, "2026-10-30");
     expect(window.activityAPI.record).toHaveBeenCalledWith(TOMORROW, "opened");
+    // The new page asks for the caret, and the menu does not hand focus back to the +.
+    expect(useStackStore.getState().caret).toBe(TOMORROW);
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "New daily page" }));
   });
 
   it("offers the same on a right-click, and scrolls a stream already shown to the new page", async () => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { historyField } from '@codemirror/commands';
 import { getChunks, unifiedMergeView } from '@codemirror/merge';
 import { Compartment, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
@@ -55,6 +56,12 @@ interface MarkdownEditorProps {
   extensions?: Extension;
   /** Section layout: the height to hold while the file is read. */
   loadingHeight?: number;
+  /**
+   * Section layout: the state this file's editor had when it last went,
+   * read once when the view is created. Its undo history comes back when its
+   * text is still the file's.
+   */
+  restoreState?: () => EditorState | null;
 }
 
 /** A followed link replaces the page in its tab, or opens a new tab, as an open from the tree does. */
@@ -115,7 +122,7 @@ interface MarkdownEditorSurfaceProps extends MarkdownEditorProps {
 }
 
 const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
-  path, layout, document, initialBody, autoFocusEmpty = false, openNote = openNoteInTab, propertiesShown, onToggleProperties, onView, extensions,
+  path, layout, document, initialBody, autoFocusEmpty = false, openNote = openNoteInTab, propertiesShown, onToggleProperties, onView, extensions, restoreState,
 }) => {
   const section = layout === 'section';
   const doc = isDocFile(path);
@@ -144,52 +151,55 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const wasOpen = useRef(propertiesOpen);
 
   useEffect(() => {
+    const config = {
+      extensions: [
+        markdownEditorExtensions(path, openNote),
+        section ? showInlineTitle.of(false) : [],
+        extensions ?? [],
+        keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
+        conflict.of([]),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged || update.selectionSet) {
+            if (update.docChanged) recount.current = true;
+            if (counting.current) clearTimeout(counting.current);
+            counting.current = setTimeout(() => {
+              counting.current = null;
+              const whole = recount.current;
+              recount.current = false;
+              const total = whole ? pageWordCount(created.state) : null;
+              const selected = selectedWordCount(created.state);
+              setWords((shown) => {
+                const words = total ?? shown.words;
+                return words === shown.words && selected === shown.selected ? shown : { words, selected };
+              });
+            }, COUNT_DELAY_MS);
+          }
+          if (update.docChanged) {
+            if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(Transaction.remote))) {
+              actions.current.onChange(update.state.doc.toString());
+            }
+          }
+          // Every conflicting change has a pick once the merge view has no chunks left.
+          if (getChunks(update.state)?.chunks.length === 0) actions.current.resolveConflict();
+          if (update.focusChanged && !update.view.hasFocus) void actions.current.flush();
+          if (doc && (update.docChanged || update.selectionSet || update.transactions.some((tr) => tr.effects.length > 0))) {
+            if (!section) {
+              const next = formatState(update.state);
+              setFormat((shown) => (sameFormat(shown, next) ? shown : next));
+            }
+            setLink(update.state.field(linkEditor));
+            setFramed(update.state.field(objectFrame, false) ?? null);
+            setFormula(update.state.field(mathEditor, false) ?? null);
+          }
+        }),
+      ],
+    };
+    const last = restoreState?.();
     const created = new EditorView({
       parent: host.current as HTMLDivElement,
-      state: EditorState.create({
-        doc: initialBody,
-        extensions: [
-          markdownEditorExtensions(path, openNote),
-          section ? showInlineTitle.of(false) : [],
-          extensions ?? [],
-          keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
-          conflict.of([]),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged || update.selectionSet) {
-              if (update.docChanged) recount.current = true;
-              if (counting.current) clearTimeout(counting.current);
-              counting.current = setTimeout(() => {
-                counting.current = null;
-                const whole = recount.current;
-                recount.current = false;
-                const total = whole ? pageWordCount(created.state) : null;
-                const selected = selectedWordCount(created.state);
-                setWords((shown) => {
-                  const words = total ?? shown.words;
-                  return words === shown.words && selected === shown.selected ? shown : { words, selected };
-                });
-              }, COUNT_DELAY_MS);
-            }
-            if (update.docChanged) {
-              if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(Transaction.remote))) {
-                actions.current.onChange(update.state.doc.toString());
-              }
-            }
-            // Every conflicting change has a pick once the merge view has no chunks left.
-            if (getChunks(update.state)?.chunks.length === 0) actions.current.resolveConflict();
-            if (update.focusChanged && !update.view.hasFocus) void actions.current.flush();
-            if (doc && (update.docChanged || update.selectionSet || update.transactions.some((tr) => tr.effects.length > 0))) {
-              if (!section) {
-                const next = formatState(update.state);
-                setFormat((shown) => (sameFormat(shown, next) ? shown : next));
-              }
-              setLink(update.state.field(linkEditor));
-              setFramed(update.state.field(objectFrame, false) ?? null);
-              setFormula(update.state.field(mathEditor, false) ?? null);
-            }
-          }),
-        ],
-      }),
+      state: last && last.doc.toString() === initialBody
+        ? EditorState.fromJSON({ ...last.toJSON({ history: historyField }), doc: initialBody }, config, { history: historyField })
+        : EditorState.create({ doc: initialBody, ...config }),
     });
     view.current = created;
     setWords(pageWords(created.state));

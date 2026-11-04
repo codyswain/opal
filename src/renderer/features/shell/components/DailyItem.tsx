@@ -48,6 +48,13 @@ export function DailyItem({ onNavigate }: DailyItemProps) {
   const tomorrow = addDays(today, 1);
   const openedPath = useTabsStore(selectOpenedPath);
   const [picking, setPicking] = React.useState(false);
+  // A day picked from a menu takes the caret into its page, so the menu does not hand focus back to the row.
+  const chose = React.useRef(false);
+  const keepFocusAway = (event: Event) => {
+    if (!chose.current) return;
+    chose.current = false;
+    event.preventDefault();
+  };
   // A daily page restored on relaunch counts too, and the mark moves on at midnight.
   const active = dailyPageDate(openedPath) === today;
 
@@ -63,6 +70,7 @@ export function DailyItem({ onNavigate }: DailyItemProps) {
     void run(() => openDaily(navigateFiles, { newTab }), "Could not open today's page.");
   };
   const openDay = (date: string) => {
+    chose.current = true;
     void run(() => openDailyPage(navigateFiles, date), "Could not open that day's page.");
   };
   const pickDate = afterMenu(() => setPicking(true));
@@ -87,7 +95,7 @@ export function DailyItem({ onNavigate }: DailyItemProps) {
                   <Plus aria-hidden className="h-4 w-4" />
                 </IconButton>
               </MenuTrigger>
-              <MenuContent align="start" className="w-[216px]">
+              <MenuContent align="start" className="w-[216px]" onCloseAutoFocus={keepFocusAway}>
                 <MenuItem onSelect={() => openDay(tomorrow)}>
                   Tomorrow
                   <DayHint date={tomorrow} />
@@ -97,7 +105,7 @@ export function DailyItem({ onNavigate }: DailyItemProps) {
             </Menu>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-[216px]">
+        <ContextMenuContent className="w-[216px]" onCloseAutoFocus={keepFocusAway}>
           <ContextMenuItem onSelect={() => openDay(tomorrow)}>
             Tomorrow
             <DayHint date={tomorrow} />

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Extension } from '@codemirror/state';
+import { redoDepth, undoDepth } from '@codemirror/commands';
+import type { EditorState, Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { isDocFile, pageName } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
@@ -245,6 +246,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const content = useRef<HTMLDivElement>(null);
   const articles = useRef(new Map<string, HTMLElement>());
   const views = useRef(new Map<string, EditorView>());
+  // The last state of each edited section whose editor went, until the editor comes back.
+  const keptStates = useRef(new Map<string, EditorState>());
   const focused = useRef<string | null>(null);
   const reading = useRef(new Set<string>([head]));
   const farSince = useRef(new Map<string, number>());
@@ -291,7 +294,13 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   // A recording not split yet, or a card that is not a thread, is the stack's only file and reads as a page.
   const lone = kind !== 'daily' && sections.length === 1;
   // A stack that holds a document has one toolbar above its scroll, for the document that last had focus.
-  const hasDocuments = useMemo(() => sections.some((section) => isDocFile(section.path)), [sections]);
+  // Daily always has it, since new days are documents: the stream never moves when one arrives or leaves.
+  const hasDocuments = useMemo(() => kind === 'daily' || sections.some((section) => isDocFile(section.path)), [kind, sections]);
+  // A date's document and note read the same; their buttons name each file.
+  const twins = useMemo(() => {
+    const names = sections.map((section) => pageName(section.path));
+    return new Set(sections.filter((_section, at) => names.indexOf(names[at]) !== names.lastIndexOf(names[at])).map((section) => section.path));
+  }, [sections]);
   const [toolbar] = useState(() => new ToolbarBinding());
   // Event handlers and the planner read the latest render through refs, so they never go stale.
   const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, answers, lone });
@@ -1019,10 +1028,23 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
 
   // --- What sections ask of the stack ---------------------------------------------
 
+  // A daily page just made from Daily's "+" takes the caret once its editor is up, when it is empty, as an empty head does.
+  const takeCaret = useCallback((path: string, view: EditorView) => {
+    const store = useStackStore.getState();
+    if (store.caret !== path) return;
+    store.askCaret(null);
+    if (view.state.doc.length === 0) view.focus();
+  }, []);
+  useEffect(() => useStackStore.subscribe((state, previous) => {
+    const view = state.caret && state.caret !== previous.caret ? views.current.get(state.caret) : undefined;
+    if (state.caret && view) takeCaret(state.caret, view);
+  }), [takeCaret]);
+
   const cache = useRef({
     extensions: new Map<string, Extension>(),
     loaded: new Map<string, () => void>(),
     view: new Map<string, (view: EditorView | null) => void>(),
+    kept: new Map<string, () => EditorState | null>(),
     properties: new Map<string, () => void>(),
     refs: new Map<string, (element: HTMLElement | null) => void>(),
   });
@@ -1111,18 +1133,28 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         memo(cache.current.view, path, () => (view: EditorView | null) => {
           toolbar.view(path, view);
           if (!view) {
+            // An edited section keeps its undo history while its editor is away.
+            const gone = views.current.get(path)?.state;
+            if (gone && undoDepth(gone) + redoDepth(gone) > 0) keptStates.current.set(path, gone);
             views.current.delete(path);
             reading.current.delete(path);
             if (focused.current === path) focused.current = null;
             return;
           }
           views.current.set(path, view);
+          takeCaret(path, view);
           if (path === head) autoFocusHead.current = false;
           const caret = pendingCaret.current;
           if (caret?.path === path) {
             pendingCaret.current = null;
             placeCaret(view, caret.edge, caret.column);
           }
+        }),
+      keptStateFor: (path) =>
+        memo(cache.current.kept, path, () => () => {
+          const state = keptStates.current.get(path) ?? null;
+          keptStates.current.delete(path);
+          return state;
         }),
       togglePropertiesFor: (path) =>
         memo(cache.current.properties, path, () => () => {
@@ -1139,7 +1171,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
           store.setOpen(true);
         }),
     };
-  }, [focusSection, head, neighbour, revealSection, saveView, schedule, toolbar]);
+  }, [focusSection, head, neighbour, revealSection, saveView, schedule, takeCaret, toolbar]);
 
   // Focus moves between sections without React; the planner reads it from a ref.
   // The toolbar follows it into a document, and greys out in a note.
@@ -1180,6 +1212,7 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
                 section={section}
                 first={position === 0}
                 large={kind === 'daily' || section.role === 'head'}
+                twin={twins.has(section.path)}
                 lone={lone}
                 open={open}
                 live={isLive}
