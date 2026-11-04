@@ -359,7 +359,7 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const REPLY_DRAFTED = /\s*\(reply drafted\)\s*$/i;
 
 /** Text without links, bold or code marks, on one line. */
-function plainText(value: string): string {
+export function plainText(value: string): string {
   return readLinks(value).text.replace(/\*\*|__/g, '').replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
 }
 
