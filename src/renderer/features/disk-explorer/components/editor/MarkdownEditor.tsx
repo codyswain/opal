@@ -264,7 +264,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       data-properties-shown={propertiesOpen ? '' : undefined}
       onKeyDown={closePropertiesOnEscape}
     >
-      {docView && format ? <DocToolbar view={docView} format={format} /> : null}
+      {docView && format && !section ? <DocToolbar view={docView} format={format} /> : null}
       <div ref={host} className={section ? 'relative' : 'relative min-h-0 flex-1'} />
       {docView && link ? <LinkPopover view={docView} editor={link} /> : null}
       {docView && framed ? <ObjectBar view={docView} frame={framed} /> : null}
