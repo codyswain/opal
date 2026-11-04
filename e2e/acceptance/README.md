@@ -28,7 +28,12 @@ node e2e/acceptance/mdo-math-acceptance.mjs [--out dir] # Math in documents: dra
 node e2e/acceptance/files-protocol-acceptance.mjs [--shots dir] # Files in the main process: opal-file:// ranges and headers, sandboxed HTML, a movie seeking to its end, read-only LFS opens, launchers shown in Finder, thumbnails and a HEIC copy (ffmpeg makes the test movie when it is installed)
 node e2e/acceptance/mdo-files-acceptance.mjs [--shots dir] # Files in documents: chips, cards and previews from gallery/files.mdo, every failure state, captions, a movie seeking to its end, the object bar, a dropped PDF, movie and deck, and Japanese input beside a chip
 node e2e/acceptance/mdo-session-acceptance.mjs [--shots dir] # One session in a new document: a heading, Cmd+B, a nested numbered list, Insert > Table, ```ts, inline and display formulas, a dropped picture, PDF and deck, Show as and Size, Replace All and undo; the file's bytes after every step, light and dark screenshots
+node e2e/acceptance/daily-mdo-acceptance.mjs [--shots dir] # Daily as one document: today's page made as a .mdo, .md and .mdo days in order with a date that has both, the one toolbar (Bold, a list, Insert > Table, Undo per day, grey in a note, Option+F10 and Escape), the object bar, link popover, Find bar, formula popover and [[ picker in a document day, Daily's "+" and a log's daily link; light and dark screenshots at 700 and 420px
 ```
+
+`daily-mdo-acceptance.mjs` keeps its window from taking the keyboard: it
+hides the app once the window shows and shows it again without making it
+active, so typing in another app during the run lands where it should.
 
 The gallery writes to `--out`, then `OPAL_GALLERY_OUT`, then `e2e/out/gallery`.
 Each area adds its own fixture document to `e2e/fixtures/gallery/`. Its

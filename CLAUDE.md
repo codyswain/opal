@@ -2,9 +2,11 @@
 
 A desktop app for reading and editing the Markdown pages in a folder on disk.
 Pages come first. There is no chat and no Today screen: "Daily" opens a
-stream of daily pages at the day's page (`Library/daily/YYYY-MM-DD.md`), the
-earlier ones below it and pages made for later days above it, creating the
-day's page from the vault's template when it does not exist. Activity logs
+stream of daily pages at the day's page (`Library/daily/YYYY-MM-DD.mdo`, or
+`.md` for older days and Obsidian's), the earlier ones below it and pages
+made for later days above it, creating the day's page as a `.mdo` from the
+vault's template when the date has none. A date with both files shows both,
+the document first. Activity logs
 are separate, read-only files in `Library/logs/`. Until the cleanup commit,
 Daily opens an existing `Inbox/Logs/YYYY-MM-DD.md` when the daily page does
 not exist.
@@ -67,7 +69,9 @@ not exist.
   the stream of daily pages, a recording (the summary file, then
   `transcripts/<stem> transcript.md`) and a chat (the thread card, then its
   sessions, newest first). Sections near the view have a live editor and the
-  rest are placeholders
+  rest are placeholders. A stack that holds a `.mdo` has one `DocToolbar`
+  above its scroll (`StackToolbar.tsx`), for the document that last had
+  focus and grey while a note has it
 - **Main area:** each tab shows one file, a stack or Recent. Markdown opens in the
   editor; other files open in a minimal viewer (`FileViewer`: images, PDFs,
   plain text, otherwise "Open in default app"). There is no folder view:
