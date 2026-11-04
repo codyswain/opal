@@ -56,6 +56,10 @@ describe('resolveLinkTarget', () => {
     expect(resolveLinkTarget('Library/daily/2026-11-03', log, days)).toBe('/Vault/Library/daily/2026-11-03.mdo');
     expect(resolveLinkTarget('2026-11-03', '/Vault/Library/daily/2026-11-02.md', days)).toBe('/Vault/Library/daily/2026-11-03.mdo');
     expect(resolveLinkTarget('2026-11-03.md', log, days)).toBe('/Vault/Library/daily/2026-11-03.md');
+    // A link that names the day's note opens the document when the date has only that.
+    expect(resolveLinkTarget('Library/daily/2026-11-04.md', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('2026-11-04.md', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('Plan.md', log, ['/Vault/Library/x/Plan.mdo'])).toBeNull();
     // A shorter path elsewhere still wins, as it would over the day's note.
     expect(resolveLinkTarget('2026-11-05', log, days)).toBe('/Vault/Archive/2026-11-05.md');
     // Outside Library/daily a note still comes before a document of the same name.

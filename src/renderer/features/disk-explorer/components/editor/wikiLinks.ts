@@ -8,7 +8,9 @@ import type { MarkdownConfig } from '@lezer/markdown';
 import { toast } from 'sonner';
 import { classifyFile, isDocFile, pageName, storedExtension } from '@/common/fileKind';
 import { basenameFsPath, isFsPathAtOrBelow, parentFsPath } from '@/common/fsPaths';
+import { validDate } from '@/common/vaultModel';
 import { LINK_TARGET_LIMIT } from '@/types/markdown';
+import type { VaultResult } from '@/types/vault';
 import { setLinkEditor } from './linkEditorEffect';
 import { nodeDecorators, objectKinds, type DecorateContext } from './extensionPoints';
 import { docMode } from './livePreview';
@@ -178,9 +180,21 @@ export function noteToCreate(target: string): { name: string; extension: 'md' | 
 }
 
 /**
+ * The date of the day page a link target names from the vault's top,
+ * `Library/daily/<date>` with or without ".md" or ".mdo", or null. A log's
+ * frontmatter links its day this way before the day's page exists.
+ */
+export function dayToCreate(target: string): string | null {
+  const match = /^\/?Library\/daily\/(\d{4}-\d{2}-\d{2})(?:\.mdo?)?$/.exec(target);
+  return match && validDate(match[1]) ? match[1] : null;
+}
+
+/**
  * Follows a wiki link. A link to a note that does not exist yet creates it at
  * the top of the opened folder, the way Obsidian does, and opens it; a link
- * to a missing file says so and creates nothing.
+ * to a missing file says so and creates nothing. A missing day page is made
+ * as Daily makes it: a document from the vault's template, and never a
+ * second file for a date that has one.
  */
 export async function openWikiLink(view: EditorView, written: string, newTab = false): Promise<void> {
   const { path, openNote } = view.state.facet(pageContext);
@@ -202,6 +216,7 @@ export async function openWikiLink(view: EditorView, written: string, newTab = f
     openNote(resolved, newTab);
     return;
   }
+  const day = dayToCreate(wanted);
   const note = noteToCreate(wanted);
   const roots = note ? await window.diskAPI.listRoots().catch(() => null) : null;
   const root = roots?.success ? roots.data.find((candidate: string) => isFsPathAtOrBelow(candidate, path)) : undefined;
@@ -210,8 +225,10 @@ export async function openWikiLink(view: EditorView, written: string, newTab = f
     toast.error(`Could not find ${target}.`);
     return;
   }
-  const created = await window.markdownAPI.create(folder, note.name, note.extension);
-  if (!created.success) {
+  const created: VaultResult<{ path: string }> = day && root
+    ? await window.vaultAPI.createDay(root, day)
+    : await window.markdownAPI.create(folder, note.name, note.extension);
+  if (created.success === false) {
     toast.error(created.error);
     return;
   }

@@ -63,6 +63,24 @@ describe('following a link to nothing', () => {
     expect(toastError).toHaveBeenCalledWith('Could not find Library/files/2026-11/deck.pptx.');
   });
 
+  it('makes a missing day page through Daily, as a document from the template, and never a second file for a date', async () => {
+    const LOG = '/Vault/Library/logs/2026-11-05 log.md';
+    const api = installMarkdownApi({ [LOG]: '', '/Vault/Library/daily/2026-11-04.mdo': '' });
+    const createDay = vi.fn(async (_root: string, date: string) => ({ success: true as const, data: { path: `/Vault/Library/daily/${date}.mdo` } }));
+    (window as unknown as { vaultAPI: unknown }).vaultAPI = { createDay };
+    const openNote = vi.fn();
+    const view = mount('', LOG, openNote);
+    // A log's `daily: "[[Library/daily/<date>]]"`, written before the day's page exists.
+    await openWikiLink(view, 'Library/daily/2026-11-05');
+    expect(createDay).toHaveBeenLastCalledWith('/Vault', '2026-11-05');
+    expect(openNote).toHaveBeenLastCalledWith('/Vault/Library/daily/2026-11-05.mdo', false);
+    await openWikiLink(view, 'Library/daily/2026-11-06.md');
+    expect(createDay).toHaveBeenLastCalledWith('/Vault', '2026-11-06');
+    await openWikiLink(view, 'Library/daily/2026-11-07.mdo');
+    expect(createDay).toHaveBeenLastCalledWith('/Vault', '2026-11-07');
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
   it('resolves NFD and NFC spellings of a target to the same file', () => {
     const files = ['/Vault/People/Renée.md'];
     const nfd = 'Renée';
