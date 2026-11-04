@@ -236,6 +236,12 @@ function typedCharacter(tr: Transaction): { at: number; text: string; from: numb
 const numberEscape = StateEffect.define<number | null>();
 /** The blank line written above `---` or `===` under a paragraph, taken out again when the line stops being one. */
 const ruleBlank = StateEffect.define<{ from: number; to: number }>();
+/**
+ * The same for the blank line a list command writes above an empty item
+ * under a paragraph (formatCommands.ts): `length` characters from `from`,
+ * taken out once the item has text.
+ */
+export const provisionalBlank = (from: number, length: number) => ruleBlank.of({ from, to: from + length });
 /** The backslash written before the third star of `**x*`, which the next star turns into bold. */
 const starEscape = StateEffect.define<number | null>();
 
