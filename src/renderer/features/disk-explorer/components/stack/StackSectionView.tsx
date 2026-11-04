@@ -32,7 +32,7 @@ interface StackSectionViewProps {
   first: boolean;
   /** The label uses the page title's size; otherwise the smaller heading size. */
   large: boolean;
-  /** Another section has the same name, as a date's document and note do: the buttons name the file with its extension. */
+  /** Another section has the same name, as a date's document and note do: its buttons name the file with its extension. */
   twin: boolean;
   /** The stack's only file, as a recording not split yet: it reads as a page, with nothing to fold or open alone. */
   lone: boolean;
@@ -83,7 +83,9 @@ export const StackSectionView = memo(function StackSectionView({
   const id = useId();
   const titleId = `${id}-title`;
   const problem = status ? PROBLEM[status] : undefined;
-  const shownName = twin ? basenameFsPath(section.path) : pageName(section.path);
+  const shownName = pageName(section.path);
+  // The buttons' names and titles; the row itself shows only the label, so its width never changes.
+  const fileName = twin ? basenameFsPath(section.path) : shownName;
   const quiet = open && !lone && section.textHeading !== null;
   const lead = quiet ? ({ '--stack-lead': section.textHeading?.line ?? 0 } as React.CSSProperties) : undefined;
 
@@ -111,7 +113,7 @@ export const StackSectionView = memo(function StackSectionView({
             {lone ? null : (
               <button
                 type="button"
-                aria-label={open ? `Fold ${shownName}` : `Unfold ${shownName}`}
+                aria-label={open ? `Fold ${fileName}` : `Unfold ${fileName}`}
                 aria-expanded={open}
                 title="Option-click folds or unfolds every section"
                 onClick={(event) => actions.toggleFold(section.path, event)}
@@ -145,8 +147,8 @@ export const StackSectionView = memo(function StackSectionView({
               {lone ? null : (
                 <button
                   type="button"
-                  aria-label={`Open ${shownName} on its own`}
-                  title={`Open ${shownName} on its own`}
+                  aria-label={`Open ${fileName} on its own`}
+                  title={`Open ${fileName} on its own`}
                   onClick={(event) => actions.openAlone(section.path, event)}
                   onAuxClick={(event) => {
                     if (event.button === 1) actions.openAlone(section.path, event);
@@ -177,7 +179,7 @@ export const StackSectionView = memo(function StackSectionView({
               loadingHeight={height}
             />
           ) : (
-            <div aria-busy="true" aria-label={`${shownName}, not drawn yet`} className="opal-stack-placeholder" style={{ height }} />
+            <div aria-busy="true" aria-label={`${fileName}, not drawn yet`} className="opal-stack-placeholder" style={{ height }} />
           )}
         </div>
       ) : null}
