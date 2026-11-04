@@ -27,7 +27,8 @@ test("The daily stream saves two typed sections on quit, and takes an append to 
     const root = await realpath(vault.root);
     const daily = path.join(root, "Library/daily");
     await mkdir(daily, { recursive: true });
-    const today = path.join(daily, `${dayBefore(0)}.md`);
+    // Launch makes today's page, a document; the earlier pages are notes.
+    const today = path.join(daily, `${dayBefore(0)}.mdo`);
     const yesterday = path.join(daily, `${dayBefore(1)}.md`);
     const older = path.join(daily, `${dayBefore(2)}.md`);
     await writeFile(yesterday, "Yesterday's page.\n");

@@ -59,7 +59,8 @@ test.describe("with a vault", () => {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     });
-    const daily = path.join(root, "Library/daily", `${date}.md`);
+    // Daily makes a new day's page as a document.
+    const daily = path.join(root, "Library/daily", `${date}.mdo`);
     await expect
       .poll(() => page.evaluate(() => decodeURIComponent(window.location.hash)))
       .toContain(`file=${daily}`);
