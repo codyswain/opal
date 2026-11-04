@@ -65,11 +65,16 @@ export class VaultService {
 
   /** The existing regular file at `file`, or null when nothing is there. */
   private async existing(root: string, file: string): Promise<string | null> {
+    const target = await this.fileAt(root, file);
+    if (target === false) throw new Error("The daily page path is not a file.");
+    return target;
+  }
+
+  /** The regular file at `file`, null when nothing is there, and false for anything else there. */
+  private async fileAt(root: string, file: string): Promise<string | null | false> {
     try {
       const target = await inVault(root, file);
-      if (!(await lstat(target)).isFile())
-        throw new Error("The daily page path is not a file.");
-      return target;
+      return (await lstat(target)).isFile() ? target : false;
     } catch (error) {
       if (missing(error)) return null;
       throw error;
@@ -97,15 +102,20 @@ export class VaultService {
 
   /**
    * The page a date already has: `Library/daily/<date>.mdo`, else
-   * `<date>.md`, and until the cleanup commit `Inbox/Logs/<date>.md`. Null
-   * when it has none.
+   * `<date>.md`, and until the cleanup commit `Inbox/Logs/<date>.md`. A
+   * folder or anything else that is not a file does not count, as in the
+   * day sidebar (DayService). Null when it has none.
    */
   private async dayPage(root: string, date: string): Promise<string | null> {
-    for (const name of dailyNames(date)) {
-      const found = await this.existing(root, path.join(root, DAY_LAYOUT.daily, name));
+    const files = [
+      ...dailyNames(date).map((name) => path.join(root, DAY_LAYOUT.daily, name)),
+      path.join(root, LEGACY_DAY_LAYOUT.logs, legacyDayName(date)),
+    ];
+    for (const file of files) {
+      const found = await this.fileAt(root, file);
       if (found) return found;
     }
-    return this.existing(root, path.join(root, LEGACY_DAY_LAYOUT.logs, legacyDayName(date)));
+    return null;
   }
 
   /**
@@ -140,7 +150,7 @@ export class VaultService {
           await handle.close();
         }
         // A note another app made while the template was being written is the day's page.
-        const made = await this.existing(root, note);
+        const made = await this.fileAt(root, note);
         if (made) return { path: made };
         await inVault(root, page, true);
         // Linking publishes the fully written inode atomically, and never replaces

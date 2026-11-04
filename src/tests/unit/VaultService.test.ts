@@ -198,6 +198,13 @@ describe("VaultService", () => {
     await expect(service.createDay(root, date)).rejects.toThrow("not a file");
   });
 
+  it("opens the day's note when a folder has the document's name, as the day sidebar does", async () => {
+    await mkdir(daily(), { recursive: true });
+    await writeFile(note(), "Note\n");
+    expect(await service.createDay(root, date)).toEqual({ path: note() });
+    expect(await readFile(note(), "utf8")).toBe("Note\n");
+  });
+
   it("rejects invalid dates, nested roots, and symlink escape even into another allowed root", async () => {
     await expect(service.createDay(root, "2026-02-30")).rejects.toThrow();
     await expect(
