@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Extension } from '@codemirror/state';
+import { redoDepth, undoDepth } from '@codemirror/commands';
+import type { EditorState, Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { pageName } from '@/common/fileKind';
+import { isDocFile, pageName } from '@/common/fileKind';
 import { isFsPathAtOrBelow } from '@/common/fsPaths';
 import { dailyDetail, dailyHeadDate, readOnlyRule } from '@/common/stackModel';
 import { localDate } from '@/common/vaultModel';
@@ -15,6 +16,7 @@ import { sectionOpen, useStackFoldsStore, useStackStore, type StackMove } from '
 import { useTabsStore, type StackViewState, type TabEntry } from '../../store/tabsStore';
 import { placeCaret, sectionKeys, type SectionEdge } from './stackKeys';
 import { StackSectionView, type SectionActions } from './StackSectionView';
+import { StackToolbar, ToolbarBinding } from './StackToolbar';
 import { STACK_WINDOW, planStackWindow, sectionHeights, type SectionGeometry } from './stackWindow';
 import './stack.css';
 
@@ -213,10 +215,11 @@ interface PendingCaret {
 
 /**
  * Several Markdown files one after another in one scroll. Each section is
- * the file's own editor, which loads, saves and merges on its own; the stack
- * owns only the scroll. Sections near the view have a live editor and the
- * rest are placeholders of the height they last had, so a stream of a
- * hundred daily pages keeps at most twelve editors.
+ * the file's own editor, which loads, saves and merges on its own, with its
+ * own undo; the stack owns only the scroll, and, when it holds a document,
+ * the one toolbar above the scroll. Sections near the view have a live
+ * editor and the rest are placeholders of the height they last had, so a
+ * stream of a hundred daily pages keeps at most twelve editors.
  */
 export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) => {
   const head = location.file;
@@ -243,6 +246,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const content = useRef<HTMLDivElement>(null);
   const articles = useRef(new Map<string, HTMLElement>());
   const views = useRef(new Map<string, EditorView>());
+  // The last state of each edited section whose editor went, until the editor comes back.
+  const keptStates = useRef(new Map<string, EditorState>());
   const focused = useRef<string | null>(null);
   const reading = useRef(new Set<string>([head]));
   const farSince = useRef(new Map<string, number>());
@@ -288,6 +293,15 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   }, [kind, sections, loadedCount]);
   // A recording not split yet, or a card that is not a thread, is the stack's only file and reads as a page.
   const lone = kind !== 'daily' && sections.length === 1;
+  // A stack that holds a document has one toolbar above its scroll, for the document that last had focus.
+  // Daily always has it, since new days are documents: the stream never moves when one arrives or leaves.
+  const hasDocuments = useMemo(() => kind === 'daily' || sections.some((section) => isDocFile(section.path)), [kind, sections]);
+  // A date's document and note read the same; their buttons name each file.
+  const twins = useMemo(() => {
+    const names = sections.map((section) => pageName(section.path));
+    return new Set(sections.filter((_section, at) => names.indexOf(names[at]) !== names.lastIndexOf(names[at])).map((section) => section.path));
+  }, [sections]);
+  const [toolbar] = useState(() => new ToolbarBinding());
   // Event handlers and the planner read the latest render through refs, so they never go stale.
   const latest = useRef({ sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, answers, lone });
   latest.current = { sections, shown, live, folds, statuses, propertiesPath, propertiesOpen, answers, lone };
@@ -1014,10 +1028,23 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
 
   // --- What sections ask of the stack ---------------------------------------------
 
+  // A daily page just made from Daily's "+" takes the caret once its editor is up, when it is empty, as an empty head does.
+  const takeCaret = useCallback((path: string, view: EditorView) => {
+    const store = useStackStore.getState();
+    if (store.caret !== path) return;
+    store.askCaret(null);
+    if (view.state.doc.length === 0) view.focus();
+  }, []);
+  useEffect(() => useStackStore.subscribe((state, previous) => {
+    const view = state.caret && state.caret !== previous.caret ? views.current.get(state.caret) : undefined;
+    if (state.caret && view) takeCaret(state.caret, view);
+  }), [takeCaret]);
+
   const cache = useRef({
     extensions: new Map<string, Extension>(),
     loaded: new Map<string, () => void>(),
     view: new Map<string, (view: EditorView | null) => void>(),
+    kept: new Map<string, () => EditorState | null>(),
     properties: new Map<string, () => void>(),
     refs: new Map<string, (element: HTMLElement | null) => void>(),
   });
@@ -1089,6 +1116,13 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
             const held = hold.current;
             if (update.docChanged && held?.kind === 'line' && held.path === path) held.pos = update.changes.mapPos(held.pos, 1);
           }),
+          isDocFile(path)
+            ? EditorView.updateListener.of((update) => {
+              if (update.docChanged || update.selectionSet || update.transactions.some((tr) => tr.effects.length > 0)) {
+                toolbar.update(path, update.view, update.state);
+              }
+            })
+            : [],
         ]),
       onLoadedFor: (path) =>
         memo(cache.current.loaded, path, () => () => {
@@ -1097,19 +1131,30 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
         }),
       onViewFor: (path) =>
         memo(cache.current.view, path, () => (view: EditorView | null) => {
+          toolbar.view(path, view);
           if (!view) {
+            // An edited section keeps its undo history while its editor is away.
+            const gone = views.current.get(path)?.state;
+            if (gone && undoDepth(gone) + redoDepth(gone) > 0) keptStates.current.set(path, gone);
             views.current.delete(path);
             reading.current.delete(path);
             if (focused.current === path) focused.current = null;
             return;
           }
           views.current.set(path, view);
+          takeCaret(path, view);
           if (path === head) autoFocusHead.current = false;
           const caret = pendingCaret.current;
           if (caret?.path === path) {
             pendingCaret.current = null;
             placeCaret(view, caret.edge, caret.column);
           }
+        }),
+      keptStateFor: (path) =>
+        memo(cache.current.kept, path, () => () => {
+          const state = keptStates.current.get(path) ?? null;
+          keptStates.current.delete(path);
+          return state;
         }),
       togglePropertiesFor: (path) =>
         memo(cache.current.properties, path, () => () => {
@@ -1126,12 +1171,14 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
           store.setOpen(true);
         }),
     };
-  }, [focusSection, head, neighbour, revealSection, saveView, schedule]);
+  }, [focusSection, head, neighbour, revealSection, saveView, schedule, takeCaret, toolbar]);
 
   // Focus moves between sections without React; the planner reads it from a ref.
+  // The toolbar follows it into a document, and greys out in a note.
   const onFocus = (event: React.FocusEvent) => {
     const article = (event.target as HTMLElement).closest<HTMLElement>('[data-stack-section]');
     focused.current = article?.dataset.stackSection ?? null;
+    if (focused.current) toolbar.focus(focused.current, views.current.get(focused.current));
   };
   const onBlur = (event: React.FocusEvent) => {
     const next = event.relatedTarget as HTMLElement | null;
@@ -1144,39 +1191,43 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
   const loadingMore = !listed || shown.length < sections.length;
 
   return (
-    <div
-      ref={scroller}
-      data-testid="files-stack"
-      data-stack-kind={kind}
-      data-lone={lone ? '' : undefined}
-      className="opal-stack h-full min-h-0 overflow-y-auto"
-      onFocus={onFocus}
-      onBlur={onBlur}
-    >
-      <div ref={content} role="feed" aria-busy={loadingMore} aria-label={kind === 'daily' ? 'Daily pages' : pageName(head)} className="opal-stack-content">
-        {shown.map((section, position) => {
-          const open = lone || sectionOpen(folds, section.path, section.defaultOpen);
-          const isLive = open && live.has(section.path);
-          return (
-            <StackSectionView
-              key={section.path}
-              section={section}
-              first={position === 0}
-              large={kind === 'daily' || section.role === 'head'}
-              lone={lone}
-              open={open}
-              live={isLive}
-              height={sectionHeights.get(section.path, section.size)}
-              status={isLive ? statuses[section.path] : undefined}
-              autoFocusEmpty={section.role === 'head' && !!autoFocusHead.current}
-              propertiesShown={propertiesOpen && propertiesPath === section.path}
-              position={position + 1}
-              setSize={total}
-              actions={actions}
-            />
-          );
-        })}
-        {kind === 'daily' && ended ? <p className="opal-stack-end">No earlier pages</p> : null}
+    <div className="opal-stack-frame flex h-full min-h-0 flex-col">
+      {hasDocuments ? <StackToolbar binding={toolbar} /> : null}
+      <div
+        ref={scroller}
+        data-testid="files-stack"
+        data-stack-kind={kind}
+        data-lone={lone ? '' : undefined}
+        className="opal-stack min-h-0 flex-1 overflow-y-auto"
+        onFocus={onFocus}
+        onBlur={onBlur}
+      >
+        <div ref={content} role="feed" aria-busy={loadingMore} aria-label={kind === 'daily' ? 'Daily pages' : pageName(head)} className="opal-stack-content">
+          {shown.map((section, position) => {
+            const open = lone || sectionOpen(folds, section.path, section.defaultOpen);
+            const isLive = open && live.has(section.path);
+            return (
+              <StackSectionView
+                key={section.path}
+                section={section}
+                first={position === 0}
+                large={kind === 'daily' || section.role === 'head'}
+                twin={twins.has(section.path)}
+                lone={lone}
+                open={open}
+                live={isLive}
+                height={sectionHeights.get(section.path, section.size)}
+                status={isLive ? statuses[section.path] : undefined}
+                autoFocusEmpty={section.role === 'head' && !!autoFocusHead.current}
+                propertiesShown={propertiesOpen && propertiesPath === section.path}
+                position={position + 1}
+                setSize={total}
+                actions={actions}
+              />
+            );
+          })}
+          {kind === 'daily' && ended ? <p className="opal-stack-end">No earlier pages</p> : null}
+        </div>
       </div>
     </div>
   );

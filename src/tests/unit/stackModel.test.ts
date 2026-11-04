@@ -42,14 +42,46 @@ describe('stack model', () => {
       '2026-10-27.md', '2026-10-29.md', '2026-10-30.md', '2026-09-01.md', 'notes.md', '2026-11-02.md',
       '2026-10-28.md', '2026-02-30.md', '2026-10-28 copy.md', '2026-10-26.txt', '2026-10-31.md',
     ];
-    expect(dailyStreamNames(names, '2026-10-29')).toEqual({
+    expect(dailyStreamNames(names, '2026-10-29.md')).toEqual({
       later: ['2026-11-02.md', '2026-10-31.md', '2026-10-30.md'],
       earlier: ['2026-10-28.md', '2026-10-27.md', '2026-09-01.md'],
     });
     // The limit keeps the days nearest the head on each side.
-    expect(dailyStreamNames(names, '2026-10-29', 2)).toEqual({
+    expect(dailyStreamNames(names, '2026-10-29.md', 2)).toEqual({
       later: ['2026-10-31.md', '2026-10-30.md'],
       earlier: ['2026-10-28.md', '2026-10-27.md'],
+    });
+  });
+
+  it('knows a day made as a document by path, as it knows a note', () => {
+    expect(dailyHeadDate('/Vault/Library/daily/2026-11-04.mdo')).toBe('2026-11-04');
+    expect(dailyHeadDate('Library/daily/2026-11-04.mdo')).toBe('2026-11-04');
+    expect(dailyHeadDate('/Vault/Library/daily/2026-11-04.mdx')).toBeNull();
+    expect(dailyHeadDate('/Vault/Library/daily/2026-11-04.mdo.md')).toBeNull();
+    expect(isStackHead('daily', '/Vault/Library/daily/2026-11-04.mdo')).toBe(true);
+    expect(isStackHead('daily', '/Vault/Notes/2026-11-04.mdo')).toBe(false);
+    expect(stackKindForPath('/Vault/Library/daily/2026-11-04.mdo')).toBeNull();
+  });
+
+  it('lists notes and documents by their real names, a date with both files twice, the document first', () => {
+    const names = [
+      '2026-11-01.md', '2026-11-02.md', '2026-11-03.md', '2026-11-03.mdo', '2026-11-04.mdo', '2026-11-05.mdo',
+      '2026-11-05.md', '2026-11-06.mdo.md', '2026-11-07.MDO', 'Plan.mdo',
+    ];
+    // Headed by today's document: today's note sits right below it.
+    expect(dailyStreamNames(names, '2026-11-03.mdo')).toEqual({
+      later: ['2026-11-05.mdo', '2026-11-05.md', '2026-11-04.mdo'],
+      earlier: ['2026-11-03.md', '2026-11-02.md', '2026-11-01.md'],
+    });
+    // Headed by today's note: today's document sits right above it.
+    expect(dailyStreamNames(names, '2026-11-03.md')).toEqual({
+      later: ['2026-11-05.mdo', '2026-11-05.md', '2026-11-04.mdo', '2026-11-03.mdo'],
+      earlier: ['2026-11-02.md', '2026-11-01.md'],
+    });
+    // The limit counts files, nearest the head first.
+    expect(dailyStreamNames(names, '2026-11-03.mdo', 2)).toEqual({
+      later: ['2026-11-05.md', '2026-11-04.mdo'],
+      earlier: ['2026-11-03.md', '2026-11-02.md'],
     });
   });
 
@@ -180,6 +212,37 @@ describe('StackService', () => {
       ['2026-10-25', 'part'],
     ]);
     expect(stack.sections[1].detail).toBe('Monday');
+  });
+
+  it('lists notes and documents in one stream, a date with both files twice, the document first', async () => {
+    const head = await put('Library/daily/2026-10-29.mdo', '---\ndate: 2026-10-29\ntags:\n  - daily\n---\n');
+    // Obsidian made a note for the same date; it shows below the document.
+    await put('Library/daily/2026-10-29.md', 'Written in Obsidian.');
+    await put('Library/daily/2026-10-30.mdo', '---\ndate: 2026-10-30\n---\n');
+    await put('Library/daily/2026-10-28.md', 'An older note.');
+    await put('Library/daily/2026-10-27.mdo', 'A document, before the switch.');
+    // A past document with only its properties is blank, and left out as a note would be.
+    await put('Library/daily/2026-10-26.mdo', '---\ndate: 2026-10-26\n---\n');
+    await put('Library/daily/2026-10-25.md', 'Both files, the note first on disk.');
+    await put('Library/daily/2026-10-25.mdo', 'Both files, the document.');
+    const stack = await service.stack(root, 'daily', head);
+    expect(stack.sections.map((section) => [path.basename(section.path), section.label, section.detail, section.role])).toEqual([
+      ['2026-10-30.mdo', '2026-10-30', 'Tomorrow', 'part'],
+      ['2026-10-29.mdo', '2026-10-29', 'Today', 'head'],
+      ['2026-10-29.md', '2026-10-29', 'Today', 'part'],
+      ['2026-10-28.md', '2026-10-28', 'Yesterday', 'part'],
+      ['2026-10-27.mdo', '2026-10-27', 'Tuesday', 'part'],
+      ['2026-10-25.mdo', '2026-10-25', 'Sunday', 'part'],
+      ['2026-10-25.md', '2026-10-25', 'Sunday', 'part'],
+    ]);
+    expect(new Set(stack.sections.map((section) => section.path)).size).toBe(stack.sections.length);
+    // Headed by the note, the same date's document comes above it.
+    const fromNote = await service.stack(root, 'daily', path.join(root, 'Library/daily/2026-10-29.md'));
+    expect(fromNote.sections.slice(0, 3).map((section) => [path.basename(section.path), section.role])).toEqual([
+      ['2026-10-30.mdo', 'part'],
+      ['2026-10-29.mdo', 'part'],
+      ['2026-10-29.md', 'head'],
+    ]);
   });
 
   it('notices a past page that gains a body', async () => {

@@ -1,9 +1,10 @@
 import { validDate } from '@/common/vaultModel';
 
 /*
- * Which day the right sidebar shows. A dated page (a daily page, a log, a
- * recording, a recording's transcript or a digest) sets the day. Any other
- * page keeps the last day shown. With nothing set, the sidebar shows today.
+ * Which day the right sidebar shows. A dated page (a daily page, as a note
+ * or a document, a log, a recording, a recording's transcript or a digest)
+ * sets the day. Any other page keeps the last day shown. With nothing set,
+ * the sidebar shows today.
  */
 
 /**
@@ -13,19 +14,23 @@ import { validDate } from '@/common/vaultModel';
 const DATED_PAGE =
   /(?:^|\/)(?:Library\/(?:daily|logs|recordings(?:\/transcripts)?|digests)|Inbox\/(?:Logs|Recordings|Digests))\/(\d{4}-\d{2}-\d{2})(?: [^/]*)?\.md$/;
 
+/** A day made as a document, `Library/daily/<date>.mdo`. */
+const DAILY_DOCUMENT = /(?:^|\/)Library\/daily\/(\d{4}-\d{2}-\d{2})\.mdo$/;
+
 /** The date a dated page belongs to, or null for any other page. */
 export function pageDate(path: string | null): string | null {
-  const match = path ? DATED_PAGE.exec(path) : null;
+  const match = path ? DATED_PAGE.exec(path) ?? DAILY_DOCUMENT.exec(path) : null;
   return match && validDate(match[1]) ? match[1] : null;
 }
 
-/** The pages Daily opens: daily pages, and old Inbox/Logs pages until the cleanup commit. */
-const DAILY_PAGE = /(?:^|\/)(?:Library\/daily|Inbox\/Logs)\/(\d{4}-\d{2}-\d{2})\.md$/;
+/** The pages Daily opens: daily pages, as notes or documents, and old Inbox/Logs pages until the cleanup commit. */
+const DAILY_PAGE = /(?:^|\/)(?:Library\/daily\/(\d{4}-\d{2}-\d{2})\.mdo?|Inbox\/Logs\/(\d{4}-\d{2}-\d{2})\.md)$/;
 
 /** The date of a daily page, or null for any other page. */
 export function dailyPageDate(path: string | null): string | null {
   const match = path ? DAILY_PAGE.exec(path) : null;
-  return match && validDate(match[1]) ? match[1] : null;
+  const date = match?.[1] ?? match?.[2];
+  return date && validDate(date) ? date : null;
 }
 
 export interface DayRuleState {

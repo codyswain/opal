@@ -5,7 +5,8 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
 import { markdownEditorExtensions } from '@/renderer/features/disk-explorer/components/editor/editorSetup';
-import { toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { toggleList, toggleMarker } from '@/renderer/features/disk-explorer/components/editor/formatCommands';
+import { formatState } from '@/renderer/features/disk-explorer/components/editor/formatState';
 import { fitMarks, literalText } from '@/renderer/features/disk-explorer/components/editor/typing';
 import { visibleLine, visibleSlice } from '@/renderer/features/disk-explorer/components/editor/visibleText';
 import { pasteSpec } from '@/renderer/features/disk-explorer/components/editor/clipboard';
@@ -183,6 +184,18 @@ describe('typing in a document', () => {
     act(() => { equals.dispatch({ changes: { from: 3, insert: '\n' }, selection: { anchor: 4 } }); });
     type(equals, '===');
     expect(text(equals)).toBe('abc\n\n===\n');
+  });
+
+  it('starts a list on the empty line under a paragraph, and the typed item sits right under it', () => {
+    for (const [kind, marker] of [['bullet', '- '], ['number', '1. '], ['task', '- [ ] ']] as const) {
+      const view = mount('Plan the week\n', '/Vault/Library/daily/2026-11-04.mdo');
+      at(view, text(view).length);
+      act(() => { toggleList(kind)(view); });
+      // The empty item draws as a list item, not as the paragraph's heading underline.
+      expect(formatState(view.state).list).toBe(kind);
+      type(view, 'First item');
+      expect(text(view)).toBe(`Plan the week\n${marker}First item`);
+    }
   });
 
   it('puts a letter that would unmake a mark on the mark\'s other side', () => {

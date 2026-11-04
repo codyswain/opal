@@ -95,7 +95,7 @@
 }
 
 /* The toolbar's Insert button: a plus and a chevron. */
-.opal-editor .opal-doc-toolbar-insert {
+.opal-doc-toolbar-insert {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -107,13 +107,13 @@
   transition: background-color var(--duration-hover) var(--ease-standard);
 }
 
-.opal-editor .opal-doc-toolbar-insert:hover,
-.opal-editor .opal-doc-toolbar-insert[data-state="open"] {
+.opal-doc-toolbar-insert:hover,
+.opal-doc-toolbar-insert[data-state="open"] {
   background-color: hsl(var(--surface-hover));
   color: hsl(var(--foreground));
 }
 
-.opal-editor .opal-doc-toolbar-insert:focus-visible {
+.opal-doc-toolbar-insert:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px hsl(var(--focus));
 }
@@ -121,7 +121,7 @@
 @media (prefers-reduced-motion: reduce) {
   .opal-editor .cm-editor [data-object],
   .opal-object-bar-text,
-  .opal-editor .opal-doc-toolbar-insert {
+  .opal-doc-toolbar-insert {
     transition: none;
   }
 }

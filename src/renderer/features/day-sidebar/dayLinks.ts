@@ -1,3 +1,4 @@
+import { isDocFile } from '@/common/fileKind';
 import type { DayLink } from '@/types/day';
 
 /*
@@ -40,10 +41,14 @@ export function hostName(url: string): string {
   }
 }
 
-/** The vault file a target names, with ".md" when the target has no extension. */
-export function targetFile(target: string): string {
+/**
+ * The vault file a target names. A target with no extension gets the one of
+ * the file it resolved to, ".mdo" for a document, and ".md" otherwise.
+ */
+export function targetFile(target: string, resolved: string | null = null): string {
   const file = target.split('#')[0];
-  return /\.[a-z0-9]+$/i.test(file) ? file : `${file}.md`;
+  if (/\.[a-z0-9]+$/i.test(file)) return file;
+  return `${file}${resolved && isDocFile(resolved) ? '.mdo' : '.md'}`;
 }
 
 /** The name of the folder a vault link's file is in. */
@@ -65,7 +70,7 @@ export function sortDayLinks(links: readonly DayLink[]): DayLink[] {
 export function linkTitle(link: DayLink): string {
   if (link.external) return `Opens ${hostName(link.target)} in the browser`;
   if (!link.path) return `${targetFile(link.target)} is not in the vault`;
-  return openTitle(targetFile(link.target));
+  return openTitle(targetFile(link.target, link.path));
 }
 
 export const openTitle = (file: string) => `Opens ${file} in this tab. Cmd-click opens a new tab.`;

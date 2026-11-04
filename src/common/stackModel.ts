@@ -8,8 +8,9 @@ import { validDate } from './vaultModel';
  * the folders and hands the names in; the renderer uses the path rules.
  */
 
-const DAILY_PAGE = /(?:^|\/)Library\/daily\/(\d{4}-\d{2}-\d{2})\.md$/;
-const DAILY_NAME = /^(\d{4}-\d{2}-\d{2})\.md$/;
+/** A daily page is `<date>.md`, or `<date>.mdo` for a day made as a document. */
+const DAILY_PAGE = /(?:^|\/)Library\/daily\/(\d{4}-\d{2}-\d{2})\.mdo?$/;
+const DAILY_NAME = /^(\d{4}-\d{2}-\d{2})\.(mdo?)$/;
 
 const RECORDING_HEAD = /(?:^|\/)Library\/recordings\/([^/]+\.md)$/;
 const CHAT_HEAD = /(?:^|\/)Library\/chats\/[^/]+\.md$/;
@@ -110,27 +111,40 @@ export function isStackHead(kind: StackKind, path: string): boolean {
 }
 
 /**
- * The names in a daily folder that a stream headed by `headDate` shows
- * around the head, newest first, as the whole stream reads: the later days
- * above it and the earlier days below it. Only valid dated names, the head
- * itself left out, and at most `limit` on each side, those nearest the head.
+ * Where a daily page's file name sorts in the stream, newest first: by its
+ * date, and on one date the document before the note, so a date with both
+ * files shows both. Null for any other name.
+ */
+function streamKey(name: string): string | null {
+  const match = DAILY_NAME.exec(name);
+  if (!match || !validDate(match[1])) return null;
+  return `${match[1]}${match[2] === 'mdo' ? '1' : '0'}`;
+}
+
+/**
+ * The names in a daily folder that a stream headed by the file `headName`
+ * shows around the head, newest first, as the whole stream reads: the later
+ * pages above it and the earlier pages below it. Only valid dated names, the
+ * head itself left out, and at most `limit` on each side, those nearest the
+ * head. A date with both a document and a note has both, the document first;
+ * the other file of the head's own date sits beside the head by that rule.
  */
 export function dailyStreamNames(
   names: readonly string[],
-  headDate: string,
+  headName: string,
   limit = DAILY_STREAM_LIMIT,
 ): { later: string[]; earlier: string[] } {
-  const later = new Set<string>();
-  const earlier = new Set<string>();
+  const head = streamKey(headName) ?? '';
+  const keyed = new Map<string, string>();
   for (const name of names) {
-    const match = DAILY_NAME.exec(name);
-    if (!match || !validDate(match[1]) || match[1] === headDate) continue;
-    (match[1] > headDate ? later : earlier).add(match[1]);
+    const key = streamKey(name);
+    if (key && key !== head) keyed.set(key, name);
   }
-  const named = (dates: string[]) => dates.map((date) => `${date}.md`);
+  const keys = [...keyed.keys()];
+  const named = (sorted: string[]) => sorted.map((key) => keyed.get(key) as string);
   return {
-    later: named([...later].sort().slice(0, limit).reverse()),
-    earlier: named([...earlier].sort().reverse().slice(0, limit)),
+    later: named(keys.filter((key) => key > head).sort().slice(0, limit).reverse()),
+    earlier: named(keys.filter((key) => key < head).sort().reverse().slice(0, limit)),
   };
 }
 

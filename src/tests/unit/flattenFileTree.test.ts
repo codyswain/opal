@@ -199,6 +199,25 @@ describe('flattenFileTree', () => {
       });
     });
 
+    it('shows a day made as a document like a note, and a date with both files twice, the document first', () => {
+      const doc = (date: string) =>
+        entry({ path: `/Vault/Library/daily/${date}.mdo`, name: `${date}.mdo`, kind: 'markdown' });
+      const nodes = flattenFileTree({
+        roots: ['/Vault'],
+        expanded: { '/Vault/Library': true, '/Vault/Library/daily': true, '/Vault/Library/daily/2026': true },
+        listings: { ...listings, '/Vault/Library/daily': [page('2026-11-03'), doc('2026-11-03'), doc('2026-11-04'), page('2026-11-02'), readme] },
+      });
+
+      expect(nodes.slice(2).map((node) => [node.label, node.name])).toEqual([
+        ['2026', '2026'],
+        ['11-04 Wed', '2026-11-04.mdo'],
+        ['11-03 Tue', '2026-11-03.mdo'],
+        ['11-03 Tue', '2026-11-03.md'],
+        ['11-02 Mon', '2026-11-02.md'],
+        ['README', 'README.md'],
+      ]);
+    });
+
     it('leaves pages loose when a real folder has the year’s name, and other folders alone', () => {
       const real = entry({ path: '/Vault/Library/daily/2026', name: '2026', kind: 'directory', isDirectory: true });
       const nodes = flattenFileTree({

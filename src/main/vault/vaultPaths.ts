@@ -24,7 +24,13 @@ export const LEGACY_DAY_LAYOUT = {
   digests: "Inbox/Digests",
 } as const;
 
-export const dailyName = (date: string) => `${date}.md`;
+/**
+ * A day's page in `Library/daily`, in the order a lookup tries them: the
+ * document Opal makes, then a note, which older days and Obsidian have.
+ */
+export const dailyNames = (date: string) => [`${date}.mdo`, `${date}.md`] as const;
+/** Before the Library move a day's page, and its digest, was `<date>.md` in an Inbox folder. */
+export const legacyDayName = (date: string) => `${date}.md`;
 export const logName = (date: string) => `${date} log.md`;
 export const digestName = (date: string) => `${date} digest.md`;
 
@@ -39,7 +45,7 @@ export function isDigestPath(relative: string): boolean {
   const date = /^(\d{4}-\d\d-\d\d)(?: digest)?\.md$/.exec(name);
   if (!date) return false;
   if (folder === DAY_LAYOUT.digests) return name === digestName(date[1]);
-  return folder === LEGACY_DAY_LAYOUT.digests && name === dailyName(date[1]);
+  return folder === LEGACY_DAY_LAYOUT.digests && name === legacyDayName(date[1]);
 }
 
 export const missing = (error: unknown) =>

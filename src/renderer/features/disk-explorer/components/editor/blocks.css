@@ -270,8 +270,10 @@
   }
 }
 
-/* The style menu on a callout's title, which takes no heading. */
-.opal-editor .opal-doc-toolbar-style:disabled {
+/* The style menu on a callout's title, which takes no heading, and the
+   style and Insert menus of a stack's toolbar while a note has focus. */
+.opal-doc-toolbar-style:disabled,
+.opal-doc-toolbar-insert:disabled {
   pointer-events: none;
   opacity: 0.4;
 }

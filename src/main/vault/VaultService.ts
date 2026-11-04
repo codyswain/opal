@@ -11,9 +11,10 @@ import { defaultDailyPage, fillDailyTemplate, validDate } from "@/common/vaultMo
 import {
   DAY_LAYOUT,
   LEGACY_DAY_LAYOUT,
-  dailyName,
+  dailyNames,
   inVault,
   isDigestPath,
+  legacyDayName,
   missing,
   openedVault,
 } from "./vaultPaths";
@@ -64,11 +65,16 @@ export class VaultService {
 
   /** The existing regular file at `file`, or null when nothing is there. */
   private async existing(root: string, file: string): Promise<string | null> {
+    const target = await this.fileAt(root, file);
+    if (target === false) throw new Error("The daily page path is not a file.");
+    return target;
+  }
+
+  /** The regular file at `file`, null when nothing is there, and false for anything else there. */
+  private async fileAt(root: string, file: string): Promise<string | null | false> {
     try {
       const target = await inVault(root, file);
-      if (!(await lstat(target)).isFile())
-        throw new Error("The daily page path is not a file.");
-      return target;
+      return (await lstat(target)).isFile() ? target : false;
     } catch (error) {
       if (missing(error)) return null;
       throw error;
@@ -95,10 +101,28 @@ export class VaultService {
   }
 
   /**
-   * The daily page for `date`: `Library/daily/<date>.md`, written from
-   * the vault's template when it does not exist yet. Until the cleanup commit,
-   * an existing `Inbox/Logs/<date>.md` is opened instead when the daily page
-   * does not exist. Never overwrites a file.
+   * The page a date already has: `Library/daily/<date>.mdo`, else
+   * `<date>.md`, and until the cleanup commit `Inbox/Logs/<date>.md`. A
+   * folder or anything else that is not a file does not count, as in the
+   * day sidebar (DayService). Null when it has none.
+   */
+  private async dayPage(root: string, date: string): Promise<string | null> {
+    const files = [
+      ...dailyNames(date).map((name) => path.join(root, DAY_LAYOUT.daily, name)),
+      path.join(root, LEGACY_DAY_LAYOUT.logs, legacyDayName(date)),
+    ];
+    for (const file of files) {
+      const found = await this.fileAt(root, file);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /**
+   * The daily page for `date`: the page it already has (`dayPage`), or else
+   * `Library/daily/<date>.mdo`, a document written from the vault's template.
+   * Never overwrites a file, and never makes a second page for a date that
+   * has one.
    */
   async createDay(target: string, date: string): Promise<{ path: string }> {
     this.checkDate(date);
@@ -106,11 +130,9 @@ export class VaultService {
     // Any other opened folder stays as it is; Daily never adds Library/daily to it.
     if (!(await this.isVault(root))) throw new Error("Choose an opened vault folder.");
     return filesystemMutationQueue.run(async () => {
-      const page = path.join(root, DAY_LAYOUT.daily, dailyName(date));
-      const found =
-        (await this.existing(root, page)) ??
-        (await this.existing(root, path.join(root, LEGACY_DAY_LAYOUT.logs, dailyName(date))));
+      const found = await this.dayPage(root, date);
       if (found) return { path: found };
+      const [page, note] = dailyNames(date).map((name) => path.join(root, DAY_LAYOUT.daily, name));
       await inVault(root, page, true);
       await mkdir(path.dirname(page), { recursive: true });
       await inVault(root, path.dirname(page));
@@ -127,6 +149,9 @@ export class VaultService {
         } finally {
           await handle.close();
         }
+        // A note another app made while the template was being written is the day's page.
+        const made = await this.fileAt(root, note);
+        if (made) return { path: made };
         await inVault(root, page, true);
         // Linking publishes the fully written inode atomically, and never replaces
         // a page another app created while the template was being written.

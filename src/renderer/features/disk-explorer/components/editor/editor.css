@@ -5,8 +5,10 @@
    Selectors start with `.opal-editor .cm-editor` so they outrank
    CodeMirror's own theme. Lines and blocks space themselves with padding,
    never margins: CodeMirror measures their boxes to place the caret.
-   A stack (stack.css) shares the column and the type. */
+   A stack (stack.css) shares the column and the type, and so does the
+   frame that holds a stack's toolbar above its scroll. */
 .opal-editor,
+.opal-stack-frame,
 .opal-stack {
   --font-reading: "PT Serif", "Iowan Old Style", Georgia, serif;
   --editor-measure: 43.75rem;
@@ -149,9 +151,10 @@
 }
 
 /* A document's toolbar: one row of grey icon buttons over the text column,
-   in the interface's sans. It sits outside the page's scroller, so it holds
-   still while the page scrolls. A pressed button takes IconButton's grey. */
-.opal-editor .opal-doc-toolbar {
+   in the interface's sans. It sits outside the page's scroller, or a
+   stack's, so it holds still while the page scrolls. A pressed button takes
+   IconButton's grey. */
+.opal-doc-toolbar {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -167,7 +170,7 @@
   font-feature-settings: var(--font-features);
 }
 
-.opal-editor .opal-doc-toolbar-rule {
+.opal-doc-toolbar-rule {
   flex-shrink: 0;
   width: 1px;
   height: 16px;
@@ -175,7 +178,7 @@
   background-color: hsl(var(--border-subtle));
 }
 
-.opal-editor .opal-doc-toolbar-style {
+.opal-doc-toolbar-style {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -192,14 +195,14 @@
   transition: background-color var(--duration-hover) var(--ease-standard);
 }
 
-.opal-editor .opal-doc-toolbar-style:hover,
-.opal-editor .opal-doc-toolbar-style[data-state="open"] {
+.opal-doc-toolbar-style:hover,
+.opal-doc-toolbar-style[data-state="open"] {
   background-color: hsl(var(--surface-hover));
   color: hsl(var(--foreground));
   transition-duration: 0s;
 }
 
-.opal-editor .opal-doc-toolbar-style:focus-visible {
+.opal-doc-toolbar-style:focus-visible {
   box-shadow: 0 0 0 2px hsl(var(--focus));
 }
 

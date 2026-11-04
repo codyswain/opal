@@ -1,4 +1,4 @@
-import { indentUnit } from '@codemirror/language';
+import { ensureSyntaxTree, indentUnit } from '@codemirror/language';
 import {
   ChangeSet,
   EditorSelection,
@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { latestTree, protectedIn, treeFor } from './extensionPoints';
 import { nestListItems } from './listKeys';
 import { docMode, linkTarget } from './livePreview';
-import { closesAt, fitMarks, keepsVisibleText, opensAt } from './typing';
+import { closesAt, fitMarks, keepsVisibleText, opensAt, provisionalBlank } from './typing';
 import { parseWikiTarget } from './wikiLinks';
 
 /*
@@ -746,14 +746,36 @@ export function toggleList(kind: ListKind): StateCommand {
         changes.push({ from: last.to, insert: `\n${blankFor(last)}` });
       }
     }
+    const blank = emptyItemBlank(state, lines, items, changes);
+    if (blank) changes.unshift(blank);
     const changeSet = state.changes(changes);
     // A caret where a marker went in goes after it, ready to type.
     const { head } = state.selection.main;
     const marked = state.selection.main.empty ? changes.find((change) => (change as { from: number }).from === head && (change as { insert?: string }).insert?.trim()) as { insert: string } | undefined : undefined;
-    const selection = marked ? { anchor: changeSet.mapPos(head, -1) + marked.insert.length } : undefined;
-    dispatch(state.update({ changes: changeSet, selection, scrollIntoView: true, userEvent: 'input' }));
+    const selection = blank ? { anchor: changeSet.mapPos(head, 1) } : marked ? { anchor: changeSet.mapPos(head, -1) + marked.insert.length } : undefined;
+    const effects = blank ? [provisionalBlank(changeSet.mapPos(blank.from, -1), blank.insert.length)] : [];
+    dispatch(state.update({ changes: changeSet, selection, effects, scrollIntoView: true, userEvent: 'input' }));
     return true;
   };
+}
+
+/**
+ * In a document, an empty list item started on the empty line under a
+ * paragraph's line would read as that paragraph's heading underline ("-")
+ * or as more of its text ("1."), so the blank line Markdown needs goes above
+ * it. Typing the item's first character takes the blank line out again, and
+ * the item then sits right under the paragraph (typing.ts). Null when the
+ * item is a list item as it is.
+ */
+function emptyItemBlank(state: EditorState, lines: readonly Line[], items: readonly (ListLine | null)[], changes: readonly ChangeSpec[]): { from: number; insert: string } | null {
+  const [line] = lines;
+  if (!state.facet(docMode) || lines.length !== 1 || items[0] || /[^\s>]/.test(line.text) || line.number === 1) return null;
+  if (!/[^\s>]/.test(state.doc.line(line.number - 1).text)) return null;
+  const changeSet = state.changes(changes);
+  const trial = state.update({ changes: changeSet, filter: false }).state;
+  const at = changeSet.mapPos(line.to, 1);
+  ensureSyntaxTree(trial, trial.doc.lineAt(at).to, 50);
+  return listItemOf(trial, trial.doc.lineAt(at)) ? null : { from: line.from, insert: `${blankFor(line)}\n` };
 }
 
 // A quote's ">" marks, and the space after each, at the start of a line.

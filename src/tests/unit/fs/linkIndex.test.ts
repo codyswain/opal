@@ -40,6 +40,32 @@ describe('resolveLinkTarget', () => {
     expect(resolveLinkTarget('Plan.mdo', from, files)).toBe('/Vault/Library/x/Plan.mdo');
   });
 
+  it('finds a day made as a document where its note would be, and the document when a date has both', () => {
+    const days = [
+      ...files,
+      '/Vault/Library/daily/2026-11-03.md',
+      '/Vault/Library/daily/2026-11-03.mdo',
+      '/Vault/Library/daily/2026-11-04.mdo',
+      '/Vault/Archive/2026-11-05.md',
+      '/Vault/Library/daily/2026-11-05.mdo',
+    ];
+    const log = '/Vault/Library/logs/2026-11-04 log.md';
+    // A log's `daily: "[[Library/daily/<date>]]"` and a typed [[<date>]].
+    expect(resolveLinkTarget('Library/daily/2026-11-04', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('2026-11-04', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('Library/daily/2026-11-03', log, days)).toBe('/Vault/Library/daily/2026-11-03.mdo');
+    expect(resolveLinkTarget('2026-11-03', '/Vault/Library/daily/2026-11-02.md', days)).toBe('/Vault/Library/daily/2026-11-03.mdo');
+    expect(resolveLinkTarget('2026-11-03.md', log, days)).toBe('/Vault/Library/daily/2026-11-03.md');
+    // A link that names the day's note opens the document when the date has only that.
+    expect(resolveLinkTarget('Library/daily/2026-11-04.md', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('2026-11-04.md', log, days)).toBe('/Vault/Library/daily/2026-11-04.mdo');
+    expect(resolveLinkTarget('Plan.md', log, ['/Vault/Library/x/Plan.mdo'])).toBeNull();
+    // A shorter path elsewhere still wins, as it would over the day's note.
+    expect(resolveLinkTarget('2026-11-05', log, days)).toBe('/Vault/Archive/2026-11-05.md');
+    // Outside Library/daily a note still comes before a document of the same name.
+    expect(resolveLinkTarget('Plan', log, days)).toBe('/Vault/Library/x/Plan.md');
+  });
+
   it('prefers the linking note\'s folder, then the shortest path', () => {
     expect(resolveLinkTarget('Robert Xu', '/Vault/Library/today.md', files)).toBe('/Vault/Library/Robert Xu.md');
     expect(resolveLinkTarget('Robert Xu', '/Vault/Library/people/Ahmed.md', files)).toBe('/Vault/Library/people/Robert Xu.md');

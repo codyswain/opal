@@ -201,6 +201,22 @@ describe('file switcher match', () => {
     expect(search('2026-10-30').slice(0, 2)).toEqual(['Archive/daily/2026-10-30.md', 'Library/daily/2026-10-30.md']);
   });
 
+  it('finds a day made as a document by the same name the tree shows', () => {
+    const days = [
+      item({ path: '/V/Library/daily/2026-11-04.mdo', mtimeMs: NOW - DAY }),
+      item({ path: '/V/Library/logs/2026-11-04 log.md', mtimeMs: NOW }),
+    ];
+    const search = (value: string) => evaluateCollectionQuery({
+      items: days,
+      activity: () => null,
+      touchedAt,
+      allowedRoots: ['/V'],
+      query: { version: 1, scope: { kind: 'all-roots' }, filters: [{ field: 'name', op: 'matches', value }], sort: { field: 'match', direction: 'desc' } },
+    }).map((row) => row.entry.path.replace('/V/', ''));
+    expect(search('11-04 Wed')).toEqual(['Library/daily/2026-11-04.mdo']);
+    expect(search('11-04')[0]).toBe('Library/daily/2026-11-04.mdo');
+  });
+
   it('matches each item\'s path from its own root when one root\'s name starts another folder\'s', () => {
     // Under /V, "Photos-old" is not inside the opened folder /V/Photos.
     const rows = evaluateCollectionQuery({
