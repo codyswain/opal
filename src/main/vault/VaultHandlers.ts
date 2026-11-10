@@ -5,6 +5,7 @@ import { validDate } from "@/common/vaultModel";
 import { isStackKind } from "@/common/stackModel";
 import type { DayService } from "./DayService";
 import type { StackService } from "./StackService";
+import type { TouchedService } from "./TouchedService";
 import type { VaultService } from "./VaultService";
 import { isDigestReviewChoice, type DigestReviewService } from './DigestReviewService';
 
@@ -34,6 +35,7 @@ export class VaultHandlers {
       service: VaultService;
       days: DayService;
       stacks: StackService;
+      touched?: TouchedService;
       reviews?: DigestReviewService;
     },
   ) {}
@@ -48,6 +50,12 @@ export class VaultHandlers {
     ipc.handle("vault:day", (_, root: unknown, day: unknown) =>
       target(root) && date(day)
         ? this.respond(() => days.day(root, day))
+        : invalid(),
+    );
+    const { touched } = this.deps;
+    ipc.handle("vault:touched-week", (_, root: unknown, day: unknown) =>
+      target(root) && date(day) && touched
+        ? this.respond(() => touched.week(root, day))
         : invalid(),
     );
     ipc.handle("vault:stack", (_, root: unknown, kind: unknown, head: unknown) =>

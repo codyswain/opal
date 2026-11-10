@@ -1,6 +1,7 @@
 import type { VaultAPI } from "./types/vault";
 import type { PinsAPI } from "./types/pins";
 import type { VaultDayChange } from "./types/day";
+import type { TouchedWeekChange } from "./types/touched";
 import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from "electron";
 import type { ThemeReport } from "./common/theme";
 import type { OpenPageRequest } from "./common/opalLink";
@@ -164,6 +165,7 @@ const vaultAPI: VaultAPI = {
   createDay: (root, date) => ipcRenderer.invoke("vault:create-day", root, date),
   day: (root, date) => ipcRenderer.invoke("vault:day", root, date),
   stack: (root, kind, head) => ipcRenderer.invoke("vault:stack", root, kind, head),
+  touchedWeek: (root, date) => ipcRenderer.invoke("vault:touched-week", root, date),
   checkDigestItem: (root, path, line, raw, checked) =>
     ipcRenderer.invoke("vault:check-digest-item", root, path, line, raw, checked),
   voteDigestReview: (root, date, reviewId, choice, reason) =>
@@ -175,6 +177,11 @@ const vaultAPI: VaultAPI = {
       callback(change);
     ipcRenderer.on("vault:day-changed", listener);
     return () => ipcRenderer.removeListener("vault:day-changed", listener);
+  },
+  onTouchedChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, change: TouchedWeekChange) => callback(change);
+    ipcRenderer.on("vault:touched-changed", listener);
+    return () => ipcRenderer.removeListener("vault:touched-changed", listener);
   },
 };
 contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);

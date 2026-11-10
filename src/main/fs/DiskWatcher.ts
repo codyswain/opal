@@ -10,6 +10,8 @@ export interface DiskWatcherDependencies {
 }
 
 const DEFAULT_DEBOUNCE_MS = 150;
+/** Files in a folder's `.opal` whose changes are reported; the rest of `.opal` is not watched. */
+const WATCHED_OPAL_FILES: ReadonlySet<string> = new Set(['touched.json', 'link-titles.json']);
 
 /**
  * Watches opened roots and reports which *directories* changed.
@@ -40,7 +42,10 @@ export class DiskWatcher {
       ignored: (candidate: string) => {
         const relative = path.relative(rootPath, candidate);
         if (!relative || relative.startsWith(`..${path.sep}`)) return false;
-        return relative.split(path.sep).some((segment, index, segments) =>
+        const segments = relative.split(path.sep);
+        // The touched list reads two files in `.opal`, so those are watched too.
+        if (segments[0] === '.opal' && (segments.length === 1 || (segments.length === 2 && WATCHED_OPAL_FILES.has(segments[1])))) return false;
+        return segments.some((segment, index) =>
           segment.startsWith('.') && !(segment === '.opal.yaml' && index === segments.length - 1));
       },
       followSymlinks: false,
