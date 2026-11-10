@@ -40,7 +40,8 @@ function ReplyDrafted() {
 /**
  * A checkbox item: the box, its title, and its detail muted below, each
  * clamped to two lines. The tooltip holds the whole detail, and a click on
- * the text shows all of it in place. Ticking writes the digest file.
+ * the text shows all of it in place. Ticking writes the digest file. A
+ * ticked item is done, so it rests as its struck title on one line.
  */
 function DigestCheckbox({
   busy,
@@ -55,10 +56,15 @@ function DigestCheckbox({
 }) {
   const [open, setOpen] = React.useState(false);
   const checked = item.checked === true;
+  const done = checked && !open;
   const title = (
     <span
       title={item.detail ? undefined : item.text}
-      className={cn('block', !open && 'line-clamp-2', checked ? 'text-foreground-tertiary line-through' : WEIGHTS[level])}
+      className={cn(
+        'block',
+        done ? 'truncate' : !open && 'line-clamp-2',
+        checked ? 'text-foreground-tertiary line-through' : WEIGHTS[level],
+      )}
     >
       {item.text}
     </span>
@@ -93,17 +99,19 @@ function DigestCheckbox({
             className="block w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             {title}
-            <span
-              data-testid="digest-detail"
-              className={cn('block pt-0.5 text-control text-foreground-tertiary', !open && 'line-clamp-2')}
-            >
-              {item.detail}
-            </span>
+            {done ? null : (
+              <span
+                data-testid="digest-detail"
+                className={cn('block pt-0.5 text-control text-foreground-tertiary', !open && 'line-clamp-2')}
+              >
+                {item.detail}
+              </span>
+            )}
           </button>
         ) : (
           title
         )}
-        {item.replyDrafted ? <ReplyDrafted /> : null}
+        {item.replyDrafted && !done ? <ReplyDrafted /> : null}
       </div>
     </div>
   );

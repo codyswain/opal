@@ -5,9 +5,7 @@ import { cn } from '@/renderer/shared/utils';
 interface DayCardProps {
   id: string;
   title: string;
-  /** The count at the end of the header while the card is open. */
-  value: string;
-  /** What the header says while the card is folded. */
+  /** What the header says while the card is folded. An open card's rows speak for themselves. */
   summary: string;
   collapsed: boolean;
   onToggle: () => void;
@@ -20,7 +18,7 @@ const cardStyles = 'flex-none rounded-card border border-page-ring bg-canvas p-1
  * One section of the day: a hairline card whose header folds it. The chevron
  * shows on hover, on focus, or while the card is folded.
  */
-export function DayCard({ children, collapsed, id, onToggle, summary, title, value }: DayCardProps) {
+export function DayCard({ children, collapsed, id, onToggle, summary, title }: DayCardProps) {
   const bodyId = `day-card-${id}`;
   return (
     <section aria-label={title} className={cardStyles}>
@@ -40,14 +38,11 @@ export function DayCard({ children, collapsed, id, onToggle, summary, title, val
             !collapsed && 'rotate-90 opacity-0 group-hover/head:opacity-100 group-focus-visible/head:opacity-100',
           )}
         />
-        <span
-          className={cn(
-            'ml-auto truncate whitespace-nowrap pl-2 tabular-nums text-foreground-tertiary',
-            collapsed ? 'text-control' : 'text-2xs',
-          )}
-        >
-          {collapsed ? summary : value}
-        </span>
+        {collapsed ? (
+          <span className="ml-auto truncate whitespace-nowrap pl-2 text-control tabular-nums text-foreground-tertiary">
+            {summary}
+          </span>
+        ) : null}
       </button>
       {collapsed ? null : (
         <div id={bodyId} className="flex flex-col gap-0.5 pt-0.5">

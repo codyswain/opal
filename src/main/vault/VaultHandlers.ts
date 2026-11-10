@@ -6,6 +6,7 @@ import { isStackKind } from "@/common/stackModel";
 import type { DayService } from "./DayService";
 import type { StackService } from "./StackService";
 import type { VaultService } from "./VaultService";
+import { isDigestReviewChoice, type DigestReviewService } from './DigestReviewService';
 
 const nonempty = (value: unknown, limit = 32768): value is string =>
   typeof value === "string" &&
@@ -33,6 +34,7 @@ export class VaultHandlers {
       service: VaultService;
       days: DayService;
       stacks: StackService;
+      reviews?: DigestReviewService;
     },
   ) {}
   registerAll(): void {
@@ -60,6 +62,12 @@ export class VaultHandlers {
           ? this.respond(() => service.checkDigestItem(root, file, line, raw, checked))
           : invalid(),
     );
+    ipc.handle('vault:vote-digest-review', (_, root: unknown, day: unknown, id: unknown, choice: unknown, reason: unknown) =>
+      target(root) && date(day) && nonempty(id, 128) && isDigestReviewChoice(choice) && typeof reason === 'string' && reason.length <= 1000 && !reason.includes('\0') && this.deps.reviews
+        ? this.respond(() => this.deps.reviews!.vote(root, day, id, choice, reason)) : invalid());
+    ipc.handle('vault:reveal-digest-review', (_, root: unknown, day: unknown, id: unknown) =>
+      target(root) && date(day) && nonempty(id, 128) && this.deps.reviews
+        ? this.respond(() => this.deps.reviews!.reveal(root, day, id)) : invalid());
   }
 
   private async respond<T>(

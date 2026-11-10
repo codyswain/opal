@@ -4,6 +4,7 @@ import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import type { VaultService } from "@/main/vault/VaultService";
 import type { DayService } from "@/main/vault/DayService";
 import type { StackService } from "@/main/vault/StackService";
+import type { DigestReviewService } from "@/main/vault/DigestReviewService";
 
 const DIGEST = "/vault/Library/digests/2026-09-08 digest.md";
 const LINE = "- [ ] **Answer Tom on the 409A price**";
@@ -24,6 +25,7 @@ describe("Vault IPC validation", () => {
     const stacks = {
       stack: vi.fn(),
     };
+    const reviews = { vote: vi.fn(), reveal: vi.fn() };
     new VaultHandlers({
       ipc: {
         handle: (
@@ -34,6 +36,7 @@ describe("Vault IPC validation", () => {
       service: service as unknown as VaultService,
       days: days as unknown as DayService,
       stacks: stacks as unknown as StackService,
+      reviews: reviews as unknown as DigestReviewService,
     }).registerAll();
     for (const [channel, args] of [
       ["create-day", [null, "2026-09-08"]],
@@ -57,12 +60,17 @@ describe("Vault IPC validation", () => {
       ["stack", ["/vault", "folder", "/vault/Library/daily/2026-09-08.md"]],
       ["stack", ["/vault", "daily", "Library/daily/2026-09-08.md"]],
       ["stack", ["/vault", "daily", null]],
+      ["vote-digest-review", ["relative", "2026-09-08", "review", "A", ""]],
+      ["vote-digest-review", ["/vault", "2026-02-30", "review", "A", ""]],
+      ["vote-digest-review", ["/vault", "2026-09-08", "review", "C", ""]],
+      ["vote-digest-review", ["/vault", "2026-09-08", "review", "A", "x".repeat(1001)]],
+      ["reveal-digest-review", ["/vault", "2026-09-08", ""]],
     ] as Array<[string, unknown[]]>) {
       expect(
         await handlers.get(`vault:${channel}`)?.({}, ...args),
       ).toMatchObject({ success: false, error: "Invalid vault request." });
     }
-    [...Object.values(service), ...Object.values(days), ...Object.values(stacks)].forEach((method) =>
+    [...Object.values(service), ...Object.values(days), ...Object.values(stacks), ...Object.values(reviews)].forEach((method) =>
       expect(method).not.toHaveBeenCalled(),
     );
     await handlers.get("vault:create-day")?.({}, "/vault", "2026-09-08");
@@ -73,5 +81,9 @@ describe("Vault IPC validation", () => {
     expect(service.checkDigestItem).toHaveBeenCalledWith("/vault", DIGEST, 4, LINE, false);
     await handlers.get("vault:stack")?.({}, "/vault", "daily", "/vault/Library/daily/2026-09-08.md");
     expect(stacks.stack).toHaveBeenCalledWith("/vault", "daily", "/vault/Library/daily/2026-09-08.md");
+    await handlers.get("vault:vote-digest-review")?.({}, "/vault", "2026-09-08", "a".repeat(64), "B", "clearer");
+    expect(reviews.vote).toHaveBeenCalledWith("/vault", "2026-09-08", "a".repeat(64), "B", "clearer");
+    await handlers.get("vault:reveal-digest-review")?.({}, "/vault", "2026-09-08", "a".repeat(64));
+    expect(reviews.reveal).toHaveBeenCalledWith("/vault", "2026-09-08", "a".repeat(64));
   });
 });

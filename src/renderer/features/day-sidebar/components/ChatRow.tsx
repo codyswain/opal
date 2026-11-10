@@ -20,11 +20,13 @@ export function chatTitle(chat: DayChat, file: string): string {
   return `${openTitle(file)}\nLast active ${chat.last}. ${made}${prompts}.${tool ? `\n${tool}.` : ''}`;
 }
 
-/** A chat created or continued that day. A click opens its chat page: the thread card, with its sessions below. */
+/**
+ * A chat created or continued that day. A click opens its chat page: the thread card, with its sessions below.
+ * Only an archived chat is marked; whether a chat is new that day is in the tooltip.
+ */
 export function ChatRow({ chat }: { chat: DayChat }) {
   const { openPath, root } = useDaySidebarContext();
   const archived = chat.status === 'archived';
-  const badge = archived ? 'Archived' : chat.isNew ? 'New' : null;
   return (
     <button
       type="button"
@@ -38,7 +40,7 @@ export function ChatRow({ chat }: { chat: DayChat }) {
         <span className={cn('min-w-0 truncate', archived && 'text-foreground-tertiary')}>{chat.title}</span>
         {chat.tool === 'codex' ? <span className="flex-none text-control text-foreground-tertiary">Codex</span> : null}
       </span>
-      {badge ? <span className="flex-none text-2xs tabular-nums text-foreground-tertiary">{badge}</span> : null}
+      {archived ? <span className="flex-none text-2xs text-foreground-tertiary">Archived</span> : null}
     </button>
   );
 }
