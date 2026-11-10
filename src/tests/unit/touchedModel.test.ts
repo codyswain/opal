@@ -99,7 +99,7 @@ describe('touched model: a week', () => {
       noSkip,
     );
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ key: 'Notes/Plan.md', kind: 'file', name: 'Plan', path: 'Notes/Plan.md', url: null, colour: null });
+    expect(items[0]).toMatchObject({ key: 'Notes/Plan.md', kind: 'file', name: 'the plan', path: 'Notes/Plan.md', url: null, colour: null });
     expect(items[0].days[0]).toEqual({ lines: 3, text: 'Second pass on the plan.' });
     expect(items[0].days.slice(1)).toEqual([null, null, null, null, null, null]);
   });
@@ -192,5 +192,27 @@ describe('touched model: a day', () => {
     const many = [...Array(10).keys()].map((index) => item(`${index}.md`, [2]));
     expect(touchedForDay(at(many), 0)).toHaveLength(8);
     expect(touchedForDay(at(many), 3)).toEqual([]);
+  });
+});
+
+describe('touched model: file names', () => {
+  it('names a file by its most common log label, and by its file name when the label repeats the path', () => {
+    const items = byKey(
+      touchedItems(
+        week({
+          0: [
+            turn('09:00', 'Wrote it.', file('Notes/2026-01-05-trip.md', 'Trip plan')),
+            turn('10:00', 'Fixed it.', file('Notes/2026-01-05-trip.md', 'Trip plan')),
+            turn('11:00', 'Read it.', file('Notes/2026-01-05-trip.md', 'trip notes')),
+            turn('12:00', 'No alias.', file('Notes/Plan.md', 'Notes/Plan')),
+          ],
+        }),
+        EMPTY_TOUCHED_CONFIG,
+        {},
+        noSkip,
+      ),
+    );
+    expect(items['Notes/2026-01-05-trip.md'].name).toBe('Trip plan');
+    expect(items['Notes/Plan.md'].name).toBe('Plan');
   });
 });

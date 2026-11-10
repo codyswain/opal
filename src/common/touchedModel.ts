@@ -249,7 +249,11 @@ function itemName(link: LinkItem, titles: Readonly<Record<string, string>>, labe
   switch (link.kind) {
     case 'file': {
       const name = link.key.split('/').pop() ?? link.key;
-      return fileTreeLabel(name, classifyFile(name));
+      // The name the log gave it, as the day sidebar's Files card shows; a label that only repeats the path is not one.
+      const stem = (value: string) => value.replace(/\.[a-z0-9]+$/i, '');
+      const plain = new Set([link.key, name, stem(link.key), stem(name)]);
+      const label = mostCommon(labels.filter((candidate) => candidate && !plain.has(candidate)));
+      return label ?? fileTreeLabel(name, classifyFile(name));
     }
     case 'folder':
       return folderLabel(link.key);
