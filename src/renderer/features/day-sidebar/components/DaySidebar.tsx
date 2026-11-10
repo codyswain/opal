@@ -42,7 +42,7 @@ import { HourGroup, LogEntry } from './LogEntry';
 import { RecordingRow } from './RecordingRow';
 
 /** What each card shows at rest; "Show N more" shows the rest. */
-export const AT_REST = { activity: 3, documents: 8, chats: 8, recordings: 4, people: 8, digest: 3 } as const;
+export const AT_REST = { activity: 3, documents: 5, chats: 5, recordings: 4, people: 5, digest: 3 } as const;
 /** Past this many entries the full log folds by hour. */
 const FLAT_LOG_LIMIT = 40;
 /** Below this width the header drops the weekday: "Oct 28 Yesterday". */
@@ -140,7 +140,6 @@ function ActivityCard({ day, more, onMore }: CardProps) {
     <DayCard
       id="activity"
       title={DAY_SECTION_TITLES.activity}
-      value={count.toLocaleString()}
       summary={`${plural(count, 'entry', 'entries')}, last ${entries[0].time}`}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed('activity')}
@@ -190,7 +189,6 @@ function FilesCard({ files, more, noun, onMore, section }: FilesCardProps) {
     <DayCard
       id={section}
       title={title}
-      value={count.toLocaleString()}
       summary={`${plural(count, noun[0], noun[1])}, last ${files[0].last}`}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed(section)}
@@ -226,7 +224,6 @@ function ChatsCard({ day, more, onMore }: CardProps) {
     <DayCard
       id="chats"
       title={DAY_SECTION_TITLES.chats}
-      value={fresh ? `${fresh} new · ${count.toLocaleString()}` : count.toLocaleString()}
       summary={`${fresh} new, ${count - fresh} updated`}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed('chats')}
@@ -254,7 +251,6 @@ function RecordingsCard({ day, more, onMore }: CardProps) {
     <DayCard
       id="recordings"
       title={DAY_SECTION_TITLES.recordings}
-      value={count.toLocaleString()}
       summary={`${plural(count, 'recording', 'recordings')}, ${minutes} min`}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed('recordings')}
@@ -346,6 +342,7 @@ function DigestCard({ day, more, onMore }: CardProps) {
   const collapsed = useDaySidebarStore((state) => state.collapsed.digest);
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
   const ticks = useDigestTicks(day.digest, root);
+  const openedPath = useTabsStore(selectOpenedPath);
   const [reviewOpen, setReviewOpen] = React.useState(false);
   const review = day.digestReview;
   React.useEffect(() => setReviewOpen(false), [root, day.date, review?.id]);
@@ -368,7 +365,6 @@ function DigestCard({ day, more, onMore }: CardProps) {
     <DayCard
       id="digest"
       title={DAY_SECTION_TITLES.digest}
-      value={total.toLocaleString()}
       summary={rest ? `${lead}, ${rest} more` : lead}
       collapsed={collapsed}
       onToggle={() => toggleCollapsed('digest')}
@@ -401,14 +397,16 @@ function DigestCard({ day, more, onMore }: CardProps) {
         ) : review?.status === 'failed' ? (
           <span className="px-2 text-control text-foreground-tertiary">Comparison unavailable today</span>
         ) : null}
-        <FootButton
-          className="ml-auto"
-          title={`Opens ${file} in this tab. Cmd-click opens a new tab.`}
-          onClick={open}
-          onAuxClick={(event) => event.button === 1 && open(event)}
-        >
-          Open digest
-        </FootButton>
+        {openedPath === digest.path ? null : (
+          <FootButton
+            className="ml-auto"
+            title={`Opens ${file} in this tab. Cmd-click opens a new tab.`}
+            onClick={open}
+            onAuxClick={(event) => event.button === 1 && open(event)}
+          >
+            Open digest
+          </FootButton>
+        )}
       </div>
     </DayCard>
   );

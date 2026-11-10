@@ -382,7 +382,7 @@ describe('day sidebar preferences', () => {
 });
 
 describe('DaySidebar', () => {
-  it('shows the day with Yesterday, and each card at rest with its count', async () => {
+  it('shows the day with Yesterday, and each card at rest with no count in its header', async () => {
     openTabs([DAILY]);
     renderSidebar();
     expect(await screen.findByRole('region', { name: 'Activity log' })).toBeInTheDocument();
@@ -392,7 +392,7 @@ describe('DaySidebar', () => {
 
     // Every line of the log counts, the sync line for a recording below too.
     const log = card('Activity log');
-    expect(within(log).getByRole('button', { name: /^Activity log/ })).toHaveTextContent('Activity log5');
+    expect(within(log).getByRole('button', { name: /^Activity log/ })).toHaveTextContent(/^Activity log$/);
     expect(within(log).getAllByRole('button', { expanded: false }).filter((button) => /^\d\d:\d\d/.test(button.textContent ?? ''))).toHaveLength(3);
     expect(within(log).getByRole('button', { name: 'Show 2 more' })).toBeInTheDocument();
     expect(within(log).getByRole('button', { name: 'Open full log' })).toBeInTheDocument();
@@ -411,26 +411,31 @@ describe('DaySidebar', () => {
     ]);
 
     const people = card('People');
-    expect(within(people).getByRole('button', { name: /^People/ })).toHaveTextContent('People2');
+    expect(within(people).getByRole('button', { name: /^People/ })).toHaveTextContent(/^People$/);
     expect(within(people).getByRole('button', { name: /Lucas Czajka/ })).toHaveTextContent('11:15Lucas Czajka');
 
     const files = card('Files');
-    expect(within(files).getByRole('button', { name: /^Files/ })).toHaveTextContent('Files9');
+    expect(within(files).getByRole('button', { name: /^Files/ })).toHaveTextContent(/^Files$/);
     expect(within(files).getByText('FedEx dataset note')).toBeInTheDocument();
-    // Eight at rest, the latest touched first.
-    expect(within(files).getByText('Note 7')).toBeInTheDocument();
-    expect(within(files).queryByText('Gob deck')).toBeNull();
-    expect(within(files).getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
+    // Five at rest, the latest touched first.
+    expect(within(files).getByText('Note 4')).toBeInTheDocument();
+    expect(within(files).queryByText('Note 5')).toBeNull();
+    expect(within(files).getByRole('button', { name: 'Show 4 more' })).toBeInTheDocument();
 
     const chats = card('Chats');
-    expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent('1 new · 10');
+    expect(within(chats).getByRole('button', { name: /^Chats/ })).toHaveTextContent(/^Chats$/);
     expect(within(chats).getByText('Model Training')).toBeInTheDocument();
-    expect(within(chats).getByText('New')).toBeInTheDocument();
+    // A chat made that day has no mark; its tooltip says when it was made.
+    expect(within(chats).queryByText('New')).toBeNull();
+    expect(within(chats).getByRole('button', { name: /Opal status/ }).title).toContain('Created 20:00');
     expect(within(chats).getByText('Codex')).toBeInTheDocument();
-    // Eight at rest.
-    expect(within(chats).getByText('Thread 5')).toBeInTheDocument();
-    expect(within(chats).queryByText('Old thread')).toBeNull();
-    expect(within(chats).getByRole('button', { name: 'Show 2 more' })).toBeInTheDocument();
+    // Five at rest.
+    expect(within(chats).getByText('Thread 2')).toBeInTheDocument();
+    expect(within(chats).queryByText('Thread 3')).toBeNull();
+    expect(within(chats).getByRole('button', { name: 'Show 5 more' })).toBeInTheDocument();
+    // Only an archived chat is marked.
+    await userEvent.setup().click(within(chats).getByRole('button', { name: 'Show 5 more' }));
+    expect(within(chats).getByRole('button', { name: /Old thread/ })).toHaveTextContent('09:00Old threadArchived');
 
     const recordings = card('Recordings');
     expect(within(recordings).getByText('137 min')).toBeInTheDocument();
@@ -489,7 +494,7 @@ describe('DaySidebar', () => {
     openTabs([DAILY]);
     renderSidebar();
     const files = await screen.findByRole('region', { name: 'Files' });
-    await user.click(within(files).getByRole('button', { name: 'Show 1 more' }));
+    await user.click(within(files).getByRole('button', { name: 'Show 4 more' }));
     const deck = within(files).getByRole('button', { name: /Gob deck/ });
     expect(deck).toHaveTextContent('09:10Gob deckpptx');
     expect(within(files).getByRole('button', { name: /FedEx dataset note/ })).not.toHaveTextContent('md');
@@ -578,6 +583,8 @@ describe('DaySidebar', () => {
     expect(tom).toHaveAttribute('aria-checked', 'false');
     expect(rich).toHaveAttribute('aria-checked', 'true');
     expect(within(digest).getByText('Reply drafted')).toBeInTheDocument();
+    // A ticked item rests as its struck title on one line.
+    expect(within(digest).getByText('Tell Richard Hurley that Friday 2pm PT works')).toHaveClass('truncate', 'line-through');
 
     // The detail is muted and clamped; its tooltip has all of it, and a click shows it in place.
     const detail = within(digest).getByText(LONG);
@@ -623,6 +630,32 @@ describe('DaySidebar', () => {
     expect(tom).toHaveAttribute('aria-checked', 'false');
     expect(tom).toBeEnabled();
     error.mockRestore();
+  });
+
+  it('rests a ticked item on one line, and drops Open digest while the digest is the open page', async () => {
+    const user = userEvent.setup();
+    days['2026-10-28'] = {
+      ...oct28(),
+      digest: {
+        path: DIGEST,
+        title: 'Digest',
+        groups: [{ level: 'top', items: [box(4, 'Send Alex the plan', 'Alex asked on Monday.', true, true)] }],
+        sections: [],
+      },
+    };
+    openTabs([DAILY]);
+    renderSidebar();
+    const digest = await screen.findByRole('region', { name: 'Digest' });
+    expect(within(digest).queryByText('Alex asked on Monday.')).toBeNull();
+    expect(within(digest).queryByText('Reply drafted')).toBeNull();
+    // A click on the title shows the detail again.
+    await user.click(within(digest).getByRole('button', { name: /^Send Alex/ }));
+    expect(within(digest).getByText('Alex asked on Monday.')).toBeInTheDocument();
+    expect(within(digest).getByText('Reply drafted')).toBeInTheDocument();
+
+    await user.click(within(digest).getByRole('button', { name: 'Open digest' }));
+    expect(openedPath()).toBe(DIGEST);
+    expect(within(card('Digest')).queryByRole('button', { name: 'Open digest' })).toBeNull();
   });
 
   it('folds a card to its summary and remembers it', async () => {
