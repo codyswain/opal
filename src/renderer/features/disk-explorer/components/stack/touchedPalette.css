@@ -1,0 +1,26 @@
+/* The touched list's colours: the one place in Opal with hue (Cody,
+   2026-11-10). An item touched on two or more days of a week takes one of
+   these on every day of that week. Muted, and lighter in dark mode so each
+   keeps its contrast on the page. blackAndWhite.test.ts exempts this file
+   by name and nothing else. */
+.opal-stack {
+  --touched-0: #5b7fbf;
+  --touched-1: #c68645;
+  --touched-2: #4f9873;
+  --touched-3: #8a6fc2;
+  --touched-4: #c4668f;
+  --touched-5: #44959e;
+  --touched-6: #a8913a;
+  --touched-7: #b9655a;
+}
+
+.dark .opal-stack {
+  --touched-0: #7d9bd6;
+  --touched-1: #d59f68;
+  --touched-2: #6fb38f;
+  --touched-3: #a48ed6;
+  --touched-4: #d486a8;
+  --touched-5: #66b0b8;
+  --touched-6: #c4ad5a;
+  --touched-7: #d08378;
+}

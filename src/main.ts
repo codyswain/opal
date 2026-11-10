@@ -2,6 +2,7 @@ import "@/main/applyTestProfile";
 import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
+import { TouchedService } from "@/main/vault/TouchedService";
 import { DigestReviewService } from '@/main/vault/DigestReviewService';
 import { StackService } from "@/main/vault/StackService";
 import { PinsService } from "@/main/pins/PinsService";
@@ -416,6 +417,7 @@ const diskWatcher = new DiskWatcher({
     collectionIndex.invalidateDirectories(directories);
     linkIndex.invalidateDirectories(directories);
     void dayService.changed(directories);
+    void touchedService.changed(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -439,6 +441,14 @@ const dayService = new DayService({
     mainWindow.webContents.send("vault:day-changed", change);
   },
 });
+const touchedService = new TouchedService({
+  registry: rootRegistry,
+  days: dayService,
+  onChanged: (change) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("vault:touched-changed", change);
+  },
+});
 const stackService = new StackService({ registry: rootRegistry });
 const opalLinks = new OpalLinks({
   registry: rootRegistry,
@@ -457,6 +467,7 @@ const vaultHandlers = new VaultHandlers({
   service: vaultService,
   days: dayService,
   stacks: stackService,
+  touched: touchedService,
   reviews: digestReviews,
 });
 const pinsHandlers = new PinsHandlers({

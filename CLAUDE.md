@@ -36,6 +36,17 @@ not exist.
   (person notes the log links to, and meeting speakers who have one) and
   digest, and sends `vault:day-changed`. The parsing
   is in `src/common/dayModel.ts`
+- **Touched list:** each daily page in the stream shows, to its right (under
+  it when the stack is narrower than 900px), up to eight things the agent
+  turns of that day's log linked to, with a square per day of its week.
+  `TouchedService` (`vault:touched-week`, `vault:touched-changed`) reads a
+  week's logs through `DayService.logEntries`, plus the optional
+  `.opal/touched.json` (groups and ignores) and `.opal/link-titles.json`
+  (titles of issues, PRs and Google Docs), which Opal never writes; the
+  watcher reports those two files. The rules are in
+  `src/common/touchedModel.ts`, the view in `stack/TouchedList.tsx`. Its
+  palette, `stack/touchedPalette.css`, is the only hued colour in the app,
+  exempted by name in `blackAndWhite.test.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`

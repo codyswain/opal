@@ -63,6 +63,11 @@ const DAY_FOLDERS = [
   ...Object.values(LEGACY_DAY_LAYOUT),
 ];
 
+/** Whether a path from the vault's top is in a folder the day sidebar shows in its own cards. */
+export function inDayFolder(relative: string): boolean {
+  return DAY_FOLDERS.some((folder) => relative.startsWith(`${folder}/`));
+}
+
 interface CachedFile {
   mtimeMs: number;
   size: number;
@@ -96,6 +101,14 @@ export class DayService {
       this.watched.delete(stale);
     }
     return day;
+  }
+
+  /**
+   * A date's log entries with their links resolved, newest first, for the
+   * touched list. `root` is an opened vault's canonical path. Nothing is watched.
+   */
+  async logEntries(root: string, date: string): Promise<DayLogEntry[]> {
+    return (await this.serial(() => this.log(root, date))).entries;
   }
 
   /**
@@ -184,7 +197,7 @@ export class DayService {
   private isDocument(root: string, file: string): boolean {
     const relative = this.relative(root, file);
     if (relative.startsWith("..") || relative.split("/").some((part) => part.startsWith("."))) return false;
-    if (DAY_FOLDERS.some((folder) => relative.startsWith(`${folder}/`))) return false;
+    if (inDayFolder(relative)) return false;
     return classifyFile(path.posix.basename(relative)) !== "text";
   }
 

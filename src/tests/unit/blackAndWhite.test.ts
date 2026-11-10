@@ -7,8 +7,16 @@ import resolveConfig from 'tailwindcss/resolveConfig';
 /**
  * Opal is black and white first (the pages-first spec, "Look"): every token is
  * a neutral grey, and no component can reach a hued colour. The only colour on
- * screen comes from images inside notes.
+ * screen comes from images inside notes, and from the touched list's palette.
  */
+
+/**
+ * The one exception, which Cody set on 2026-11-10: the touched list beside a
+ * daily page colours each item touched on several days of a week, so the
+ * same item can be found on each day. Its eight colours live in this one
+ * file and nowhere else.
+ */
+const PALETTE_EXCEPTION = 'src/renderer/features/disk-explorer/components/stack/touchedPalette.css';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const require = createRequire(__filename);
@@ -76,12 +84,21 @@ describe('black and white', () => {
   });
 
   it('keeps hued colours and palette classes out of the renderer source', () => {
-    const offenders = sourceFiles(path.join(ROOT, 'src/renderer')).flatMap((file) => {
+    const files = sourceFiles(path.join(ROOT, 'src/renderer'));
+    expect(files.map((file) => path.relative(ROOT, file))).toContain(PALETTE_EXCEPTION);
+    const offenders = files.filter((file) => path.relative(ROOT, file) !== PALETTE_EXCEPTION).flatMap((file) => {
       const text = readFileSync(file, 'utf8');
       const classes = [...text.matchAll(new RegExp(`\\b[a-z-]+-(?:${HUES})-\\d{2,3}\\b`, 'g'))].map(([match]) => match);
       const literals = colours(text).filter(({ spread }) => spread > MAX_SPREAD).map(({ colour }) => colour);
       return [...classes, ...literals].map((match) => `${path.relative(ROOT, file)}: ${match}`);
     });
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps the touched palette to eight colours, defined in light and dark and nothing else', () => {
+    const css = readFileSync(path.join(ROOT, PALETTE_EXCEPTION), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const names = [...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(([, name]) => name);
+    expect(names).toEqual([...Array(16).keys()].map((index) => `--touched-${index % 8}`));
+    expect(colours(css)).toHaveLength(16);
   });
 });

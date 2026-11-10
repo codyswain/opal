@@ -14,6 +14,7 @@ import { tabLocation, useTabsStore } from '@/renderer/features/disk-explorer/sto
 import { readPref } from '@/renderer/shared/prefs/prefs';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import type { StackSection } from '@/types/stack';
+import type { TouchedItem, TouchedWeek, TouchedWeekChange } from '@/types/touched';
 import type { VaultAPI } from '@/types/vault';
 import { installActivityApi } from '@/tests/helpers/activityApi';
 import { installDiskApi } from '@/tests/helpers/diskApi';
@@ -802,5 +803,93 @@ describe('the toolbar of a stack that holds documents', () => {
     expect(toolbar().contains(document.activeElement)).toBe(true);
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
     expect(document.activeElement).toBe(older.contentDOM);
+  });
+});
+
+describe('the touched list beside each daily page', () => {
+  const PLAN = '/Vault/Notes/Plan.md';
+  const ISSUE_URL = 'https://linear.app/acme/issue/ABC-123/fix';
+  const hit = (lines: number, text: string) => ({ lines, text });
+  const item = (key: string, extra: Partial<TouchedItem>): TouchedItem => ({
+    key, kind: 'file', id: null, name: key, path: null, url: null, days: [null, null, null, null, null, null, null], colour: null, ...extra,
+  });
+  // HEAD is Thursday 2026-10-29; its week starts on Monday 2026-10-26.
+  const WEEK: TouchedWeek = {
+    root: ROOT,
+    monday: '2026-10-26',
+    items: [
+      item('Notes/Plan.md', { name: 'Plan', path: PLAN, colour: 0, days: [null, null, hit(1, 'Started the plan.'), hit(1, 'Finished the plan.'), null, null, null] }),
+      item('linear:ABC-123', { kind: 'issue', id: 'ABC-123', name: 'Fix the thing', url: ISSUE_URL, days: [null, null, null, hit(2, 'Fixed it.'), null, null, null] }),
+      item('Notes/Once.md', { name: 'Once', path: '/Vault/Notes/Once.md', days: [null, hit(1, 'Once.'), null, null, null, null, null] }),
+    ],
+  };
+  let changed: ((change: TouchedWeekChange) => void) | null;
+
+  beforeEach(() => {
+    changed = null;
+    const api = window.vaultAPI as unknown as Record<string, unknown>;
+    api.touchedWeek = vi.fn(async (_root: string, date: string) => ({
+      success: true as const,
+      data: date === WEEK.monday ? WEEK : { root: ROOT, monday: date, items: [] },
+    }));
+    api.onTouchedChanged = vi.fn((callback: (change: TouchedWeekChange) => void) => {
+      changed = callback;
+      return () => undefined;
+    });
+  });
+
+  const list = (path: string) => article(path).querySelector<HTMLElement>('aside.opal-touched');
+  const rows = (path: string) => [...(list(path)?.querySelectorAll<HTMLElement>('.opal-touched-row') ?? [])];
+
+  it('lists a day’s items by count beside its page, with the week’s squares, and nothing on a day without any', async () => {
+    renderStack();
+    await waitFor(() => expect(list(HEAD)).toBeTruthy());
+    expect(window.vaultAPI.touchedWeek).toHaveBeenCalledWith(ROOT, '2026-10-26');
+    expect(rows(HEAD).map((row) => row.textContent)).toEqual(['ABC-123Fix the thing', 'Plan']);
+    expect(rows(paths[1]).map((row) => row.textContent)).toEqual(['Plan']);
+    // Monday's one-line item stands alone, so Monday shows nothing.
+    expect(list(paths[3])).toBeNull();
+    expect(article(HEAD).dataset.touched).toBe('');
+    expect(article(paths[3]).dataset.touched).toBeUndefined();
+    const letters = [...(list(HEAD)?.querySelectorAll('.opal-touched-head .opal-touched-week > span') ?? [])];
+    expect(letters.map((letter) => letter.textContent).join('')).toBe('MTWTFSS');
+    expect(letters.findIndex((letter) => letter.hasAttribute('data-today'))).toBe(3);
+    const squares = rows(HEAD)[1].querySelectorAll<HTMLElement>('.opal-touched-week > i');
+    expect([...squares].map((square) => square.dataset.hit !== undefined)).toEqual([false, false, true, true, false, false, false]);
+    expect(squares[2].style.backgroundColor).toBe('var(--touched-0)');
+    expect(rows(HEAD)[0].querySelector<HTMLElement>('i[data-hit]')?.style.backgroundColor).toBe('');
+  });
+
+  it('dims every other row while one is pointed at, and shows a filled square’s log line', async () => {
+    renderStack();
+    await waitFor(() => expect(rows(paths[1])).toHaveLength(1));
+    const content = screen.getByRole('feed');
+    fireEvent.pointerOver(rows(HEAD)[1]);
+    expect(content.dataset.touchedHover).toBe('Notes/Plan.md');
+    expect([...content.querySelectorAll('.opal-touched-row[data-match]')]).toEqual([rows(HEAD)[1], rows(paths[1])[0]]);
+    fireEvent.pointerEnter(rows(HEAD)[1].querySelectorAll('.opal-touched-week > i')[2]);
+    expect(screen.getByRole('tooltip').textContent).toBe('Wed, Oct 28, 1 log lineStarted the plan.');
+    fireEvent.pointerLeave(content);
+    expect(content.dataset.touchedHover).toBeUndefined();
+    expect(content.querySelectorAll('[data-match]')).toHaveLength(0);
+  });
+
+  it('opens a file as a page link does and a URL in the browser, and reads the week again when it changes', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderStack();
+    await waitFor(() => expect(rows(HEAD)).toHaveLength(2));
+    fireEvent.click(rows(HEAD)[0]);
+    expect(open).toHaveBeenCalledWith(ISSUE_URL, '_blank');
+    fireEvent.click(rows(HEAD)[1]);
+    await waitFor(() => expect(tabLocation(useTabsStore.getState().tabs[0])).toEqual(fileLocation(PLAN)));
+    open.mockRestore();
+  });
+
+  it('asks for a week again when the main process says it changed', async () => {
+    renderStack();
+    await waitFor(() => expect(list(HEAD)).toBeTruthy());
+    const calls = vi.mocked(window.vaultAPI.touchedWeek).mock.calls.filter(([, date]) => date === WEEK.monday).length;
+    act(() => changed?.({ root: ROOT, monday: WEEK.monday }));
+    await waitFor(() => expect(vi.mocked(window.vaultAPI.touchedWeek).mock.calls.filter(([, date]) => date === WEEK.monday)).toHaveLength(calls + 1));
   });
 });

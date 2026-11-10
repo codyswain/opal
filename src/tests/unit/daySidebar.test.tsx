@@ -161,12 +161,14 @@ function installVaultApi() {
     createDay: vi.fn(async () => ({ success: true as const, data: { path: DAILY } })),
     day: vi.fn(async (_root: string, date: string) => ({ success: true as const, data: days[date] ?? empty(date) })),
     stack: vi.fn(async () => ({ success: false as const, error: 'No stacks here.' })),
+    touchedWeek: vi.fn(async () => ({ success: false as const, error: 'No weeks here.' })),
     checkDigestItem: vi.fn(async (_root: string, _path: string, line: number, raw: string, checked: boolean) => ({
       success: true as const,
       data: { line, raw: raw.replace(/\[[ xX]\]/, checked ? '[x]' : '[ ]'), checked },
     })),
     voteDigestReview: vi.fn(async () => ({ success: false as const, error: 'No comparison here.' })),
     revealDigestReview: vi.fn(async () => ({ success: false as const, error: 'No comparison here.' })),
+    onTouchedChanged: vi.fn(() => () => undefined),
     onDayChanged: vi.fn((callback: (change: VaultDayChange) => void) => {
       changed = callback;
       return () => {

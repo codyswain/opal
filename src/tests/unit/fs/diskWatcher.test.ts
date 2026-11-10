@@ -145,3 +145,19 @@ describe('metadata observation', () => {
     expect(onMetadataChanged).not.toHaveBeenCalled();
   });
 });
+
+describe('the touched list files', () => {
+  it('reports .opal/touched.json and .opal/link-titles.json, and nothing else in .opal', { retry: 2 }, async () => {
+    await mkdir(path.join(root, '.opal'));
+    await watcher.watch(root);
+    await writeFile(path.join(root, '.opal', 'touched.json'), '{}');
+    await reported(onChanged);
+    expect(onChanged.mock.calls.flat(2)).toContain(path.join(root, '.opal'));
+    onChanged.mockClear();
+    await writeFile(path.join(root, '.opal', 'pins.json'), '[]');
+    await settle();
+    expect(onChanged).not.toHaveBeenCalled();
+    await writeFile(path.join(root, '.opal', 'link-titles.json'), '{}');
+    await reported(onChanged);
+  });
+});

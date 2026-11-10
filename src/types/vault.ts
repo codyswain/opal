@@ -1,5 +1,6 @@
 import type { VaultDay, VaultDayChange } from "./day";
 import type { StackKind, VaultStack } from "./stack";
+import type { TouchedWeek, TouchedWeekChange } from "./touched";
 import type { DigestReview, DigestReviewChoice } from './digestReview';
 
 export interface VaultInfo {
@@ -22,6 +23,8 @@ export interface VaultAPI {
   day: (root: string, date: string) => Promise<VaultResult<VaultDay>>;
   /** The files a stack headed by `head` shows, in order. Fails when `head` does not start a stack of `kind`. */
   stack: (root: string, kind: StackKind, head: string) => Promise<VaultResult<VaultStack>>;
+  /** The touched list's items for the week `date` is in, Monday to Sunday. */
+  touchedWeek: (root: string, date: string) => Promise<VaultResult<TouchedWeek>>;
   /**
    * Ticks or clears a digest checkbox. `line` and `raw` are the item's `at`,
    * as `day` read it; the main process refuses when that line changed since.
@@ -37,6 +40,8 @@ export interface VaultAPI {
   revealDigestReview: (root: string, date: string, reviewId: string) => Promise<VaultResult<DigestReview>>;
   /** Called when a day asked for with `day` reads differently on disk. Returns the unsubscribe. */
   onDayChanged: (callback: (change: VaultDayChange) => void) => () => void;
+  /** Called when a week asked for with `touchedWeek` reads differently on disk. Returns the unsubscribe. */
+  onTouchedChanged: (callback: (change: TouchedWeekChange) => void) => () => void;
 }
 declare global {
   interface Window {
