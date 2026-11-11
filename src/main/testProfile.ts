@@ -41,3 +41,27 @@ export function touchIdStub(
   const stub = env.OPAL_TEST_TOUCH_ID?.trim();
   return stub === 'pass' || stub === 'fail' || stub === 'none' ? stub : null;
 }
+
+/**
+ * Where Opal keeps copies of the builds it replaced. A test run under
+ * OPAL_TEST_USER_DATA_DIR may move it with OPAL_TEST_UPDATE_BACKUPS_DIR;
+ * without the test profile that variable is ignored.
+ */
+export function updateBackupsDir(env: Record<string, string | undefined>, home: string): string {
+  const override = env.OPAL_TEST_UPDATE_BACKUPS_DIR?.trim();
+  if (env.OPAL_TEST_USER_DATA_DIR?.trim() && override) return override;
+  return `${home}/Library/Caches/Opal-app-backups`;
+}
+
+/**
+ * What a build relaunched after an update must start with. Under a test
+ * profile the new build gets the same profile (and backups folder), so it
+ * never opens the real one; otherwise nothing, and the bundle opens as from
+ * the Dock.
+ */
+export function updateRelaunchEnv(env: Record<string, string | undefined>): Record<string, string> | null {
+  const profile = env.OPAL_TEST_USER_DATA_DIR?.trim();
+  if (!profile) return null;
+  const backups = env.OPAL_TEST_UPDATE_BACKUPS_DIR?.trim();
+  return { OPAL_TEST_USER_DATA_DIR: profile, ...(backups ? { OPAL_TEST_UPDATE_BACKUPS_DIR: backups } : {}) };
+}

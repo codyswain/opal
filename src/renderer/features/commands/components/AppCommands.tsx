@@ -28,6 +28,7 @@ import { useShell } from "@/renderer/features/shell/context/ShellContext";
 import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openDaily, openDailyPage } from "@/renderer/features/shell/utils/openDaily";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
+import { useUpdatesStore, useUpdatesSync } from "@/renderer/features/updates";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
 
@@ -67,6 +68,10 @@ export const AppCommands: React.FC = () => {
   const pagePinned = usePinsStore((state) => isPinned(state.byRoot, pagePath));
   // The command reads Show Hidden Files or Hide Hidden Files.
   const hiddenShown = useHiddenStore((state) => state.shown);
+  // Install Update is there only while a build is ready, Roll Back only while an earlier one is kept.
+  useUpdatesSync();
+  const updateReady = useUpdatesStore((state) => state.state?.available != null);
+  const canRollBack = useUpdatesStore((state) => state.state?.canRollBack === true);
 
   useEffect(() => {
     /** A new page next to the open page, or at the top of the vault. */
@@ -323,6 +328,35 @@ export const AppCommands: React.FC = () => {
         keywords: ["hidden", "private", "touch id", "unhide", "reveal", "secret"],
         perform: () => { void useHiddenStore.getState().toggle(); },
       },
+      ...(updateReady
+        ? [
+          {
+            id: "app.installUpdate",
+            name: "Install Update",
+            type: "action",
+            keywords: ["update", "upgrade", "new version", "build", "restart"],
+            perform: () => { void useUpdatesStore.getState().install(); },
+          } satisfies Command,
+        ]
+        : []),
+      {
+        id: "app.checkForUpdates",
+        name: "Check for Updates",
+        type: "action",
+        keywords: ["update", "upgrade", "new version", "build"],
+        perform: () => { void useUpdatesStore.getState().check(); },
+      },
+      ...(canRollBack
+        ? [
+          {
+            id: "app.rollBack",
+            name: "Roll Back to Previous Build",
+            type: "action",
+            keywords: ["update", "undo update", "downgrade", "previous version", "build", "revert"],
+            perform: () => { void useUpdatesStore.getState().rollBack(); },
+          } satisfies Command,
+        ]
+        : []),
       {
         id: COMMAND_IDS.pasteAndMatchStyle,
         name: "Paste and Match Style",
@@ -354,7 +388,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned, hiddenShown]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned, hiddenShown, updateReady, canRollBack]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   // Cmd+O is Go to File, a menu accelerator, so it works while the editor has focus.

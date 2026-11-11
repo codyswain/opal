@@ -1,13 +1,40 @@
-import type { ConfigEnv, UserConfig } from 'vite';
+import type { ConfigEnv, Plugin, UserConfig } from 'vite';
 import { defineConfig, mergeConfig } from 'vite';
 import { getBuildConfig, pluginHotRestart, external } from './vite.base.config';
 import commonjs from '@rollup/plugin-commonjs';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import path from 'path';
+import { execSync } from 'child_process';
+
+/**
+ * The build's identity: the short git commit and the time of the build. The
+ * main process reads it as __OPAL_BUILD__ to tell whether an update is newer,
+ * and the same values go to build-info.json beside main.js, where the update
+ * staging script reads them from a packaged app.
+ */
+function buildIdentity(): { commit: string; builtAt: string } {
+  let commit = 'unknown';
+  try {
+    commit = execSync('git rev-parse --short=7 HEAD', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || commit;
+  } catch {
+    // Not a git checkout: the build has no commit to name.
+  }
+  return { commit, builtAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') };
+}
+
+function emitBuildInfo(identity: { commit: string; builtAt: string }): Plugin {
+  return {
+    name: 'opal:build-info',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'build-info.json', source: `${JSON.stringify(identity)}\n` });
+    },
+  };
+}
 
 // https://vitejs.dev/config
 export default defineConfig((env) => {
   const forgeEnv = env as ConfigEnv<'build'>;
+  const identity = buildIdentity();
   // const { forgeConfigSelf } = forgeEnv;
 
   // Define config for main process
@@ -59,8 +86,11 @@ export default defineConfig((env) => {
       }),
       // Keep hot restart for development
       pluginHotRestart('restart'),
+      emitBuildInfo(identity),
     ],
-    // define should be managed by forge plugin or base config
+    define: {
+      __OPAL_BUILD__: JSON.stringify(identity),
+    },
     resolve: {
       // Load Node.js entry points
       mainFields: ['main', 'module', 'jsnext:main', 'jsnext'],
