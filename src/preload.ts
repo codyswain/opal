@@ -169,10 +169,6 @@ const vaultAPI: VaultAPI = {
   touchedWeek: (root, date) => ipcRenderer.invoke("vault:touched-week", root, date),
   checkDigestItem: (root, path, line, raw, checked) =>
     ipcRenderer.invoke("vault:check-digest-item", root, path, line, raw, checked),
-  voteDigestReview: (root, date, reviewId, choice, reason) =>
-    ipcRenderer.invoke('vault:vote-digest-review', root, date, reviewId, choice, reason),
-  revealDigestReview: (root, date, reviewId) =>
-    ipcRenderer.invoke('vault:reveal-digest-review', root, date, reviewId),
   onDayChanged: (callback) => {
     const listener = (_event: IpcRendererEvent, change: VaultDayChange) =>
       callback(change);

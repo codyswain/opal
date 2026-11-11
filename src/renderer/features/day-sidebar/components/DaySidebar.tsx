@@ -36,7 +36,6 @@ import { ChatRow } from './ChatRow';
 import { CardFoot, DayCard, EmptyDayCard, FootButton } from './DayCard';
 import { DaySidebarContext, useDaySidebarContext, vaultRelative, wantsNewTab } from './daySidebarContext';
 import { DigestGroup, digestGroupLabel } from './DigestGroup';
-import { DigestReviewDialog } from './DigestReviewDialog';
 import { FileRow } from './FileRow';
 import { HourGroup, LogEntry } from './LogEntry';
 import { RecordingRow } from './RecordingRow';
@@ -343,9 +342,6 @@ function DigestCard({ day, more, onMore }: CardProps) {
   const toggleCollapsed = useDaySidebarStore((state) => state.toggleCollapsed);
   const ticks = useDigestTicks(day.digest, root);
   const openedPath = useTabsStore(selectOpenedPath);
-  const [reviewOpen, setReviewOpen] = React.useState(false);
-  const review = day.digestReview;
-  React.useEffect(() => setReviewOpen(false), [root, day.date, review?.id]);
   const read = day.digest;
   if (!read) return <EmptyDayCard title={DAY_SECTION_TITLES.digest} line="No digest" />;
   const digest = { ...read, groups: read.groups.map((group) => ({ ...group, items: group.items.map(ticks.shown) })) };
@@ -383,19 +379,6 @@ function DigestCard({ day, more, onMore }: CardProps) {
       <div className="flex flex-wrap items-center gap-0.5">
         {total > shown || more ? (
           <FootButton aria-expanded={more} onClick={onMore}>{more ? 'Show fewer' : `Show ${total - shown} more`}</FootButton>
-        ) : null}
-        {review?.status === 'ready' && review.variants ? (
-          <DigestReviewDialog
-            root={root}
-            review={review}
-            open={reviewOpen}
-            onOpenChange={setReviewOpen}
-            trigger={<FootButton>Compare versions</FootButton>}
-          />
-        ) : review?.status === 'generating' ? (
-          <span className="px-2 text-control text-foreground-tertiary">Preparing comparison</span>
-        ) : review?.status === 'failed' ? (
-          <span className="px-2 text-control text-foreground-tertiary">Comparison unavailable today</span>
         ) : null}
         {openedPath === digest.path ? null : (
           <FootButton

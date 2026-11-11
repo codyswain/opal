@@ -3,7 +3,6 @@ import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
 import { TouchedService } from "@/main/vault/TouchedService";
-import { DigestReviewService } from '@/main/vault/DigestReviewService';
 import { StackService } from "@/main/vault/StackService";
 import { PinsService } from "@/main/pins/PinsService";
 import { PinsHandlers } from "@/main/pins/PinsHandlers";
@@ -457,10 +456,8 @@ const markdownDocuments = new MarkdownDocumentService({
   history: new PageHistory(),
 });
 const vaultService = new VaultService({ registry: rootRegistry, documents: markdownDocuments });
-const digestReviews = new DigestReviewService({ registry: rootRegistry });
 const dayService = new DayService({
   registry: rootRegistry,
-  reviews: digestReviews,
   resolveLinks: (from, targets) => linkIndex.resolve(from, targets),
   onChanged: (change) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -494,7 +491,6 @@ const vaultHandlers = new VaultHandlers({
   days: dayService,
   stacks: stackService,
   touched: touchedService,
-  reviews: digestReviews,
 });
 const pinsHandlers = new PinsHandlers({
   ipc: ipcMain,
