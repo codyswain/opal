@@ -3,6 +3,7 @@ import { AlertCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DiskEntry } from '@/types/disk';
 import { useDiskStore } from '../store/diskStore';
+import { HIDDEN_MESSAGE, useHiddenStore } from '../store/hiddenStore';
 import { RecentView } from './RecentView';
 import { FileViewer } from './FileViewer';
 import { MarkdownEditor } from './editor/MarkdownEditor';
@@ -24,6 +25,10 @@ export const DiskExplorer: React.FC = () => {
   const activeTab = useTabsStore(selectActiveTab);
   const location = useTabsStore(selectCurrentLocation);
   const stack = location?.mode === 'stack' ? location : null;
+  const shownPath = stack?.file ?? openedPath;
+  const hidden = useHiddenStore((state) => (shownPath ? state.blocked[shownPath] === true : false));
+  // Bumped when hidden files change, so the open file is looked up again.
+  const hiddenGeneration = useHiddenStore((state) => state.generation);
   const page = useRef<HTMLDivElement>(null);
   useTabScroll(page, activeTab?.id ?? null, activeTab?.index ?? 0, openedPath);
 
@@ -64,6 +69,7 @@ export const DiskExplorer: React.FC = () => {
     );
     void Promise.resolve(window.diskAPI.stat(openedPath))
       .then((result) => {
+        if (!cancelled && result && !result.success && result.hidden) useHiddenStore.getState().refused(openedPath);
         if (!cancelled)
           setStatted({
             path: openedPath,
@@ -83,7 +89,7 @@ export const DiskExplorer: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [openedPath, listedEntry]);
+  }, [openedPath, listedEntry, hiddenGeneration]);
   const focusedEntry =
     openedPath && listedEntry
       ? { path: openedPath, entry: listedEntry, loading: false }
@@ -97,7 +103,12 @@ export const DiskExplorer: React.FC = () => {
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
       {error && <ErrorBanner message={error} />}
-      {stack && activeTab ? (
+      {hidden ? (
+        // Nothing from the file: not its name, not its text. An editor that was open saved on its way out.
+        <div role="status" data-testid="files-hidden" className="p-4 text-ui text-foreground-secondary">
+          {HIDDEN_MESSAGE}
+        </div>
+      ) : stack && activeTab ? (
         // A stack keeps its own place per tab entry, so each entry gets its own view.
         <div className="min-h-0 flex-1">
           <StackView

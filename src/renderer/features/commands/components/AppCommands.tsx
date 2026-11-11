@@ -14,6 +14,7 @@ import {
 import { shownPath, toggleDaySidebar } from "@/renderer/features/day-sidebar/store/daySidebarStore";
 import { useDiskStore } from "@/renderer/features/disk-explorer/store/diskStore";
 import { isPinned, usePinsStore } from "@/renderer/features/disk-explorer/store/pinsStore";
+import { useHiddenStore } from "@/renderer/features/disk-explorer/store/hiddenStore";
 import { selectViewedPath, useStackStore } from "@/renderer/features/disk-explorer/store/stackStore";
 import {
   togglePageProperties,
@@ -64,6 +65,8 @@ export const AppCommands: React.FC = () => {
   const pagePath = viewedPath ?? openedPath;
   const fileOpen = pagePath !== null;
   const pagePinned = usePinsStore((state) => isPinned(state.byRoot, pagePath));
+  // The command reads Show Hidden Files or Hide Hidden Files.
+  const hiddenShown = useHiddenStore((state) => state.shown);
 
   useEffect(() => {
     /** A new page next to the open page, or at the top of the vault. */
@@ -313,6 +316,14 @@ export const AppCommands: React.FC = () => {
         ]
         : []),
       {
+        id: "files.toggleHidden",
+        // Showing asks for Touch ID in the main process; hiding asks nothing.
+        name: hiddenShown ? "Hide Hidden Files" : "Show Hidden Files",
+        type: "action",
+        keywords: ["hidden", "private", "touch id", "unhide", "reveal", "secret"],
+        perform: () => { void useHiddenStore.getState().toggle(); },
+      },
+      {
         id: COMMAND_IDS.pasteAndMatchStyle,
         name: "Paste and Match Style",
         type: "action",
@@ -343,7 +354,7 @@ export const AppCommands: React.FC = () => {
     return () => {
       commands.forEach((command) => commandRegistry.unregisterCommand(command));
     };
-  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned]);
+  }, [navigateFiles, toggleSidebar, propertiesOpen, stackShown, fileOpen, pagePinned, hiddenShown]);
 
   // Cmd+K and Cmd+P open the palette; Cmd+Shift+P opens it in command mode.
   // Cmd+O is Go to File, a menu accelerator, so it works while the editor has focus.

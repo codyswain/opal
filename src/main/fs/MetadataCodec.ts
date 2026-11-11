@@ -155,7 +155,8 @@ export async function isValidAdjacentCarrier(registry: RootRegistry, candidate: 
   if (!candidate.endsWith(SIDECAR_SUFFIX) || path.basename(candidate) === SIDECAR_SUFFIX) return false;
   const primary = candidate.slice(0, -SIDECAR_SUFFIX.length);
   try {
-    const state = await readMetadata(registry, primary);
+    // A hidden file's sidecar folds into it too, so its name never shows on its own.
+    const state = await readMetadata(registry.seeingHidden(), primary);
     return state.kind !== 'directory' && !state.markdown && state.carrier === candidate && state.exists;
   } catch { return false; }
 }

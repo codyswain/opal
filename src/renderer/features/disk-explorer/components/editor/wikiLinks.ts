@@ -1,3 +1,4 @@
+import { HIDDEN_MESSAGE } from '@/types/hidden';
 import { syntaxTree } from '@codemirror/language';
 import { isolateHistory } from '@codemirror/commands';
 import { Facet, Prec, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
@@ -216,6 +217,11 @@ export async function openWikiLink(view: EditorView, written: string, newTab = f
     openNote(resolved, newTab);
     return;
   }
+  // A link to a hidden file opens nothing and makes no page of that name.
+  if (response?.hiddenTargets?.includes(wanted)) {
+    toast(HIDDEN_MESSAGE);
+    return;
+  }
   const day = dayToCreate(wanted);
   const note = noteToCreate(wanted);
   const roots = note ? await window.diskAPI.listRoots().catch(() => null) : null;
@@ -405,5 +411,6 @@ export async function openPathLink(view: EditorView, href: string, newTab = fals
   const response = await window.markdownAPI.resolveLinks(path, [target]).catch(() => null);
   const resolved = response?.success ? response.data[target] : null;
   if (resolved) openNote(resolved, newTab);
+  else if (response?.hiddenTargets?.includes(target)) toast(HIDDEN_MESSAGE);
   else toast.error(`Could not find ${written}.`);
 }

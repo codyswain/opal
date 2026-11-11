@@ -68,6 +68,32 @@ export function inDayFolder(relative: string): boolean {
   return DAY_FOLDERS.some((folder) => relative.startsWith(`${folder}/`));
 }
 
+/**
+ * The day without what is hidden: hidden files leave every card, and a log
+ * entry that links one goes too, since its sentence names the file. A
+ * recording or chat that is hidden itself goes; a visible recording keeps
+ * only its links to visible files.
+ */
+export function visibleDay(day: VaultDay, blocked: (path: string) => boolean): VaultDay {
+  const shows = (file: string | null) => file === null || !blocked(file);
+  const linksShow = (links: readonly DayLink[]) => links.every((link) => shows(link.path));
+  const log = shows(day.log);
+  return {
+    ...day,
+    daily: shows(day.daily) ? day.daily : null,
+    log: log ? day.log : null,
+    entries: log ? day.entries.filter((entry) => linksShow(entry.links)) : [],
+    documents: day.documents.filter((file) => shows(file.path)),
+    chats: day.chats.filter((chat) => shows(chat.path)),
+    recordings: day.recordings
+      .filter((recording) => shows(recording.path))
+      .map((recording) => (linksShow(recording.links) ? recording : { ...recording, links: recording.links.filter((link) => shows(link.path)) })),
+    people: day.people.filter((file) => shows(file.path)),
+    digest: day.digest && shows(day.digest.path) ? day.digest : null,
+    ...(day.digestReview !== undefined ? { digestReview: day.digest && shows(day.digest.path) ? day.digestReview : null } : {}),
+  };
+}
+
 interface CachedFile {
   mtimeMs: number;
   size: number;
@@ -163,7 +189,8 @@ export class DayService {
       ...mentions.filter((file) => this.isPerson(root, file.path)),
       ...(await this.speakers(root, recordings)),
     ]);
-    return { date, daily, ...log, documents, chats, recordings, people, digest, ...(this.deps.reviews ? { digestReview } : {}) };
+    const day: VaultDay = { date, daily, ...log, documents, chats, recordings, people, digest, ...(this.deps.reviews ? { digestReview } : {}) };
+    return visibleDay(day, await this.deps.registry.blocked());
   }
 
   private relative(root: string, file: string): string {

@@ -11,6 +11,7 @@ import { useStackStore } from '@/renderer/features/disk-explorer/store/stackStor
 import { useTabsStore } from '@/renderer/features/disk-explorer/store/tabsStore';
 import { stackLocation } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import { usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
+import { useHiddenStore } from '@/renderer/features/disk-explorer/store/hiddenStore';
 import { installPinsApi, setPins } from '@/tests/helpers/pinsApi';
 import { useSettingsStore } from '@/renderer/features/settings';
 import { ShellProvider } from '@/renderer/features/shell';
@@ -436,5 +437,26 @@ describe('CommandPalette', () => {
     resetTabs();
     run(COMMAND_IDS.closeTab);
     expect(window.systemAPI.closeWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows hidden files from the palette after the prompt, and hides them again', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
+    const show = vi.fn(async () => ({ success: true as const, data: { shown: true } }));
+    const hide = vi.fn(async () => ({ success: true as const, data: { shown: false } }));
+    Object.defineProperty(window, 'hiddenAPI', { value: { show, hide }, configurable: true });
+    useHiddenStore.setState({ shown: false });
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'hidden');
+    await user.click(await screen.findByRole('option', { name: /Show hidden files/i }));
+    await waitFor(() => expect(useHiddenStore.getState().shown).toBe(true));
+    expect(show).toHaveBeenCalledTimes(1);
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'hidden');
+    await user.click(await screen.findByRole('option', { name: /Hide hidden files/i }));
+    await waitFor(() => expect(useHiddenStore.getState().shown).toBe(false));
+    expect(hide).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(window, 'hiddenAPI');
   });
 });

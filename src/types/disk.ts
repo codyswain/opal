@@ -13,6 +13,8 @@ export interface DiskEntry {
   /** Bytes. 0 for directories. */
   size: number;
   mtimeMs: number;
+  /** Set on a hidden file or folder while hidden files are shown; such entries are left out otherwise. */
+  hidden?: true;
 }
 
 /** Files whose text contains a search term, with a short excerpt around the first match. */
@@ -35,5 +37,5 @@ export interface DirectoryListing {
  * handlers return, and gives the renderer real narrowing instead.
  */
 export type DiskResult<T = undefined> =
-  | { success: true; data: T; error?: undefined }
-  | { success: false; error: string; data?: undefined };
+  | { success: true; data: T; error?: undefined; hidden?: undefined }
+  | { success: false; error: string; data?: undefined; hidden?: true };

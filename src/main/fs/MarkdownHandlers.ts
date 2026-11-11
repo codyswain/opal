@@ -10,7 +10,7 @@ import {
   type MarkdownWriteResult,
   type PageExtension,
 } from '@/types/markdown';
-import { PathNotAllowedError } from './RootRegistry';
+import { HiddenPathError, PathNotAllowedError, type RootRegistry } from './RootRegistry';
 import { MetadataError } from './MetadataCodec';
 import { MarkdownConflictError, MarkdownError, MarkdownHeldError, type MarkdownDocumentService } from './MarkdownDocumentService';
 import type { LinkIndex } from './LinkIndex';
@@ -19,9 +19,17 @@ export interface MarkdownHandlerDependencies {
   ipc: IpcMain;
   service: MarkdownDocumentService;
   links: LinkIndex;
+  /** Says which resolved links point at hidden files; without it, none do. */
+  registry?: Pick<RootRegistry, 'blocked'>;
 }
 
-export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true; gitBusy?: true };
+/**
+ * `hidden` marks a refused hidden path. `hiddenTargets` lists the link
+ * targets, as the page sent them, that point at a hidden file: they resolve
+ * to null, and following one says the file is hidden instead of making a
+ * new page of that name.
+ */
+export type MarkdownResponse<T> = IPCResponse<T> & { conflict?: true; gitBusy?: true; hidden?: true; hiddenTargets?: string[] };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -68,7 +76,16 @@ export class MarkdownHandlers {
     });
     ipc.handle('markdown:resolve-links', async (_, from: unknown, targets: unknown): Promise<MarkdownResponse<MarkdownLinks>> => {
       if (!isNonEmptyString(from) || !isLinkTargets(targets)) return invalid();
-      return this.respond(() => links.resolve(from, targets), 'Failed to resolve links');
+      const response = await this.respond(() => links.resolve(from, targets), 'Failed to resolve links');
+      if (!response.success || !response.data) return response;
+      const blocked = this.deps.registry ? await this.deps.registry.blocked() : () => false;
+      const hiddenTargets: string[] = [];
+      const data: MarkdownLinks = {};
+      for (const [target, file] of Object.entries(response.data)) {
+        if (file && blocked(file)) hiddenTargets.push(target);
+        data[target] = file && !blocked(file) ? file : null;
+      }
+      return { success: true, data, ...(hiddenTargets.length > 0 ? { hiddenTargets } : {}) };
     });
   }
 
@@ -76,6 +93,7 @@ export class MarkdownHandlers {
     try {
       return { success: true, data: await operation() };
     } catch (error) {
+      if (error instanceof HiddenPathError) return { success: false, error: error.message, hidden: true };
       if (error instanceof MarkdownConflictError) return { success: false, error: error.message, conflict: true };
       if (error instanceof MarkdownHeldError) return { success: false, error: error.message, gitBusy: true };
       if (error instanceof MarkdownError || error instanceof MetadataError || error instanceof PathNotAllowedError) {

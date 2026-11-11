@@ -1,8 +1,9 @@
 import type { MarkdownCopyLabel, MarkdownDocument, MarkdownLinks, MarkdownProperties, MarkdownWriteResult, PageExtension, UnsavedPage } from '@/types/markdown';
 
+/** `hidden` marks a refused hidden file; `hiddenTargets` the link targets that point at one. */
 export type MarkdownResult<T> =
-  | { success: true; data: T; error?: undefined; conflict?: undefined; gitBusy?: undefined }
-  | { success: false; error: string; data?: undefined; conflict?: true; gitBusy?: true };
+  | { success: true; data: T; error?: undefined; conflict?: undefined; gitBusy?: undefined; hidden?: undefined; hiddenTargets?: string[] }
+  | { success: false; error: string; data?: undefined; conflict?: true; gitBusy?: true; hidden?: true; hiddenTargets?: undefined };
 
 export interface MarkdownAPI {
   read: (target: string) => Promise<MarkdownResult<MarkdownDocument>>;

@@ -2,7 +2,7 @@ import type { IpcMain, OpenDialogReturnValue } from 'electron';
 import type { IPCResponse } from '@/types/ipc';
 import type { ContentSearchResult, DiskEntry, DirectoryListing, TextFileContents } from '@/types/disk';
 import type { RootRegistry } from '@/main/fs/RootRegistry';
-import { PathNotAllowedError } from '@/main/fs/RootRegistry';
+import { HiddenPathError, PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { DiskReader } from '@/main/fs/DiskReader';
 import type { FileWriter } from '@/main/fs/FileWriter';
 import { DestinationExistsError, InvalidNameError } from '@/main/fs/FileWriter';
@@ -124,7 +124,7 @@ export class DiskHandlers {
           const listing = await this.deps.reader.readDirectory(dirPath);
           return { success: true, data: listing };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to read folder') };
+          return failure(error, 'Failed to read folder');
         }
       }
     );
@@ -138,7 +138,7 @@ export class DiskHandlers {
           const created = await this.deps.writer.createDirectory(parentDir, name);
           return { success: true, data: { path: created } };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to create folder') };
+          return failure(error, 'Failed to create folder');
         }
       }
     );
@@ -152,7 +152,7 @@ export class DiskHandlers {
           const entry = await this.deps.reader.statEntry(target);
           return { success: true, data: entry };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to read file') };
+          return failure(error, 'Failed to read file');
         }
       }
     );
@@ -168,7 +168,7 @@ export class DiskHandlers {
         try {
           return { success: true, data: await searchCurrentText(this.deps.registry, query.trim()) };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to search file contents') };
+          return failure(error, 'Failed to search file contents');
         }
       }
     );
@@ -182,7 +182,7 @@ export class DiskHandlers {
           const contents = await this.deps.reader.readTextFile(target);
           return { success: true, data: contents };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to read file') };
+          return failure(error, 'Failed to read file');
         }
       }
     );
@@ -196,7 +196,7 @@ export class DiskHandlers {
           const renamed = await this.deps.writer.rename(target, nextName);
           return { success: true, data: { path: renamed } };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to rename') };
+          return failure(error, 'Failed to rename');
         }
       }
     );
@@ -210,7 +210,7 @@ export class DiskHandlers {
           const moved = await this.deps.writer.move(target, destinationDir);
           return { success: true, data: { path: moved } };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to move') };
+          return failure(error, 'Failed to move');
         }
       }
     );
@@ -224,7 +224,7 @@ export class DiskHandlers {
           await this.deps.writer.moveToTrash(target);
           return { success: true };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to move to Trash') };
+          return failure(error, 'Failed to move to Trash');
         }
       }
     );
@@ -239,7 +239,7 @@ export class DiskHandlers {
           this.deps.shell.showItemInFolder(resolved);
           return { success: true };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to reveal file') };
+          return failure(error, 'Failed to reveal file');
         }
       }
     );
@@ -255,11 +255,20 @@ export class DiskHandlers {
           const { openPath, showItemInFolder } = this.deps.shell;
           return { success: true, data: await openFile(resolved, { inside: true }, { copiesDir: this.deps.copiesDir, openPath, showItemInFolder }) };
         } catch (error) {
-          return { success: false, error: describeError(error, 'Failed to open file') };
+          return failure(error, 'Failed to open file');
         }
       }
     );
   }
+}
+
+/**
+ * A failed request. A hidden path says so with `hidden: true`, so a tab can
+ * show "This file is hidden" rather than an error.
+ */
+function failure(error: unknown, fallback: string): IPCResponse<never> & { hidden?: true } {
+  if (error instanceof HiddenPathError) return { success: false, error: error.message, hidden: true };
+  return { success: false, error: describeError(error, fallback) };
 }
 
 /**

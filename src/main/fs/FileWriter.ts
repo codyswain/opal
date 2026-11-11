@@ -20,6 +20,7 @@ import { MutationQueue, filesystemMutationQueue } from './MutationQueue';
 import { MetadataError, readMetadata, SIDECAR_SUFFIX, assertNoSymlinks } from './MetadataCodec';
 import { classifyFile } from '@/common/fileKind';
 import type { ActivityRecorder } from '@/main/activity/ActivityService';
+import type { HiddenFiles } from './HiddenFiles';
 
 export class DestinationExistsError extends Error {
   constructor(target: string) {
@@ -45,6 +46,8 @@ export interface FileWriterDependencies {
   renameEntry?: (source: string, destination: string) => Promise<void>;
   /** Remaps and records activity after a mutation succeeds; failures never affect the mutation. */
   activity?: ActivityRecorder;
+  /** Keeps `.opal/hidden.json` on a renamed or moved path, and drops a trashed one; never throws. */
+  hidden?: Pick<HiddenFiles, 'moved' | 'removed'>;
 }
 
 /**
@@ -109,6 +112,7 @@ export class FileWriter {
     if (carrier) await this.renamePair(source, destination, carrier);
     else await this.renameEntry(source, destination);
     await this.deps.activity?.noteMoved(source, destination);
+    await this.deps.hidden?.moved(source, destination);
     return destination;
   }
 
@@ -136,6 +140,7 @@ export class FileWriter {
     if (carrier) {
       await this.renamePair(source, destination, carrier);
       await this.deps.activity?.noteMoved(source, destination);
+      await this.deps.hidden?.moved(source, destination);
       return destination;
     }
 
@@ -151,6 +156,7 @@ export class FileWriter {
     }
 
     await this.deps.activity?.noteMoved(source, destination);
+    await this.deps.hidden?.moved(source, destination);
     return destination;
   }
 
@@ -161,6 +167,7 @@ export class FileWriter {
     if (!carrier) {
       await this.deps.trashItem(resolved);
       await this.deps.activity?.noteRemoved(resolved);
+      await this.deps.hidden?.removed(resolved);
       return;
     }
     const bundle = await mkdtemp(path.join(path.dirname(resolved), '.opal-trash-'));
@@ -174,6 +181,7 @@ export class FileWriter {
       staged.push([stagedCarrier, carrier]);
       await this.deps.trashItem(bundle);
       await this.deps.activity?.noteRemoved(resolved);
+      await this.deps.hidden?.removed(resolved);
     } catch (error) {
       const failures: unknown[] = [];
       for (const [from, to] of staged.reverse()) {

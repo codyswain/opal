@@ -85,6 +85,8 @@ export class VaultService {
     let handle;
     try {
       const template = await inVault(root, path.join(root, DAY_LAYOUT.template));
+      // A hidden template is not copied into a page that shows.
+      if ((await this.deps.registry.blocked())(template)) return defaultDailyPage(date);
       handle = await open(template, constants.O_RDONLY | constants.O_NOFOLLOW);
     } catch (error) {
       if (missing(error)) return defaultDailyPage(date);

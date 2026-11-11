@@ -33,8 +33,8 @@ export interface PickedFiles {
 
 /** Narrows on `success` without strict null checks, as DiskResult does. */
 export type FilesResult<T> =
-  | { success: true; data: T; error?: undefined }
-  | { success: false; error: string; data?: undefined };
+  | { success: true; data: T; error?: undefined; hidden?: undefined }
+  | { success: false; error: string; data?: undefined; hidden?: true };
 
 /**
  * Where a file's bytes are: a plain file, a Git LFS file whose object is on

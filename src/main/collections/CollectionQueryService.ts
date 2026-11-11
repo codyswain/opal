@@ -23,8 +23,10 @@ export class CollectionQueryService {
     const page = validateCollectionPage(rawPage);
     const snapshot = await this.deps.index.get();
     const store = this.deps.activity;
+    // The index lists hidden files too, so showing them needs no new scan; they are left out here.
+    const blocked = await this.deps.registry.blocked();
     const rows = evaluateCollectionQuery({
-      items: snapshot.items,
+      items: snapshot.items.filter((item) => !blocked(item.path)),
       activity: (target) => store.get(target),
       touchedAt: (record) => store.touchedAt(record),
       allowedRoots: this.deps.registry.list(),
@@ -35,7 +37,8 @@ export class CollectionQueryService {
       total: rows.length,
       offset: page.offset,
       limit: page.limit,
-      warnings: snapshot.warnings,
+      // A warning starts with the folder it is about.
+      warnings: snapshot.warnings.filter((warning) => !blocked(warning.split(': ')[0])),
     };
   }
 }

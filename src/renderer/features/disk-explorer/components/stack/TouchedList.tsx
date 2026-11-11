@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { CircleDot, FileText, Folder, GitPullRequest, NotebookText, type LucideIcon } from 'lucide-react';
 import { mondayOf, weekDates } from '@/common/touchedModel';
 import type { TouchedItem, TouchedKind, TouchedWeek } from '@/types/touched';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/renderer/shared/ui/ContextMenu';
+import { useHiddenStore } from '../../store/hiddenStore';
 import './touched.css';
 import './touchedPalette.css';
 
@@ -48,6 +50,17 @@ export const TouchedList = memo(function TouchedList({
   openPath: (path: string, newTab: boolean) => void;
 }) {
   const [tip, setTip] = useState<Tip | null>(null);
+  // A file row's menu offers Hide; other rows have no menu.
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const openMenu = (event: React.MouseEvent) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[data-touched-file]');
+    if (!row?.dataset.touchedFile) {
+      event.preventDefault();
+      return;
+    }
+    setTip(null);
+    setMenuPath(row.dataset.touchedFile);
+  };
   const dates = weekDates(touched.week.monday);
   const open = (item: TouchedItem, event: React.MouseEvent) => {
     event.preventDefault();
@@ -68,55 +81,65 @@ export const TouchedList = memo(function TouchedList({
   };
 
   return (
-    <aside className="opal-touched" aria-label="Touched this day">
-      <div className="opal-touched-head" aria-hidden>
-        <span className="opal-touched-week">
-          {LETTERS.map((letter, index) => (
-            <span key={index} data-today={index === touched.day ? '' : undefined}>{letter}</span>
-          ))}
-        </span>
-      </div>
-      {touched.rows.map((item) => {
-        const Icon = ICONS[item.kind];
-        const label = `${item.id ? `${item.id} ` : ''}${item.name}`.trim();
-        return (
-          <button
-            key={item.key}
-            type="button"
-            data-touched-key={item.key}
-            className="opal-touched-row"
-            aria-label={label}
-            onClick={(event) => open(item, event)}
-            onAuxClick={(event) => event.button === 1 && open(item, event)}
-          >
-            <Icon aria-hidden className="opal-touched-icon" />
-            <span className="opal-touched-name" title={label}>
-              {item.id ? <span className="opal-touched-id">{item.id}</span> : null}
-              {item.name}
-            </span>
-            <span className="opal-touched-week" onPointerLeave={() => setTip(null)}>
-              {item.days.map((hit, day) => (
-                <i
-                  key={day}
-                  data-hit={hit ? '' : undefined}
-                  style={hit && item.colour !== null ? { backgroundColor: `var(--touched-${item.colour})` } : undefined}
-                  onPointerEnter={hit ? (event) => showTip(item, day, event.currentTarget) : () => setTip(null)}
-                />
+    <ContextMenu>
+      <ContextMenuTrigger asChild onContextMenu={openMenu}>
+        <aside className="opal-touched" aria-label="Touched this day">
+          <div className="opal-touched-head" aria-hidden>
+            <span className="opal-touched-week">
+              {LETTERS.map((letter, index) => (
+                <span key={index} data-today={index === touched.day ? '' : undefined}>{letter}</span>
               ))}
             </span>
-          </button>
-        );
-      })}
-      {tip
-        ? createPortal(
-          <div role="tooltip" className="opal-touched-tip" style={{ left: tip.left, top: tip.top }}>
-            <b>{tip.heading}</b>
-            {tip.text}
-          </div>,
-          document.body,
-        )
-        : null}
-    </aside>
+          </div>
+          {touched.rows.map((item) => {
+            const Icon = ICONS[item.kind];
+            const label = `${item.id ? `${item.id} ` : ''}${item.name}`.trim();
+            return (
+              <button
+                key={item.key}
+                type="button"
+                data-touched-key={item.key}
+                data-touched-file={item.kind === 'file' && item.path ? item.path : undefined}
+                className="opal-touched-row"
+                aria-label={label}
+                onClick={(event) => open(item, event)}
+                onAuxClick={(event) => event.button === 1 && open(item, event)}
+              >
+                <Icon aria-hidden className="opal-touched-icon" />
+                <span className="opal-touched-name" title={label}>
+                  {item.id ? <span className="opal-touched-id">{item.id}</span> : null}
+                  {item.name}
+                </span>
+                <span className="opal-touched-week" onPointerLeave={() => setTip(null)}>
+                  {item.days.map((hit, day) => (
+                    <i
+                      key={day}
+                      data-hit={hit ? '' : undefined}
+                      style={hit && item.colour !== null ? { backgroundColor: `var(--touched-${item.colour})` } : undefined}
+                      onPointerEnter={hit ? (event) => showTip(item, day, event.currentTarget) : () => setTip(null)}
+                    />
+                  ))}
+                </span>
+              </button>
+            );
+          })}
+          {tip
+            ? createPortal(
+              <div role="tooltip" className="opal-touched-tip" style={{ left: tip.left, top: tip.top }}>
+                <b>{tip.heading}</b>
+                {tip.text}
+              </div>,
+              document.body,
+            )
+            : null}
+        </aside>
+      </ContextMenuTrigger>
+      {menuPath ? (
+        <ContextMenuContent data-testid="touched-menu">
+          <ContextMenuItem onSelect={() => void useHiddenStore.getState().hide(menuPath)}>Hide</ContextMenuItem>
+        </ContextMenuContent>
+      ) : null}
+    </ContextMenu>
   );
 });
 

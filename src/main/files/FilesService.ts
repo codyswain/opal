@@ -5,7 +5,7 @@ import path from 'path';
 import type { WebContents } from 'electron';
 import { extensionOf, storedExtension, storedParts, withoutHash } from '@/common/fileKind';
 import { jobQueue, type JobQueue } from '@/main/mapLimited';
-import { isInsideRoot } from '@/main/fs/paths';
+import { isInsideRoot, normalizePath } from '@/main/fs/paths';
 import { PathNotAllowedError, type RootRegistry } from '@/main/fs/RootRegistry';
 import type { FileInfo, FileStatus, ImportedFile, OpenResult, Rendition } from '@/types/files';
 import { FilesError, type FileStore, type ImportSource, type RunFile, type StoreDependencies } from './FileStore';
@@ -245,6 +245,8 @@ export class FilesService {
       }
     };
     await walk(top, 0);
+    const blocked = await this.deps.registry.blocked();
+    found.splice(0, found.length, ...found.filter((file) => !blocked(normalizePath(file))));
     return found.find((file) => path.basename(file) === name) ?? found.sort()[0] ?? null;
   }
 

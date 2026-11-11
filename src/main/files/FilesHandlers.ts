@@ -2,7 +2,7 @@ import type { IpcMain, OpenDialogOptions } from 'electron';
 import path from 'path';
 import { IMAGE_EXTENSIONS } from '@/common/fileKind';
 import logger from '@/main/logger';
-import { PathNotAllowedError } from '@/main/fs/RootRegistry';
+import { HiddenPathError, PathNotAllowedError } from '@/main/fs/RootRegistry';
 import type { FilesResult, PickedFiles } from '@/types/files';
 import { FilesError, type ImportSource } from './FileStore';
 import type { FilesService } from './FilesService';
@@ -100,7 +100,7 @@ export class FilesHandlers {
     ipc.on('files:start-drag', (event, target: unknown) => {
       if (!isPath(target)) return;
       service.startDrag(event.sender, target).catch((error) => {
-        if (!(error instanceof FilesError || error instanceof PathNotAllowedError)) logger.error('Failed to drag a file', error instanceof Error ? error : undefined);
+        if (!(error instanceof FilesError || error instanceof PathNotAllowedError || error instanceof HiddenPathError)) logger.error('Failed to drag a file', error instanceof Error ? error : undefined);
       });
     });
   }
@@ -131,6 +131,7 @@ export class FilesHandlers {
     try {
       return { success: true, data: await operation() };
     } catch (error) {
+      if (error instanceof HiddenPathError) return { success: false, error: error.message, hidden: true };
       if (error instanceof FilesError || error instanceof PathNotAllowedError) return { success: false, error: error.message };
       logger.error(fallback, error instanceof Error ? error : undefined);
       return { success: false, error: fallback };

@@ -1,3 +1,4 @@
+import { HIDDEN_MESSAGE } from '@/types/hidden';
 import type { EditorView } from '@codemirror/view';
 import { toast } from 'sonner';
 import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, MARKDOWN_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS } from '@/common/fileKind';
@@ -62,6 +63,7 @@ async function openVaultPath(view: EditorView, target: string, newTab: boolean):
   const response = await window.markdownAPI.resolveLinks(path, [target]).catch(() => null);
   const resolved = response?.success ? response.data[target] : null;
   if (resolved) openNote(resolved, newTab);
+  else if (response?.hiddenTargets?.includes(target)) toast(HIDDEN_MESSAGE);
   else toast.error(`Could not find ${target}.`);
 }
 
