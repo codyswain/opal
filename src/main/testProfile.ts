@@ -23,3 +23,21 @@ export function applyTestProfile(
   app.setPath('sessionData', dir);
   return dir;
 }
+
+/** What a stubbed Touch ID prompt does in a test run. */
+export type TouchIdStub = 'pass' | 'fail' | 'none';
+
+/**
+ * The Touch ID stub a test run asks for with OPAL_TEST_TOUCH_ID, honoured
+ * only when the app is not packaged and runs under the test profile
+ * (OPAL_TEST_USER_DATA_DIR). A packaged build always uses the real prompt,
+ * whatever its environment says.
+ */
+export function touchIdStub(
+  env: Record<string, string | undefined>,
+  isPackaged: boolean,
+): TouchIdStub | null {
+  if (isPackaged || !env.OPAL_TEST_USER_DATA_DIR?.trim()) return null;
+  const stub = env.OPAL_TEST_TOUCH_ID?.trim();
+  return stub === 'pass' || stub === 'fail' || stub === 'none' ? stub : null;
+}

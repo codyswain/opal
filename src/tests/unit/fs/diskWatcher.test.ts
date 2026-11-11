@@ -147,7 +147,7 @@ describe('metadata observation', () => {
 });
 
 describe('the touched list files', () => {
-  it('reports .opal/touched.json and .opal/link-titles.json, and nothing else in .opal', { retry: 2 }, async () => {
+  it('reports .opal/touched.json, link-titles.json and hidden.json, and nothing else in .opal', { retry: 2 }, async () => {
     await mkdir(path.join(root, '.opal'));
     await watcher.watch(root);
     await writeFile(path.join(root, '.opal', 'touched.json'), '{}');
@@ -159,5 +159,10 @@ describe('the touched list files', () => {
     expect(onChanged).not.toHaveBeenCalled();
     await writeFile(path.join(root, '.opal', 'link-titles.json'), '{}');
     await reported(onChanged);
+    onChanged.mockClear();
+    // The hidden list, so a hand edit or a pull applies at once.
+    await writeFile(path.join(root, '.opal', 'hidden.json'), '{}');
+    await reported(onChanged);
+    expect(onChanged.mock.calls.flat(2)).toContain(path.join(root, '.opal'));
   });
 });

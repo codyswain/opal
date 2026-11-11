@@ -14,6 +14,7 @@ import {
   removePathsFromDiskState,
 } from './diskPathState';
 import { collapsedTree, isTreeExpanded } from './treeExpansion';
+import { useHiddenStore } from './hiddenStore';
 
 const EXPANDED_PREF_KEY = 'tree.expanded';
 
@@ -62,6 +63,20 @@ export interface DiskActions {
 }
 
 export type DiskStore = DiskState & DiskActions;
+
+/**
+ * The paths that left a listing because they are gone, not because they
+ * became hidden. A hidden file keeps its tabs, which then say it is hidden,
+ * and its pins.
+ */
+async function stillThere(paths: string[]): Promise<string[]> {
+  if (paths.length === 0 || typeof window === 'undefined' || !window.hiddenAPI) return paths;
+  const checked = await window.hiddenAPI.blocked(paths).catch(() => null);
+  if (!checked?.success) return paths;
+  const hidden = paths.filter((_, index) => checked.data[index]);
+  for (const path of hidden) useHiddenStore.getState().refused(path);
+  return paths.filter((_, index) => !checked.data[index]);
+}
 
 export const useDiskStore = create<DiskStore>((set, get) => ({
   roots: [],
@@ -147,12 +162,21 @@ export const useDiskStore = create<DiskStore>((set, get) => ({
     const response = await window.diskAPI.readDirectory(dirPath);
 
     if (!response.success) {
+      // A folder that became hidden leaves the tree quietly; its row went with its parent's listing.
+      if (response.hidden) {
+        set((state) => {
+          const listings = { ...state.listings };
+          delete listings[dirPath];
+          return { listings, loading: { ...state.loading, isLoading: false } };
+        });
+        return;
+      }
       set({ loading: { isLoading: false, error: response.error } });
       return;
     }
 
     const nextPaths = new Set(response.data.entries.map(entry => entry.path));
-    const removed = (get().listings[dirPath] ?? []).filter(entry => !nextPaths.has(entry.path)).map(entry => entry.path);
+    const removed = await stillThere((get().listings[dirPath] ?? []).filter(entry => !nextPaths.has(entry.path)).map(entry => entry.path));
     if (removed.length) pathMutationCoordinator.applyExternalRemoval(removed);
     // The daily folder's year rows are not on disk, but their expansion stays.
     const shown = isDailyFolder(dirPath, get().roots)

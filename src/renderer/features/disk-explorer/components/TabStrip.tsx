@@ -13,6 +13,7 @@ import { isPinned, usePinsStore } from '../store/pinsStore';
 import { tabFile, tabLocation, useTabsStore, type Tab } from '../store/tabsStore';
 import { locationPath } from '../navigation/filesLocation';
 import { tabLabels } from './tabLabels';
+import { namesHidden, useHiddenStore } from '../store/hiddenStore';
 
 export const TAB_DRAG_TYPE = 'application/x-opal-tab';
 /** Past this many tabs the row offers a list of all of them, as browsers do. */
@@ -54,7 +55,18 @@ export const TabStrip: React.FC = () => {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [overflowing, setOverflowing] = useState(false);
   const [edges, setEdges] = useState({ start: false, end: false });
-  const labels = useMemo(() => tabLabels(tabs.map(tabLocation), roots), [tabs, roots]);
+  const hiddenChecks = useHiddenStore((state) => state.blocked);
+  const hiddenReady = useHiddenStore((state) => state.ready);
+  const labels = useMemo(() => {
+    const named = tabLabels(tabs.map(tabLocation), roots);
+    // A hidden file's tab says only that, and a tab from the last session waits for the first check.
+    return named.map((label, index) => {
+      const file = tabFile(tabs[index]);
+      if (!namesHidden({ blocked: hiddenChecks, ready: hiddenReady }, file)) return label;
+      const name = hiddenChecks[file as string] ? 'Hidden' : '';
+      return { name, hint: null, title: name };
+    });
+  }, [tabs, roots, hiddenChecks, hiddenReady]);
   const { activate, close, closeAll, closeOthers, closeToRight, move } = useTabsStore.getState();
 
   // The faded edges say more pills are scrolled out of view on that side.

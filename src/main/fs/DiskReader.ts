@@ -60,11 +60,15 @@ export class DiskReader {
 
     const dirents = await readdir(resolved, { withFileTypes: true });
     const entries: DiskEntry[] = [];
+    // Left out while hidden files are not shown; marked while they are, so the tree dims them.
+    const blocked = await this.deps.registry.blocked();
+    const hidden = await this.deps.registry.hiddenRule();
 
     for (const dirent of dirents) {
       if (!options.includeHidden && dirent.name.startsWith('.')) continue;
 
       const childPath = normalizePath(path.join(resolved, dirent.name));
+      if (blocked(childPath)) continue;
       if (await isValidAdjacentCarrier(this.deps.registry, childPath)) continue;
 
       // A child can vanish between readdir and stat (an external tool deleting
@@ -79,6 +83,7 @@ export class DiskReader {
           isDirectory,
           size: isDirectory ? 0 : childInfo.size,
           mtimeMs: childInfo.mtimeMs,
+          ...(hidden(childPath) ? { hidden: true as const } : {}),
         });
       } catch {
         continue;

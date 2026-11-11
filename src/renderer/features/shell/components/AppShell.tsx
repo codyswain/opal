@@ -2,6 +2,9 @@ import * as React from 'react';
 import { locationName } from '@/renderer/features/disk-explorer/components/tabLabels';
 import { useDiskSync } from '@/renderer/features/disk-explorer/hooks/useDiskSync';
 import { usePinsSync } from '@/renderer/features/disk-explorer/hooks/usePinsSync';
+import { useHiddenSync } from '@/renderer/features/disk-explorer/hooks/useHiddenSync';
+import { namesHidden, useHiddenStore } from '@/renderer/features/disk-explorer/store/hiddenStore';
+import { locationPath } from '@/renderer/features/disk-explorer/navigation/filesLocation';
 import {
   selectCurrentLocation,
   useTabsStore,
@@ -105,10 +108,10 @@ export function AppShell({ children }: AppShellProps) {
   );
   const setSidebarWidth = useShellStore((state) => state.setSidebarWidth);
   const { location } = useShell();
-  const pageName = useTabsStore((state) => {
-    const shown = selectCurrentLocation(state);
-    return shown ? locationName(shown) : null;
-  });
+  const shownLocation = useTabsStore(selectCurrentLocation);
+  // A hidden file never names the window.
+  const titleHidden = useHiddenStore((state) => namesHidden(state, shownLocation ? locationPath(shownLocation) : null));
+  const pageName = shownLocation && !titleHidden ? locationName(shownLocation) : null;
   const { layout, width: viewport } = useShellViewport();
   const narrowSidebarRef = React.useRef<HTMLDivElement>(null);
   const sidebarToggleRef = React.useRef<HTMLButtonElement>(null);
@@ -145,6 +148,7 @@ export function AppShell({ children }: AppShellProps) {
 
   useDiskSync();
   usePinsSync();
+  useHiddenSync();
 
   // The window menu, Mission Control and Cmd+` name the window by its page.
   React.useEffect(() => {

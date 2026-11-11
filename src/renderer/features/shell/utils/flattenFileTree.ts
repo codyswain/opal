@@ -24,6 +24,8 @@ export interface FileTreeNode {
   /** The row this one sits under; null at the top level. */
   parentPath: string | null;
   isExpanded: boolean;
+  /** A hidden file or folder, listed only while hidden files are shown; the row is dimmed. */
+  hidden?: true;
   positionInSet: number;
   setSize: number;
 }
@@ -39,7 +41,7 @@ type PendingNode = Omit<FileTreeNode, 'label' | 'isExpanded' | 'isYearGroup'> & 
   isYearGroup?: boolean;
 };
 
-type TreeItem = Pick<DiskEntry, 'path' | 'name' | 'kind' | 'isDirectory'> & {
+type TreeItem = Pick<DiskEntry, 'path' | 'name' | 'kind' | 'isDirectory' | 'hidden'> & {
   label?: string;
   isYearGroup?: boolean;
 };
@@ -94,7 +96,7 @@ export function flattenFileTree({
     isRoot: boolean
   ) => {
     for (let index = items.length - 1; index >= 0; index -= 1) {
-      const { path, name, kind, isDirectory, label, isYearGroup } = items[index];
+      const { path, name, kind, isDirectory, label, isYearGroup, hidden } = items[index];
       pending.push({
         path,
         name,
@@ -102,6 +104,7 @@ export function flattenFileTree({
         isDirectory,
         label,
         isYearGroup,
+        ...(hidden ? { hidden } : {}),
         isRoot,
         depth,
         parentPath,

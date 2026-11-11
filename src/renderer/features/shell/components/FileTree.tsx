@@ -24,6 +24,7 @@ import {
 } from '@/renderer/features/disk-explorer/navigation';
 import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore';
 import { isPinned, usePinsStore } from '@/renderer/features/disk-explorer/store/pinsStore';
+import { useHiddenStore } from '@/renderer/features/disk-explorer/store/hiddenStore';
 import { isTreeExpanded } from '@/renderer/features/disk-explorer/store/treeExpansion';
 import {
   selectOpenedPath,
@@ -235,6 +236,8 @@ function FileTreeRow({
         className={cn(
           ROW_CLASS,
           'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
+          // A hidden row while hidden files show: one step dimmer than the other rows.
+          node.hidden && 'text-foreground-tertiary',
           isActive && 'bg-surface-selected font-medium text-foreground',
           data.outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
         )}
@@ -850,6 +853,15 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={afterMenu(() => setMoving(menuNode.path))}>
                   Move to…
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() =>
+                    void (menuNode.hidden
+                      ? useHiddenStore.getState().unhide(menuNode.path)
+                      : useHiddenStore.getState().hide(menuNode.path))
+                  }
+                >
+                  {menuNode.hidden ? 'Unhide' : 'Hide'}
                 </ContextMenuItem>
               </>
             ) : null}

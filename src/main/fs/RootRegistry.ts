@@ -1,12 +1,24 @@
 import { readFile, writeFile, mkdir, realpath, stat } from 'fs/promises';
 import path from 'path';
 import { normalizePath, isInsideRoot } from '@/main/fs/paths';
+import { HiddenPathError } from '@/main/fs/HiddenFiles';
+
+export { HiddenPathError };
 
 export class PathNotAllowedError extends Error {
   constructor(target: string) {
     super(`Path is not inside any folder you have opened: ${target}`);
     this.name = 'PathNotAllowedError';
   }
+}
+
+/** The part of HiddenFiles the boundary asks (see HiddenFiles). */
+export interface HiddenRule {
+  ready(): Promise<void>;
+  /** Whether a canonical path must be left out or refused now. */
+  blocks(real: string): boolean;
+  /** Whether a canonical path is hidden, shown or not. */
+  isHidden(real: string): boolean;
 }
 
 export interface RootRegistryDependencies {
@@ -32,6 +44,7 @@ interface RootStoreFile {
 export class RootRegistry {
   private deps: RootRegistryDependencies;
   private roots: string[] = [];
+  private hidden: HiddenRule | null = null;
 
   constructor(deps: RootRegistryDependencies) {
     this.deps = deps;
@@ -97,12 +110,61 @@ export class RootRegistry {
     }
   }
 
+  /** Hidden files: from now on the boundary refuses them while they are not shown. */
+  setHidden(rule: HiddenRule | null): void {
+    this.hidden = rule;
+  }
+
   /**
-   * Resolves `target` and confirms it lives inside a registered root.
-   * Returns the resolved real path — callers should use that, not the input,
-   * so downstream I/O cannot be redirected by a symlink swapped in later.
+   * Resolves `target` and confirms it lives inside a registered root and is
+   * not hidden. Returns the resolved real path — callers should use that, not
+   * the input, so downstream I/O cannot be redirected by a symlink swapped in
+   * later. A hidden path throws HiddenPathError while hidden files are not
+   * shown, so every reader refuses it unless it asked for `seeingHidden()`.
    */
   async assertAllowed(target: string): Promise<string> {
+    const real = await this.resolveInside(target);
+    if (this.hidden) {
+      await this.hidden.ready();
+      if (this.hidden.blocks(real)) throw new HiddenPathError();
+    }
+    return real;
+  }
+
+  /**
+   * Waits for the hidden lists and answers, for a canonical path, whether it
+   * must be left out of a listing now. Lets a listing filter its children
+   * with one check each.
+   */
+  async blocked(): Promise<(real: string) => boolean> {
+    const rule = this.hidden;
+    if (!rule) return () => false;
+    await rule.ready();
+    return (real) => rule.blocks(real);
+  }
+
+  /** Whether a canonical path is hidden, shown or not, once the lists are read. */
+  async hiddenRule(): Promise<(real: string) => boolean> {
+    const rule = this.hidden;
+    if (!rule) return () => false;
+    await rule.ready();
+    return (real) => rule.isHidden(real);
+  }
+
+  /**
+   * The same boundary without the hidden check, for the few readers that
+   * must see everything and filter what they hand out themselves: the link
+   * and file-name indexes, a save of text already typed into a page, and
+   * links from other apps. Never used to add or remove roots.
+   */
+  seeingHidden(): RootRegistry {
+    const view = Object.create(this) as RootRegistry;
+    view.assertAllowed = (target: string) => this.resolveInside(target);
+    view.blocked = async () => () => false;
+    return view;
+  }
+
+  private async resolveInside(target: string): Promise<string> {
     let real: string;
     try {
       real = normalizePath(await realpath(target));

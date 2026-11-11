@@ -34,12 +34,18 @@ export interface DirectoryChildren {
   files: string[];
 }
 
-/** One level of children under the shared rules. Throws when the directory cannot be read. */
+/**
+ * One level of children under the shared rules. Throws when the directory
+ * cannot be read. Hidden files are left out while they are not shown, unless
+ * the registry is `seeingHidden()`.
+ */
 export async function listChildren(registry: RootRegistry, directory: string): Promise<DirectoryChildren> {
-  await assertNoSymlinks(registry, directory);
+  const real = await assertNoSymlinks(registry, directory);
+  const blocked = await registry.blocked();
   const children: DirectoryChildren = { directories: [], files: [] };
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+    if (blocked(path.join(real, entry.name))) continue;
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) children.directories.push(target);
     else if (entry.isFile() && !(await isValidAdjacentCarrier(registry, target))) children.files.push(target);

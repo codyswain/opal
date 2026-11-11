@@ -43,13 +43,14 @@ not exist.
   week's logs through `DayService.logEntries`, plus the optional
   `.opal/touched.json` (groups and ignores) and `.opal/link-titles.json`
   (titles of issues, PRs and Google Docs), which Opal never writes; the
-  watcher reports those two files. The rules are in
+  watcher reports those two files and `.opal/hidden.json`. The rules are in
   `src/common/touchedModel.ts`, the view in `stack/TouchedList.tsx`. Its
   palette, `stack/touchedPalette.css`, is the only hued colour in the app,
   exempted by name in `blackAndWhite.test.ts`
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
-    `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`
+    `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`,
+    `hiddenAPI`
 - **Pins:** each opened folder keeps its pinned files in `.opal/pins.json`
   (paths from the folder's top), so git syncs them across Macs. `PinsService`
   in `src/main/pins` reads and writes it (`pins:list`, `pins:set`, which
@@ -101,6 +102,22 @@ not exist.
   so only a packaged build receives links
 - **Allowed roots:** `RootRegistry` in `src/main/fs` is the security boundary;
   every path that crosses IPC is resolved and checked against opened folders
+- **Hidden files:** each opened folder lists its hidden files and folders in
+  `.opal/hidden.json` (paths from the folder's top; a folder hides everything
+  under it). `HiddenFiles` in `src/main/fs` reads it (the watcher reports it),
+  merges on write, and follows Opal's renames, moves and Move to Trash from
+  `FileWriter`. Hidden on every launch; Shown only after `promptTouchID`,
+  until Hide Hidden Files, a lock or sleep, or quit. The state lives in main.
+  While Hidden, `RootRegistry.assertAllowed` refuses a hidden path with
+  `HiddenPathError` (IPC answers carry `hidden: true`, the protocol 403) and
+  `listChildren` skips it, so walkers leave it out. The link and collection
+  indexes use `seeingHidden()` and filter per answer, so toggling needs no
+  rescan; the day sidebar, touched list, stacks and pins filter with
+  `blocked()`. Saves of typed text may reach a hidden file, so nothing typed
+  is lost when a file becomes hidden. The renderer's `hiddenStore` only
+  knows which of its own tabs are hidden, to show "This file is hidden."
+  without naming them. `OPAL_TEST_TOUCH_ID` stubs the prompt only in an
+  unpackaged run under `OPAL_TEST_USER_DATA_DIR`
 - **Path alias:** `@/*` maps to `src/*`
 
 ## Directory Structure

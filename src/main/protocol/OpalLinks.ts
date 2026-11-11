@@ -12,6 +12,11 @@ export interface LinkReceiver {
 }
 
 interface Dependencies {
+  /**
+   * The boundary seeing hidden files: a link to a hidden file still opens a
+   * tab, which says "This file is hidden" and shows nothing of it. The path
+   * is the one the link itself named.
+   */
   registry: Pick<RootRegistry, 'assertAllowed'>;
   /** The opened vaults' folders. A relative link path is read in the first. */
   vaults: () => Promise<string[]>;

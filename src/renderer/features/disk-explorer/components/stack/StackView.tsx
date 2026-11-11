@@ -19,6 +19,7 @@ import { placeCaret, sectionKeys, type SectionEdge } from './stackKeys';
 import { StackSectionView, type SectionActions } from './StackSectionView';
 import { StackToolbar, ToolbarBinding } from './StackToolbar';
 import { touchedHover, useTouchedWeeks, type TouchedDay } from './TouchedList';
+import { useHiddenStore } from '../../store/hiddenStore';
 import { STACK_WINDOW, planStackWindow, sectionHeights, type SectionGeometry } from './stackWindow';
 import './stack.css';
 
@@ -761,8 +762,12 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       if (result?.success) {
         folders = result.data.folders;
         const next = result.data.sections;
-        // A live section the planner keeps, with the caret or unsaved text, stays even when the list leaves it out.
-        const keep = (path: string) => latest.current.live.has(path) && isPinned(path);
+        // A live section the planner keeps, with the caret or unsaved text, stays even when the list leaves it out,
+        // unless it became hidden: then it goes, and its editor saves on the way out.
+        await useHiddenStore.getState().check([...latest.current.live]);
+        if (cancelled || number < answered) return;
+        const hidden = useHiddenStore.getState().blocked;
+        const keep = (path: string) => latest.current.live.has(path) && isPinned(path) && hidden[path] !== true;
         setSections((previous) => mergeSections(previous, next.length > 0 ? next : previous, keep));
       }
       setAnswers(number);

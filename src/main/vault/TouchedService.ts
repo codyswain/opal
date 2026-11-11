@@ -13,7 +13,7 @@ import {
   weekDates,
   type TouchedEntry,
 } from "@/common/touchedModel";
-import type { DayLink } from "@/types/day";
+import type { DayLink, DayLogEntry } from "@/types/day";
 import type { TouchedWeek, TouchedWeekChange } from "@/types/touched";
 import { inDayFolder, type DayService } from "./DayService";
 import { DAY_LAYOUT, LEGACY_DAY_LAYOUT, inVault, openedVault } from "./vaultPaths";
@@ -93,8 +93,15 @@ export class TouchedService {
     ]);
     const relative = (file: string) => path.posix.relative(normalizePath(root), normalizePath(file));
     const direct = await this.directTargets(root, days.flat().flatMap((entry) => entry.links));
+    // A log line that links a hidden file is left out, as the day sidebar leaves it out: its sentence names the file.
+    const blocked = await this.deps.registry.blocked();
+    const fileOf = (link: DayLink) => link.path ?? (link.external ? null : direct.has(link.target) ? path.join(root, direct.get(link.target) as string) : null);
+    const shown = (entry: DayLogEntry) => entry.links.every((link) => {
+      const file = fileOf(link);
+      return file === null || !blocked(normalizePath(file));
+    });
     const entries: TouchedEntry[][] = days.map((day) =>
-      day.map((entry) => ({
+      day.filter(shown).map((entry) => ({
         time: entry.until ?? entry.time,
         text: entry.text,
         kind: entry.kind,
@@ -106,10 +113,13 @@ export class TouchedService {
         })),
       })),
     );
-    const items = touchedItems(entries, config, titles, inDayFolder).map((item) => ({
-      ...item,
-      path: item.path ? path.join(root, item.path) : null,
-    }));
+    const items = touchedItems(entries, config, titles, inDayFolder)
+      .map((item) => ({
+        ...item,
+        path: item.path ? path.join(root, item.path) : null,
+      }))
+      // A group's folder can hold a hidden file without being hidden itself; a hidden folder goes.
+      .filter((item) => item.path === null || !blocked(normalizePath(item.path)));
     return { root, monday, items };
   }
 

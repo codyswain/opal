@@ -120,10 +120,15 @@ export class MarkdownDocumentService {
     };
   }
 
+  /**
+   * Saves text typed into a page. A page whose file became hidden while it
+   * was open still saves, so hiding a file never loses what was typed; the
+   * answer carries only the revision of the text the page sent.
+   */
   write(target: string, body: string, expectedRevision: string): Promise<MarkdownWriteResult> {
     return this.queue.run(async () => {
       if (typeof body !== 'string') throw new MarkdownError('Body must be text.');
-      const loaded = await this.load(target);
+      const loaded = await this.load(target, true);
       if (loaded.revision !== expectedRevision) throw new MarkdownConflictError();
       return this.replace(loaded, joinMarkdown(loaded, body.replace(/\r\n/g, '\n')));
     });
@@ -214,6 +219,9 @@ export class MarkdownDocumentService {
       const name = validName(`${pageName(target)} (${label})`);
       const extension = isDocFile(target) ? 'mdo' : 'md';
       try {
+        // A copy of a hidden page's text goes to the recovery folder, so its name never shows beside the page.
+        const blocked = await this.deps.registry.blocked();
+        if (blocked(normalizePath(path.resolve(target)))) throw new MarkdownError('The page is hidden.');
         const parent = await assertNoSymlinks(this.deps.registry, path.dirname(target));
         const copy = await writeNewNote(parent, name, body, extension);
         this.deps.metadata?.invalidate();
@@ -236,8 +244,8 @@ export class MarkdownDocumentService {
       : { root: null, relativePath: resolved };
   }
 
-  private async load(target: string): Promise<LoadedFile> {
-    const resolved = await assertNoSymlinks(this.deps.registry, target);
+  private async load(target: string, seeingHidden = false): Promise<LoadedFile> {
+    const resolved = await assertNoSymlinks(seeingHidden ? this.deps.registry.seeingHidden() : this.deps.registry, target);
     const info = await lstat(resolved);
     if (!info.isFile()) throw new MarkdownError('Only files can be edited.');
     if (classifyFile(path.basename(resolved)) !== 'markdown') throw new MarkdownError('Only Markdown files can be edited here.');

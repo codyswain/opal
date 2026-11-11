@@ -1,5 +1,6 @@
 import type { VaultAPI } from "./types/vault";
 import type { PinsAPI } from "./types/pins";
+import type { HiddenAPI, HiddenState } from "./types/hidden";
 import type { VaultDayChange } from "./types/day";
 import type { TouchedWeekChange } from "./types/touched";
 import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from "electron";
@@ -191,6 +192,21 @@ const pinsAPI: PinsAPI = {
   set: (root, paths, base) => ipcRenderer.invoke("pins:set", root, paths, base),
 };
 contextBridge.exposeInMainWorld("pinsAPI", pinsAPI);
+
+const hiddenAPI: HiddenAPI = {
+  state: () => ipcRenderer.invoke("hidden:state"),
+  show: () => ipcRenderer.invoke("hidden:show"),
+  hide: () => ipcRenderer.invoke("hidden:hide"),
+  add: (target) => ipcRenderer.invoke("hidden:add", target),
+  remove: (target) => ipcRenderer.invoke("hidden:remove", target),
+  blocked: (paths) => ipcRenderer.invoke("hidden:blocked", paths),
+  onChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, state: HiddenState) => callback(state);
+    ipcRenderer.on("hidden:changed", listener);
+    return () => ipcRenderer.removeListener("hidden:changed", listener);
+  },
+};
+contextBridge.exposeInMainWorld("hiddenAPI", hiddenAPI);
 
 const filesAPI: FilesAPI = {
   // A file from Finder goes by its path; File.path is gone in Electron 32.

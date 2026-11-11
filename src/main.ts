@@ -20,6 +20,8 @@ import {
   screen,
   Menu,
   net,
+  powerMonitor,
+  systemPreferences,
 } from "electron";
 import path from "path";
 import {
@@ -63,6 +65,10 @@ import {
 import { applyAppPolicy } from "@/main/window/contentSecurity";
 import { electronFilesPlatform } from "@/main/files/electronPlatform";
 import { OpalLinks } from "@/main/protocol/OpalLinks";
+import { HiddenFiles } from "@/main/fs/HiddenFiles";
+import { HiddenHandlers } from "@/main/fs/HiddenHandlers";
+import { touchIdPrompt } from "@/main/fs/touchId";
+import { touchIdStub } from "@/main/testProfile";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -388,11 +394,30 @@ ipcMain.on("menu:commands", (_event, commands) => {
 const rootRegistry = new RootRegistry({
   storePath: path.join(userDataDir, "disk-roots.json"),
 });
+// Hidden files: the registry refuses them while they are not shown. Shown
+// lasts until hidden again, the Mac locks or sleeps, or Opal quits.
+const hiddenFiles = new HiddenFiles({
+  roots: () => rootRegistry.list(),
+  // The stub is honoured only for an unpackaged run under the test profile.
+  ...touchIdPrompt(systemPreferences, touchIdStub(process.env, app.isPackaged)),
+  onChanged: ({ shown, directories }) => {
+    metadataService.invalidate();
+    void dayService.changed(rootRegistry.list());
+    void touchedService.changed(rootRegistry.list());
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("disk:changed", { directories });
+    mainWindow.webContents.send("hidden:changed", { shown });
+  },
+});
+rootRegistry.setHidden(hiddenFiles);
+// The indexes list hidden files too and leave them out when asked, so
+// showing them needs no new scan.
+const seeingHidden = rootRegistry.seeingHidden();
 const diskReader = new DiskReader({ registry: rootRegistry });
 const activityStore = new ActivityStore({
   storePath: activityStorePath(userDataDir),
 });
-const collectionIndex = new CollectionIndex({ registry: rootRegistry });
+const collectionIndex = new CollectionIndex({ registry: seeingHidden });
 const activityService = new ActivityService({
   registry: rootRegistry,
   store: activityStore,
@@ -411,9 +436,10 @@ const metadataService = new MetadataService({
   registry: rootRegistry,
   activity: activityService,
 });
-const linkIndex = new LinkIndex({ registry: rootRegistry });
+const linkIndex = new LinkIndex({ registry: seeingHidden });
 const diskWatcher = new DiskWatcher({
   onChanged: (directories) => {
+    void hiddenFiles.changed(directories);
     collectionIndex.invalidateDirectories(directories);
     linkIndex.invalidateDirectories(directories);
     void dayService.changed(directories);
@@ -451,7 +477,7 @@ const touchedService = new TouchedService({
 });
 const stackService = new StackService({ registry: rootRegistry });
 const opalLinks = new OpalLinks({
-  registry: rootRegistry,
+  registry: seeingHidden,
   vaults: async () => (await vaultService.discover()).map((vault) => vault.path),
 });
 // macOS hands opal:// links to the app here, the one that launched it before
@@ -496,6 +522,7 @@ const fileWriter = new FileWriter({
   metadata: metadataService,
   activity: activityService,
   trashItem: (fullPath) => shell.trashItem(fullPath),
+  hidden: hiddenFiles,
 });
 const diskHandlers = new DiskHandlers({
   ipc: ipcMain,
@@ -516,6 +543,7 @@ const diskHandlers = new DiskHandlers({
   watcher: diskWatcher,
   writer: fileWriter,
   onRootsChanged: () => {
+    hiddenFiles.forget();
     collectionIndex.invalidateAll();
     linkIndex.invalidateAll();
   },
@@ -532,6 +560,12 @@ const markdownHandlers = new MarkdownHandlers({
   ipc: ipcMain,
   service: markdownDocuments,
   links: linkIndex,
+  registry: rootRegistry,
+});
+const hiddenHandlers = new HiddenHandlers({
+  ipc: ipcMain,
+  hidden: hiddenFiles,
+  registry: rootRegistry,
 });
 
 // --- Primary Initialization and Cleanup ---
@@ -562,6 +596,7 @@ app.whenReady().then(async () => {
     activityHandlers.registerAll();
     collectionHandlers.registerAll();
     markdownHandlers.registerAll();
+    hiddenHandlers.registerAll();
     vaultHandlers.registerAll();
     pinsHandlers.registerAll();
     filesHandlers.registerAll();
@@ -570,6 +605,14 @@ app.whenReady().then(async () => {
 
     await windowStateStore.load();
     log.info("Window state loaded");
+
+    // Locking the screen or sleeping hides hidden files again.
+    powerMonitor.on("lock-screen", () => {
+      void hiddenFiles.hide();
+    });
+    powerMonitor.on("suspend", () => {
+      void hiddenFiles.hide();
+    });
 
     createWindow();
     windowStarted = true;

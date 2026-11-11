@@ -77,7 +77,7 @@ export class PinsService {
     return filesystemMutationQueue.run(async () => {
       const result: RootPins[] = [];
       for (const root of this.deps.registry.list()) {
-        const pins = await this.read(root);
+        const pins = await this.visible(await this.read(root));
         result.push({ root, pins, missing: await this.missing(pins) });
       }
       return result;
@@ -103,7 +103,8 @@ export class PinsService {
       if (pins.length > PINS_LIMIT) throw new Error("That is too many pins.");
       const stored = pins.map((pin) => path.relative(root, pin).split(path.sep).join("/"));
       await this.write(root, { version: 1, pins: stored });
-      return { root, pins, missing: await this.missing(pins) };
+      const shown = await this.visible(pins);
+      return { root, pins: shown, missing: await this.missing(shown) };
     });
   }
 
@@ -125,6 +126,16 @@ export class PinsService {
     } finally {
       await handle.close();
     }
+  }
+
+  /**
+   * The pins without hidden files, while they are not shown. A hidden pin
+   * stays in the file: the renderer never saw it, so a change it sends keeps
+   * it as one the file gained (see mergePins).
+   */
+  private async visible(pins: readonly string[]): Promise<string[]> {
+    const blocked = await this.deps.registry.blocked();
+    return pins.filter((pin) => !blocked(pin));
   }
 
   /** The pins that are not a file inside an opened folder now. */

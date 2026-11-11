@@ -10,7 +10,7 @@ import {
 
 export { OPAL_FILE_SCHEME };
 import type { RootRegistry } from '@/main/fs/RootRegistry';
-import { PathNotAllowedError } from '@/main/fs/RootRegistry';
+import { HiddenPathError, PathNotAllowedError } from '@/main/fs/RootRegistry';
 import { localObject, readPlaceholder } from '@/main/files/lfsPlaceholder';
 import logger from '@/main/logger';
 
@@ -122,7 +122,7 @@ export async function serveOpalFile(request: Request, deps: OpalFileProtocolDepe
     // any file the user can read to anything running in the renderer.
     resolved = await deps.registry.assertAllowed(requestedPath);
   } catch (error) {
-    if (error instanceof PathNotAllowedError) return answer(403, 'Forbidden');
+    if (error instanceof PathNotAllowedError || error instanceof HiddenPathError) return answer(403, 'Forbidden');
     logger.error('opal-file: failed to authorize request', error);
     return answer(500, 'Internal error');
   }

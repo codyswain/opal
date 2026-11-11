@@ -351,6 +351,7 @@ describe('FileTree', () => {
       'New folder',
       'Rename',
       'Move to…',
+      'Hide',
       'Reveal in Finder',
       'Copy path',
       'Move to Trash',
@@ -571,6 +572,7 @@ describe('FileTree', () => {
         'New folder',
         'Rename',
         'Move to…',
+        'Hide',
         'Reveal in Finder',
         'Copy path',
         'Move to Trash',
@@ -816,5 +818,30 @@ describe('FileTree', () => {
       fireEvent.drop(sticky(ROOT), { dataTransfer: dataTransfer(source) });
       await waitFor(() => expect(window.diskAPI.move).toHaveBeenCalledWith(source, ROOT));
     });
+  });
+
+  it('hides a row from its menu, and while hidden files show, dims one and offers Unhide', async () => {
+    const user = userEvent.setup();
+    const add = vi.fn(async () => ({ success: true as const, data: undefined }));
+    const remove = vi.fn(async () => ({ success: true as const, data: undefined }));
+    Object.defineProperty(window, 'hiddenAPI', { value: { add, remove }, configurable: true });
+    useDiskStore.setState({
+      listings: { [ROOT]: [...LISTINGS[ROOT], entry({ path: '/Vault/Private.md', name: 'Private.md', kind: 'markdown', hidden: true })] },
+    });
+    renderTree();
+
+    expect(row(README).className).not.toContain('text-foreground-tertiary');
+    expect(row('/Vault/Private.md').className).toContain('text-foreground-tertiary');
+
+    await user.pointer({ keys: '[MouseRight]', target: row(README) });
+    await user.click(within(await screen.findByTestId('file-tree-menu')).getByRole('menuitem', { name: 'Hide' }));
+    expect(add).toHaveBeenCalledWith(README);
+
+    await user.pointer({ keys: '[MouseRight]', target: row('/Vault/Private.md') });
+    const menu = await screen.findByTestId('file-tree-menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Hide' })).toBeNull();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Unhide' }));
+    expect(remove).toHaveBeenCalledWith('/Vault/Private.md');
+    Reflect.deleteProperty(window, 'hiddenAPI');
   });
 });

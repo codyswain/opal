@@ -1,7 +1,7 @@
 import { constants, type Dirent } from "fs";
 import { lstat, open, readdir } from "fs/promises";
 import path from "path";
-import type { RootRegistry } from "@/main/fs/RootRegistry";
+import { HiddenPathError, type RootRegistry } from "@/main/fs/RootRegistry";
 import { mapLimited } from "@/main/mapLimited";
 import { normalizePath } from "@/main/fs/paths";
 import { splitFrontmatter } from "@/common/dayModel";
@@ -68,6 +68,14 @@ export class StackService {
     const root = await openedVault(this.deps.registry, target);
     const file = await inVault(root, normalizePath(head));
     if (!isStackHead(kind, normalizePath(path.relative(root, file)))) throw new Error("This page does not start a stack.");
+    const blocked = await this.deps.registry.blocked();
+    if (blocked(file)) throw new HiddenPathError();
+    const stack = await this.build(root, kind, file);
+    // A hidden section is left out of the stream.
+    return { ...stack, sections: stack.sections.filter((section) => !blocked(normalizePath(section.path))) };
+  }
+
+  private build(root: string, kind: StackKind, file: string): Promise<VaultStack> {
     switch (kind) {
       case "daily":
         return this.daily(root, file);
