@@ -2,7 +2,7 @@ import { classifyFile, fileTreeLabel } from './fileKind';
 import type { TouchedHit, TouchedItem, TouchedKind, TouchedWeek } from '@/types/touched';
 
 /*
- * The "touched" list beside each daily page: what the agent turns of a week's
+ * The "touched" list under each daily page: what the agent turns of a week's
  * activity logs linked to, and on which days. Pure data in, plain data out;
  * the main process reads the logs and the `.opal` files.
  */

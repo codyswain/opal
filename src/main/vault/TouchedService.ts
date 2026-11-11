@@ -16,7 +16,7 @@ import {
 import type { DayLink, DayLogEntry } from "@/types/day";
 import type { TouchedWeek, TouchedWeekChange } from "@/types/touched";
 import { inDayFolder, type DayService } from "./DayService";
-import { DAY_LAYOUT, LEGACY_DAY_LAYOUT, inVault, openedVault } from "./vaultPaths";
+import { DAY_LAYOUT, LEGACY_DAY_LAYOUT, inVault, openedVault, digestName } from "./vaultPaths";
 
 export interface TouchedServiceDependencies {
   registry: RootRegistry;
@@ -82,7 +82,7 @@ export class TouchedService {
     const normalized = normalizePath(directory);
     if (!isInsideRoot(root, normalized)) return false;
     const relative = path.posix.relative(normalizePath(root), normalized);
-    return ["", "Library", "Inbox", ".opal", DAY_LAYOUT.logs, LEGACY_DAY_LAYOUT.logs].includes(relative);
+    return ["", "Library", "Inbox", ".opal", DAY_LAYOUT.logs, LEGACY_DAY_LAYOUT.logs, DAY_LAYOUT.digests].includes(relative);
   }
 
   private async read(root: string, monday: string): Promise<TouchedWeek> {
@@ -120,7 +120,18 @@ export class TouchedService {
       }))
       // A group's folder can hold a hidden file without being hidden itself; a hidden folder goes.
       .filter((item) => item.path === null || !blocked(normalizePath(item.path)));
-    return { root, monday, items };
+    const digests = await Promise.all(weekDates(monday).map((date) => this.digest(root, date, blocked)));
+    return { root, monday, items, digests };
+  }
+
+  /** A date's digest file, or null when there is none, it is a link, or it is hidden. */
+  private async digest(root: string, date: string, blocked: (real: string) => boolean): Promise<string | null> {
+    try {
+      const file = await inVault(root, path.join(root, DAY_LAYOUT.digests, digestName(date)));
+      return (await lstat(file)).isFile() && !blocked(normalizePath(file)) ? file : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

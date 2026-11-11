@@ -178,7 +178,7 @@ describe('touched model: a day', () => {
     days: [...Array(7).keys()].map((day) => (counts[day] ? { lines: counts[day], text: key } : null)),
     colour: null,
   });
-  const at = (items: TouchedItem[]): TouchedWeek => ({ root: '/vault', monday: '2026-11-02', items });
+  const at = (items: TouchedItem[]): TouchedWeek => ({ root: '/vault', monday: '2026-11-02', items, digests: [] });
 
   it('shows items touched twice that day or also on another day, by count, spread, then key', () => {
     const rows = touchedForDay(

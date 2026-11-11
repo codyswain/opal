@@ -318,8 +318,8 @@ export const StackView: React.FC<StackViewProps> = ({ tabId, index, location }) 
       // The same answer keeps the same object, so the section stays memoized.
       const known = touchedDays.current.get(section.path);
       const day = weekdayIndex(date);
-      const entry = known?.week === week && known.day === day ? known : { week, day, rows: touchedForDay(week, day) };
-      if (entry.rows.length > 0) byPath.set(section.path, entry);
+      const entry = known?.week === week && known.day === day ? known : { week, day, rows: touchedForDay(week, day), digest: week.digests[day] ?? null };
+      if (entry.rows.length > 0 || entry.digest) byPath.set(section.path, entry);
     }
     touchedDays.current = byPath;
     return byPath;

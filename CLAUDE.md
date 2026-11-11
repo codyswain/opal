@@ -36,9 +36,9 @@ not exist.
   (person notes the log links to, and meeting speakers who have one) and
   digest, and sends `vault:day-changed`. The parsing
   is in `src/common/dayModel.ts`
-- **Touched list:** each daily page in the stream shows, to its right (under
-  it when the stack is narrower than 900px), up to eight things the agent
-  turns of that day's log linked to, with a square per day of its week.
+- **Touched list:** each daily page in the stream shows, under its text, a
+  link to the day's digest and up to eight things the agent turns of that
+  day's log linked to, with a square per day of its week.
   `TouchedService` (`vault:touched-week`, `vault:touched-changed`) reads a
   week's logs through `DayService.logEntries`, plus the optional
   `.opal/touched.json` (groups and ignores) and `.opal/link-titles.json`
