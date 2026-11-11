@@ -4,6 +4,7 @@ import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import type { VaultService } from "@/main/vault/VaultService";
 import type { DayService } from "@/main/vault/DayService";
 import type { StackService } from "@/main/vault/StackService";
+import type { TestService } from "@/main/vault/TestService";
 
 const DIGEST = "/vault/Library/digests/2026-09-08 digest.md";
 const LINE = "- [ ] **Answer Tom on the 409A price**";
@@ -24,6 +25,12 @@ describe("Vault IPC validation", () => {
     const stacks = {
       stack: vi.fn(),
     };
+    const tests = {
+      test: vi.fn(),
+      answer: vi.fn(),
+      sides: vi.fn(),
+      setSide: vi.fn(),
+    };
     new VaultHandlers({
       ipc: {
         handle: (
@@ -34,6 +41,7 @@ describe("Vault IPC validation", () => {
       service: service as unknown as VaultService,
       days: days as unknown as DayService,
       stacks: stacks as unknown as StackService,
+      tests: tests as unknown as TestService,
     }).registerAll();
     for (const [channel, args] of [
       ["create-day", [null, "2026-09-08"]],
@@ -57,12 +65,20 @@ describe("Vault IPC validation", () => {
       ["stack", ["/vault", "folder", "/vault/Library/daily/2026-09-08.md"]],
       ["stack", ["/vault", "daily", "Library/daily/2026-09-08.md"]],
       ["stack", ["/vault", "daily", null]],
+      ["test", ["vault", "2026-09-08"]],
+      ["test", ["/vault", "2026-02-30"]],
+      ["answer-test", ["/vault", "2026-09-08", "id", "c", ""]],
+      ["answer-test", ["/vault", "2026-09-08", "", "a", ""]],
+      ["answer-test", ["/vault", "2026-09-08", "id", "a", null]],
+      ["answer-test", ["vault", "2026-09-08", "id", "a", ""]],
+      ["set-variant", ["Not A Name", "b"]],
+      ["set-variant", ["row-height", "c"]],
     ] as Array<[string, unknown[]]>) {
       expect(
         await handlers.get(`vault:${channel}`)?.({}, ...args),
       ).toMatchObject({ success: false, error: "Invalid vault request." });
     }
-    [...Object.values(service), ...Object.values(days), ...Object.values(stacks)].forEach((method) =>
+    [...Object.values(service), ...Object.values(days), ...Object.values(stacks), ...Object.values(tests)].forEach((method) =>
       expect(method).not.toHaveBeenCalled(),
     );
     await handlers.get("vault:create-day")?.({}, "/vault", "2026-09-08");
@@ -73,5 +89,9 @@ describe("Vault IPC validation", () => {
     expect(service.checkDigestItem).toHaveBeenCalledWith("/vault", DIGEST, 4, LINE, false);
     await handlers.get("vault:stack")?.({}, "/vault", "daily", "/vault/Library/daily/2026-09-08.md");
     expect(stacks.stack).toHaveBeenCalledWith("/vault", "daily", "/vault/Library/daily/2026-09-08.md");
+    await handlers.get("vault:answer-test")?.({}, "/vault", "2026-09-08", "id", "neither", "");
+    expect(tests.answer).toHaveBeenCalledWith("/vault", "2026-09-08", "id", "neither", "");
+    await handlers.get("vault:set-variant")?.({}, "row-height", "b");
+    expect(tests.setSide).toHaveBeenCalledWith("row-height", "b");
   });
 });

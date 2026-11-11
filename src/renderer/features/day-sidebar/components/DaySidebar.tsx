@@ -23,6 +23,7 @@ import {
 import { cn } from '@/renderer/shared/utils';
 import type { DayDigest, DayDigestItem, DayFile, DayLogEntry, VaultDay } from '@/types/day';
 import { addDays, dayName, pageDate, relativeDayName, shortDayName, shownDay, weekdayName } from '../dayRule';
+import { useDailyTest } from '../hooks/useDailyTest';
 import { useDay, useToday } from '../hooks/useDay';
 import { useScrollFade } from '../hooks/useScrollFade';
 import {
@@ -39,6 +40,7 @@ import { DigestGroup, digestGroupLabel } from './DigestGroup';
 import { FileRow } from './FileRow';
 import { HourGroup, LogEntry } from './LogEntry';
 import { RecordingRow } from './RecordingRow';
+import { TestCard } from './TestCard';
 
 /** What each card shows at rest; "Show N more" shows the rest. */
 export const AT_REST = { activity: 3, documents: 5, chats: 5, recordings: 4, people: 5, digest: 3 } as const;
@@ -472,6 +474,8 @@ export function DaySidebar({ width }: DaySidebarProps) {
   const followPage = useDaySidebarStore((state) => state.followPage);
   const date = shownDay({ pickedDay, lastDay }, pagePath, today);
   const state = useDay(date);
+  // The test is today's whatever day the sidebar shows.
+  const dailyTest = useDailyTest(today);
   const column = React.useRef<HTMLDivElement>(null);
   useScrollFade(column);
 
@@ -561,6 +565,7 @@ export function DaySidebar({ width }: DaySidebarProps) {
         ref={column}
         className="day-column flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
       >
+        {dailyTest.test ? <TestCard test={dailyTest.test} today={today} onAnswered={dailyTest.replace} /> : null}
         {pickedDay && pageDay && pickedDay !== pageDay ? (
           <Note>
             The open page is from {shortDayName(pageDay)}.{' '}

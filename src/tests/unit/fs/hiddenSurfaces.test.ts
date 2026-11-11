@@ -29,6 +29,7 @@ import { VaultService } from '@/main/vault/VaultService';
 import { VaultHandlers } from '@/main/vault/VaultHandlers';
 import { DayService } from '@/main/vault/DayService';
 import { TouchedService } from '@/main/vault/TouchedService';
+import { TestService } from '@/main/vault/TestService';
 import { StackService } from '@/main/vault/StackService';
 import { PinsService } from '@/main/pins/PinsService';
 import { PinsHandlers } from '@/main/pins/PinsHandlers';
@@ -79,6 +80,11 @@ describe('no IPC answer names or holds a hidden file while hidden', () => {
       '',
     ].join('\n'));
     await put('Library/digests/2026-11-10 digest.md', '# Digest\n');
+    // A page test whose side B is a hidden file: the whole test is refused.
+    await put('Library/tests/2026-11-10 test.json', JSON.stringify({
+      version: 1, id: 'plans', title: 'Compare the plans', question: 'Which plan reads better?', kind: 'page',
+      a: { label: 'Plan', path: 'Notes/Plan.md' }, b: { label: 'Other', path: 'Notes/Private.md' },
+    }));
     await put('.opal/pins.json', JSON.stringify({ version: 1, pins: ['Notes/Private.md', 'Notes/Plan.md'] }));
     await put('.opal/hidden.json', JSON.stringify({ version: 1, hidden: ['Notes/Private.md', 'Photos/private', 'Library/daily/2026-11-09.mdo'] }));
 
@@ -115,6 +121,7 @@ describe('no IPC answer names or holds a hidden file while hidden', () => {
     new VaultHandlers({
       ipc, service: vault, days, stacks: new StackService({ registry }),
       touched: new TouchedService({ registry, days }),
+      tests: new TestService({ registry, variantsFile: path.join(temporary, 'app', 'variants.json') }),
     }).registerAll();
     new PinsHandlers({ ipc, service: new PinsService({ registry }) }).registerAll();
     new FilesHandlers({ ipc, service: files, showOpenDialog: vi.fn() as never }).registerAll();
@@ -165,6 +172,8 @@ describe('no IPC answer names or holds a hidden file while hidden', () => {
       ['vault:day', root, DAY],
       ['vault:touched-week', root, DAY],
       ['vault:stack', root, 'daily', at('Library/daily/2026-11-10.mdo')],
+      ['vault:test', root, DAY],
+      ['vault:variants'],
       ['pins:list'],
       ['files:status', report],
       ['files:fetch', report],
@@ -204,12 +213,17 @@ describe('no IPC answer names or holds a hidden file while hidden', () => {
     // The visible half of the day survives.
     const day = JSON.stringify(await invoke('vault:day', root, DAY));
     expect(day).toContain('Wrote the plan.');
+    // The test that names a hidden file is no test: neither its paths nor its own text are handed over, and it cannot be answered.
+    expect(await invoke('vault:test', root, DAY)).toEqual({ success: true, data: null });
+    expect(await invoke('vault:answer-test', root, DAY, 'plans', 'b', '')).toMatchObject({ success: false });
+    expect(await invoke('disk:read-text-file', at('Library/tests/2026-11-10 answer.json'))).toMatchObject({ success: false });
   });
 
   it('the same calls do name them while shown, so the check above can see a leak', async () => {
     await hidden.show();
     const found = new Set(leaks(await everyAnswer()).map((leak) => leak.split(': ').at(-1)));
     expect([...found].sort()).toEqual([...MARKERS].sort());
+    expect(JSON.stringify(await invoke('vault:test', root, DAY))).toContain('Notes/Private.md');
   });
 
   it('hidden:remove and hidden:show cannot reach shown without the prompt', async () => {

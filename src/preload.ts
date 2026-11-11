@@ -3,6 +3,7 @@ import type { PinsAPI } from "./types/pins";
 import type { HiddenAPI, HiddenState } from "./types/hidden";
 import type { UpdatesAPI, UpdateState } from "./types/updates";
 import type { VaultDayChange } from "./types/day";
+import type { VaultTestChange } from "./types/dailyTest";
 import type { TouchedWeekChange } from "./types/touched";
 import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from "electron";
 import type { ThemeReport } from "./common/theme";
@@ -180,6 +181,16 @@ const vaultAPI: VaultAPI = {
     const listener = (_event: IpcRendererEvent, change: TouchedWeekChange) => callback(change);
     ipcRenderer.on("vault:touched-changed", listener);
     return () => ipcRenderer.removeListener("vault:touched-changed", listener);
+  },
+  test: (root, today) => ipcRenderer.invoke("vault:test", root, today),
+  answerTest: (root, date, id, choice, reason) =>
+    ipcRenderer.invoke("vault:answer-test", root, date, id, choice, reason),
+  variants: () => ipcRenderer.invoke("vault:variants"),
+  setVariant: (name, side) => ipcRenderer.invoke("vault:set-variant", name, side),
+  onTestChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, change: VaultTestChange) => callback(change);
+    ipcRenderer.on("vault:test-changed", listener);
+    return () => ipcRenderer.removeListener("vault:test-changed", listener);
   },
 };
 contextBridge.exposeInMainWorld("vaultAPI", vaultAPI);

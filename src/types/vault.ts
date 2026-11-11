@@ -1,6 +1,7 @@
 import type { VaultDay, VaultDayChange } from "./day";
 import type { StackKind, VaultStack } from "./stack";
 import type { TouchedWeek, TouchedWeekChange } from "./touched";
+import type { TestAnswerResult, TestChoice, VariantSide, VariantSides, VaultTest, VaultTestChange } from "./dailyTest";
 
 export interface VaultInfo {
   path: string;
@@ -39,6 +40,22 @@ export interface VaultAPI {
   onDayChanged: (callback: (change: VaultDayChange) => void) => () => void;
   /** Called when a week asked for with `touchedWeek` reads differently on disk. Returns the unsubscribe. */
   onTouchedChanged: (callback: (change: TouchedWeekChange) => void) => () => void;
+  /** The current A/B test on `today`: the newest unanswered of the last three days, else today's answered one, else null. */
+  test: (root: string, today: string) => Promise<VaultResult<VaultTest | null>>;
+  /** Writes the answer to the test of `date`, which must still have `id`, and leaves its variant on the chosen side. */
+  answerTest: (
+    root: string,
+    date: string,
+    id: string,
+    choice: TestChoice,
+    reason: string,
+  ) => Promise<VaultResult<TestAnswerResult>>;
+  /** The side each variant is on, on this Mac. A variant not listed is on A. */
+  variants: () => Promise<VaultResult<VariantSides>>;
+  /** Puts a variant this build knows on a side. */
+  setVariant: (name: string, side: VariantSide) => Promise<VaultResult<VariantSides>>;
+  /** Called when the current test asked for with `test` reads differently on disk. Returns the unsubscribe. */
+  onTestChanged: (callback: (change: VaultTestChange) => void) => () => void;
 }
 declare global {
   interface Window {

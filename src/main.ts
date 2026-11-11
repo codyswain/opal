@@ -3,6 +3,7 @@ import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
 import { TouchedService } from "@/main/vault/TouchedService";
+import { TestService } from "@/main/vault/TestService";
 import { StackService } from "@/main/vault/StackService";
 import { PinsService } from "@/main/pins/PinsService";
 import { PinsHandlers } from "@/main/pins/PinsHandlers";
@@ -410,6 +411,7 @@ const hiddenFiles = new HiddenFiles({
     metadataService.invalidate();
     void dayService.changed(rootRegistry.list());
     void touchedService.changed(rootRegistry.list());
+    void testService.changed(rootRegistry.list());
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
     mainWindow.webContents.send("hidden:changed", { shown });
@@ -450,6 +452,7 @@ const diskWatcher = new DiskWatcher({
     linkIndex.invalidateDirectories(directories);
     void dayService.changed(directories);
     void touchedService.changed(directories);
+    void testService.changed(directories);
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("disk:changed", { directories });
   },
@@ -479,6 +482,15 @@ const touchedService = new TouchedService({
     mainWindow.webContents.send("vault:touched-changed", change);
   },
 });
+// The side each variant is on is per Mac, so it survives a relaunch and an update.
+const testService = new TestService({
+  registry: rootRegistry,
+  variantsFile: path.join(userDataDir, "variants.json"),
+  onChanged: (change) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("vault:test-changed", change);
+  },
+});
 const stackService = new StackService({ registry: rootRegistry });
 const opalLinks = new OpalLinks({
   registry: seeingHidden,
@@ -498,6 +510,7 @@ const vaultHandlers = new VaultHandlers({
   days: dayService,
   stacks: stackService,
   touched: touchedService,
+  tests: testService,
 });
 const pinsHandlers = new PinsHandlers({
   ipc: ipcMain,
