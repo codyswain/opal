@@ -426,6 +426,9 @@ function fixLinkButton(view: EditorView, frame: HTMLElement, length: number): HT
   return button;
 }
 
+/** Text longer than this, in characters, makes a cell one of running text. */
+const LONG_CELL = 28;
+
 export class TableWidget extends WidgetType {
   constructor(
     readonly source: string,
@@ -467,7 +470,8 @@ export class TableWidget extends WidgetType {
           if (source.offset === this.cellCaret) cell.classList.add('cm-md-cell-caret');
           // The cell's text sits in a box no wider than 24em, which a table cell cannot cap by itself.
           const text = document.createElement('div');
-          text.className = 'cm-md-cell';
+          // A cell of running text keeps a readable width when the table narrows to fit the page.
+          text.className = plainText(source.content).trim().length > LONG_CELL ? 'cm-md-cell cm-md-cell-long' : 'cm-md-cell';
           renderInline(source.content, text, view);
           cell.append(text);
           if (opens(column) && !view.state.readOnly) text.append(fixLinkButton(view, frame, this.source.length));
@@ -478,6 +482,8 @@ export class TableWidget extends WidgetType {
     };
     const head = document.createElement('thead');
     head.append(row(this.model.header, 'th'));
+    // A header row with nothing in it, as a two-column form is written, is not drawn.
+    if (this.model.header.every((cell) => plainText(cell.content).trim() === '')) table.classList.add('cm-md-table-headless');
     const body = document.createElement('tbody');
     for (const cells of this.model.rows) body.append(row(cells, 'td'));
     table.append(head, body);
