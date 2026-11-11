@@ -5,13 +5,16 @@ import type { Command } from './commandRegistry';
  * a word-start match, then any substring, then a keyword hit, then a loose
  * in-order subsequence; 0 means no match.
  */
+/** The lowest score of a match on the command's own name; keyword and loose matches score less. */
+export const NAME_MATCH = 60;
+
 export function scoreCommand(command: Command, term: string): number {
   const query = term.trim().toLowerCase();
   if (!query) return 1;
   const name = command.name.toLowerCase();
   if (name.startsWith(query)) return 100;
   if (name.split(/\s+/).some((word) => word.startsWith(query))) return 80;
-  if (name.includes(query)) return 60;
+  if (name.includes(query)) return NAME_MATCH;
   if (command.keywords.some((keyword) => keyword.toLowerCase().includes(query))) return 40;
   let cursor = 0;
   for (const character of name) {

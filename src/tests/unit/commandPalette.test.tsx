@@ -61,6 +61,31 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('lists matching commands above matching files in a search', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })) });
+    window.diskAPI.searchContent = vi.fn(async () => ({ success: true as const, data: { hits: [], incomplete: false } }));
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    await user.type(await screen.findByRole('combobox'), 'daily');
+    await screen.findByTestId(`palette-file-${PLAN}`);
+    const palette = screen.getByRole('dialog');
+    expect(within(palette).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['Commands', 'Files']);
+    expect(within(palette).getAllByRole('option')[0].getAttribute('data-testid')).toMatch(/^palette-command-/);
+  });
+  it('keeps a command found only by keyword or loose letters below the files', async () => {
+    installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([collectionRow({ entry: { path: PLAN, name: 'plan.md', kind: 'markdown' } })]) })) });
+    window.diskAPI.searchContent = vi.fn(async () => ({ success: true as const, data: { hits: [], incomplete: false } }));
+    const user = userEvent.setup();
+    renderPalette();
+    act(() => usePaletteStore.getState().show());
+    // "pla" is in no command's name; it is in a keyword of one and loosely in others.
+    await user.type(await screen.findByRole('combobox'), 'pla');
+    await screen.findByTestId(`palette-file-${PLAN}`);
+    const palette = screen.getByRole('dialog');
+    expect(within(palette).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['Files', 'More commands']);
+    expect(within(palette).getAllByRole('option')[0]).toHaveAttribute('data-testid', `palette-file-${PLAN}`);
+  });
   it('adds body matches with snippets from a scan of the files', async () => {
     installCollectionsApi({ query: vi.fn(async () => ({ success: true as const, data: collectionResult([]) })) });
     const searchContent = vi.fn(async () => ({ success: true as const, data: { hits: [{ path: PLAN, name: 'plan.md', excerpt: 'Plant foxglove in the garden.' }], incomplete: false } }));
