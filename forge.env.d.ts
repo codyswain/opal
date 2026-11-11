@@ -6,6 +6,8 @@ declare global {
   // whether you're running in development or production).
   const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
   const MAIN_WINDOW_VITE_NAME: string;
+  /** The short git commit and build time, defined by vite.main.config.ts. Undefined under Vitest. */
+  const __OPAL_BUILD__: { commit: string; builtAt: string } | undefined;
 
   namespace NodeJS {
     interface Process {

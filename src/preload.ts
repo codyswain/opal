@@ -1,6 +1,7 @@
 import type { VaultAPI } from "./types/vault";
 import type { PinsAPI } from "./types/pins";
 import type { HiddenAPI, HiddenState } from "./types/hidden";
+import type { UpdatesAPI, UpdateState } from "./types/updates";
 import type { VaultDayChange } from "./types/day";
 import type { TouchedWeekChange } from "./types/touched";
 import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from "electron";
@@ -169,10 +170,6 @@ const vaultAPI: VaultAPI = {
   touchedWeek: (root, date) => ipcRenderer.invoke("vault:touched-week", root, date),
   checkDigestItem: (root, path, line, raw, checked) =>
     ipcRenderer.invoke("vault:check-digest-item", root, path, line, raw, checked),
-  voteDigestReview: (root, date, reviewId, choice, reason) =>
-    ipcRenderer.invoke('vault:vote-digest-review', root, date, reviewId, choice, reason),
-  revealDigestReview: (root, date, reviewId) =>
-    ipcRenderer.invoke('vault:reveal-digest-review', root, date, reviewId),
   onDayChanged: (callback) => {
     const listener = (_event: IpcRendererEvent, change: VaultDayChange) =>
       callback(change);
@@ -207,6 +204,19 @@ const hiddenAPI: HiddenAPI = {
   },
 };
 contextBridge.exposeInMainWorld("hiddenAPI", hiddenAPI);
+
+const updatesAPI: UpdatesAPI = {
+  state: () => ipcRenderer.invoke("updates:state"),
+  check: () => ipcRenderer.invoke("updates:check"),
+  install: () => ipcRenderer.invoke("updates:install"),
+  rollBack: () => ipcRenderer.invoke("updates:roll-back"),
+  onChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, state: UpdateState) => callback(state);
+    ipcRenderer.on("updates:changed", listener);
+    return () => ipcRenderer.removeListener("updates:changed", listener);
+  },
+};
+contextBridge.exposeInMainWorld("updatesAPI", updatesAPI);
 
 const filesAPI: FilesAPI = {
   // A file from Finder goes by its path; File.path is gone in Electron 32.

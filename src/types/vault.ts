@@ -1,7 +1,6 @@
 import type { VaultDay, VaultDayChange } from "./day";
 import type { StackKind, VaultStack } from "./stack";
 import type { TouchedWeek, TouchedWeekChange } from "./touched";
-import type { DigestReview, DigestReviewChoice } from './digestReview';
 
 export interface VaultInfo {
   path: string;
@@ -36,8 +35,6 @@ export interface VaultAPI {
     raw: string,
     checked: boolean,
   ) => Promise<VaultResult<DigestItemTick>>;
-  voteDigestReview: (root: string, date: string, reviewId: string, choice: DigestReviewChoice, reason: string) => Promise<VaultResult<DigestReview>>;
-  revealDigestReview: (root: string, date: string, reviewId: string) => Promise<VaultResult<DigestReview>>;
   /** Called when a day asked for with `day` reads differently on disk. Returns the unsubscribe. */
   onDayChanged: (callback: (change: VaultDayChange) => void) => () => void;
   /** Called when a week asked for with `touchedWeek` reads differently on disk. Returns the unsubscribe. */

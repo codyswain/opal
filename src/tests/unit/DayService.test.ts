@@ -12,7 +12,6 @@ import { DiskWatcher } from "@/main/fs/DiskWatcher";
 import { LinkIndex } from "@/main/fs/LinkIndex";
 import { RootRegistry } from "@/main/fs/RootRegistry";
 import { DayService } from "@/main/vault/DayService";
-import { DigestReviewService } from "@/main/vault/DigestReviewService";
 import type { VaultDayChange } from "@/types/day";
 
 const DATE = "2026-10-28";
@@ -96,28 +95,6 @@ afterEach(async () => {
 });
 
 describe("DayService", () => {
-  it("refreshes a day's comparison and votes when its review folder changes", async () => {
-    const reviews = new DigestReviewService({ registry });
-    service = new DayService({ registry, reviews, resolveLinks: (from, targets) => links.resolve(from, targets), onChanged });
-    expect((await service.day(root, DATE)).digestReview).toBeNull();
-    const current = [{ title: 'Answer Tom on the price', detail: 'Same source.', checked: false }];
-    const concise = [{ ...current[0], title: 'Answer Tom' }];
-    await put(`Library/digests/reviews/${DATE}.json`, JSON.stringify({
-      schemaVersion: 1, id: 'a'.repeat(64), date: DATE, createdAt: `${DATE}T15:00:00Z`, status: 'ready', budgetUsd: 0.25,
-      source: { digestPath: `Library/digests/${DATE} digest.md`, sha256: 'b'.repeat(64), section: 'Top 3' },
-      generation: { model: 'test', reservedUsd: 0.25, maxOutputTokens: 4096, costUsd: 0.01 },
-      variants: { A: { kind: 'current', items: current }, B: { kind: 'concise', items: concise } },
-    }));
-    const directory = path.join(root, 'Library/digests/reviews');
-    await service.changed([directory]);
-    expect(onChanged).toHaveBeenCalledTimes(1);
-    expect((await service.day(root, DATE)).digestReview).toMatchObject({ status: 'ready', revealed: false });
-    await reviews.vote(root, DATE, 'a'.repeat(64), 'B', 'clearer');
-    await service.changed([directory]);
-    expect(onChanged).toHaveBeenCalledTimes(2);
-    expect((await service.day(root, DATE)).digestReview).toMatchObject({ revealed: true, vote: { choice: 'B', blind: true } });
-  });
-
   it("answers with the day's page, log, chats, recordings and digest", async () => {
     const day = await service.day(root, DATE);
     expect(day.date).toBe(DATE);

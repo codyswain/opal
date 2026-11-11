@@ -1,5 +1,3 @@
-import type { DigestReview } from './digestReview';
-
 /** A link in a day's files. Wiki links are vault files; markdown links to a URL are external. */
 export interface DayLink {
   label: string;
@@ -123,8 +121,6 @@ export interface VaultDay {
   /** Person notes the log links to, and the day's meeting speakers who have one. */
   people: DayFile[];
   digest: DayDigest | null;
-  /** One frozen, optional blind comparison, separate from digest checkboxes. */
-  digestReview?: DigestReview | null;
 }
 
 /** Sent as `vault:day-changed` when a day the renderer asked for reads differently on disk. */

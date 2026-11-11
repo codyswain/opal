@@ -8,6 +8,7 @@ import {
   useTabsStore,
 } from "@/renderer/features/disk-explorer/store/tabsStore";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
+import { UpdateRow } from "@/renderer/features/updates";
 import { IconButton } from "@/renderer/shared/ui";
 import { useShell } from "../context/ShellContext";
 import { DailyItem } from "./DailyItem";
@@ -103,6 +104,7 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="shrink-0 p-2">
+        <UpdateRow />
         <SidebarItem icon={Settings} label="Settings" onActivate={openSettings} />
       </div>
     </aside>

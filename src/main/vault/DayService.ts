@@ -8,7 +8,6 @@ import { MARKDOWN_DOCUMENT_LIMIT } from "@/types/markdown";
 import type { DayFile, DayLink, DayLogEntry, DayRecording, VaultDay, VaultDayChange } from "@/types/day";
 import { splitDailyLog, validDate } from "@/common/vaultModel";
 import { classifyFile } from "@/common/fileKind";
-import type { DigestReviewService } from './DigestReviewService';
 import {
   chatsForDay,
   latestFirst,
@@ -43,7 +42,6 @@ export interface DayServiceDependencies {
   resolveLinks?: (from: string, targets: string[]) => Promise<Record<string, string | null>>;
   /** Called when a day the renderer asked for reads differently on disk. */
   onChanged?: (change: VaultDayChange) => void;
-  reviews?: DigestReviewService;
 }
 
 /** How many recently asked-for days are checked again when their folders change. */
@@ -90,7 +88,6 @@ export function visibleDay(day: VaultDay, blocked: (path: string) => boolean): V
       .map((recording) => (linksShow(recording.links) ? recording : { ...recording, links: recording.links.filter((link) => shows(link.path)) })),
     people: day.people.filter((file) => shows(file.path)),
     digest: day.digest && shows(day.digest.path) ? day.digest : null,
-    ...(day.digestReview !== undefined ? { digestReview: day.digest && shows(day.digest.path) ? day.digestReview : null } : {}),
   };
 }
 
@@ -175,13 +172,12 @@ export class DayService {
   }
 
   private async read(root: string, date: string): Promise<VaultDay> {
-    const [daily, log, chats, recordings, digest, digestReview] = await Promise.all([
+    const [daily, log, chats, recordings, digest] = await Promise.all([
       this.dailyPage(root, date),
       this.log(root, date),
       this.chats(root, date),
       this.recordings(root, date),
       this.digest(root, date),
-      this.deps.reviews?.read(root, date).catch(() => null) ?? null,
     ]);
     const mentions = logMentions(log.entries);
     const documents = latestFirst(mentions.filter((file) => this.isDocument(root, file.path)));
@@ -189,7 +185,7 @@ export class DayService {
       ...mentions.filter((file) => this.isPerson(root, file.path)),
       ...(await this.speakers(root, recordings)),
     ]);
-    const day: VaultDay = { date, daily, ...log, documents, chats, recordings, people, digest, ...(this.deps.reviews ? { digestReview } : {}) };
+    const day: VaultDay = { date, daily, ...log, documents, chats, recordings, people, digest };
     return visibleDay(day, await this.deps.registry.blocked());
   }
 

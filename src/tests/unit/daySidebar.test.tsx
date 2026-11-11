@@ -166,8 +166,6 @@ function installVaultApi() {
       success: true as const,
       data: { line, raw: raw.replace(/\[[ xX]\]/, checked ? '[x]' : '[ ]'), checked },
     })),
-    voteDigestReview: vi.fn(async () => ({ success: false as const, error: 'No comparison here.' })),
-    revealDigestReview: vi.fn(async () => ({ success: false as const, error: 'No comparison here.' })),
     onTouchedChanged: vi.fn(() => () => undefined),
     onDayChanged: vi.fn((callback: (change: VaultDayChange) => void) => {
       changed = callback;

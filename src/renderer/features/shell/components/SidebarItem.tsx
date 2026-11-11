@@ -10,6 +10,9 @@ interface SidebarItemProps {
   /** Gets the click, so Cmd+click and middle-click can open a new tab. */
   onActivate?: (event: React.MouseEvent) => void;
   className?: string;
+  /** The native tooltip. */
+  title?: string;
+  disabled?: boolean;
 }
 
 const rowStyles = [
@@ -44,10 +47,14 @@ export function SidebarItem({
   label,
   onActivate,
   trailing,
+  title,
+  disabled,
 }: SidebarItemProps) {
   return (
     <button
       type="button"
+      title={title}
+      disabled={disabled}
       onClick={onActivate}
       onAuxClick={(event) => {
         if (event.button === 1) onActivate?.(event);
@@ -56,6 +63,7 @@ export function SidebarItem({
       className={cn(
         rowStyles,
         active === true && 'bg-surface-selected text-foreground',
+        disabled && 'pointer-events-none',
         className
       )}
     >

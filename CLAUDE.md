@@ -50,7 +50,7 @@ not exist.
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`,
-    `hiddenAPI`
+    `hiddenAPI`, `updatesAPI`
 - **Pins:** each opened folder keeps its pinned files in `.opal/pins.json`
   (paths from the folder's top), so git syncs them across Macs. `PinsService`
   in `src/main/pins` reads and writes it (`pins:list`, `pins:set`, which
@@ -118,6 +118,18 @@ not exist.
   knows which of its own tabs are hidden, to show "This file is hidden."
   without naming them. `OPAL_TEST_TOUCH_ID` stubs the prompt only in an
   unpackaged run under `OPAL_TEST_USER_DATA_DIR`
+- **Updates:** `src/main/updates/`. The build knows its short commit and
+  build time (`__OPAL_BUILD__`, defined in `vite.main.config.ts`, also
+  written to `.vite/build/build-info.json`). `UpdateService` reads the
+  sources listed in `<userData>/updates.json` only (folders or https), shows
+  "Update ready" above Settings (`features/updates`) when one offers a later
+  build with another commit, and installs by checking the zip's sha256 and
+  bundle id, starting the detached helper from `helperScript.ts` and quitting
+  through the normal close path. The helper swaps the bundle, keeps two
+  `Opal-update-*` copies in `~/Library/Caches/Opal-app-backups/` and reopens
+  Opal. Palette: Install Update, Check for Updates, Roll Back to Previous
+  Build. `scripts/stage-update.mjs` stages a packaged build in a source;
+  `docs/local-app-install.md` has the steps
 - **Path alias:** `@/*` maps to `src/*`
 
 ## Directory Structure

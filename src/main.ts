@@ -3,7 +3,6 @@ import { VaultService } from "@/main/vault/VaultService";
 import { VaultHandlers } from "@/main/vault/VaultHandlers";
 import { DayService } from "@/main/vault/DayService";
 import { TouchedService } from "@/main/vault/TouchedService";
-import { DigestReviewService } from '@/main/vault/DigestReviewService';
 import { StackService } from "@/main/vault/StackService";
 import { PinsService } from "@/main/pins/PinsService";
 import { PinsHandlers } from "@/main/pins/PinsHandlers";
@@ -68,7 +67,14 @@ import { OpalLinks } from "@/main/protocol/OpalLinks";
 import { HiddenFiles } from "@/main/fs/HiddenFiles";
 import { HiddenHandlers } from "@/main/fs/HiddenHandlers";
 import { touchIdPrompt } from "@/main/fs/touchId";
-import { touchIdStub } from "@/main/testProfile";
+import { touchIdStub, updateBackupsDir, updateRelaunchEnv } from "@/main/testProfile";
+import { UpdateService } from "@/main/updates/UpdateService";
+import { UpdateHandlers } from "@/main/updates/UpdateHandlers";
+import { runningBuild } from "@/main/updates/buildIdentity";
+import { execFile, spawn } from "child_process";
+import { promisify } from "util";
+import fsPromises from "fs/promises";
+import os from "os";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // Only run this check on Windows
@@ -457,10 +463,8 @@ const markdownDocuments = new MarkdownDocumentService({
   history: new PageHistory(),
 });
 const vaultService = new VaultService({ registry: rootRegistry, documents: markdownDocuments });
-const digestReviews = new DigestReviewService({ registry: rootRegistry });
 const dayService = new DayService({
   registry: rootRegistry,
-  reviews: digestReviews,
   resolveLinks: (from, targets) => linkIndex.resolve(from, targets),
   onChanged: (change) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -494,7 +498,6 @@ const vaultHandlers = new VaultHandlers({
   days: dayService,
   stacks: stackService,
   touched: touchedService,
-  reviews: digestReviews,
 });
 const pinsHandlers = new PinsHandlers({
   ipc: ipcMain,
@@ -567,6 +570,30 @@ const hiddenHandlers = new HiddenHandlers({
   hidden: hiddenFiles,
   registry: rootRegistry,
 });
+// Updates come only from the sources in <userData>/updates.json.
+const runFile = promisify(execFile);
+const updateService = new UpdateService({
+  current: runningBuild(),
+  userData: userDataDir,
+  home: os.homedir(),
+  backupsDir: updateBackupsDir(process.env, os.homedir()),
+  execPath: process.execPath,
+  pid: process.pid,
+  isPackaged: app.isPackaged,
+  relaunchEnv: updateRelaunchEnv(process.env),
+  fs: fsPromises,
+  fetch: (url, init) => net.fetch(url, init),
+  exec: async (file, args) => ({ stdout: (await runFile(file, args, { maxBuffer: 1024 * 1024 })).stdout }),
+  spawnDetached: (file, args) => {
+    spawn(file, args, { detached: true, stdio: "ignore" }).unref();
+  },
+  quit: () => app.quit(),
+  onChanged: (state) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("updates:changed", state);
+  },
+});
+const updateHandlers = new UpdateHandlers({ ipc: ipcMain, service: updateService });
 
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
@@ -600,6 +627,7 @@ app.whenReady().then(async () => {
     vaultHandlers.registerAll();
     pinsHandlers.registerAll();
     filesHandlers.registerAll();
+    updateHandlers.registerAll();
     void filesService.cleanup();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
@@ -616,6 +644,8 @@ app.whenReady().then(async () => {
 
     createWindow();
     windowStarted = true;
+    updateService.start();
+    app.on("browser-window-focus", () => updateService.focused());
     log.info("Application initialization completed");
   } catch (error) {
     log.error(`Error during app setup: ${error}`);
