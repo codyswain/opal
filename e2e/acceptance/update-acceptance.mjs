@@ -64,18 +64,20 @@ try {
 
   const env = { ...process.env, OPAL_TEST_USER_DATA_DIR: profile, OPAL_TEST_UPDATE_BACKUPS_DIR: backups };
   const app = await electron.launch({ executablePath: path.join(bundle, 'Contents/MacOS/Opal'), args: [], env });
-  const firstPid = app.process().pid;
+  const child = app.process();
+  const firstPid = child.pid;
   const page = await app.firstWindow();
   const row = page.getByRole('button', { name: 'Update ready' });
   await row.waitFor({ timeout: 30_000 });
   check('the sidebar shows Update ready', true);
   check('its tooltip is the notes line', (await row.getAttribute('title')) === 'Second build for the update run');
-  const closed = new Promise((resolve) => app.process().once('exit', resolve));
+  const closed = new Promise((resolve) => child.once('exit', resolve));
   await row.click();
   const updating = await page.getByRole('button', { name: 'Updating…' }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
   check('the row reads Updating… after the click', updating);
-  await Promise.race([closed, sleep(30_000)]);
-  check('the first build quit', app.process().exitCode !== null || app.process().signalCode !== null);
+  // Copying, checking and unpacking a 200 MB build takes a while before Opal quits.
+  await Promise.race([closed, sleep(120_000)]);
+  check('the first build quit', child.exitCode !== null || child.signalCode !== null);
 
   for (let tries = 0; tries < 120 && running(bundle).filter((pid) => pid !== firstPid).length === 0; tries += 1) await sleep(250);
   relaunched = running(bundle).filter((pid) => pid !== firstPid);
@@ -111,7 +113,7 @@ try {
   check('the relaunched build has files open in the temp profile', open.length > 0, open.slice(0, 2).join(', '));
   check('and none in Application Support', !open.some((file) => file.includes('/Application Support/')));
 } catch (error) {
-  check('the run finished', false, error instanceof Error ? error.message : String(error));
+  check('the run finished', false, error instanceof Error ? error.stack : String(error));
 } finally {
   for (const pid of running(bundle)) {
     try {
