@@ -10,7 +10,7 @@ export type DayState =
   | { status: 'ready'; root: string; day: VaultDay };
 
 /** The first opened folder that is a vault, as Daily picks it. Asked again when the opened folders change. */
-function useVaultRoot(): { root: string | null; checked: boolean; error: string | null } {
+export function useVaultRoot(): { root: string | null; checked: boolean; error: string | null } {
   const roots = useDiskStore((state) => state.roots.join('\n'));
   const [found, setFound] = useState<{ root: string | null; checked: boolean; error: string | null }>({
     root: null,

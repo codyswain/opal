@@ -47,6 +47,21 @@ not exist.
   `src/common/touchedModel.ts`, the view in `stack/TouchedList.tsx`. Its
   palette, `stack/touchedPalette.css`, is the only hued colour in the app,
   exempted by name in `blackAndWhite.test.ts`
+- **Daily test:** an A/B test an agent writes as
+  `Library/tests/<date> test.json`; Opal only reads it and writes
+  `<date> answer.json` beside it in one step. The parsing and the "which test
+  is current" rule (the newest unanswered test of today and the two days
+  before, else today's answered one, else none) are in
+  `src/common/dailyTest.ts`. `TestService` in `src/main/vault`
+  (`vault:test`, `vault:test-changed`, `vault:answer-test`) checks every path
+  a test names against `RootRegistry`, so a hidden or outside file makes it
+  no test. `TestCard.tsx` sits at the top of the day sidebar. An interface
+  test switches a variant: both versions ship in one build, the names this
+  build knows are listed in `src/common/variants.ts`, and a component reads
+  its side with `useVariant(name)` (`features/variants`). The side per
+  variant is per Mac, in `<userData>/variants.json` (`vault:variants`,
+  `vault:set-variant`). Adding a variant is one line in `VARIANTS` plus the
+  branch in the component
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`,
@@ -147,7 +162,7 @@ src/
     services/          # Credentials, system
     window/            # Window state, navigation guard
   renderer/            # React renderer
-    features/          # disk-explorer, shell, day-sidebar, settings, theme, commands
+    features/          # disk-explorer, shell, day-sidebar, variants, settings, theme, commands
     shared/            # Reusable components, hooks, utils, types
     store/             # Zustand stores
     styles/            # Global CSS
