@@ -532,6 +532,20 @@ describe('wide tables', () => {
   });
 });
 
+describe('tables that fit the page', () => {
+  it('marks cells of running text, so the table can narrow without squeezing them', () => {
+    const view = mount('Intro\n\n| Stage | What happens |\n|---|---|\n| Install | The team installs the machine once the space is ready. |\n');
+    const cells = [...view.contentDOM.querySelectorAll('.cm-md-table td .cm-md-cell')];
+    expect(cells.map((cell) => cell.classList.contains('cm-md-cell-long'))).toEqual([false, true]);
+  });
+  it('does not draw a header row that is empty', () => {
+    const form = mount('Intro\n\n| | |\n|---|---|\n| **Name** | Alex |\n');
+    expect(form.contentDOM.querySelector('.cm-md-table table')?.classList.contains('cm-md-table-headless')).toBe(true);
+    const plain = mount(`Intro\n\n${TABLE}\n`);
+    expect(plain.contentDOM.querySelector('.cm-md-table table')?.classList.contains('cm-md-table-headless')).toBe(false);
+  });
+});
+
 describe('formatting inside a table cell', () => {
   it('bolds text inside one cell, and never a whole row', () => {
     const doc = '| a | some words |\n|---|---|\n| 1 | 2 |\n';

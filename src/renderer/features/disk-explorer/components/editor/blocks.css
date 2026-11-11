@@ -140,11 +140,23 @@
 }
 
 /* Wide tables: the table is as wide as its columns want, each column at
-   most 24em, where its text wraps, so a wide table scrolls sideways rather
-   than squeeze its last column into a tall, narrow box. Long code and links
-   break at 24em. */
+   most 24em, where its text wraps. A table wider than the page narrows to
+   fit it, its text wrapping sooner, as long as every column of running text
+   keeps 11em. When the columns cannot all keep that, the table scrolls
+   sideways rather than squeeze one into a tall, narrow box. Long code and
+   links break at 24em. */
 .opal-editor .cm-editor .cm-md-table table {
   width: max-content;
+  max-width: 100%;
+}
+
+.opal-editor .cm-editor .cm-md-table .cm-md-cell-long {
+  min-width: 11em;
+}
+
+/* A table whose header row is empty is a form: the row is not drawn. */
+.opal-editor .cm-editor .cm-md-table table.cm-md-table-headless thead {
+  display: none;
 }
 
 .opal-editor .cm-editor .cm-md-table .cm-md-cell {
