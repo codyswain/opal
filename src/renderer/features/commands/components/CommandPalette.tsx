@@ -10,7 +10,7 @@ import { useDiskStore } from '@/renderer/features/disk-explorer/store/diskStore'
 import { useShell } from '@/renderer/features/shell/context/ShellContext';
 import type { DiskEntry } from '@/types/disk';
 import { commandRegistry, type Command } from '../services/commandRegistry';
-import { formatShortcut, rankCommands, sentenceCase } from '../services/matchCommand';
+import { NAME_MATCH, formatShortcut, rankCommands, scoreCommand, sentenceCase } from '../services/matchCommand';
 import { usePaletteStore } from '../store/paletteStore';
 
 type PaletteItem =
@@ -38,8 +38,8 @@ function useCommandList(): Command[] {
  * registered command. Empty shows what was touched recently; a leading `>`
  * limits results to commands, as in most editors. A file is one line, as in
  * Obsidian's quick switcher: its name as the tree shows it, then its folder.
- * Files come best match first (matchFile.ts in main). Go to File (Cmd+O) and
- * New Tab ask only for a file.
+ * A search lists the commands whose name matches first, then files, best match
+ * first (matchFile.ts in main), then commands found only by keyword or loosely. Go to File (Cmd+O) and New Tab ask only for a file.
  */
 export const CommandPalette: React.FC = () => {
   const open = usePaletteStore((state) => state.open);
@@ -125,10 +125,15 @@ export const CommandPalette: React.FC = () => {
     const commandSection = { title: 'Commands', items: filesOnly ? [] : matched };
     if (!term) return [{ title: 'Recent', items: recent }, commandSection].filter((section) => section.items.length > 0);
     const named = new Set(files.map((item) => (item.kind === 'file' ? item.entry.path : '')));
+    // A search lists the commands whose name holds the text first, so files never push them out
+    // of sight. A command found only by a keyword or by loose letters ("pla" finds the keyword
+    // "plain") goes last, so Enter on a file's name does not run a command nobody named.
+    const byName = (item: PaletteItem) => item.kind === 'command' && scoreCommand(item.command, term) >= NAME_MATCH;
     return [
+      { title: 'Commands', items: commandSection.items.filter(byName) },
       { title: 'Files', items: files },
       { title: 'Inside files', items: content.filter((item) => item.kind === 'file' && !named.has(item.entry.path)) },
-      commandSection,
+      { title: 'More commands', items: commandSection.items.filter((item) => !byName(item)) },
     ].filter((section) => section.items.length > 0);
   }, [commands, term, commandMode, filesOnly, recent, files, content]);
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections]);
