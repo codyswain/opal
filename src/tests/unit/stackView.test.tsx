@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { StackView, mergeSections } from '@/renderer/features/disk-explorer/components/stack/StackView';
+import { TouchedList } from '@/renderer/features/disk-explorer/components/stack/TouchedList';
 import { STACK_WINDOW } from '@/renderer/features/disk-explorer/components/stack/stackWindow';
 import { flushPendingSaves } from '@/renderer/features/disk-explorer/components/editor/pendingSaves';
 import { openWikiLink } from '@/renderer/features/disk-explorer/components/editor/wikiLinks';
@@ -806,7 +807,7 @@ describe('the toolbar of a stack that holds documents', () => {
   });
 });
 
-describe('the touched list beside each daily page', () => {
+describe('the touched list under each daily page', () => {
   const PLAN = '/Vault/Notes/Plan.md';
   const ISSUE_URL = 'https://linear.app/acme/issue/ABC-123/fix';
   const hit = (lines: number, text: string) => ({ lines, text });
@@ -822,6 +823,7 @@ describe('the touched list beside each daily page', () => {
       item('linear:ABC-123', { kind: 'issue', id: 'ABC-123', name: 'Fix the thing', url: ISSUE_URL, days: [null, null, null, hit(2, 'Fixed it.'), null, null, null] }),
       item('Notes/Once.md', { name: 'Once', path: '/Vault/Notes/Once.md', days: [null, hit(1, 'Once.'), null, null, null, null, null] }),
     ],
+    digests: [],
   };
   let changed: ((change: TouchedWeekChange) => void) | null;
 
@@ -830,7 +832,7 @@ describe('the touched list beside each daily page', () => {
     const api = window.vaultAPI as unknown as Record<string, unknown>;
     api.touchedWeek = vi.fn(async (_root: string, date: string) => ({
       success: true as const,
-      data: date === WEEK.monday ? WEEK : { root: ROOT, monday: date, items: [] },
+      data: date === WEEK.monday ? WEEK : { root: ROOT, monday: date, items: [], digests: [] },
     }));
     api.onTouchedChanged = vi.fn((callback: (change: TouchedWeekChange) => void) => {
       changed = callback;
@@ -841,7 +843,7 @@ describe('the touched list beside each daily page', () => {
   const list = (path: string) => article(path).querySelector<HTMLElement>('aside.opal-touched');
   const rows = (path: string) => [...(list(path)?.querySelectorAll<HTMLElement>('.opal-touched-row') ?? [])];
 
-  it('lists a day’s items by count beside its page, with the week’s squares, and nothing on a day without any', async () => {
+  it('lists a day’s items by count under its page, with the week’s squares, and nothing on a day without any', async () => {
     renderStack();
     await waitFor(() => expect(list(HEAD)).toBeTruthy());
     expect(window.vaultAPI.touchedWeek).toHaveBeenCalledWith(ROOT, '2026-10-26');
@@ -860,6 +862,18 @@ describe('the touched list beside each daily page', () => {
     expect(rows(HEAD)[0].querySelector<HTMLElement>('i[data-hit]')?.style.backgroundColor).toBe('');
   });
 
+  it('links the day’s digest first, and alone on a day that touched nothing', () => {
+    const DIGEST = '/Vault/Library/digests/2026-10-29 digest.md';
+    const open = vi.fn();
+    const { rerender } = render(<TouchedList touched={{ week: WEEK, day: 3, rows: [WEEK.items[0]], digest: DIGEST }} openPath={open} />);
+    expect(screen.getAllByRole('button').map((row) => row.textContent)).toEqual(['Digest', 'Plan']);
+    fireEvent.click(screen.getByRole('button', { name: 'Digest' }));
+    expect(open).toHaveBeenCalledWith(DIGEST, false);
+    // No rows: the digest link stands alone, with no weekday letters over it.
+    rerender(<TouchedList touched={{ week: WEEK, day: 4, rows: [], digest: DIGEST }} openPath={open} />);
+    expect(screen.getAllByRole('button').map((row) => row.textContent)).toEqual(['Digest']);
+    expect(screen.queryByText('W')).toBeNull();
+  });
   it('dims every other row while one is pointed at, and shows a filled square’s log line', async () => {
     renderStack();
     await waitFor(() => expect(rows(paths[1])).toHaveLength(1));

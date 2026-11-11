@@ -34,6 +34,8 @@ export interface TouchedWeek {
   /** The week's Monday, YYYY-MM-DD. */
   monday: string;
   items: TouchedItem[];
+  /** Each day's digest file, Monday first; null for a day with none. */
+  digests: (string | null)[];
 }
 
 /** Sent as `vault:touched-changed` when a week the renderer asked for reads differently on disk. */

@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleDot, FileText, Folder, GitPullRequest, NotebookText, type LucideIcon } from 'lucide-react';
+import { CircleDot, FileText, Folder, GitPullRequest, Newspaper, NotebookText, type LucideIcon } from 'lucide-react';
 import { mondayOf, weekDates } from '@/common/touchedModel';
 import type { TouchedItem, TouchedKind, TouchedWeek } from '@/types/touched';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/renderer/shared/ui/ContextMenu';
@@ -24,6 +24,8 @@ export interface TouchedDay {
   /** 0 for Monday. */
   day: number;
   rows: TouchedItem[];
+  /** The day's digest file, linked as the first row; null for none. */
+  digest: string | null;
 }
 
 interface Tip {
@@ -37,9 +39,9 @@ const tipDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
 /**
- * The touched list beside a daily page: the most important things the
- * day's agent turns worked on, each with the days of its week it was
- * touched. A click opens the file the way a link in a page does, or the
+ * The touched list under a daily page: a link to the day's digest, then the
+ * most important things the day's agent turns worked on, each with the days
+ * of its week it was touched. A click opens the file the way a link in a page does, or the
  * URL in the browser.
  */
 export const TouchedList = memo(function TouchedList({
@@ -62,6 +64,7 @@ export const TouchedList = memo(function TouchedList({
     setMenuPath(row.dataset.touchedFile);
   };
   const dates = weekDates(touched.week.monday);
+  const { digest } = touched;
   const open = (item: TouchedItem, event: React.MouseEvent) => {
     event.preventDefault();
     if (item.path) openPath(item.path, event.metaKey || event.ctrlKey || event.button === 1);
@@ -84,13 +87,26 @@ export const TouchedList = memo(function TouchedList({
     <ContextMenu>
       <ContextMenuTrigger asChild onContextMenu={openMenu}>
         <aside className="opal-touched" aria-label="Touched this day">
-          <div className="opal-touched-head" aria-hidden>
-            <span className="opal-touched-week">
-              {LETTERS.map((letter, index) => (
-                <span key={index} data-today={index === touched.day ? '' : undefined}>{letter}</span>
-              ))}
-            </span>
-          </div>
+          {touched.rows.length > 0 ? (
+            <div className="opal-touched-head" aria-hidden>
+              <span className="opal-touched-week">
+                {LETTERS.map((letter, index) => (
+                  <span key={index} data-today={index === touched.day ? '' : undefined}>{letter}</span>
+                ))}
+              </span>
+            </div>
+          ) : null}
+          {digest ? (
+            <button
+              type="button"
+              className="opal-touched-row"
+              onClick={(event) => openPath(digest, event.metaKey || event.ctrlKey)}
+              onAuxClick={(event) => event.button === 1 && openPath(digest, true)}
+            >
+              <Newspaper aria-hidden className="opal-touched-icon" />
+              <span className="opal-touched-name">Digest</span>
+            </button>
+          ) : null}
           {touched.rows.map((item) => {
             const Icon = ICONS[item.kind];
             const label = `${item.id ? `${item.id} ` : ''}${item.name}`.trim();

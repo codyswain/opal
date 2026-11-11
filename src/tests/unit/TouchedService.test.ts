@@ -73,6 +73,12 @@ describe("TouchedService", () => {
     expect(byKey["linear:ABC-123"]).toMatchObject({ kind: "issue", id: "ABC-123", name: "", path: null, url: "https://linear.app/acme/issue/ABC-123/fix" });
   });
 
+  it("gives each day's digest file, and null for a day without one", async () => {
+    const digest = await put("Library/digests/2026-11-05 digest.md", "# Digest\n");
+    const week = await service.week(root, "2026-11-05");
+    expect(week.digests).toEqual([null, null, null, digest, null, null, null]);
+  });
+
   it("reads groups, ignores and titles from .opal, and reports a watched week when they change", async () => {
     await service.week(root, "2026-11-02");
     await put(".opal/touched.json", JSON.stringify({ groups: ["Projects/*"], ignore: ["Notes/"] }));

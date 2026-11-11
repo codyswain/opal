@@ -1,81 +1,17 @@
-/* The touched list beside a daily page. The note keeps the left of the page
-   column and narrows; the list takes the right, top-aligned with the note's
-   title. When the stack is too narrow for both, the list goes under the
-   note. Every colour but the palette's is a shell token. */
-.opal-stack {
-  --touched-width: calc(340px + 2rem);
-  container-type: inline-size;
-}
-
-.opal-stack-section[data-touched] {
-  display: grid;
-  grid-template-columns:
-    max(0px, calc((100% - var(--editor-measure) - 4rem) / 2))
-    minmax(0, calc(var(--editor-measure) + 4rem))
-    var(--touched-width);
-  grid-template-rows: auto auto;
-}
-
-/* The body keeps its own height, which the stack measures for placeholders. */
-.opal-stack-section[data-touched] > .opal-stack-header {
-  grid-area: 1 / 2;
-  align-self: start;
-  min-width: 0;
-}
-
-.opal-stack-section[data-touched] > .opal-stack-body {
-  grid-area: 2 / 2;
-  align-self: start;
-  min-width: 0;
-}
-
+/* The touched list under a daily page: the day's digest link and what the
+   day touched, in the page's own column below the note. Every colour but
+   the palette's is a shell token. */
 .opal-touched {
   position: relative;
-  grid-area: 1 / 3 / 3 / 4;
-  align-self: start;
-  min-width: 0;
-  /* Level with the title: below the rule between days, or the stack's top space. */
-  padding: calc(3.25rem + 1px + 0.4rem) 2rem 1rem 0;
+  box-sizing: border-box;
+  max-width: calc(var(--editor-measure) + 4rem);
+  margin: 0 auto;
+  padding: 0.5rem 2rem 1rem;
   font-family: var(--font-sans);
   font-feature-settings: var(--font-features);
   font-size: var(--text-ui-size);
   line-height: var(--text-ui-line);
   letter-spacing: var(--text-ui-tracking);
-}
-
-.opal-stack-section:first-child > .opal-touched {
-  padding-top: calc(3rem + 0.4rem);
-}
-
-/* The rule between days runs on under the list. */
-.opal-stack-section:not(:first-child) > .opal-touched::before {
-  position: absolute;
-  top: 1.25rem;
-  right: 2rem;
-  left: -2rem;
-  border-top: 1px solid hsl(var(--border-subtle));
-  content: "";
-}
-
-@container (max-width: 899px) {
-  .opal-stack-section[data-touched] {
-    display: block;
-  }
-
-  .opal-touched {
-    box-sizing: border-box;
-    max-width: calc(var(--editor-measure) + 4rem);
-    margin: 0 auto;
-    padding: 0.5rem 2rem 1rem;
-  }
-
-  .opal-stack-section:first-child > .opal-touched {
-    padding-top: 0.5rem;
-  }
-
-  .opal-stack-section:not(:first-child) > .opal-touched::before {
-    content: none;
-  }
 }
 
 .opal-touched-head,

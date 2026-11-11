@@ -93,7 +93,7 @@ describe('the touched list', () => {
       { key: 'Notes/Plan.md', kind: 'file', id: null, name: 'Plan', path: PLAN, url: null, days, colour: null },
       { key: 'linear:ABC-1', kind: 'issue', id: 'ABC-1', name: 'Fix', path: null, url: 'https://example.com/ABC-1', days, colour: null },
     ];
-    render(<TouchedList touched={{ week: { root: ROOT, monday: '2026-11-09', items: rows }, day: 1, rows }} openPath={vi.fn()} />);
+    render(<TouchedList touched={{ week: { root: ROOT, monday: '2026-11-09', items: rows, digests: [] }, day: 1, rows, digest: null }} openPath={vi.fn()} />);
 
     await user.pointer({ keys: '[MouseRight]', target: screen.getByRole('button', { name: 'ABC-1 Fix' }) });
     expect(screen.queryByTestId('touched-menu')).toBeNull();
