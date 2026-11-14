@@ -1,10 +1,11 @@
 import { pathFromShellOutput, shellPathArgs } from './agentModel';
 
 /**
- * The login shell's PATH, read once. An app started from the Dock gets a
- * minimal PATH, so the command and the folder's hooks would not find their
- * tools. A shell that fails or takes longer than the timeout leaves Opal's
- * own PATH.
+ * The login shell's PATH. An app started from the Dock gets a minimal PATH,
+ * so the command and the folder's hooks would not find their tools. Only a
+ * real answer is kept. A shell that fails, takes longer than the timeout or
+ * prints no PATH gives Opal's own PATH for that call, and the next call asks
+ * the shell again.
  */
 export function loginShellPath(deps: {
   shell: string | undefined;
@@ -12,16 +13,22 @@ export function loginShellPath(deps: {
   run: (file: string, args: string[], timeoutMs: number) => Promise<string>;
   timeoutMs?: number;
 }): () => Promise<string> {
-  let found: Promise<string> | null = null;
-  return () => {
-    found ??= (async () => {
+  let found: string | null = null;
+  let asking: Promise<string | null> | null = null;
+  return async () => {
+    if (found !== null) return found;
+    asking ??= (async () => {
       const shell = deps.shell && deps.shell.startsWith('/') ? deps.shell : '/bin/zsh';
       try {
-        return pathFromShellOutput(await deps.run(shell, shellPathArgs(), deps.timeoutMs ?? 5000)) ?? deps.fallback;
+        return pathFromShellOutput(await deps.run(shell, shellPathArgs(), deps.timeoutMs ?? 5000));
       } catch {
-        return deps.fallback;
+        return null;
+      } finally {
+        asking = null;
       }
     })();
-    return found;
+    const answer = await asking;
+    if (answer !== null) found = answer;
+    return answer ?? deps.fallback;
   };
 }

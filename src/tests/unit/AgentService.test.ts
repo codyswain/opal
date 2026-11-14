@@ -57,7 +57,7 @@ const service = (overrides: Partial<AgentServiceDependencies> = {}) =>
     registry,
     userData,
     home,
-    env: { HOME: home, ANTHROPIC_API_KEY: 'sk-test', ANTHROPIC_AUTH_TOKEN: 'token', ...fakeEnv },
+    env: { HOME: home, ANTHROPIC_API_KEY: 'sk-test', ANTHROPIC_AUTH_TOKEN: 'token', ANTHROPIC_BASE_URL: 'http://localhost:1', CLAUDE_CODE_SIMPLE: '1', CLAUDECODE: '1', ...fakeEnv },
     fs,
     spawn: spawnAgent,
     runFile: runAgentFile,
@@ -109,6 +109,32 @@ describe('AgentService', () => {
     expect(await service().readiness(PLAN())).toEqual({ state: 'ask', folder: 'Vault' });
   });
 
+  it('forgets a remembered sign-in when a run fails for want of one', async () => {
+    await allow();
+    await writeFile(PLAN(), 'Plan\n');
+    const env: Record<string, string> = { HOME: home, ...fakeEnv, FAKE_AGENT_AUTH: 'in' };
+    const agent = service({ env });
+    expect(await agent.readiness(PLAN())).toEqual({ state: 'ready' });
+    // Signed out since: the remembered yes still answers.
+    env.FAKE_AGENT_AUTH = 'out';
+    expect(await agent.readiness(PLAN())).toEqual({ state: 'ready' });
+    await agent.start({ path: PLAN(), comment: 'Tighten #signed-out', selection: null });
+    expect((await ended())[0]).toMatchObject({ status: 'failed', reply: SIGNED_OUT_MESSAGE });
+    expect(await agent.readiness(PLAN())).toEqual({ state: 'signed-out' });
+  });
+
+  it('keeps a remembered sign-in after a run that failed for another reason', async () => {
+    await allow();
+    await writeFile(PLAN(), 'Plan\n');
+    const env: Record<string, string> = { HOME: home, ...fakeEnv };
+    const agent = service({ env });
+    expect(await agent.readiness(PLAN())).toEqual({ state: 'ready' });
+    await agent.start({ path: PLAN(), comment: 'Tighten #fail', selection: null });
+    await ended();
+    env.FAKE_AGENT_AUTH = 'out';
+    expect(await agent.readiness(PLAN())).toEqual({ state: 'ready' });
+  });
+
   it('asks once per opened folder and keeps the yes in agent.json beside the other settings', async () => {
     await writeFile(PLAN(), 'Plan\n');
     await writeFile(path.join(userData, 'agent.json'), JSON.stringify({ version: 1, model: 'sonnet' }));
@@ -135,8 +161,13 @@ describe('AgentService', () => {
     const [run] = await ended();
     expect(run).toEqual({ id: started.id, path: PLAN(), status: 'done', reply: 'Rewrote the line as a question.', sessionId: '3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41' });
     expect(await readFile(PLAN(), 'utf8')).toBe('---\ntitle: Plan\n---\n# Plan\n\nDo we ship on Friday?\nThen we rest.\n');
-    const [call] = await logged();
-    expect(call.cwd).toBe(vault);
+    const calls = await logged();
+    // auth status ran with none of the session's variables either.
+    const auth = calls.filter((entry) => entry.args?.[0] === 'auth');
+    expect(auth.length).toBeGreaterThan(0);
+    expect(auth.every((entry) => entry.keys.length === 0)).toBe(true);
+    const call = calls.find((entry) => entry.args?.[0] === '-p');
+    expect(call?.cwd).toBe(vault);
     expect(call.args).toEqual(['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--name', 'Make this a question.']);
     expect(call.keys).toEqual([]);
     expect(call.path).toBe(`${bin}:/usr/bin:/bin`);
@@ -145,12 +176,55 @@ describe('AgentService', () => {
     expect(agent.running()).toEqual([]);
   });
 
+  it('ends a run at its first result line while the process lives on, and ignores later results', async () => {
+    await allow();
+    await writeFile(PLAN(), 'Plan\n');
+    fakeEnv.FAKE_AGENT_LINGER_MS = '5000';
+    const agent = service();
+    const started = Date.now();
+    const { id } = await agent.start({ path: PLAN(), comment: 'Tighten', selection: null });
+    const [run] = await ended();
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(run).toMatchObject({ id, status: 'done', reply: 'Rewrote the line as a question.' });
+    // Past its result a run has ended: it is not running and Stop does nothing.
+    expect(agent.running()).toEqual([]);
+    agent.stop(id);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await logged()).some((entry) => entry.signal)).toBe(false);
+    // Quitting still ends the lingering process, which then reports nothing new.
+    agent.stopAll();
+    for (let waited = 0; (await readFile(log, 'utf8')).indexOf('"signal"') < 0 && waited < 4000; waited += 50) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect((await logged()).some((entry) => entry.signal === 'SIGINT')).toBe(true);
+    expect(runs.filter((entry) => entry.status !== 'running')).toHaveLength(1);
+  }, 15000);
+
+  it('reports nothing from a second result even when the process exits after it', async () => {
+    await allow();
+    await writeFile(PLAN(), 'Plan\n');
+    fakeEnv.FAKE_AGENT_LINGER_MS = '200';
+    const exits: number[] = [];
+    const agent = service({
+      spawn: (file, args, options) => {
+        const child = spawnAgent(file, args, options);
+        child.on('close', () => exits.push(Date.now()));
+        return child;
+      },
+    });
+    await agent.start({ path: PLAN(), comment: 'Tighten', selection: null });
+    await ended();
+    for (let waited = 0; exits.length === 0 && waited < 4000; waited += 20) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(exits).toHaveLength(1);
+    expect(runs.filter((entry) => entry.status !== 'running')).toEqual([expect.objectContaining({ status: 'done', reply: 'Rewrote the line as a question.' })]);
+  });
+
   it('passes the model from the settings', async () => {
     await writeFile(path.join(userData, 'agent.json'), JSON.stringify({ version: 1, model: 'sonnet', folders: [vault] }));
     await writeFile(PLAN(), 'Plan\n');
     await service().start({ path: PLAN(), comment: 'Tighten', selection: null });
     await ended();
-    expect((await logged())[0].args.slice(-2)).toEqual(['--model', 'sonnet']);
+    expect((await logged()).find((entry) => entry.args?.[0] === '-p')?.args.slice(-2)).toEqual(['--model', 'sonnet']);
   });
 
   it('fails with the result\'s message, the sign-in line, or the last error line when no result came', async () => {

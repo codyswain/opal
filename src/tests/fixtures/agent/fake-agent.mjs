@@ -8,13 +8,19 @@
 //   FAKE_AGENT_STREAM=name     success (default), error or signed-out
 //   FAKE_AGENT_EDIT={"find":"a","replace":"b"}  the edit a success makes
 //   FAKE_AGENT_REPLY=text      the success result's text
+//   FAKE_AGENT_EDIT_DELAY_MS=n wait before making the edit
 //   FAKE_AGENT_DELAY_MS=n      wait before the result line
+//   FAKE_AGENT_LINGER_MS=n     after the result, stay alive n ms, then print a
+//                              second result with other text, as when a
+//                              folder's hook wakes the session
 //   FAKE_AGENT_NO_RESULT=1     end with no result line, after FAKE_AGENT_STDERR
 //   FAKE_AGENT_STDERR=text     a line on standard error
-//   FAKE_AGENT_LOG=file        append {args, cwd, prompt, keys} as one JSON line
+//   FAKE_AGENT_LOG=file        append {args, cwd, prompt, keys, path} as one JSON line;
+//                              keys are the agent-session variables it was given
 //
-// A comment holding "#fail", "#signed-out" or "#slow" picks the error
-// stream, the signed-out stream or a 60 s wait, whatever the variables say.
+// A comment holding "#fail", "#signed-out", "#slow" or "#linger" picks the
+// error stream, the signed-out stream, a 60 s wait or a 5 s linger, whatever
+// the variables say.
 import { appendFileSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,14 +29,17 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const env = process.env;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sessionKeys = () => Object.keys(env).filter((key) => key.startsWith('ANTHROPIC_') || key.startsWith('CLAUDE_CODE_') || key === 'CLAUDECODE');
 
 if (args[0] === 'auth' && args[1] === 'status') {
   const loggedIn = env.FAKE_AGENT_AUTH !== 'out';
+  if (env.FAKE_AGENT_LOG) appendFileSync(env.FAKE_AGENT_LOG, `${JSON.stringify({ args, keys: sessionKeys() })}\n`);
   process.stdout.write(`${JSON.stringify({ loggedIn, authMethod: loggedIn ? 'claude.ai' : 'none', apiProvider: 'firstParty' }, null, 2)}\n`);
   process.exit(loggedIn ? 0 : 1);
 }
 
 process.on('SIGINT', () => {
+  if (env.FAKE_AGENT_LOG) appendFileSync(env.FAKE_AGENT_LOG, `${JSON.stringify({ signal: 'SIGINT' })}\n`);
   process.stderr.write('Interrupted by the user.\n');
   process.exit(130);
 });
@@ -40,8 +49,7 @@ process.stdin.setEncoding('utf8');
 for await (const chunk of process.stdin) prompt += chunk;
 
 if (env.FAKE_AGENT_LOG) {
-  const keys = Object.keys(env).filter((key) => key.startsWith('ANTHROPIC_'));
-  appendFileSync(env.FAKE_AGENT_LOG, `${JSON.stringify({ args, cwd: process.cwd(), prompt, keys, path: env.PATH })}\n`);
+  appendFileSync(env.FAKE_AGENT_LOG, `${JSON.stringify({ args, cwd: process.cwd(), prompt, keys: sessionKeys(), path: env.PATH })}\n`);
 }
 
 const comment = prompt.split('\nComment:\n')[1]?.split('\n\nCarry out the comment.')[0] ?? '';
@@ -58,6 +66,7 @@ for (const line of lines) {
 }
 
 if (stream === 'success' && env.FAKE_AGENT_EDIT) {
+  if (Number(env.FAKE_AGENT_EDIT_DELAY_MS) > 0) await sleep(Number(env.FAKE_AGENT_EDIT_DELAY_MS));
   const file = /^File: (.+)$/m.exec(prompt)?.[1];
   const { find, replace } = JSON.parse(env.FAKE_AGENT_EDIT);
   if (file) {
@@ -73,4 +82,9 @@ if (env.FAKE_AGENT_NO_RESULT === '1') process.exit(2);
 const final = JSON.parse(result);
 if (stream === 'success' && env.FAKE_AGENT_REPLY) final.result = env.FAKE_AGENT_REPLY;
 process.stdout.write(`${JSON.stringify(final)}\n`);
+const linger = comment.includes('#linger') ? 5000 : Number(env.FAKE_AGENT_LINGER_MS || 0);
+if (linger > 0) {
+  await sleep(linger);
+  process.stdout.write(`${JSON.stringify({ ...final, result: 'Noted the hook output.' })}\n`);
+}
 process.exit(final.is_error ? 1 : 0);

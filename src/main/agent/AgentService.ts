@@ -11,6 +11,7 @@ import {
   COMMENT_LIMIT,
   SELECTION_LIMIT,
   StreamReader,
+  type RunOutcome,
   agentArgs,
   agentEnv,
   commandCandidates,
@@ -65,6 +66,8 @@ interface LiveRun {
   child: AgentProcess;
   reader: StreamReader;
   stopped: boolean;
+  /** The end has been sent: at the first result line, or at exit when none came. */
+  reported: boolean;
   killTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -194,21 +197,40 @@ export class AgentService {
       env: agentEnv(this.deps.env, await this.deps.searchPath()),
     });
     const run: CommentRun = { id: randomUUID(), path: request.path, status: 'running', reply: '', sessionId: null };
-    const live: LiveRun = { run, child, reader: new StreamReader(), stopped: false, killTimer: null };
+    // The run ends at its first result line. The process may live on after
+    // it (a folder's hooks can keep it busy, or wake it for more turns); it
+    // stays tracked until it exits, so quitting still ends it.
+    const report = (outcome: RunOutcome) => {
+      if (live.reported) return;
+      live.reported = true;
+      run.status = outcome.status;
+      run.reply = outcome.reply;
+      run.sessionId = live.reader.sessionId;
+      // A run that failed for want of a sign-in means the remembered yes is stale.
+      if (outcome.signedOut) this.signedIn.delete(command);
+      this.deps.onChanged?.({ ...run });
+    };
+    const live: LiveRun = {
+      run,
+      child,
+      reader: new StreamReader(() => {
+        if (!live.stopped) report(live.reader.outcome(false));
+      }),
+      stopped: false,
+      reported: false,
+      killTimer: null,
+    };
     this.runs.set(run.id, live);
 
-    let ended = false;
+    let exited = false;
     const end = (spawnError?: Error) => {
-      if (ended) return;
-      ended = true;
+      if (exited) return;
+      exited = true;
       if (live.killTimer) clearTimeout(live.killTimer);
       this.runs.delete(run.id);
       if (spawnError) live.reader.err(`${spawnError.message}\n`);
       const outcome = live.reader.finish(live.stopped);
-      run.status = outcome.status;
-      run.reply = outcome.reply;
-      run.sessionId = live.reader.sessionId;
-      this.deps.onChanged?.({ ...run });
+      report(outcome);
     };
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');
@@ -223,24 +245,30 @@ export class AgentService {
     return { ...run };
   }
 
-  /** Ends a run's turn with SIGINT; one still going after the grace period is killed. */
+  /** Ends a run's turn with SIGINT; one still going after the grace period is killed. A run past its result has ended and is not stopped. */
   stop(id: string): void {
     const live = this.runs.get(id);
-    if (!live || live.stopped) return;
+    if (!live || live.reported) return;
+    this.signal(live);
+  }
+
+  private signal(live: LiveRun): void {
+    if (live.stopped) return;
     live.stopped = true;
     live.child.kill('SIGINT');
     live.killTimer = setTimeout(() => {
-      if (this.runs.has(id)) live.child.kill('SIGTERM');
+      if (this.runs.get(live.run.id) === live) live.child.kill('SIGTERM');
     }, this.deps.stopGraceMs ?? STOP_GRACE_MS);
     live.killTimer.unref?.();
   }
 
-  /** On quit: every running run ends its turn. */
+  /** On quit: every process Opal started ends, including one past its result. */
   stopAll(): void {
-    for (const id of [...this.runs.keys()]) this.stop(id);
+    for (const live of [...this.runs.values()]) this.signal(live);
   }
 
+  /** Runs that have not ended. */
   running(): CommentRun[] {
-    return [...this.runs.values()].map((live) => ({ ...live.run }));
+    return [...this.runs.values()].filter((live) => !live.reported).map((live) => ({ ...live.run }));
   }
 }

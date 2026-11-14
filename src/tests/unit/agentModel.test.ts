@@ -8,6 +8,7 @@ import {
   agentEnv,
   commandCandidates,
   commentPrompt,
+  quoteFences,
   linesBefore,
   parseAgentSettings,
   parseAuthStatus,
@@ -53,6 +54,16 @@ describe('the prompt', () => {
     ].join('\n'));
   });
 
+  it('lengthens both fences until no line of the text equals the closing one', () => {
+    expect(quoteFences('a\n>> b\n>>>> c')).toEqual({ open: '<<<', close: '>>>' });
+    expect(quoteFences('a\n>>>\nb')).toEqual({ open: '<<<<', close: '>>>>' });
+    expect(quoteFences('>>>\r\n>>>>\n>>>>>>')).toEqual({ open: '<<<<<', close: '>>>>>' });
+    const prompt = commentPrompt({ file: 'notes.md', comment: 'Fix.', selection: { first: 1, last: 3, text: 'one\n>>>\ntwo' } });
+    expect(prompt).toContain('<<<<\none\n>>>\ntwo\n>>>>\n');
+    // The text cannot end its own quote: the closing fence appears once.
+    expect(prompt.split('\n').filter((line) => line === '>>>>')).toHaveLength(1);
+  });
+
   it('says the comment is about the whole file when nothing was selected', () => {
     const prompt = commentPrompt({ file: 'notes.md', comment: 'Add a summary.', selection: null });
     expect(prompt).toContain('File: notes.md\nNo text was selected. The comment is about the whole file.\n\nComment:\nAdd a summary.\n');
@@ -77,6 +88,20 @@ describe('the prompt', () => {
 });
 
 describe('reading the stream', () => {
+  it('keeps the first result only, and says so once as it is read', () => {
+    const lines = fixture('success.jsonl').trim().split('\n');
+    const result = JSON.parse(lines[lines.length - 1]);
+    let calls = 0;
+    const reader = new StreamReader(() => { calls += 1; });
+    reader.out(`${lines.join('\n')}\n`);
+    expect(calls).toBe(1);
+    expect(reader.hasResult).toBe(true);
+    reader.out(`${JSON.stringify({ ...result, result: 'Noted the hook output.' })}\n`);
+    reader.out(`${JSON.stringify({ type: 'assistant', error: 'authentication_failed' })}\n`);
+    expect(calls).toBe(1);
+    expect(reader.finish(false)).toEqual({ status: 'done', reply: 'Rewrote the line as a question.' });
+  });
+
   it('takes the session id from init, whatever comes first, and the reply from the result', () => {
     const outcome = read(fixture('success.jsonl'));
     expect(outcome).toEqual({ status: 'done', reply: 'Rewrote the line as a question.', sessionId: '3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41' });
@@ -128,9 +153,22 @@ describe('finding and starting the command', () => {
     expect(commandCandidates(null, HOME, '/Users/alex/.local/bin')).toEqual(['/Users/alex/.local/bin/claude']);
   });
 
-  it('runs with the login PATH and without either API key variable', () => {
-    const env = agentEnv({ HOME, PATH: '/usr/bin', ANTHROPIC_API_KEY: 'k', ANTHROPIC_AUTH_TOKEN: 't', ANTHROPIC_MODEL: 'm', LANG: 'en_US.UTF-8', GONE: undefined }, '/opt/homebrew/bin:/usr/bin');
-    expect(env).toEqual({ HOME, PATH: '/opt/homebrew/bin:/usr/bin', ANTHROPIC_MODEL: 'm', LANG: 'en_US.UTF-8' });
+  it('runs with the login PATH and without any API key or agent-session variable', () => {
+    const env = agentEnv({
+      HOME,
+      PATH: '/usr/bin',
+      ANTHROPIC_API_KEY: 'k',
+      ANTHROPIC_AUTH_TOKEN: 't',
+      ANTHROPIC_MODEL: 'm',
+      ANTHROPIC_BASE_URL: 'http://localhost:1',
+      CLAUDE_CODE_SIMPLE: '1',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CLAUDECODE: '1',
+      CLAUDE_CONFIG_DIR_NOTE: 'kept',
+      LANG: 'en_US.UTF-8',
+      GONE: undefined,
+    }, '/opt/homebrew/bin:/usr/bin');
+    expect(env).toEqual({ HOME, PATH: '/opt/homebrew/bin:/usr/bin', CLAUDE_CONFIG_DIR_NOTE: 'kept', LANG: 'en_US.UTF-8' });
   });
 
   it('reads the PATH between the markers, past whatever the shell\'s startup files print', () => {
