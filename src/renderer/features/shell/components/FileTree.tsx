@@ -38,6 +38,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/renderer/shared/ui';
+import { useRootLength } from '@/renderer/shared/hooks/useRootLength';
 import { cn } from '@/renderer/shared/utils';
 import {
   flattenFileTree,
@@ -49,14 +50,18 @@ import {
   type StickyFolder,
 } from '../utils/stickyFolders';
 
-/** A 28px row plus the 2px gap below it. */
-const TREE_ROW_HEIGHT = 30;
+/** The gap below a row; the row itself is the --row-height-compact token tall. */
+const TREE_ROW_GAP = 2;
+/** The row height when the stylesheet has not set the token, as in tests. */
+const FALLBACK_ROW_HEIGHT = 28;
 const TREE_INDENT = 16;
+/** A row's left padding: its level's indent plus a row's 8px padding. */
+const rowIndent = (depth: number) => `${depth * TREE_INDENT + 8}px`;
 /** At most this many folder rows stick at the top of the tree. */
 const MAX_STICKY_LEVELS = 4;
 /** The look a tree row and its stuck copy share. */
 const ROW_CLASS = cn(
-  'mx-2 flex h-row-compact cursor-default select-none items-center gap-2 rounded-row pr-2 text-ui text-foreground-secondary outline-none',
+  'mx-sidebar-inset flex h-row-compact cursor-default select-none items-center gap-sidebar-icon-gap rounded-sidebar-row pr-2 text-ui text-sidebar-label outline-none',
   'transition-hover hover:bg-surface-hover hover:text-foreground'
 );
 /** Keys typed within this window extend the type-ahead prefix. */
@@ -232,13 +237,13 @@ function FileTreeRow({
         }
         onKeyDown={(event) => data.onKeyDown(index, event)}
         {...(isRenaming ? {} : data.dragProps(node))}
-        style={{ paddingLeft: `${node.depth * TREE_INDENT + 8}px` }}
+        style={{ paddingLeft: rowIndent(node.depth) }}
         className={cn(
           ROW_CLASS,
           'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
           // A hidden row while hidden files show: one step dimmer than the other rows.
           node.hidden && 'text-foreground-tertiary',
-          isActive && 'bg-surface-selected font-medium text-foreground',
+          isActive && 'bg-sidebar-selected font-sidebar-active text-foreground',
           data.outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
         )}
       >
@@ -246,12 +251,12 @@ function FileTreeRow({
           <ChevronRight
             aria-hidden
             className={cn(
-              'h-4 w-4 shrink-0 p-px text-icon transition-transform duration-quick ease-standard',
+              'stroke-sidebar-icon h-sidebar-icon w-sidebar-icon shrink-0 p-px text-sidebar-icon transition-transform duration-quick ease-standard',
               node.isExpanded && 'rotate-90'
             )}
           />
         ) : (
-          <span aria-hidden className="w-4 shrink-0" />
+          <span aria-hidden className="w-sidebar-icon shrink-0" />
         )}
         {isRenaming ? (
           <RenameField node={node} onDone={data.onRenameDone} />
@@ -285,6 +290,8 @@ const TreeInner = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivE
 
 interface StickyFolderRowsProps {
   folders: readonly StickyFolder[];
+  /** A row and the gap below it, in pixels. */
+  rowHeight: number;
   outlinedPath: string | null;
   onActivate: (folder: StickyFolder) => void;
   dragProps: (node: FileTreeNode) => React.HTMLAttributes<HTMLDivElement>;
@@ -296,6 +303,7 @@ interface StickyFolderRowsProps {
  */
 function StickyFolderRows({
   folders,
+  rowHeight,
   outlinedPath,
   onActivate,
   dragProps,
@@ -310,7 +318,7 @@ function StickyFolderRows({
           <div
             key={node.path}
             // Outer folders cover inner ones as the inner ones are pushed out.
-            style={{ top, height: TREE_ROW_HEIGHT, zIndex: folders.length - level }}
+            style={{ top, height: rowHeight, zIndex: folders.length - level }}
             className={cn(
               'absolute inset-x-0 bg-chrome',
               level === folders.length - 1 && 'border-b border-border-subtle'
@@ -332,13 +340,13 @@ function StickyFolderRows({
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
-              style={{ paddingLeft: `${node.depth * TREE_INDENT + 8}px` }}
+              style={{ paddingLeft: rowIndent(node.depth) }}
               className={cn(
                 ROW_CLASS,
                 outlinedPath === node.path && 'ring-1 ring-inset ring-foreground-tertiary'
               )}
             >
-              <ChevronRight aria-hidden className="h-4 w-4 shrink-0 rotate-90 p-px text-icon" />
+              <ChevronRight aria-hidden className="stroke-sidebar-icon h-sidebar-icon w-sidebar-icon shrink-0 rotate-90 p-px text-sidebar-icon" />
               <span className="min-w-0 flex-1 truncate">{node.label}</span>
             </div>
           </div>
@@ -376,16 +384,17 @@ export function FileTree({ onNavigate }: FileTreeProps) {
   const openedFromTree = React.useRef<string | null>(null);
   const typeAhead = React.useRef({ prefix: '', at: 0 });
 
+  const rowHeight = useRootLength('--row-height-compact', FALLBACK_ROW_HEIGHT) + TREE_ROW_GAP;
   const nodes = React.useMemo(
     () => flattenFileTree({ expanded, listings, roots }),
     [expanded, listings, roots]
   );
   const hasRows = nodes.length > 0;
   const loneRoot = roots.length === 1 ? roots[0] : null;
-  const listHeight = Math.max(TREE_ROW_HEIGHT, viewport.height);
+  const listHeight = Math.max(rowHeight, viewport.height);
   const stuck = React.useMemo(
-    () => stickyFolders(nodes, scrollTop, TREE_ROW_HEIGHT, listHeight, MAX_STICKY_LEVELS),
-    [listHeight, nodes, scrollTop]
+    () => stickyFolders(nodes, scrollTop, rowHeight, listHeight, MAX_STICKY_LEVELS),
+    [listHeight, nodes, rowHeight, scrollTop]
   );
   const tabStopPath = React.useMemo(() => {
     const has = (path: string | null) =>
@@ -418,18 +427,18 @@ export function FileTree({ onNavigate }: FileTreeProps) {
       const below = offsetBelowStickyFolders(
         nodes,
         index,
-        TREE_ROW_HEIGHT,
+        rowHeight,
         listHeight,
         MAX_STICKY_LEVELS
       );
       // More than a screen away, 'smart' centres the row, clear of the stuck rows.
-      if (below < offset && offset <= index * TREE_ROW_HEIGHT + listHeight) {
+      if (below < offset && offset <= index * rowHeight + listHeight) {
         list.scrollTo(below);
       } else {
         list.scrollToItem(index, 'smart');
       }
     },
-    [listHeight, nodes]
+    [listHeight, nodes, rowHeight]
   );
 
   React.useEffect(() => {
@@ -683,14 +692,14 @@ export function FileTree({ onNavigate }: FileTreeProps) {
         offsetBelowStickyFolders(
           nodes,
           folder.index,
-          TREE_ROW_HEIGHT,
+          rowHeight,
           listHeight,
           MAX_STICKY_LEVELS
         )
       );
       focusPath(folder.node.path);
     },
-    [focusPath, listHeight, nodes]
+    [focusPath, listHeight, nodes, rowHeight]
   );
 
   // The blank space below the rows stands for the lone root: it takes drops
@@ -791,6 +800,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                 value={
                   <StickyFolderRows
                     folders={stuck}
+                    rowHeight={rowHeight}
                     outlinedPath={outlinedPath}
                     onActivate={showStuckFolder}
                     dragProps={dragProps}
@@ -805,7 +815,7 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                   itemCount={nodes.length}
                   itemData={itemData}
                   itemKey={itemKey}
-                  itemSize={TREE_ROW_HEIGHT}
+                  itemSize={rowHeight}
                   overscanCount={6}
                   innerElementType={TreeInner}
                   onScroll={handleScroll}

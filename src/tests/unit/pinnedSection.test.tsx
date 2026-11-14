@@ -152,9 +152,9 @@ describe('PinnedSection', () => {
     await waitFor(() => expect(openedPath()).toBe(INVESTORS));
     expect(tabPaths()).toEqual([INVESTORS]);
     expect(window.activityAPI.record).toHaveBeenCalledWith(INVESTORS, 'opened');
-    expect(pinned(INVESTORS)).toHaveClass('bg-surface-selected');
+    expect(pinned(INVESTORS)).toHaveClass('bg-sidebar-selected');
     expect(pinned(INVESTORS)).toHaveAttribute('aria-pressed', 'true');
-    expect(pinned(README)).not.toHaveClass('bg-surface-selected');
+    expect(pinned(README)).not.toHaveClass('bg-sidebar-selected');
 
     await user.keyboard('{Meta>}');
     await user.click(pinned(README));

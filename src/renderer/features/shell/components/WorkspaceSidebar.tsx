@@ -99,11 +99,11 @@ export function WorkspaceSidebar({
 
       <PinnedSection onNavigate={onNavigate} />
 
-      <div className="min-h-0 flex-1 pt-4">
+      <div className="min-h-0 flex-1 pt-sidebar-group">
         <FileTree onNavigate={onNavigate} />
       </div>
 
-      <div className="shrink-0 p-2">
+      <div className="shrink-0 px-sidebar-inset py-2">
         <UpdateRow />
         <SidebarItem icon={Settings} label="Settings" onActivate={openSettings} />
       </div>

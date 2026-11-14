@@ -130,22 +130,22 @@ describe("WorkspaceSidebar", () => {
       // A restored tab, which Daily did not open.
       openTabs([`${ROOT}/Library/daily/2026-10-29.md`]);
       renderSidebar();
-      expect(today()).toHaveClass("bg-surface-selected");
+      expect(today()).toHaveClass("bg-sidebar-selected");
 
       act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
-      expect(today()).not.toHaveClass("bg-surface-selected");
+      expect(today()).not.toHaveClass("bg-sidebar-selected");
       // Until the cleanup commit, the old page counts too; the day's log does not.
       act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Inbox/Logs/2026-10-29.md`)));
-      expect(today()).toHaveClass("bg-surface-selected");
+      expect(today()).toHaveClass("bg-sidebar-selected");
       act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Library/logs/2026-10-29 log.md`)));
-      expect(today()).not.toHaveClass("bg-surface-selected");
+      expect(today()).not.toHaveClass("bg-sidebar-selected");
 
       // At midnight the page becomes yesterday's.
       act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/Library/daily/2026-10-29.md`)));
-      expect(today()).toHaveClass("bg-surface-selected");
+      expect(today()).toHaveClass("bg-sidebar-selected");
       vi.setSystemTime(new Date(2026, 9, 30, 0, 1));
       act(() => { window.dispatchEvent(new Event("focus")); });
-      expect(today()).not.toHaveClass("bg-surface-selected");
+      expect(today()).not.toHaveClass("bg-sidebar-selected");
     } finally {
       vi.useRealTimers();
     }
@@ -198,19 +198,19 @@ describe("WorkspaceSidebar", () => {
     useDiskStore.setState({ roots: [ROOT], rootsLoaded: true });
     renderSidebar(true);
     const recent = screen.getByRole("button", { name: "Recent" });
-    expect(recent).not.toHaveClass("bg-surface-selected");
+    expect(recent).not.toHaveClass("bg-sidebar-selected");
 
     await user.click(recent);
     expect(await screen.findByRole("heading", { name: "Recent" })).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/files?mode=browse&collection=recent",
     );
-    expect(recent).toHaveClass("bg-surface-selected");
+    expect(recent).toHaveClass("bg-sidebar-selected");
     expect(window.activityAPI.record).not.toHaveBeenCalled();
 
     // Opening a page from Recent leaves Recent one Back step away.
     act(() => useTabsStore.getState().open(fileLocation(`${ROOT}/readme.md`)));
-    expect(recent).not.toHaveClass("bg-surface-selected");
+    expect(recent).not.toHaveClass("bg-sidebar-selected");
   });
 });
 

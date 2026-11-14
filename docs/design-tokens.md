@@ -1,7 +1,12 @@
 # Opal design tokens
 
 `src/renderer/styles/index.css` is the token source of truth.
-`tailwind.config.js` exposes those values to components. Both light and dark
+`tailwind.config.js` exposes those values to components.
+
+Values marked **B** are version B of the `roomy` interface variant
+(`src/common/variants.ts`), on while the document root carries `data-roomy`
+(see "Version B: roomy" at the end). Everything else, and every A value, is
+what ships by default. Both light and dark
 themes define the same semantic roles independently; a component never chooses
 a raw palette shade. The values follow the design brief drawn from Linear and
 Bastion (`docs/product/2026-10-28-pages-first-ux.md`, "Look").
@@ -21,15 +26,16 @@ apart by the steps between the three greys and by space.
 
 | CSS token | Tailwind | Light | Dark |
 |---|---|---|---|
-| `--chrome` | `bg-chrome` | #ececec | #0b0b0b |
-| `--ground` | `bg-ground` | #f5f5f5 | #131313 |
+| `--chrome` | `bg-chrome` | #ececec; **B** #fafafa | #0b0b0b |
+| `--ground` | `bg-ground` | #f5f5f5; **B** #fafafa | #131313 |
 | `--canvas` | `bg-canvas` | #ffffff | #1a1a1a |
 | `--page-ring` | `border-page-ring` | #e2e2e2 | #282828 |
 | `--radius-card` | `rounded-card` | 8 px | 8 px |
 | `--page-inset` | `m*-page` | 8 px | 8 px |
 
 The Electron window background (`WINDOW_BACKGROUND` in `src/main.ts`) is the
-chrome colour, so the first frame matches.
+chrome colour, so the first frame matches; with `roomy` on B it is #fafafa in
+light mode.
 
 ## Color
 
@@ -55,6 +61,8 @@ fails if a token, a Tailwind colour or a renderer source file brings hue back.
 | `--surface-hover` | `bg-surface-hover` | Pointer hover: black 4% / white 3% |
 | `--surface-active` | `bg-surface-active` | Pressed control: black 7% / white 5% |
 | `--surface-selected` | `bg-surface-selected` | Current row or item: black 6.4% / white 7.8% |
+| `--tab-active` | `bg-tab-active` | The active tab pill: `--surface-lift`; **B** light black 9% |
+| `--tab-active-shadow` | `shadow-tab-active` | Its shadow: `--shadow-control`; **B** light none |
 
 The selected overlay is set so a selected sidebar row is #dddddd on the light
 chrome and #1e1e1e on the dark one, the sketch's values; on the page it is
@@ -128,11 +136,11 @@ Monospace is `ui-monospace`, SF Mono, Menlo.
 
 | Tailwind | Size / line height | Use |
 |---|---|---|
-| `text-metadata` | 11 / 14 px | Counts, sizes, kbd hints |
+| `text-metadata`, `text-2xs` | 11 / 14 px; **B** 12 / 16 | Counts, sizes, kbd hints |
 | `text-label` | 12 / 16 px, weight 510 | Section and group labels |
-| `text-control` | 12 / 16 px | Dense secondary controls |
-| `text-ui` | 13 / 18 px, -0.01em | Rows, menus, buttons, default UI |
-| `text-ui-heading` | 15 / 20 px | Dialog and pane headings |
+| `text-control` | 12 / 16 px; **B** 13 / 18 | Dense secondary controls |
+| `text-ui` | 13 / 18 px, -0.01em; **B** 14 / 20 | Rows, menus, buttons, default UI |
+| `text-ui-heading` | 15 / 20 px; **B** 16 / 22 | Dialog and pane headings |
 
 Weights come from Inter's variable axis: 400 regular, `font-medium` 510 for
 nav items, active rows and buttons, `font-semibold` 590. Tree rows stay at 400.
@@ -150,15 +158,34 @@ both classes.
 |---|---|---|
 | `--control-height-compact` | `h-control-compact` | 28 px |
 | `--control-height` | `h-control` | 32 px |
-| `--row-height-compact` | `h-row-compact` | 28 px |
-| `--row-height` | `h-row` | 32 px |
+| `--row-height-compact` | `h-row-compact` | 28 px; **B** 32 |
+| `--row-height` | `h-row` | 32 px; **B** 36 |
 | `--header-height` | `h-header` | 40 px |
 | `--sidebar-width` | `w-sidebar` | 260 px |
 | `--reading-width` | `max-w-reading` | 720 px |
 
-Sidebar and tree rows are 28 px tall with a 6 px radius and 2 px between rows.
-The tree indents 16 px per level; a folder's chevron sits where a nav icon
-does, so top-level labels line up with Today and Recent.
+Sidebar and tree rows are `h-row-compact` (28 px; **B** 32) with 2 px
+between rows; the tree's virtual list reads the token's height
+(`useRootLength`). The tree indents 16 px per level; a folder's chevron sits
+where a nav icon does, so top-level labels line up with Daily and Recent.
+
+| CSS token | Tailwind | A | B |
+|---|---|---|---|
+| `--sidebar-inset` | `px-sidebar-inset`, `mx-sidebar-inset` | 8 px | 10 |
+| (inset + 8 px) | `pl-sidebar-label` | 16 px, the group label's indent | 18 |
+| `--sidebar-group-gap` | `pt-sidebar-group` | 16 px above Pinned and the tree | 20 |
+| `--sidebar-icon-size` | `h-sidebar-icon w-sidebar-icon` | 16 px | 18 |
+| `--sidebar-icon-gap` | `gap-sidebar-icon-gap` | 8 px | 10 |
+| `--sidebar-icon-stroke` | `stroke-sidebar-icon` | 2 (Lucide units) | 1.5 |
+| `--sidebar-label-weight` | `font-sidebar-label` | 510 (Daily, Recent, Settings) | 400 |
+| `--sidebar-active-weight` | `font-sidebar-active` | 510 | 400 |
+| `--sidebar-label` | `text-sidebar-label` | `--text-secondary` | light: `--text-primary` |
+| `--sidebar-icon` | `text-sidebar-icon` | `--icon` | light: `--text-primary` |
+| `--sidebar-selected` | `bg-sidebar-selected` | `--surface-selected` | light: black 9% |
+| `--radius-sidebar-row` | `rounded-sidebar-row` | 6 px | 8 |
+
+So a row's icon starts 17 px from the sidebar's edge and its label 40 px
+(**B** about 20 and 46).
 
 The page column's top row is one `h-header` row: tab pills, New tab, and a
 200 px search field. Pills are `h-control-compact` with `rounded-control`,
@@ -174,6 +201,20 @@ Recent sits in the page card in a `max-w-reading` column. Its day groups are
 `tabular-nums`.
 Rows and controls may use the compact or default value, but features must not
 invent their own density scale.
+
+## Page headings
+
+Page headings are in the page's serif, bold, in em of the 16 px body
+(`editor.css`, `stack.css`).
+
+| CSS token | Use | A | B |
+|---|---|---|---|
+| `--heading-title` | The page's title, a large stack title | 1.8 em | 1.6 |
+| `--heading-1` | `#` | 1.8 em | 1.6 |
+| `--heading-2` | `##` | 1.5 em | 1.3 |
+| `--heading-3` | `###` | 1.25 em | 1.15 |
+| `--heading-4` | `####` | 1.1 em | 1.05 |
+| `--stack-title` | Each page's title in a stack, such as Daily | 1.5 em | 1.3 |
 
 ## Icons
 
@@ -229,3 +270,17 @@ The user preference is `system`, `light`, or `dark`, chosen in Settings
 or `dark` value. The preference lives in the versioned `opal.theme` envelope.
 The pre-paint script reads the same schema before React starts, preventing a
 theme flash.
+
+## Version B: roomy
+
+`roomy` is a variant whose version B is only token values: a roomier
+sidebar after a reference app's proportions, interface text one size up, and
+quieter page headings. `:root[data-roomy]` sets the sizes in both themes;
+`:root[data-roomy]:not(.dark)` sets the light colours (the frame, sidebar
+labels and icons, the selected row, the tab pill), so dark mode keeps its
+greys. Components read the tokens and never the attribute. The attribute is
+put on the root by `features/variants/rootVariants.ts` from the variants
+store, which mirrors the sides into `opal.variants` in localStorage; the
+pre-paint script in `index.html` reads that mirror, so a launch on B paints
+B from its first frame.
+

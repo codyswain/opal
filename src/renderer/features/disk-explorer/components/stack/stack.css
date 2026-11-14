@@ -40,12 +40,12 @@
   align-items: baseline;
   gap: 0.75rem;
   padding-bottom: 0.5em;
-  font-size: 1.5em;
+  font-size: var(--stack-title);
 }
 
 .opal-stack-title-row.opal-stack-title-large {
   padding-bottom: 0.6em;
-  font-size: 1.8em;
+  font-size: var(--heading-title);
 }
 
 .opal-stack-title {
@@ -193,10 +193,10 @@
 }
 
 /* The same sizes and space above as the editor's headings (editor.css). */
-.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="1"] { --quiet-pad: 0.45em; font-size: 1.8em; }
-.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="2"] { --quiet-pad: 0.4em; font-size: 1.5em; }
-.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="3"] { --quiet-pad: 0.3em; font-size: 1.25em; }
-.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="4"] { --quiet-pad: 0.25em; font-size: 1.1em; }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="1"] { --quiet-pad: 0.45em; font-size: var(--heading-1); }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="2"] { --quiet-pad: 0.4em; font-size: var(--heading-2); }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="3"] { --quiet-pad: 0.3em; font-size: var(--heading-3); }
+.opal-stack-header[data-quiet] .opal-stack-title-row[data-level="4"] { --quiet-pad: 0.25em; font-size: var(--heading-4); }
 .opal-stack-header[data-quiet] .opal-stack-title-row:is([data-level="5"], [data-level="6"]) { --quiet-pad: 0.2em; font-size: 1em; }
 
 .opal-stack-header[data-quiet] :is(.opal-stack-chevron, .opal-stack-open) {

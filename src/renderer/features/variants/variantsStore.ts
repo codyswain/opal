@@ -9,6 +9,8 @@ interface VariantsState {
   /** The side each variant is on, as the main process keeps it; a variant not listed is on A. */
   sides: VariantSides;
   loaded: boolean;
+  /** The main process has answered with the sides (or failed to), so `sides` is not just the starting empty set. */
+  ready: boolean;
   load: () => Promise<void>;
   /** Puts a variant on a side. Resolves to an error message, or null. */
   set: (name: string, side: VariantSide) => Promise<string | null>;
@@ -20,23 +22,24 @@ export const useVariantsStore = create<VariantsState>((set, get) => ({
   known: VARIANTS,
   sides: {},
   loaded: false,
+  ready: false,
   load: async () => {
     if (get().loaded) return;
     set({ loaded: true });
     const result = await window.vaultAPI?.variants?.().catch(() => null);
-    if (result && 'data' in result) set({ sides: result.data });
+    set(result && 'data' in result ? { sides: result.data, ready: true } : { ready: true });
   },
   set: async (name, side) => {
     try {
       const result = await window.vaultAPI.setVariant(name, side);
       if ('error' in result) return result.error;
-      set({ sides: result.data });
+      set({ sides: result.data, ready: true });
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : 'Could not switch the version.';
     }
   },
-  take: (sides) => set({ sides }),
+  take: (sides) => set({ sides, ready: true }),
 }));
 
 /** Whether this build has both versions of a variant. */
