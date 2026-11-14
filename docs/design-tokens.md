@@ -183,9 +183,22 @@ where a nav icon does, so top-level labels line up with Daily and Recent.
 | `--sidebar-icon` | `text-sidebar-icon` | `--icon` | light: `--text-primary` |
 | `--sidebar-selected` | `bg-sidebar-selected` | `--surface-selected` | light: black 9% |
 | `--radius-sidebar-row` | `rounded-sidebar-row` | 6 px | 8 |
+| `--sidebar-group-label-height` | `min-h-sidebar-group-label` | 16 px, the label's line | a row and its 2 px gap, 34 |
+| `--sidebar-group-label-weight` | `font-sidebar-group-label` | 510 | 400 |
 
 So a row's icon starts 17 px from the sidebar's edge and its label 40 px
 (**B** about 20 and 46).
+
+The frame's icon buttons (both sidebars' top rows and the tab row's "+")
+are `IconButton variant="frame"` with `frame-icon` on the icon:
+
+| CSS token | Tailwind | A | B |
+|---|---|---|---|
+| `--frame-icon` | `text-frame-icon` | `--icon` | light: `--text-primary` |
+| `--frame-icon-size` | `frame-icon` | 16 px | 18 |
+| `--frame-icon-stroke` | `frame-icon` | 2 | 1.5 |
+
+A disabled one (Back with nowhere to go) keeps the buttons' 40% opacity.
 
 The page column's top row is one `h-header` row: tab pills, New tab, and a
 200 px search field. Pills are `h-control-compact` with `rounded-control`,

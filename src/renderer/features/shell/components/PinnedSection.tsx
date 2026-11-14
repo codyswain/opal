@@ -143,7 +143,7 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
       }}
       onDrop={onDrop}
     >
-      <div id={labelId} className="shrink-0 pb-0.5 pl-sidebar-label pr-4 text-label text-foreground-tertiary">
+      <div id={labelId} className="flex min-h-sidebar-group-label shrink-0 items-center pb-0.5 pl-sidebar-label pr-4 text-label font-sidebar-group-label text-foreground-tertiary">
         Pinned
       </div>
       <div ref={listRef} className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-sidebar-inset">

@@ -52,6 +52,13 @@
     --sidebar-label: var(--text-secondary);
     --sidebar-icon: var(--icon);
     --sidebar-selected: var(--surface-selected);
+    /* A group label ("Pinned"): its box's least height, its gap below included, and its weight. */
+    --sidebar-group-label-height: 1rem;
+    --sidebar-group-label-weight: 510;
+    /* The window frame's icon buttons: the sidebars' top rows and the tab row's "+". */
+    --frame-icon: var(--icon);
+    --frame-icon-size: 1rem;
+    --frame-icon-stroke: 2;
 
     /* Page headings, in em of the page's 16px body. */
     --heading-title: 1.8em;
@@ -208,6 +215,11 @@
     --sidebar-label-weight: 400;
     --sidebar-active-weight: 400;
     --radius-sidebar-row: 0.5rem;
+    /* A group label sits in a full row with the 2px gap below, as the rows do. */
+    --sidebar-group-label-height: calc(var(--row-height-compact) + 0.125rem);
+    --sidebar-group-label-weight: 400;
+    --frame-icon-size: 1.125rem;
+    --frame-icon-stroke: 1.5;
 
     --heading-title: 1.6em;
     --heading-1: 1.6em;
@@ -227,6 +239,7 @@
     --ground: 0 0% 98%;
     --sidebar-label: var(--text-primary);
     --sidebar-icon: var(--text-primary);
+    --frame-icon: var(--text-primary);
     --sidebar-selected: 0 0% 0% / 0.09;
     --tab-active: 0 0% 0% / 0.09;
     --tab-active-shadow: none;
@@ -279,6 +292,13 @@
   /* A sidebar icon's line weight; Lucide draws in 24 units. */
   .stroke-sidebar-icon {
     stroke-width: var(--sidebar-icon-stroke);
+  }
+
+  /* An icon in a frame button (IconButton variant="frame"). */
+  .frame-icon {
+    width: var(--frame-icon-size);
+    height: var(--frame-icon-size);
+    stroke-width: var(--frame-icon-stroke);
   }
 
   /* Rows and buttons: the hover fill appears at once and fades out. */

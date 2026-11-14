@@ -518,16 +518,16 @@ export function DaySidebar({ width }: DaySidebarProps) {
           {relative ? <span className="text-foreground-tertiary">{relative}</span> : null}
         </div>
         <div className="no-drag ml-auto flex shrink-0 items-center gap-0.5">
-          <IconButton label="Previous day" onClick={() => pickDay(addDays(date, -1))}>
-            <ChevronLeft aria-hidden className="h-4 w-4" />
+          <IconButton label="Previous day" onClick={() => pickDay(addDays(date, -1))} variant="frame">
+            <ChevronLeft aria-hidden className="frame-icon" />
           </IconButton>
-          <IconButton label="Next day" onClick={() => pickDay(addDays(date, 1))}>
-            <ChevronRight aria-hidden className="h-4 w-4" />
+          <IconButton label="Next day" onClick={() => pickDay(addDays(date, 1))} variant="frame">
+            <ChevronRight aria-hidden className="frame-icon" />
           </IconButton>
           <Menu>
             <MenuTrigger asChild>
-              <IconButton label="Sidebar options">
-                <Ellipsis aria-hidden className="h-4 w-4" />
+              <IconButton label="Sidebar options" variant="frame">
+                <Ellipsis aria-hidden className="frame-icon" />
               </IconButton>
             </MenuTrigger>
             <MenuContent align="end" className="w-[216px]">
@@ -555,8 +555,9 @@ export function DaySidebar({ width }: DaySidebarProps) {
             aria-controls="day-sidebar"
             aria-expanded
             onClick={() => toggleDaySidebar()}
+            variant="frame"
           >
-            <PanelRight aria-hidden className="h-4 w-4" />
+            <PanelRight aria-hidden className="frame-icon" />
           </IconButton>
         </div>
       </div>

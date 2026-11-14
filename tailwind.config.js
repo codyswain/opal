@@ -41,6 +41,7 @@ module.exports = {
         selected: "hsl(var(--sidebar-selected))",
       },
       "tab-active": "hsl(var(--tab-active))",
+      "frame-icon": "hsl(var(--frame-icon))",
       input: "hsl(var(--input))",
       ring: "hsl(var(--ring))",
       background: "hsl(var(--background))",
@@ -124,6 +125,7 @@ module.exports = {
         semibold: "590",
         "sidebar-label": "var(--sidebar-label-weight)",
         "sidebar-active": "var(--sidebar-active-weight)",
+        "sidebar-group-label": "var(--sidebar-group-label-weight)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -160,6 +162,9 @@ module.exports = {
       },
       maxWidth: {
         reading: "var(--reading-width)",
+      },
+      minHeight: {
+        "sidebar-group-label": "var(--sidebar-group-label-height)",
       },
       // Tailwind's default ring is blue; ours is the neutral focus token.
       ringColor: {

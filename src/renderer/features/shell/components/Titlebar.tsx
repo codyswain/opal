@@ -59,8 +59,9 @@ export function Titlebar({
             aria-controls="day-sidebar"
             aria-expanded={false}
             onClick={() => toggleDaySidebar()}
+            variant="frame"
           >
-            <PanelRight aria-hidden className="h-4 w-4" />
+            <PanelRight aria-hidden className="frame-icon" />
           </IconButton>
         </div>
       ) : null}

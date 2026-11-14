@@ -38,9 +38,10 @@ function CollapseFoldersButton() {
       shortcut="⌥⌘←"
       data-testid="collapse-all-folders"
       onClick={() => useDiskStore.getState().collapseAll()}
+      variant="frame"
       className="sidebar-collapse-all opacity-0 focus-visible:opacity-100 group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100"
     >
-      <ChevronsDownUp aria-hidden className="h-4 w-4" />
+      <ChevronsDownUp aria-hidden className="frame-icon" />
     </IconButton>
   );
 }

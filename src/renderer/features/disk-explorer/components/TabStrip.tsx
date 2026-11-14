@@ -288,8 +288,8 @@ export const TabStrip: React.FC = () => {
           })}
         </div>
       ) : null}
-      <IconButton label="New tab" shortcut="⌘T" onClick={openNewTab}>
-        <Plus aria-hidden className="h-4 w-4" />
+      <IconButton label="New tab" shortcut="⌘T" onClick={openNewTab} variant="frame">
+        <Plus aria-hidden className="frame-icon" />
       </IconButton>
       {tabs.length > 0 && (overflowing || tabs.length >= OVERFLOW_MENU_AT) ? (
         <Menu>
