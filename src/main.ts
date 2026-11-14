@@ -53,6 +53,8 @@ import { MarkdownHandlers } from "@/main/fs/MarkdownHandlers";
 import { LinkIndex } from "@/main/fs/LinkIndex";
 import { ActivityStore } from "@/main/activity/ActivityStore";
 import { ActivityService } from "@/main/activity/ActivityService";
+import type { ResolvedTheme } from "@/common/theme";
+import type { VariantSides } from "@/types/dailyTest";
 import { ActivityHandlers } from "@/main/activity/ActivityHandlers";
 import { activityStorePath } from "@/main/library/libraryPaths";
 import { CollectionIndex } from "@/main/collections/CollectionIndex";
@@ -99,6 +101,12 @@ const WINDOW_BACKGROUND = {
   light: "#ECECEC",
   dark: "#0B0B0B",
 } as const;
+// Version B of the roomy variant lightens the light chrome to #fafafa.
+const ROOMY_LIGHT_BACKGROUND = "#FAFAFA";
+/** The variants' sides as last read, for the window's first-frame colour. */
+let variantSides: VariantSides = {};
+const windowBackground = (theme: ResolvedTheme) =>
+  theme === "light" && variantSides.roomy === "b" ? ROOMY_LIGHT_BACKGROUND : WINDOW_BACKGROUND[theme];
 const TRAFFIC_LIGHT_POSITION = { x: 16, y: 13 } as const;
 let mainWindow: BrowserWindow | null = null;
 // Set once startup has made the first window, so a link never makes a second.
@@ -137,7 +145,7 @@ const createWindow = () => {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
-    backgroundColor: WINDOW_BACKGROUND[resolvedTheme],
+    backgroundColor: windowBackground(resolvedTheme),
     titleBarStyle: "hiddenInset",
     // Centers the 14px buttons in the renderer's 40px top row.
     trafficLightPosition: TRAFFIC_LIGHT_POSITION,
@@ -354,9 +362,13 @@ const systemHandlers = new SystemHandlers({
   dialog,
   browserWindow: BrowserWindow,
   onThemeChanged: (report) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setBackgroundColor(WINDOW_BACKGROUND[report.resolved]);
-    }
+    // A test may have switched a variant since launch, so the sides are read again.
+    void testService.sides().catch(() => variantSides).then((sides) => {
+      variantSides = sides;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setBackgroundColor(windowBackground(report.resolved));
+      }
+    });
     void windowStateStore.saveTheme(report);
   },
 });
@@ -685,6 +697,7 @@ app.whenReady().then(async () => {
       void hiddenFiles.hide();
     });
 
+    variantSides = await testService.sides().catch(() => ({}));
     createWindow();
     windowStarted = true;
     updateService.start();

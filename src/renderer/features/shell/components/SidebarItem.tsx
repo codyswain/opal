@@ -16,8 +16,8 @@ interface SidebarItemProps {
 }
 
 const rowStyles = [
-  'group flex h-row-compact w-full min-w-0 items-center gap-2 rounded-row px-2',
-  'text-left text-ui font-medium text-foreground-secondary outline-none',
+  'group flex h-row-compact w-full min-w-0 items-center gap-sidebar-icon-gap rounded-sidebar-row px-2',
+  'text-left text-ui font-sidebar-label text-sidebar-label outline-none',
   'transition-hover hover:bg-surface-hover hover:text-foreground',
   'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
 ].join(' ');
@@ -29,7 +29,7 @@ function ItemContents({
 }: Pick<SidebarItemProps, 'icon' | 'label' | 'trailing'>) {
   return (
     <>
-      <Icon aria-hidden className="h-4 w-4 shrink-0 text-icon" />
+      <Icon aria-hidden className="stroke-sidebar-icon h-sidebar-icon w-sidebar-icon shrink-0 text-sidebar-icon" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {trailing ? (
         <span className="shrink-0 text-metadata tabular-nums text-foreground-tertiary">
@@ -62,7 +62,7 @@ export function SidebarItem({
       aria-pressed={active || undefined}
       className={cn(
         rowStyles,
-        active === true && 'bg-surface-selected text-foreground',
+        active === true && 'bg-sidebar-selected font-sidebar-active text-foreground',
         disabled && 'pointer-events-none',
         className
       )}

@@ -35,6 +35,13 @@ module.exports = {
         overlay: "hsl(var(--border-overlay))",
       },
       "page-ring": "hsl(var(--page-ring))",
+      sidebar: {
+        label: "hsl(var(--sidebar-label))",
+        icon: "hsl(var(--sidebar-icon))",
+        selected: "hsl(var(--sidebar-selected))",
+      },
+      "tab-active": "hsl(var(--tab-active))",
+      "frame-icon": "hsl(var(--frame-icon))",
       input: "hsl(var(--input))",
       ring: "hsl(var(--ring))",
       background: "hsl(var(--background))",
@@ -83,7 +90,11 @@ module.exports = {
         mono: ["var(--font-mono)"],
       },
       fontSize: {
-        "2xs": ["11px", { lineHeight: "14px" }],
+        // The same size as metadata, so it follows the text tokens.
+        "2xs": [
+          "var(--text-metadata-size)",
+          { lineHeight: "var(--text-metadata-line)" },
+        ],
         metadata: [
           "var(--text-metadata-size)",
           { lineHeight: "var(--text-metadata-line)" },
@@ -112,12 +123,16 @@ module.exports = {
       fontWeight: {
         medium: "510",
         semibold: "590",
+        "sidebar-label": "var(--sidebar-label-weight)",
+        "sidebar-active": "var(--sidebar-active-weight)",
+        "sidebar-group-label": "var(--sidebar-group-label-weight)",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
         row: "var(--radius-row)",
+        "sidebar-row": "var(--radius-sidebar-row)",
         control: "var(--radius-control)",
         card: "var(--radius-card)",
         overlay: "var(--radius-overlay)",
@@ -129,17 +144,28 @@ module.exports = {
         "row-compact": "var(--row-height-compact)",
         row: "var(--row-height)",
         header: "var(--header-height)",
+        "sidebar-icon": "var(--sidebar-icon-size)",
       },
       width: {
+        "sidebar-icon": "var(--sidebar-icon-size)",
         "control-compact": "var(--control-height-compact)",
         control: "var(--control-height)",
         sidebar: "var(--sidebar-width)",
       },
       spacing: {
         page: "var(--page-inset)",
+        "sidebar-inset": "var(--sidebar-inset)",
+        "tree-row-end": "var(--tree-row-end)",
+        // A group label's indent: in line with the rows' icons.
+        "sidebar-label": "calc(var(--sidebar-inset) + 0.5rem)",
+        "sidebar-group": "var(--sidebar-group-gap)",
+        "sidebar-icon-gap": "var(--sidebar-icon-gap)",
       },
       maxWidth: {
         reading: "var(--reading-width)",
+      },
+      minHeight: {
+        "sidebar-group-label": "var(--sidebar-group-label-height)",
       },
       // Tailwind's default ring is blue; ours is the neutral focus token.
       ringColor: {
@@ -149,6 +175,7 @@ module.exports = {
         control: "var(--shadow-control)",
         overlay: "var(--shadow-overlay)",
         dialog: "var(--shadow-dialog)",
+        "tab-active": "var(--tab-active-shadow)",
       },
       transitionDuration: {
         hover: "var(--duration-hover)",

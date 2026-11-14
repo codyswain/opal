@@ -216,7 +216,7 @@
 
 .opal-editor .cm-editor .cm-md-inline-title {
   padding-bottom: 0.6em;
-  font-size: 1.8em;
+  font-size: var(--heading-title);
   overflow-wrap: break-word;
 }
 
@@ -294,10 +294,10 @@
 }
 
 /* More room above a heading than below it, so it sits on its section. */
-.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.8em; padding-bottom: 0.15em; font-size: 1.8em; }
-.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.75em; padding-bottom: 0.15em; font-size: 1.5em; }
-.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.6em; padding-bottom: 0.1em; font-size: 1.25em; }
-.opal-editor .cm-editor .cm-md-h4 { padding-top: 0.25em; font-size: 1.1em; }
+.opal-editor .cm-editor .cm-md-h1 { padding-top: 0.8em; padding-bottom: 0.15em; font-size: var(--heading-1); }
+.opal-editor .cm-editor .cm-md-h2 { padding-top: 0.75em; padding-bottom: 0.15em; font-size: var(--heading-2); }
+.opal-editor .cm-editor .cm-md-h3 { padding-top: 0.6em; padding-bottom: 0.1em; font-size: var(--heading-3); }
+.opal-editor .cm-editor .cm-md-h4 { padding-top: 0.25em; font-size: var(--heading-4); }
 .opal-editor .cm-editor .cm-md-h5 { padding-top: 0.2em; font-size: 1em; }
 .opal-editor .cm-editor .cm-md-h6 { padding-top: 0.2em; font-size: 1em; color: hsl(var(--text-secondary)); }
 

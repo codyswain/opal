@@ -54,6 +54,30 @@
         document.documentElement.classList.add(resolvedTheme);
         document.documentElement.style.colorScheme = resolvedTheme;
       })();
+      // The same for variants whose version B is a set of tokens: each one
+      // on B gets its data-<name> attribute before the first frame. Mirrors
+      // the opal.variants envelope that rootVariants.ts in
+      // src/renderer/features/variants writes. Keep them in sync.
+      (function () {
+        try {
+          var stored = window.localStorage.getItem('opal.variants');
+          var envelope = stored ? JSON.parse(stored) : null;
+          var sides = envelope && envelope.version === 1 ? envelope.value : null;
+          if (!sides || typeof sides !== 'object') return;
+          for (var name in sides) {
+            if (
+              Object.prototype.hasOwnProperty.call(sides, name) &&
+              sides[name] === 'b' &&
+              /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) &&
+              name.length <= 64
+            ) {
+              document.documentElement.setAttribute('data-' + name, '');
+            }
+          }
+        } catch (error) {
+          // A corrupt cosmetic mirror reads as all on A until the sides load.
+        }
+      })();
     </script>
   </head>
   <body>

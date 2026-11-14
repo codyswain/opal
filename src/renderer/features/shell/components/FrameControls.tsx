@@ -50,16 +50,18 @@ export function FrameControls({
         label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
         shortcut="⌘\"
         onClick={onToggleSidebar}
+        variant="frame"
       >
-        <PanelLeft aria-hidden className="h-4 w-4" />
+        <PanelLeft aria-hidden className="frame-icon" />
       </IconButton>
       <IconButton
         label="Go back"
         shortcut="⌘["
         disabled={!canGoBack}
         onClick={() => useTabsStore.getState().back()}
+        variant="frame"
       >
-        <ChevronLeft aria-hidden className="h-4 w-4" />
+        <ChevronLeft aria-hidden className="frame-icon" />
       </IconButton>
       <IconButton
         label="Go forward"
@@ -67,8 +69,9 @@ export function FrameControls({
         disabled={!canGoForward}
         onClick={() => useTabsStore.getState().forward()}
         className="frame-forward"
+        variant="frame"
       >
-        <ChevronRight aria-hidden className="h-4 w-4" />
+        <ChevronRight aria-hidden className="frame-icon" />
       </IconButton>
     </div>
   );
@@ -85,8 +88,9 @@ export function SearchButton() {
       shortcut="⌘K"
       aria-keyshortcuts="Meta+K"
       onClick={() => usePaletteStore.getState().show()}
+      variant="frame"
     >
-      <Search aria-hidden className="h-4 w-4" />
+      <Search aria-hidden className="frame-icon" />
     </IconButton>
   );
 }

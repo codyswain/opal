@@ -8,6 +8,7 @@ import {
 import "@/renderer/styles/index.css";
 
 import { ThemeProvider, useTheme } from "@/renderer/features/theme";
+import { startRootVariants } from "@/renderer/features/variants";
 import { TooltipProvider } from "@/renderer/shared/components/Tooltip";
 import { Toaster } from "@/renderer/shared/components/Toast";
 import { SettingsDialog } from "@/renderer/features/settings";
@@ -88,6 +89,9 @@ const App: React.FC = () => {
       }
     });
   }, []);
+
+  // Variants whose version B is a set of tokens, on the document root.
+  useEffect(() => startRootVariants(), []);
 
   return (
     <Router>

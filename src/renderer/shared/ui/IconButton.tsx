@@ -19,6 +19,8 @@ const iconButtonVariants = cva(
       },
       variant: {
         ghost: 'bg-transparent hover:bg-surface-hover hover:text-foreground',
+        // The window frame's buttons: the top rows of both sidebars and the tab row. Their icons take `frame-icon`.
+        frame: 'bg-transparent text-frame-icon hover:bg-surface-hover hover:text-foreground',
         subtle:
           'bg-surface-hover text-foreground-secondary hover:bg-surface-active hover:text-foreground',
         outline:

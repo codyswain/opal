@@ -10,4 +10,8 @@ describe('cn', () => {
   it('lets a later token font size replace an earlier one', () => {
     expect(cn('text-control font-medium', 'text-ui')).toBe('font-medium text-ui');
   });
+
+  it("lets a selected sidebar row's weight token replace the label's", () => {
+    expect(cn('font-sidebar-label text-sidebar-label', 'font-sidebar-active text-foreground')).toBe('font-sidebar-active text-foreground');
+  });
 });

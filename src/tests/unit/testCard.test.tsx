@@ -124,8 +124,8 @@ describe('the variant registry and hook', () => {
     return <span data-testid="side">{useVariant(VARIANT)}</span>;
   }
 
-  it('starts empty in this build', () => {
-    expect(VARIANTS).toEqual([]);
+  it('lists the roomy variant in this build', () => {
+    expect(VARIANTS).toEqual(['roomy']);
   });
 
   it('is A until the variant is switched to B, as kept in the main process', async () => {

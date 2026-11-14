@@ -61,7 +61,10 @@ not exist.
   its side with `useVariant(name)` (`features/variants`). The side per
   variant is per Mac, in `<userData>/variants.json` (`vault:variants`,
   `vault:set-variant`). Adding a variant is one line in `VARIANTS` plus the
-  branch in the component
+  branch in the component. A variant listed in `ROOT_VARIANTS` has no branch:
+  its B is token values under `data-<name>` on the document root
+  (`rootVariants.ts`, mirrored to localStorage for the pre-paint script).
+  `roomy` is one; `docs/design-tokens.md` lists its values
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`,

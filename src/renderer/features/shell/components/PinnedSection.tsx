@@ -136,17 +136,17 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
     <section
       aria-labelledby={labelId}
       data-testid="pinned-section"
-      className="flex max-h-[40%] min-h-0 shrink-0 flex-col pt-4"
+      className="flex max-h-[40%] min-h-0 shrink-0 flex-col pt-sidebar-group"
       onDragOver={onDragOver}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropIndex(null);
       }}
       onDrop={onDrop}
     >
-      <div id={labelId} className="shrink-0 px-4 pb-0.5 text-control font-medium text-foreground-tertiary">
+      <div id={labelId} className="flex min-h-sidebar-group-label shrink-0 items-center pb-0.5 pl-sidebar-label pr-4 text-label font-sidebar-group-label text-foreground-tertiary">
         Pinned
       </div>
-      <div ref={listRef} className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2">
+      <div ref={listRef} className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-sidebar-inset">
         {rows.map(({ path }, index) => {
           const gone = missing.includes(path);
           return (
@@ -175,11 +175,11 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
                   }}
                   className={cn(
                     // shrink-0 keeps the row height once the list is long enough to scroll.
-                    'relative flex h-row-compact w-full min-w-0 shrink-0 items-center gap-2 rounded-row px-2',
-                    'text-left text-ui text-foreground-secondary outline-none',
+                    'relative flex h-row-compact w-full min-w-0 shrink-0 items-center gap-sidebar-icon-gap rounded-sidebar-row px-2',
+                    'text-left text-ui text-sidebar-label outline-none',
                     'transition-hover hover:bg-surface-hover hover:text-foreground',
                     'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
-                    openedPath === path && 'bg-surface-selected font-medium text-foreground',
+                    openedPath === path && 'bg-sidebar-selected font-sidebar-active text-foreground',
                     gone && 'text-foreground-tertiary hover:text-foreground-tertiary',
                     dragging === path && 'opacity-50',
                     dropIndex === index &&
@@ -189,7 +189,7 @@ export function PinnedSection({ onNavigate }: PinnedSectionProps) {
                       'after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-foreground/40'
                   )}
                 >
-                  <File aria-hidden className={cn('h-4 w-4 shrink-0 text-icon', gone && 'opacity-50')} />
+                  <File aria-hidden className={cn('stroke-sidebar-icon h-sidebar-icon w-sidebar-icon shrink-0 text-sidebar-icon', gone && 'opacity-50')} />
                   <span className="min-w-0 flex-1 truncate">{pinLabel(path, roots)}</span>
                 </button>
               </ContextMenuTrigger>

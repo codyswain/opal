@@ -36,9 +36,51 @@
     --reading-width: 45rem;
     --page-inset: 0.5rem;
 
+    /*
+     * The left sidebar. Rows are --row-height-compact tall with 2px between
+     * them; the tree reads that height for its virtual list. The inset is
+     * from the sidebar's edge to a row, the gap from the icon to the label.
+     */
+    --sidebar-inset: 0.5rem;
+    --sidebar-group-gap: 1rem;
+    --sidebar-icon-size: 1rem;
+    --sidebar-icon-gap: 0.5rem;
+    /* Lucide's stroke, in its 24-unit drawing. */
+    --sidebar-icon-stroke: 2;
+    --sidebar-label-weight: 510;
+    --sidebar-active-weight: 510;
+    --sidebar-label: var(--text-secondary);
+    --sidebar-icon: var(--icon);
+    --sidebar-selected: var(--surface-selected);
+    /*
+     * The tree's scroll area and its rows' right margin. A takes the
+     * scrollbar out of the rows while the tree overflows; B always keeps
+     * the 10px scrollbar's gutter and drops the margin, so a tree row ends
+     * where a Daily or Pinned row does, scrolling or not.
+     */
+    --tree-scrollbar-gutter: auto;
+    --tree-row-end: var(--sidebar-inset);
+    /* A group label ("Pinned"): its box's least height, its gap below included, and its weight. */
+    --sidebar-group-label-height: 1rem;
+    --sidebar-group-label-weight: 510;
+    /* The window frame's icon buttons: the sidebars' top rows and the tab row's "+". */
+    --frame-icon: var(--icon);
+    --frame-icon-size: 1rem;
+    --frame-icon-stroke: 2;
+
+    /* Page headings, in em of the page's 16px body. */
+    --heading-title: 1.8em;
+    --heading-1: 1.8em;
+    --heading-2: 1.5em;
+    --heading-3: 1.25em;
+    --heading-4: 1.1em;
+    /* A page's title in a stack, such as each day in Daily. */
+    --stack-title: 1.5em;
+
     /* Shape, elevation, and motion */
     --radius: 0.5rem;
     --radius-row: 0.375rem;
+    --radius-sidebar-row: var(--radius-row);
     --radius-control: 0.375rem;
     --radius-card: 0.5rem;
     --radius-overlay: 0.5rem;
@@ -79,6 +121,9 @@
     --surface-hover: 0 0% 0% / 0.04;
     --surface-active: 0 0% 0% / 0.07;
     --surface-selected: 0 0% 0% / 0.064;
+    /* The active tab pill, a page-coloured pill lifted off the top row. */
+    --tab-active: var(--surface-lift);
+    --tab-active-shadow: var(--shadow-control);
     --border-subtle: 0 0% 88.6%;
     --border-default: 0 0% 86.3%;
     --border-strong: 0 0% 83.5%;
@@ -149,6 +194,68 @@
     --shadow-dialog: 0 7px 32px hsl(0 0% 0% / 0.35);
   }
 
+  /*
+   * Version B of the `roomy` variant (src/common/variants.ts), on while the
+   * root carries data-roomy: interface text one size up, taller rows, a
+   * roomier sidebar with larger icons, and quieter page headings. Light mode
+   * also takes a lighter frame and darker sidebar labels and icons; dark
+   * mode keeps its greys. Components read these tokens and never the
+   * attribute.
+   */
+  :root[data-roomy] {
+    --text-metadata-size: 0.75rem;
+    --text-metadata-line: 1rem;
+    --text-control-size: 0.8125rem;
+    --text-control-line: 1.125rem;
+    --text-ui-size: 0.875rem;
+    --text-ui-line: 1.25rem;
+    --text-heading-size: 1rem;
+    --text-heading-line: 1.375rem;
+
+    --row-height-compact: 2rem;
+    --row-height: 2.25rem;
+
+    --sidebar-inset: 0.625rem;
+    --sidebar-group-gap: 1.25rem;
+    --sidebar-icon-size: 1.125rem;
+    --sidebar-icon-gap: 0.625rem;
+    --sidebar-icon-stroke: 1.5;
+    --sidebar-label-weight: 400;
+    --sidebar-active-weight: 400;
+    --radius-sidebar-row: 0.5rem;
+    /* A group label sits in a full row with the 2px gap below, as the rows do. */
+    --sidebar-group-label-height: calc(var(--row-height-compact) + 0.125rem);
+    --sidebar-group-label-weight: 400;
+    --frame-icon-size: 1.125rem;
+    /* The gutter is the scrollbar's 10px, the same as B's inset. */
+    --tree-scrollbar-gutter: stable;
+    --tree-row-end: 0px;
+    --frame-icon-stroke: 1.5;
+
+    --heading-title: 1.6em;
+    --heading-1: 1.6em;
+    --heading-2: 1.3em;
+    --heading-3: 1.15em;
+    --heading-4: 1.05em;
+    --stack-title: 1.3em;
+  }
+
+  /*
+   * The frame is one light grey, #fafafa, for both sidebars, the top row and
+   * the band round the page; the page keeps its ring. On it the white tab
+   * pill would vanish, so the active tab is a grey pill like a selected row.
+   */
+  :root[data-roomy]:not(.dark) {
+    --chrome: 0 0% 98%;
+    --ground: 0 0% 98%;
+    --sidebar-label: var(--text-primary);
+    --sidebar-icon: var(--text-primary);
+    --frame-icon: var(--text-primary);
+    --sidebar-selected: 0 0% 0% / 0.09;
+    --tab-active: 0 0% 0% / 0.09;
+    --tab-active-shadow: none;
+  }
+
   * {
     @apply border-border;
   }
@@ -193,6 +300,23 @@
 }
 
 @layer utilities {
+  /* A sidebar icon's line weight; Lucide draws in 24 units. */
+  .stroke-sidebar-icon {
+    stroke-width: var(--sidebar-icon-stroke);
+  }
+
+  /* The file tree's scroll area. */
+  .sidebar-tree-scroll {
+    scrollbar-gutter: var(--tree-scrollbar-gutter);
+  }
+
+  /* An icon in a frame button (IconButton variant="frame"). */
+  .frame-icon {
+    width: var(--frame-icon-size);
+    height: var(--frame-icon-size);
+    stroke-width: var(--frame-icon-stroke);
+  }
+
   /* Rows and buttons: the hover fill appears at once and fades out. */
   .transition-hover {
     transition-property: color, background-color, border-color, opacity,

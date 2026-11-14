@@ -224,7 +224,7 @@ export const TabStrip: React.FC = () => {
                       label.hint ? 'min-w-40' : 'min-w-[7.5rem]',
                       'outline-none transition-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground/25',
                       isActive
-                        ? 'bg-surface-lift font-medium text-foreground shadow-control'
+                        ? 'bg-tab-active font-medium text-foreground shadow-tab-active'
                         : 'text-foreground-secondary hover:bg-surface-hover hover:text-foreground',
                       dragging === tab.id && 'opacity-50',
                       dropIndex === index && 'before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-foreground/40',
@@ -288,8 +288,8 @@ export const TabStrip: React.FC = () => {
           })}
         </div>
       ) : null}
-      <IconButton label="New tab" shortcut="⌘T" onClick={openNewTab}>
-        <Plus aria-hidden className="h-4 w-4" />
+      <IconButton label="New tab" shortcut="⌘T" onClick={openNewTab} variant="frame">
+        <Plus aria-hidden className="frame-icon" />
       </IconButton>
       {tabs.length > 0 && (overflowing || tabs.length >= OVERFLOW_MENU_AT) ? (
         <Menu>
