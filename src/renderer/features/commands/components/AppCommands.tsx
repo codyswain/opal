@@ -29,7 +29,7 @@ import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openDaily, openDailyPage } from "@/renderer/features/shell/utils/openDaily";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { useUpdatesStore, useUpdatesSync } from "@/renderer/features/updates";
-import { commentTarget, openCommentBox, selectionCrossesPages } from "@/renderer/features/comment";
+import { commentTarget, openCommentBox, selectionCrossesPages, useCommentSync } from "@/renderer/features/comment";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
 
@@ -71,6 +71,8 @@ export const AppCommands: React.FC = () => {
   const hiddenShown = useHiddenStore((state) => state.shown);
   // Install Update is there only while a build is ready, Roll Back only while an earlier one is kept.
   useUpdatesSync();
+  // A comment's run can end before its mark is added; the listener is there from the start.
+  useCommentSync();
   const updateReady = useUpdatesStore((state) => state.state?.available != null);
   const canRollBack = useUpdatesStore((state) => state.state?.canRollBack === true);
 
@@ -315,7 +317,7 @@ export const AppCommands: React.FC = () => {
             type: "action",
             // A page's editor takes the key itself; this is the palette's and the menu's way in.
             shortcut: ["CmdOrCtrl+Shift+M"],
-            keywords: ["comment", "ask", "agent", "claude", "edit", "note", "annotate"],
+            keywords: ["comment", "ask", "agent", "claude"],
             perform: () => {
               // A selection from one page of a stack into the next belongs to neither.
               if (selectionCrossesPages()) return;

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { EditorView } from '@codemirror/view';
@@ -18,15 +19,18 @@ export interface CommentMark {
   /** The run's last message, or why it failed. */
   reply: string;
   /**
-   * Where the mark was when the page's editor last held it: the start of a
-   * line in the page's body. Editors map it through edits while they are open.
+   * Where the comment was made, as the page's editor last held it: the start
+   * of the selection, or the caret. Editors map it through edits while they
+   * are open.
    */
   pos: number;
+  /** When it was sent, in sending order: a shared mark lists its comments oldest first. */
+  order: number;
 }
 
 interface CommentStore {
   marks: Record<string, CommentMark>;
-  add: (mark: CommentMark) => void;
+  add: (mark: Omit<CommentMark, 'order'>) => void;
   /** A run's new state from the main process. */
   changed: (run: CommentRun) => void;
   /** Takes a mark away: a done mark once read, a failed one dismissed. */
@@ -79,10 +83,9 @@ function notice(mark: CommentMark): void {
   else toast(`Comment on ${name} failed.`, { action: open });
 }
 
-/** The API the store listens to; a new one (as in tests) is listened to afresh. */
-let listening: { agent: Window['agentAPI']; off: () => void } | null = null;
 /** Run changes that came before the start call answered. */
 const early = new Map<string, CommentRun>();
+let sent = 0;
 
 const status = (run: CommentRun): CommentMarkStatus | null =>
   run.status === 'done' || run.status === 'failed' ? run.status : null;
@@ -93,12 +96,9 @@ const status = (run: CommentRun): CommentMarkStatus | null =>
  */
 export const useCommentStore = create<CommentStore>((set, get) => ({
   marks: {},
-  add: (mark) => {
-    const agent = api();
-    if (agent && listening?.agent !== agent) {
-      listening?.off();
-      listening = { agent, off: agent.onRunChanged((run) => get().changed(run)) };
-    }
+  add: (added) => {
+    sent += 1;
+    const mark: CommentMark = { ...added, order: sent };
     set((state) => ({ marks: { ...state.marks, [mark.id]: mark } }));
     const waiting = early.get(mark.id);
     if (waiting) {
@@ -109,7 +109,11 @@ export const useCommentStore = create<CommentStore>((set, get) => ({
   changed: (run) => {
     const mark = get().marks[run.id];
     if (!mark) {
-      if (run.status !== 'running') early.set(run.id, run);
+      if (run.status !== 'running') {
+        early.set(run.id, run);
+        // Another window's runs end here too; only the latest few are kept.
+        if (early.size > 50) early.delete(early.keys().next().value as string);
+      }
       return;
     }
     if (run.status === 'running') return;
@@ -140,6 +144,22 @@ export const useCommentStore = create<CommentStore>((set, get) => ({
     if (!result.success) toast.error(result.error);
   },
 }));
+
+/**
+ * Listens to the main process's run changes for the life of the window, so a
+ * run that ends before its mark is added (a command that cannot start) is
+ * still heard. Returns how to stop listening.
+ */
+export function listenToRuns(): () => void {
+  const agent = api();
+  if (!agent) return () => undefined;
+  return agent.onRunChanged((run) => useCommentStore.getState().changed(run));
+}
+
+/** Mounted once, beside the updates sync, when the window starts. */
+export function useCommentSync(): void {
+  useEffect(() => listenToRuns(), []);
+}
 
 /** The marks on one page. */
 export function marksOf(marks: Record<string, CommentMark>, path: string): CommentMark[] {

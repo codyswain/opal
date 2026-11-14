@@ -153,12 +153,15 @@ not exist.
   `AgentService` in `src/main/agent` finds the command (`command` in
   `<userData>/agent.json`, then `~/.local/bin/claude`, then the login
   shell's PATH), checks `auth status`, asks once per folder (the yes is kept
-  in `agent.json`'s `folders`), and drops `ANTHROPIC_API_KEY` and
-  `ANTHROPIC_AUTH_TOKEN` from the run's environment. A folder can never name
-  the command. The rules and the stream reader are in `agentModel.ts`. In
-  the renderer, `features/comment` keeps the box and the marks in the
-  editor's state (`commentEditor.ts`); the marks are drawn in a CodeMirror
-  layer in the page's left padding and live in memory only. Code says
+  in `agent.json`'s `folders`), and passes on nothing named `ANTHROPIC_*`,
+  `CLAUDE_CODE_*` or `CLAUDECODE`. A folder can never name the command. A
+  run ends at its first `result` line; its process stays tracked until it
+  exits, so quitting still ends it. The rules and the stream reader are in
+  `agentModel.ts`. In the renderer, `features/comment` keeps the box and
+  each comment's place (where its selection starts) in the editor's state
+  (`commentEditor.ts`); comments on one visual row share one mark, drawn in
+  a CodeMirror layer in the page's left padding. Marks live in memory only;
+  `useCommentSync` listens for run ends from the window's start. Code says
   "agent" and "comment"; "Claude Code" appears only in messages. Tests and
   acceptance runs use `src/tests/fixtures/agent/fake-agent.mjs`; under the
   test profile `OPAL_TEST_AGENT_HOME` and `OPAL_TEST_AGENT_PATH` keep the

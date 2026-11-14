@@ -28,7 +28,7 @@ import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
 import type { OpenNote } from './wikiLinks';
-import { CommentBox, CommentMarkPopover, commentBox, commentExtensions, openMark, type CommentBoxAt } from '@/renderer/features/comment';
+import { CommentBox, CommentMarkPopover, commentBox, commentExtensions, openMark, type CommentBoxAt, type OpenMarks } from '@/renderer/features/comment';
 import '@/renderer/features/comment/comment.css';
 import './editor.css';
 
@@ -139,7 +139,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const [formula, setFormula] = useState<MathEditor | null>(null);
   // Comment's box and mark popover, in notes and documents alike.
   const [editorView, setEditorView] = useState<EditorView | null>(null);
-  const [comment, setComment] = useState<{ box: CommentBoxAt | null; mark: string | null }>({ box: null, mark: null });
+  const [comment, setComment] = useState<{ box: CommentBoxAt | null; mark: OpenMarks | null }>({ box: null, mark: null });
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState<{ words: number; selected: number | null }>({ words: 0, selected: null });
   const counting = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -292,7 +292,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       {docView ? <ObjectMenu view={docView} /> : null}
       {docView ? <CalloutTypeMenu view={docView} /> : null}
       {editorView && comment.box ? <CommentBox key={comment.box.id} view={editorView} box={comment.box} /> : null}
-      {editorView && comment.mark ? <CommentMarkPopover key={comment.mark} view={editorView} id={comment.mark} /> : null}
+      {editorView && comment.mark ? <CommentMarkPopover key={comment.mark.n} view={editorView} open={comment.mark} /> : null}
       <EditorStatus
         saveState={document.saveState}
         error={document.error}

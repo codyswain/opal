@@ -5,6 +5,7 @@ import type { AgentReadiness } from '@/types/agent';
 import { Button, Popover, PopoverAnchor, PopoverContent } from '@/renderer/shared/ui';
 import { commentBox, commentHost, selectedLines, setCommentBox, type CommentBoxAt } from './commentEditor';
 import { useCommentStore } from './commentStore';
+import { InlineCode } from './InlineCode';
 
 const MAX_ROWS = 6;
 
@@ -115,7 +116,8 @@ export const CommentBox: React.FC<CommentBoxProps> = ({ view, box }) => {
         status: 'running',
         comment,
         reply: '',
-        pos: view.state.doc.lineAt(Math.min(view.state.field(commentBox, false)?.from ?? at.from, view.state.doc.length)).from,
+        // The mark sits beside the row where the selection starts, or the caret's.
+        pos: Math.min(view.state.field(commentBox, false)?.from ?? at.from, view.state.doc.length),
       });
       close();
     } catch {
@@ -197,7 +199,7 @@ export const CommentBox: React.FC<CommentBoxProps> = ({ view, box }) => {
                 </div>
               </>
             ) : (
-              problem.text
+              <InlineCode text={problem.text} />
             )}
           </div>
         ) : null}

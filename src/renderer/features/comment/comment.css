@@ -100,7 +100,11 @@
 .opal-comment-line code,
 .opal-comment-reply code {
   font-family: var(--font-mono);
-  font-size: 0.95em;
+  font-size: 0.9em;
+  padding: 0 3px;
+  border-radius: 3px;
+  background-color: hsl(var(--surface-hover));
+  overflow-wrap: anywhere;
 }
 
 .opal-comment-actions {
@@ -108,6 +112,17 @@
   justify-content: flex-end;
   gap: 6px;
   margin-top: 8px;
+}
+
+.opal-comment-entry + .opal-comment-entry {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid hsl(var(--border-subtle));
+}
+
+.opal-comment-entries {
+  max-height: 24rem;
+  overflow-y: auto;
 }
 
 .opal-comment-quote {

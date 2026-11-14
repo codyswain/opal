@@ -1,11 +1,11 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import { toast } from 'sonner';
 import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
-import { commentBox, commentMarks, openCommentBox, selectedLines, setOpenMark } from '@/renderer/features/comment/commentEditor';
-import { useCommentStore } from '@/renderer/features/comment/commentStore';
+import { commentBox, commentMarks, groupStatus, markGroups, openCommentBox, openMark, selectedLines, setOpenMark } from '@/renderer/features/comment/commentEditor';
+import { listenToRuns, useCommentStore } from '@/renderer/features/comment/commentStore';
 import { SIGNED_OUT_MESSAGE } from '@/common/commentText';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import type { AgentAPI, AgentReadiness, CommentRun } from '@/types/agent';
@@ -24,6 +24,9 @@ let readiness: AgentReadiness[];
 let runChanged: ((run: CommentRun) => void) | null;
 let calls: string[];
 let agent: AgentAPI & { [key: string]: ReturnType<typeof vi.fn> };
+let stopListening: () => void = () => undefined;
+
+afterEach(() => stopListening());
 
 beforeEach(() => {
   changed = null;
@@ -54,6 +57,8 @@ beforeEach(() => {
     onRunChanged: vi.fn((callback: (run: CommentRun) => void) => { runChanged = callback; return () => { runChanged = null; }; }),
   } as never;
   (window as unknown as { agentAPI: AgentAPI }).agentAPI = agent;
+  // As the window does at startup.
+  stopListening = listenToRuns();
 });
 
 async function openEditor(path: string, text = TEXT) {
@@ -99,7 +104,8 @@ describe('Comment', () => {
     expect(api.documents.get(NOTE)?.body).toBe(`${TEXT}More.\n`);
     expect(agent.start).toHaveBeenCalledWith({ path: NOTE, comment: 'Make these one line', selection: { from: 3, to: 4, text: 'ship on Friday.\nThen we rest' } });
     await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
-    expect(marksIn(view)).toEqual([['run-1', { pos: TEXT.indexOf('We ship'), status: 'running' }]]);
+    // The mark is where the selection starts, not at its line's start.
+    expect(marksIn(view)).toEqual([['run-1', expect.objectContaining({ pos: from, status: 'running' })]]);
     expect(view.focus).toHaveBeenCalled();
   });
 
@@ -142,6 +148,7 @@ describe('Comment', () => {
     await waitFor(() => expect(view.state.doc.toString()).toBe('# Plan\n\nA line the run added.\nWe ship on Friday.\nDo we rest then?\nNotes follow.\nTyped while it ran.'));
     act(() => { view.dispatch({ changes: { from: view.state.doc.length, insert: '!' }, userEvent: 'input.type' }); });
     expect(view.state.doc.toString().endsWith('Typed while it ran.!')).toBe(true);
+    // The comment's place keeps to the start of the text that replaced the selection.
     const line = view.state.doc.toString().indexOf('Do we rest then?');
     expect(marksIn(view)[0][1].pos).toBe(line);
     // The merged text is saved, typing and all.
@@ -159,7 +166,7 @@ describe('Comment', () => {
     await waitFor(() => expect(marksIn(view)[0][1].status).toBe('done'));
     // Happy DOM lays nothing out, so the page counts as off screen.
     expect(toast).toHaveBeenCalledWith('Comment on Plan is done.', expect.objectContaining({ action: expect.objectContaining({ label: 'Open' }) }));
-    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    act(() => { view.dispatch({ effects: setOpenMark.of(['run-1']) }); });
     const popover = await screen.findByTestId('comment-popover');
     expect(popover).toHaveTextContent('Tighten');
     expect(popover).toHaveTextContent('Shortened the first paragraph.');
@@ -180,17 +187,19 @@ describe('Comment', () => {
     }
     expect(marksIn(view)).toHaveLength(2);
     act(() => { runChanged?.(run('run-1', 'failed', SIGNED_OUT_MESSAGE)); });
-    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    act(() => { view.dispatch({ effects: setOpenMark.of(['run-1']) }); });
     let popover = await screen.findByTestId('comment-popover');
-    expect(popover).toHaveTextContent(SIGNED_OUT_MESSAGE);
+    // Both are about the whole page, so they share the mark at its first row.
+    expect(within(popover).getAllByTestId('comment-entry')).toHaveLength(2);
+    expect(popover).toHaveTextContent(SIGNED_OUT_MESSAGE.replace(/`/g, ''));
     act(() => { view.dispatch({ effects: setOpenMark.of(null) }); });
     await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
     expect(view.state.field(commentMarks).get('run-1')?.status).toBe('failed');
-    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    act(() => { view.dispatch({ effects: setOpenMark.of(['run-1']) }); });
     fireEvent.click(within(await screen.findByTestId('comment-popover')).getByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(view.state.field(commentMarks).has('run-1')).toBe(false));
 
-    act(() => { view.dispatch({ effects: setOpenMark.of('run-2') }); });
+    act(() => { view.dispatch({ effects: setOpenMark.of(['run-2']) }); });
     popover = await screen.findByTestId('comment-popover');
     fireEvent.click(within(popover).getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(agent.stop).toHaveBeenCalledWith('run-2'));
@@ -259,6 +268,78 @@ describe('Comment', () => {
     render(<MarkdownEditor path={DOC} />, { wrapper: TooltipProvider });
     const again = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
     await waitFor(() => expect(again.state.doc.toString()).toBe(`Intro.\n${TEXT}`));
-    expect(marksIn(again)).toEqual([['run-1', { pos: moved, status: 'running' }]]);
+    expect(marksIn(again)).toEqual([['run-1', expect.objectContaining({ pos: moved, status: 'running' })]]);
+  });
+
+  it('hears the end of the first run of the window even when it comes before the start call answers', async () => {
+    vi.mocked(agent.start).mockImplementationOnce(async (request) => {
+      // The command could not start: its end is sent before start answers.
+      runChanged?.({ id: 'run-early', path: request.path, status: 'failed', reply: 'spawn claude ENOENT', sessionId: null as string | null });
+      return { success: true as const, data: { id: 'run-early', path: request.path, status: 'running' as const, reply: '', sessionId: null } };
+    });
+    const { view } = await openEditor(NOTE);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Tighten');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+    await waitFor(() => expect(view.state.field(commentMarks).get('run-early')?.status).toBe('failed'));
+    expect(useCommentStore.getState().marks['run-early'].reply).toBe('spawn claude ENOENT');
+  });
+
+  it('shares one mark among comments on one row: running before failed before done, oldest first, each with its own Stop or Dismiss', async () => {
+    expect(groupStatus(['done', 'failed', 'stopping'])).toBe('running');
+    expect(groupStatus(['done', 'failed'])).toBe('failed');
+    expect(groupStatus(['done', 'done'])).toBe('done');
+    const { view } = await openEditor(NOTE);
+    const at = TEXT.indexOf('ship');
+    for (const comment of ['First', 'Second', 'Third']) {
+      select(view, at, at + 4);
+      act(() => { openCommentBox(view); });
+      await box();
+      typeComment(comment);
+      enter();
+      await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
+    }
+    const groups = markGroups(view);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ ids: ['run-1', 'run-2', 'run-3'], status: 'running' });
+    act(() => { runChanged?.(run('run-1', 'done', 'Changed `Projects/Plan.md` line 3.')); });
+    act(() => { runChanged?.(run('run-2', 'failed', SIGNED_OUT_MESSAGE)); });
+    await waitFor(() => expect(view.state.field(commentMarks).get('run-2')?.status).toBe('failed'));
+    expect(markGroups(view)[0].status).toBe('running');
+
+    act(() => { view.dispatch({ effects: setOpenMark.of(markGroups(view)[0].ids) }); });
+    const popover = await screen.findByTestId('comment-popover');
+    const entries = within(popover).getAllByTestId('comment-entry');
+    expect(entries.map((entry) => entry.querySelector('.opal-comment-quote')?.textContent)).toEqual(['First', 'Second', 'Third']);
+    // Backtick spans are code; nothing else is read as Markdown.
+    expect(entries[0].querySelector('code')?.textContent).toBe('Projects/Plan.md');
+    expect(entries[0]).toHaveTextContent('Changed Projects/Plan.md line 3.');
+    expect(entries[1].querySelector('code')?.textContent).toBe('claude auth login');
+    expect(within(entries[0]).queryByRole('button')).toBeNull();
+    expect(within(entries[1]).getByRole('button', { name: 'Dismiss' })).toBeTruthy();
+    expect(within(entries[2]).getByRole('button', { name: 'Stop' })).toBeTruthy();
+    // Dismissing one keeps the popover open on the others.
+    fireEvent.click(within(entries[1]).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(within(screen.getByTestId('comment-popover')).getAllByTestId('comment-entry')).toHaveLength(2));
+    // Closing clears the done comment it showed; the running one keeps the mark.
+    act(() => { view.dispatch({ effects: setOpenMark.of(null) }); });
+    await waitFor(() => expect([...view.state.field(commentMarks).keys()]).toEqual(['run-3']));
+    expect(view.state.field(openMark)).toBeNull();
+  });
+
+  it('keeps a comment made inside a drawn table on the page', async () => {
+    const table = '# Plan\n\n| Item | Owner |\n| --- | --- |\n| Boxes | alex |\n\nAfter.\n';
+    const { view } = await openEditor(DOC, table);
+    const at = table.indexOf('Boxes');
+    select(view, at, at);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Add a date column');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+    expect(markGroups(view)).toEqual([expect.objectContaining({ ids: ['run-1'] })]);
+    expect(Number.isFinite(markGroups(view)[0].y)).toBe(true);
   });
 });
