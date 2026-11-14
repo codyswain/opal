@@ -52,6 +52,14 @@
     --sidebar-label: var(--text-secondary);
     --sidebar-icon: var(--icon);
     --sidebar-selected: var(--surface-selected);
+    /*
+     * The tree's scroll area and its rows' right margin. A takes the
+     * scrollbar out of the rows while the tree overflows; B always keeps
+     * the 10px scrollbar's gutter and drops the margin, so a tree row ends
+     * where a Daily or Pinned row does, scrolling or not.
+     */
+    --tree-scrollbar-gutter: auto;
+    --tree-row-end: var(--sidebar-inset);
     /* A group label ("Pinned"): its box's least height, its gap below included, and its weight. */
     --sidebar-group-label-height: 1rem;
     --sidebar-group-label-weight: 510;
@@ -219,6 +227,9 @@
     --sidebar-group-label-height: calc(var(--row-height-compact) + 0.125rem);
     --sidebar-group-label-weight: 400;
     --frame-icon-size: 1.125rem;
+    /* The gutter is the scrollbar's 10px, the same as B's inset. */
+    --tree-scrollbar-gutter: stable;
+    --tree-row-end: 0px;
     --frame-icon-stroke: 1.5;
 
     --heading-title: 1.6em;
@@ -292,6 +303,11 @@
   /* A sidebar icon's line weight; Lucide draws in 24 units. */
   .stroke-sidebar-icon {
     stroke-width: var(--sidebar-icon-stroke);
+  }
+
+  /* The file tree's scroll area. */
+  .sidebar-tree-scroll {
+    scrollbar-gutter: var(--tree-scrollbar-gutter);
   }
 
   /* An icon in a frame button (IconButton variant="frame"). */

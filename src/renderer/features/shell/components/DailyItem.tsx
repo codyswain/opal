@@ -90,7 +90,7 @@ export function DailyItem({ onNavigate }: DailyItemProps) {
               <MenuTrigger asChild>
                 <IconButton
                   label="New daily page"
-                  className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 focus-visible:opacity-100 group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 data-[state=open]:opacity-100"
+                  className="absolute text-sidebar-icon right-0 top-1/2 -translate-y-1/2 opacity-0 focus-visible:opacity-100 group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 data-[state=open]:opacity-100"
                 >
                   <Plus aria-hidden className="h-4 w-4" />
                 </IconButton>

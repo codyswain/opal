@@ -185,9 +185,17 @@ where a nav icon does, so top-level labels line up with Daily and Recent.
 | `--radius-sidebar-row` | `rounded-sidebar-row` | 6 px | 8 |
 | `--sidebar-group-label-height` | `min-h-sidebar-group-label` | 16 px, the label's line | a row and its 2 px gap, 34 |
 | `--sidebar-group-label-weight` | `font-sidebar-group-label` | 510 | 400 |
+| `--tree-scrollbar-gutter` | `sidebar-tree-scroll` | `auto` | `stable`, the 10 px scrollbar |
+| `--tree-row-end` | `mr-tree-row-end` | the inset, 8 px | 0 |
 
 So a row's icon starts 17 px from the sidebar's edge and its label 40 px
 (**B** about 20 and 46).
+
+In **B** the tree keeps its scrollbar's gutter at all times and its rows
+have no right margin, so the gutter takes the inset's place: a selected
+tree row ends at the same x as the Daily or Pinned pill whether or not the
+tree scrolls. The thumb still shows only while scrolling or hovered.
+Daily's "+" uses `text-sidebar-icon`.
 
 The frame's icon buttons (both sidebars' top rows and the tab row's "+")
 are `IconButton variant="frame"` with `frame-icon` on the icon:

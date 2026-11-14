@@ -61,7 +61,7 @@ const rowIndent = (depth: number) => `${depth * TREE_INDENT + 8}px`;
 const MAX_STICKY_LEVELS = 4;
 /** The look a tree row and its stuck copy share. */
 const ROW_CLASS = cn(
-  'mx-sidebar-inset flex h-row-compact cursor-default select-none items-center gap-sidebar-icon-gap rounded-sidebar-row pr-2 text-ui text-sidebar-label outline-none',
+  'ml-sidebar-inset mr-tree-row-end flex h-row-compact cursor-default select-none items-center gap-sidebar-icon-gap rounded-sidebar-row pr-2 text-ui text-sidebar-label outline-none',
   'transition-hover hover:bg-surface-hover hover:text-foreground'
 );
 /** Keys typed within this window extend the type-ahead prefix. */
@@ -812,6 +812,8 @@ export function FileTree({ onNavigate }: FileTreeProps) {
                   outerRef={listOuterRef}
                   height={listHeight}
                   width="100%"
+                  // The scroll area's gutter (--tree-scrollbar-gutter in index.css).
+                  className="sidebar-tree-scroll"
                   itemCount={nodes.length}
                   itemData={itemData}
                   itemKey={itemKey}

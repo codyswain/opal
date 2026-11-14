@@ -155,6 +155,7 @@ module.exports = {
       spacing: {
         page: "var(--page-inset)",
         "sidebar-inset": "var(--sidebar-inset)",
+        "tree-row-end": "var(--tree-row-end)",
         // A group label's indent: in line with the rows' icons.
         "sidebar-label": "calc(var(--sidebar-inset) + 0.5rem)",
         "sidebar-group": "var(--sidebar-group-gap)",

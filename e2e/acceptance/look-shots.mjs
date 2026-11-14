@@ -90,6 +90,10 @@ await put('Projects/Garden/Seeds.md', '# Seeds\n\nBeans, peas, chard.\n');
 await put('Projects/Garden/Beds.md', '# Beds\n\nFour raised beds.\n');
 await put('Projects/Kitchen/Tap.md', '# Tap\n\nThe hot side drips.\n');
 await put('Recipes/Bread.md', '# Bread\n\nFlour, water, salt, time.\n');
+// Enough recipes that the tree overflows once Recipes is open.
+for (const dish of ['Apple cake', 'Bean stew', 'Carrot soup', 'Dal', 'Egg fried rice', 'Fish pie', 'Gnocchi', 'Hummus', 'Risotto', 'Lentil salad', 'Miso soup', 'Nut roast', 'Omelette', 'Pancakes']) {
+  await put(`Recipes/${dish}.md`, `# ${dish}\n`);
+}
 await put('.opal/pins.json', JSON.stringify({ version: 1, pins: [NOTE, 'Notes/Ideas.md'] }, null, 2));
 await writeFile(path.join(userData, 'disk-roots.json'), JSON.stringify({ version: 1, roots: [vault] }, null, 2));
 if (SIDE === 'b') await writeFile(path.join(userData, 'variants.json'), JSON.stringify({ version: 1, sides: { [VARIANT]: 'b' } }, null, 2));
@@ -283,6 +287,35 @@ try {
       await page.keyboard.press('Meta+k');
       await page.getByTestId('link-popover').waitFor({ timeout: 5_000 });
       await wait(300);
+    });
+    // A tree that overflows: Daily active and today's row selected, scrolled
+    // part way so the stuck folder rows show above it.
+    const toggleFolders = async (order) => {
+      for (const folder of order) {
+        await page.locator(`[data-tree-path="${path.join(vault, folder)}"]`).click();
+        await wait(150);
+      }
+    };
+    // The tree's scroller is the nearest scrolling ancestor of a row, so this
+    // also works on builds from before the tree had its own class.
+    const scrollTree = (top) => page.locator('[data-tree-path]').first().evaluate((row, value) => {
+      let element = row.parentElement;
+      while (element && !/(auto|scroll)/.test(getComputedStyle(element).overflowY)) element = element.parentElement;
+      element.scrollTop = value;
+    }, top);
+    await shot(theme, 14, 'long-tree', async () => {
+      await page.getByRole('button', { name: 'Daily', exact: true }).click();
+      await wait(500);
+      await scrollTree(0);
+      await wait(200);
+      await toggleFolders(['Library/logs', 'Projects/Kitchen', 'Recipes']);
+      const step = await page.locator('[data-tree-path]').first().evaluate((row) => row.parentElement.getBoundingClientRect().height);
+      await scrollTree(Math.round(step * 1.5));
+      // The thumb shows while scrolling; the picture waits for it to fade (rest()).
+    }, async () => {
+      await scrollTree(0);
+      await wait(200);
+      await toggleFolders(['Recipes', 'Projects/Kitchen', 'Library/logs']);
     });
     await shot(theme, 12, 'comment-box', async () => {
       await open(NOTE);
