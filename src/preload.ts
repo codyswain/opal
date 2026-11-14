@@ -2,6 +2,7 @@ import type { VaultAPI } from "./types/vault";
 import type { PinsAPI } from "./types/pins";
 import type { HiddenAPI, HiddenState } from "./types/hidden";
 import type { UpdatesAPI, UpdateState } from "./types/updates";
+import type { AgentAPI, CommentRun } from "./types/agent";
 import type { VaultDayChange } from "./types/day";
 import type { VaultTestChange } from "./types/dailyTest";
 import type { TouchedWeekChange } from "./types/touched";
@@ -228,6 +229,19 @@ const updatesAPI: UpdatesAPI = {
   },
 };
 contextBridge.exposeInMainWorld("updatesAPI", updatesAPI);
+
+const agentAPI: AgentAPI = {
+  readiness: (path) => ipcRenderer.invoke("agent:readiness", path),
+  allowFolder: (path) => ipcRenderer.invoke("agent:allow-folder", path),
+  start: (request) => ipcRenderer.invoke("agent:start", request),
+  stop: (id) => ipcRenderer.invoke("agent:stop", id),
+  onRunChanged: (callback) => {
+    const listener = (_event: IpcRendererEvent, run: CommentRun) => callback(run);
+    ipcRenderer.on("agent:run-changed", listener);
+    return () => ipcRenderer.removeListener("agent:run-changed", listener);
+  },
+};
+contextBridge.exposeInMainWorld("agentAPI", agentAPI);
 
 const filesAPI: FilesAPI = {
   // A file from Finder goes by its path; File.path is gone in Electron 32.

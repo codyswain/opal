@@ -1,0 +1,7 @@
+{"type":"system","subtype":"session_title_changed","title":"Make this a question","uuid":"7b1d1c64-0f5e-4c7a-9d0b-2a51a3f0c111","session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41"}
+{"type":"system","subtype":"hook_started","hook_name":"SessionStart","session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41"}
+{"type":"system","subtype":"init","cwd":"/tmp/example","session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41","tools":["Read","Edit"],"model":"example-model","permissionMode":"acceptEdits"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll edit the file."}]},"session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41"}
+not json: a line a hook printed
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"The file has been updated."}]},"session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5120,"num_turns":3,"result":"Rewrote the line as a question.","session_id":"3f2b8f0e-6a1d-4f53-8d6e-0c9a7b5e2d41","total_cost_usd":0,"usage":{"input_tokens":10,"output_tokens":20},"permission_denials":[]}
