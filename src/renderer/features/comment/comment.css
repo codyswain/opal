@@ -1,0 +1,135 @@
+/* Comment: the box under a selection, the marks in the page's left padding
+   and their popover. Black and white, like the rest of the page. */
+
+/* The text a box is about stays marked while focus is in the box. */
+.opal-editor .cm-editor .cm-comment-target {
+  background-color: var(--selection);
+}
+
+/* The marks' layer sits over the scroller; only the marks take the pointer. */
+.cm-comment-marks {
+  pointer-events: none;
+}
+
+.cm-comment-marks .cm-comment-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: hsl(var(--text-tertiary));
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color var(--duration-hover) var(--ease-standard), background-color var(--duration-hover) var(--ease-standard);
+}
+
+.cm-comment-marks .cm-comment-mark:hover,
+.cm-comment-marks .cm-comment-mark[data-open] {
+  background-color: hsl(var(--surface-hover));
+  color: hsl(var(--foreground));
+}
+
+.cm-comment-marks .cm-comment-mark[data-status="done"],
+.cm-comment-marks .cm-comment-mark[data-status="failed"] {
+  color: hsl(var(--foreground));
+}
+
+.cm-comment-marks .cm-comment-mark[data-status="running"] svg,
+.cm-comment-marks .cm-comment-mark[data-status="stopping"] svg {
+  animation: opal-comment-spin 1.2s linear infinite;
+}
+
+@keyframes opal-comment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-comment-marks .cm-comment-mark svg {
+    animation: none !important;
+  }
+}
+
+.opal-comment-field {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid hsl(var(--border-strong));
+  border-radius: var(--radius-control);
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: var(--text-ui-size);
+  line-height: 1.45;
+  outline: none;
+  resize: none;
+}
+
+.opal-comment-field:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--focus));
+}
+
+.opal-comment-field::placeholder {
+  color: hsl(var(--text-tertiary));
+}
+
+/* Why the comment cannot go yet, or the first-use question. */
+.opal-comment-line {
+  margin-top: 8px;
+  color: hsl(var(--text-secondary));
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+}
+
+.opal-comment-line a {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--text-tertiary));
+  text-underline-offset: 2px;
+}
+
+.opal-comment-line a:hover {
+  text-decoration-color: hsl(var(--foreground));
+}
+
+.opal-comment-line code,
+.opal-comment-reply code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.opal-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.opal-comment-quote {
+  color: hsl(var(--text-tertiary));
+  font-size: var(--text-label-size);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.opal-comment-reply {
+  margin-top: 6px;
+  color: hsl(var(--foreground));
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 16rem;
+  overflow-y: auto;
+}

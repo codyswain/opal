@@ -65,7 +65,7 @@ not exist.
 - **IPC bridge:** Main <-> Preload <-> Renderer via context bridge
   - Exposed APIs: `systemAPI`, `credentialAPI`, `diskAPI`, `activityAPI`,
     `collectionsAPI`, `markdownAPI`, `vaultAPI`, `pinsAPI`, `filesAPI`,
-    `hiddenAPI`, `updatesAPI`
+    `hiddenAPI`, `updatesAPI`, `agentAPI`
 - **Pins:** each opened folder keeps its pinned files in `.opal/pins.json`
   (paths from the folder's top), so git syncs them across Macs. `PinsService`
   in `src/main/pins` reads and writes it (`pins:list`, `pins:set`, which
@@ -145,6 +145,24 @@ not exist.
   Opal. Palette: Install Update, Check for Updates, Roll Back to Previous
   Build. `scripts/stage-update.mjs` stages a packaged build in a source;
   `docs/local-app-install.md` has the steps
+- **Comment:** select text in a page and press Cmd+Shift+M (or Comment in
+  the palette and the Edit menu) for a box under the selection; Enter saves
+  the page, waits for the write, and starts one run of the user's own Claude
+  Code (`claude -p --output-format stream-json`) in the page's opened folder.
+  The run edits the file on disk and the outside-edit merge brings it in.
+  `AgentService` in `src/main/agent` finds the command (`command` in
+  `<userData>/agent.json`, then `~/.local/bin/claude`, then the login
+  shell's PATH), checks `auth status`, asks once per folder (the yes is kept
+  in `agent.json`'s `folders`), and drops `ANTHROPIC_API_KEY` and
+  `ANTHROPIC_AUTH_TOKEN` from the run's environment. A folder can never name
+  the command. The rules and the stream reader are in `agentModel.ts`. In
+  the renderer, `features/comment` keeps the box and the marks in the
+  editor's state (`commentEditor.ts`); the marks are drawn in a CodeMirror
+  layer in the page's left padding and live in memory only. Code says
+  "agent" and "comment"; "Claude Code" appears only in messages. Tests and
+  acceptance runs use `src/tests/fixtures/agent/fake-agent.mjs`; under the
+  test profile `OPAL_TEST_AGENT_HOME` and `OPAL_TEST_AGENT_PATH` keep the
+  lookup away from a real install
 - **Path alias:** `@/*` maps to `src/*`
 
 ## Directory Structure

@@ -1,0 +1,264 @@
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { toast } from 'sonner';
+import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
+import { commentBox, commentMarks, openCommentBox, selectedLines, setOpenMark } from '@/renderer/features/comment/commentEditor';
+import { useCommentStore } from '@/renderer/features/comment/commentStore';
+import { SIGNED_OUT_MESSAGE } from '@/common/commentText';
+import { TooltipProvider } from '@/renderer/shared/ui';
+import type { AgentAPI, AgentReadiness, CommentRun } from '@/types/agent';
+import { installDiskApi } from '@/tests/helpers/diskApi';
+import { installMarkdownApi } from '@/tests/helpers/markdownApi';
+import { openTabs } from '@/tests/helpers/tabs';
+
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
+
+const NOTE = '/Vault/Projects/Plan.md';
+const DOC = '/Vault/Projects/Plan.mdo';
+const TEXT = '# Plan\n\nWe ship on Friday.\nThen we rest.\nNotes follow.\n';
+
+let changed: ((payload: { directories: string[] }) => void) | null = null;
+let readiness: AgentReadiness[];
+let runChanged: ((run: CommentRun) => void) | null;
+let calls: string[];
+let agent: AgentAPI & { [key: string]: ReturnType<typeof vi.fn> };
+
+beforeEach(() => {
+  changed = null;
+  const listeners = new Set<(payload: { directories: string[] }) => void>();
+  installDiskApi({
+    onChanged: vi.fn((callback: (payload: { directories: string[] }) => void) => {
+      listeners.add(callback);
+      changed = (payload) => { for (const listener of [...listeners]) listener(payload); };
+      return () => { listeners.delete(callback); };
+    }),
+  });
+  openTabs([NOTE]);
+  useCommentStore.setState({ marks: {} });
+  vi.mocked(toast).mockClear();
+  readiness = [];
+  runChanged = null;
+  calls = [];
+  let count = 0;
+  agent = {
+    readiness: vi.fn(async () => ({ success: true as const, data: readiness.shift() ?? { state: 'ready' as const } })),
+    allowFolder: vi.fn(async () => { calls.push('allow'); return { success: true as const, data: undefined }; }),
+    start: vi.fn(async (request) => {
+      calls.push('start');
+      count += 1;
+      return { success: true as const, data: { id: `run-${count}`, path: request.path, status: 'running' as const, reply: '', sessionId: null } };
+    }),
+    stop: vi.fn(async () => ({ success: true as const, data: undefined })),
+    onRunChanged: vi.fn((callback: (run: CommentRun) => void) => { runChanged = callback; return () => { runChanged = null; }; }),
+  } as never;
+  (window as unknown as { agentAPI: AgentAPI }).agentAPI = agent;
+});
+
+async function openEditor(path: string, text = TEXT) {
+  const api = installMarkdownApi({ [path]: text });
+  const write = api.write;
+  api.write = vi.fn(async (...args: Parameters<typeof write>) => { calls.push('write'); return write(...args); });
+  const rendered = render(<MarkdownEditor path={path} />, { wrapper: TooltipProvider });
+  const view = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
+  // Real focus would let happy-dom fire selectionchange inside CodeMirror's own updates, which browsers never do.
+  view.focus = vi.fn();
+  return { api, view, rendered };
+}
+
+const select = (view: EditorView, anchor: number, head: number) => act(() => { view.dispatch({ selection: { anchor, head } }); });
+const box = () => screen.findByTestId('comment-box');
+const field = () => within(screen.getByTestId('comment-box')).getByRole('textbox', { name: 'Comment' });
+const typeComment = (text: string) => fireEvent.change(field(), { target: { value: text } });
+const enter = (init: KeyboardEventInit = {}) => fireEvent.keyDown(field(), { key: 'Enter', ...init });
+const run = (id: string, status: CommentRun['status'], reply = ''): CommentRun => ({ id, path: NOTE, status, reply, sessionId: 's1' });
+const marksIn = (view: EditorView) => [...view.state.field(commentMarks)];
+
+describe('Comment', () => {
+  it('opens on Cmd+Shift+M with the selection marked, saves the page, then starts the run with its lines and marks the first one', async () => {
+    const { api, view } = await openEditor(NOTE);
+    // Unsaved typing first, so the save has something to write.
+    act(() => { view.dispatch({ changes: { from: view.state.doc.length, insert: 'More.\n' }, userEvent: 'input.type' }); });
+    const from = TEXT.indexOf('ship');
+    const to = TEXT.indexOf('rest') + 4;
+    select(view, from, to);
+    const mod = /Mac/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+    act(() => { runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'M', keyCode: 77, shiftKey: true, ...mod }), 'editor'); });
+    await box();
+    expect(view.state.field(commentBox)).toMatchObject({ from, to });
+    expect(view.contentDOM.querySelector('.cm-comment-target')?.textContent).toBe('ship on Friday.');
+    expect(field()).toHaveFocus();
+    // Shift+Enter is a new line, not a send.
+    typeComment('Make these one line');
+    enter({ shiftKey: true });
+    expect(agent.start).not.toHaveBeenCalled();
+    enter();
+    await waitFor(() => expect(agent.start).toHaveBeenCalledTimes(1));
+    expect(calls).toEqual(['write', 'start']);
+    expect(api.documents.get(NOTE)?.body).toBe(`${TEXT}More.\n`);
+    expect(agent.start).toHaveBeenCalledWith({ path: NOTE, comment: 'Make these one line', selection: { from: 3, to: 4, text: 'ship on Friday.\nThen we rest' } });
+    await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
+    expect(marksIn(view)).toEqual([['run-1', { pos: TEXT.indexOf('We ship'), status: 'running' }]]);
+    expect(view.focus).toHaveBeenCalled();
+  });
+
+  it('sends a comment about the whole page with no selection, and Escape keeps nothing', async () => {
+    const { view } = await openEditor(NOTE);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Throw this away');
+    fireEvent.keyDown(field(), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
+    act(() => { openCommentBox(view); });
+    await box();
+    expect(field()).toHaveValue('');
+    typeComment('Add a summary');
+    enter();
+    await waitFor(() => expect(agent.start).toHaveBeenCalledWith({ path: NOTE, comment: 'Add a summary', selection: null }));
+    expect(marksIn(view)[0][1].pos).toBe(0);
+  });
+
+  it('counts a selection that ends at the start of a line as ending on the line before', async () => {
+    const { view } = await openEditor(NOTE);
+    const start = TEXT.indexOf('We ship');
+    const next = TEXT.indexOf('Then');
+    expect(selectedLines(view.state, start, next)).toEqual({ from: 3, to: 3, text: 'We ship on Friday.\n' });
+    expect(selectedLines(view.state, start, start)).toBeNull();
+  });
+
+  it('brings the run\'s edit on disk into the open page while typing goes on, through the merge, and the mark keeps its line', async () => {
+    const { api, view } = await openEditor(NOTE);
+    select(view, TEXT.indexOf('Then'), TEXT.indexOf('rest.') + 5);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Make this a question');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+    // The user keeps typing at the end while the run edits the file on disk: a line above, and its own line changed.
+    act(() => { view.dispatch({ changes: { from: view.state.doc.length, insert: 'Typed while it ran.' }, userEvent: 'input.type' }); });
+    api.externalEdit(NOTE, '# Plan\n\nA line the run added.\nWe ship on Friday.\nDo we rest then?\nNotes follow.\n');
+    act(() => { changed?.({ directories: ['/Vault/Projects'] }); });
+    await waitFor(() => expect(view.state.doc.toString()).toBe('# Plan\n\nA line the run added.\nWe ship on Friday.\nDo we rest then?\nNotes follow.\nTyped while it ran.'));
+    act(() => { view.dispatch({ changes: { from: view.state.doc.length, insert: '!' }, userEvent: 'input.type' }); });
+    expect(view.state.doc.toString().endsWith('Typed while it ran.!')).toBe(true);
+    const line = view.state.doc.toString().indexOf('Do we rest then?');
+    expect(marksIn(view)[0][1].pos).toBe(line);
+    // The merged text is saved, typing and all.
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toContain('Do we rest then?\nNotes follow.\nTyped while it ran.!'));
+  });
+
+  it('shows done with the reply, and a done mark goes once its popover closes; a page off screen gets a notice', async () => {
+    const { view } = await openEditor(NOTE);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Tighten');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+    act(() => { runChanged?.(run('run-1', 'done', 'Shortened the first paragraph.')); });
+    await waitFor(() => expect(marksIn(view)[0][1].status).toBe('done'));
+    // Happy DOM lays nothing out, so the page counts as off screen.
+    expect(toast).toHaveBeenCalledWith('Comment on Plan is done.', expect.objectContaining({ action: expect.objectContaining({ label: 'Open' }) }));
+    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    const popover = await screen.findByTestId('comment-popover');
+    expect(popover).toHaveTextContent('Tighten');
+    expect(popover).toHaveTextContent('Shortened the first paragraph.');
+    expect(within(popover).queryByRole('button')).toBeNull();
+    act(() => { view.dispatch({ effects: setOpenMark.of(null) }); });
+    await waitFor(() => expect(marksIn(view)).toEqual([]));
+    expect(useCommentStore.getState().marks).toEqual({});
+  });
+
+  it('keeps a failed mark until dismissed, and stops a running one', async () => {
+    const { view } = await openEditor(NOTE);
+    for (const comment of ['First', 'Second']) {
+      act(() => { openCommentBox(view); });
+      await box();
+      typeComment(comment);
+      enter();
+      await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
+    }
+    expect(marksIn(view)).toHaveLength(2);
+    act(() => { runChanged?.(run('run-1', 'failed', SIGNED_OUT_MESSAGE)); });
+    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    let popover = await screen.findByTestId('comment-popover');
+    expect(popover).toHaveTextContent(SIGNED_OUT_MESSAGE);
+    act(() => { view.dispatch({ effects: setOpenMark.of(null) }); });
+    await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
+    expect(view.state.field(commentMarks).get('run-1')?.status).toBe('failed');
+    act(() => { view.dispatch({ effects: setOpenMark.of('run-1') }); });
+    fireEvent.click(within(await screen.findByTestId('comment-popover')).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(view.state.field(commentMarks).has('run-1')).toBe(false));
+
+    act(() => { view.dispatch({ effects: setOpenMark.of('run-2') }); });
+    popover = await screen.findByTestId('comment-popover');
+    fireEvent.click(within(popover).getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(agent.stop).toHaveBeenCalledWith('run-2'));
+    expect(view.state.field(commentMarks).get('run-2')?.status).toBe('stopping');
+    act(() => { runChanged?.(run('run-2', 'stopped')); });
+    await waitFor(() => expect(marksIn(view)).toEqual([]));
+  });
+
+  it('says not installed or not signed in as the box opens, and keeps the comment', async () => {
+    readiness = [{ state: 'missing' }, { state: 'missing' }];
+    const { view } = await openEditor(NOTE);
+    act(() => { openCommentBox(view); });
+    await box();
+    const line = await screen.findByTestId('comment-line');
+    expect(line).toHaveTextContent('Claude Code is not installed. How to install');
+    expect(within(line).getByRole('link', { name: 'How to install' })).toHaveAttribute('target', '_blank');
+    typeComment('Tighten');
+    enter();
+    await waitFor(() => expect(agent.readiness).toHaveBeenCalledTimes(2));
+    expect(agent.start).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('Tighten');
+
+    fireEvent.keyDown(field(), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('comment-box')).toBeNull());
+    readiness = [{ state: 'signed-out' }];
+    act(() => { openCommentBox(view); });
+    await box();
+    expect(await screen.findByTestId('comment-line')).toHaveTextContent('Claude Code is not signed in. Run claude auth login in a terminal.');
+  });
+
+  it('asks the first-use question on Enter, and runs once the folder says yes', async () => {
+    readiness = [{ state: 'ask', folder: 'Vault' }, { state: 'ask', folder: 'Vault' }, { state: 'ask', folder: 'Vault' }];
+    const { view } = await openEditor(NOTE);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Tighten');
+    enter();
+    const question = await screen.findByTestId('comment-line');
+    expect(question).toHaveTextContent("Run Claude Code in this folder? It loads this folder's Claude settings, hooks and tools.");
+    expect(agent.start).not.toHaveBeenCalled();
+    // Cancel goes back to the comment.
+    fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('comment-line')).toBeNull();
+    enter();
+    const run = within(await screen.findByTestId('comment-line')).getByRole('button', { name: 'Run' });
+    expect(run).toHaveFocus();
+    readiness = [{ state: 'ready' }];
+    fireEvent.click(run);
+    await waitFor(() => expect(agent.start).toHaveBeenCalled());
+    expect(calls).toEqual(['allow', 'start']);
+  });
+
+  it('works the same in a document, and a mark comes back where it was when the editor returns', async () => {
+    const { view, rendered } = await openEditor(DOC);
+    select(view, TEXT.indexOf('Notes'), TEXT.indexOf('follow'));
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Expand');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+    act(() => { view.dispatch({ changes: { from: 0, insert: 'Intro.\n' }, userEvent: 'input.type' }); });
+    const moved = TEXT.indexOf('Notes') + 'Intro.\n'.length;
+    expect(marksIn(view)[0][1].pos).toBe(moved);
+    rendered.unmount();
+    expect(useCommentStore.getState().marks['run-1'].pos).toBe(moved);
+    render(<MarkdownEditor path={DOC} />, { wrapper: TooltipProvider });
+    const again = EditorView.findFromDOM(await screen.findByTestId('markdown-editor')) as EditorView;
+    await waitFor(() => expect(again.state.doc.toString()).toBe(`Intro.\n${TEXT}`));
+    expect(marksIn(again)).toEqual([['run-1', { pos: moved, status: 'running' }]]);
+  });
+});

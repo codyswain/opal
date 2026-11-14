@@ -14,6 +14,7 @@ export const COMMAND_IDS = {
   toggleLeftPane: "pane.toggleLeft",
   toggleRightPane: "pane.toggleRight",
   toggleProperties: "page.toggleProperties",
+  comment: "page.comment",
   pasteAndMatchStyle: "edit.pasteAndMatchStyle",
   nextSection: "stack.nextSection",
   previousSection: "stack.previousSection",

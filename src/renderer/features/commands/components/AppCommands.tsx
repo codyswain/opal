@@ -29,6 +29,7 @@ import { useShellStore } from "@/renderer/features/shell/store/shellStore";
 import { openDaily, openDailyPage } from "@/renderer/features/shell/utils/openDaily";
 import { useSettingsStore } from "@/renderer/features/settings/store/settingsStore";
 import { useUpdatesStore, useUpdatesSync } from "@/renderer/features/updates";
+import { commentTarget, openCommentBox, selectionCrossesPages } from "@/renderer/features/comment";
 import { commandRegistry, type Command } from "../services/commandRegistry";
 import { usePaletteStore } from "../store/paletteStore";
 
@@ -308,6 +309,23 @@ export const AppCommands: React.FC = () => {
         : []),
       ...(fileOpen
         ? [
+          {
+            id: COMMAND_IDS.comment,
+            name: "Comment",
+            type: "action",
+            // A page's editor takes the key itself; this is the palette's and the menu's way in.
+            shortcut: ["CmdOrCtrl+Shift+M"],
+            keywords: ["comment", "ask", "agent", "claude", "edit", "note", "annotate"],
+            perform: () => {
+              // A selection from one page of a stack into the next belongs to neither.
+              if (selectionCrossesPages()) return;
+              // After the palette has closed and handed focus back.
+              requestAnimationFrame(() => {
+                const view = commentTarget();
+                if (view) openCommentBox(view);
+              });
+            },
+          } satisfies Command,
           {
             id: "page.togglePin",
             name: pagePinned ? "Unpin page" : "Pin page",
