@@ -1,4 +1,4 @@
-import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { history, historyKeymap, defaultKeymap, indentWithTab, isolateHistory } from '@codemirror/commands';
 import { deleteMarkupBackward, insertNewlineContinueMarkupCommand, markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { diff } from '@codemirror/merge';
@@ -37,15 +37,19 @@ export function textChanges(current: string, next: string): ChangeSpec[] {
 
 /**
  * Brings the editor to `text` the way a collaborator's edit would arrive: only
- * the changed ranges move, so the cursor and scroll stay put, and undo never
- * takes the change back. It passes the read-only log guard.
+ * the changed ranges move, so the cursor and scroll stay put. It passes the
+ * read-only log guard. Undo never takes the change back, unless `undoable`:
+ * then the change is one undo step of its own, as for an edit a comment's run
+ * made, which the person may want to take back.
  */
-export function replaceText(view: EditorView, text: string): void {
+export function replaceText(view: EditorView, text: string, options: { undoable?: boolean } = {}): void {
   const current = view.state.doc.toString();
   if (current === text) return;
   view.dispatch({
     changes: textChanges(current, text),
-    annotations: [Transaction.remote.of(true), Transaction.addToHistory.of(false)],
+    annotations: options.undoable
+      ? [Transaction.remote.of(true), isolateHistory.of('full')]
+      : [Transaction.remote.of(true), Transaction.addToHistory.of(false)],
   });
 }
 

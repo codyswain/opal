@@ -8,7 +8,7 @@ import { recordOpened } from '../../activity/recordActivity';
 import { fileLocation } from '../../navigation/filesLocation';
 import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePropertiesStore';
 import { useTabsStore } from '../../store/tabsStore';
-import { isLogPage } from './activityLog';
+import { isDailyLog, isLogPage } from './activityLog';
 import { linkEditor, type LinkEditor } from './docMode';
 import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
@@ -28,7 +28,7 @@ import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
 import type { OpenNote } from './wikiLinks';
-import { CommentBox, CommentMarkPopover, commentBox, commentExtensions, openMark, type CommentBoxAt, type OpenMarks } from '@/renderer/features/comment';
+import { CommentBox, CommentMarkPopover, commentBox, commentExtensions, openMark, runTouches, type CommentBoxAt, type OpenMarks } from '@/renderer/features/comment';
 import '@/renderer/features/comment/comment.css';
 import './editor.css';
 
@@ -222,7 +222,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
     if (created.state.doc.length === 0 && (!section || autoFocusEmpty)) created.focus();
     const detach = actions.current.attach({
       getText: () => created.state.doc.toString(),
-      setText: (text) => replaceText(created, text),
+      // A comment's run edits the page from the disk; that edit is one undo
+      // step, so it can be taken back. Read-only log pages keep every disk
+      // edit out of undo, since their guard would drop an undo of one.
+      setText: (text) => replaceText(created, text, { undoable: runTouches(path) && !isLogPage(path) && !isDailyLog(path) }),
     });
     onViewRef.current?.(created);
     return () => {

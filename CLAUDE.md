@@ -156,7 +156,9 @@ not exist.
   in `agent.json`'s `folders`), and passes on nothing named `ANTHROPIC_*`,
   `CLAUDE_CODE_*` or `CLAUDECODE`. A folder can never name the command. A
   run ends at its first `result` line; its process stays tracked until it
-  exits, so quitting still ends it. The rules and the stream reader are in
+  exits, so quitting still ends it. A disk edit that reaches a page while
+  one of its runs is going, or under 3 s after one ended (`runTouches`),
+  is one undo step; every other disk edit stays out of undo. The rules and the stream reader are in
   `agentModel.ts`. In the renderer, `features/comment` keeps the box and
   each comment's place (where its selection starts) in the editor's state
   (`commentEditor.ts`); comments on one visual row share one mark, drawn in

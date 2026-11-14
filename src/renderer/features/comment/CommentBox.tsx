@@ -145,6 +145,7 @@ export const CommentBox: React.FC<CommentBoxProps> = ({ view, box }) => {
         align="start"
         className="w-80 p-2"
         data-testid="comment-box"
+        data-comment-box={box.id}
         aria-label="Comment"
         onOpenAutoFocus={(event) => {
           event.preventDefault();

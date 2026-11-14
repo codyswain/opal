@@ -30,6 +30,8 @@ export interface CommentMark {
 
 interface CommentStore {
   marks: Record<string, CommentMark>;
+  /** When the last run on each page ended, by page. */
+  ended: Record<string, number>;
   add: (mark: Omit<CommentMark, 'order'>) => void;
   /** A run's new state from the main process. */
   changed: (run: CommentRun) => void;
@@ -83,6 +85,9 @@ function notice(mark: CommentMark): void {
   else toast(`Comment on ${name} failed.`, { action: open });
 }
 
+/** How long after a run ends an edit from the disk still counts as the run's. */
+export const RUN_TOUCH_MS = 3000;
+
 /** Run changes that came before the start call answered. */
 const early = new Map<string, CommentRun>();
 let sent = 0;
@@ -96,6 +101,7 @@ const status = (run: CommentRun): CommentMarkStatus | null =>
  */
 export const useCommentStore = create<CommentStore>((set, get) => ({
   marks: {},
+  ended: {},
   add: (added) => {
     sent += 1;
     const mark: CommentMark = { ...added, order: sent };
@@ -107,6 +113,7 @@ export const useCommentStore = create<CommentStore>((set, get) => ({
     }
   },
   changed: (run) => {
+    if (run.status !== 'running') set((state) => ({ ended: { ...state.ended, [run.path]: Date.now() } }));
     const mark = get().marks[run.id];
     if (!mark) {
       if (run.status !== 'running') {
@@ -159,6 +166,18 @@ export function listenToRuns(): () => void {
 /** Mounted once, beside the updates sync, when the window starts. */
 export function useCommentSync(): void {
   useEffect(() => listenToRuns(), []);
+}
+
+/**
+ * Whether a comment's run may be editing the page now: one of its marks is
+ * running or stopping, or a run on it ended under RUN_TOUCH_MS ago, since
+ * its last write can reach the page after the run's end.
+ */
+export function runTouches(path: string, now = Date.now()): boolean {
+  const { ended, marks } = useCommentStore.getState();
+  if (ended[path] !== undefined && now - ended[path] < RUN_TOUCH_MS) return true;
+  return Object.values(marks)
+    .some((mark) => mark.path === path && (mark.status === 'running' || mark.status === 'stopping'));
 }
 
 /** The marks on one page. */

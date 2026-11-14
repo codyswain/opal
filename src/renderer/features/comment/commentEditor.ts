@@ -181,9 +181,17 @@ export function selectedLines(state: EditorState, from: number, to: number): { f
   return { from: first.number, to: last.number, text: state.sliceDoc(from, to) };
 }
 
-/** Opens the box under the selection, or for the whole page with none. */
+/**
+ * Opens the box under the selection, or for the whole page with none. A box
+ * already open stays, with what was typed in it, and gets the focus back.
+ */
 export function openCommentBox(view: EditorView): boolean {
   if (!view.state.facet(commentHost)) return false;
+  const open = view.state.field(commentBox, false);
+  if (open) {
+    document.querySelector<HTMLTextAreaElement>(`[data-comment-box="${open.id}"] textarea`)?.focus();
+    return true;
+  }
   const { from, to } = view.state.selection.main;
   boxes += 1;
   view.dispatch({ effects: [setCommentBox.of({ id: boxes, from, to }), setOpenMark.of(null)] });

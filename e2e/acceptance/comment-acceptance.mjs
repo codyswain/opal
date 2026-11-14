@@ -109,6 +109,23 @@ const REWRITES = await wrapper('claude-rewrites', [
   'export FAKE_AGENT_DELAY_MS=1000',
   "export FAKE_AGENT_REPLY='Reworded the line about owners and dates.'",
 ]);
+// Rewords the first paragraph half a second in, for undo and redo.
+const REWORDS = await wrapper('claude-rewords', [
+  `export FAKE_AGENT_LOG='${runLog}'`,
+  `export FAKE_AGENT_EDIT='${JSON.stringify({ find: 'twenty teams', replace: 'ten teams' })}'`,
+  'export FAKE_AGENT_EDIT_DELAY_MS=500',
+  'export FAKE_AGENT_DELAY_MS=300',
+  "export FAKE_AGENT_REPLY='Cut the beta to ten teams.'",
+]);
+// Writes 2.5 s in from the file as it was when the run began, over whatever was saved since.
+const STALE = await wrapper('claude-stale', [
+  `export FAKE_AGENT_LOG='${runLog}'`,
+  `export FAKE_AGENT_EDIT='${JSON.stringify({ find: 'Open questions sit', replace: 'OPEN QUESTIONS SIT' })}'`,
+  'export FAKE_AGENT_EDIT_DELAY_MS=2500',
+  'export FAKE_AGENT_STALE=1',
+  'export FAKE_AGENT_DELAY_MS=300',
+  "export FAKE_AGENT_REPLY='Capitalised the opening words.'",
+]);
 const SIGNED_OUT = await wrapper('claude-signed-out', ['export FAKE_AGENT_AUTH=out']);
 const settings = (fields) => writeFile(path.join(userData, 'agent.json'), JSON.stringify({ version: 1, ...fields }, null, 2));
 await mkdir(outDir, { recursive: true });
@@ -344,6 +361,66 @@ try {
   await popover.waitFor({ timeout: 5_000 });
   await page.keyboard.press('Escape');
   await waitFor(async () => (await marks.count()) === 0, 3_000);
+
+  // Undo takes a run's edit back as one step, in the page and on disk; redo brings it back.
+  const pageText = () => page.locator('.cm-content').textContent();
+  const diskText = () => readFile(PLAN_FILE, 'utf8');
+  await settings({ command: REWORDS, folders: [vault] });
+  await commentOn('The beta goes');
+  await page.keyboard.type('Fewer teams');
+  await page.keyboard.press('Enter');
+  await box.waitFor({ state: 'detached', timeout: 5_000 });
+  const reworded = await waitFor(async () => (await marks.first().getAttribute('data-status')) === 'done', 8_000);
+  check('the run\'s edit lands', reworded && await waitFor(async () => (await pageText()).includes('goes to ten teams') && (await diskText()).includes('goes to ten teams'), 3_000),
+    JSON.stringify({ status: await marks.first().getAttribute('data-status').catch(() => null), page: (await pageText()).slice(0, 80), disk: (await diskText()).split('\n')[6] }));
+  await page.keyboard.press('Meta+Z');
+  check('Cmd+Z takes the run\'s edit back in the page', await waitFor(async () => (await pageText()).includes('goes to twenty teams'), 2_000));
+  check('and the file follows', await waitFor(async () => (await diskText()).includes('goes to twenty teams'), 4_000));
+  await page.keyboard.press('Meta+Shift+Z');
+  check('Shift+Cmd+Z brings it back, in the page and the file', await waitFor(async () => (await pageText()).includes('goes to ten teams'), 2_000)
+    && await waitFor(async () => (await diskText()).includes('goes to ten teams'), 4_000));
+  await marks.first().click();
+  await popover.waitFor({ timeout: 5_000 });
+  await page.keyboard.press('Escape');
+  await waitFor(async () => (await marks.count()) === 0, 3_000);
+
+  // A run that writes from a stale read removes text the page had saved; one Cmd+Z brings it back.
+  await settings({ command: STALE, folders: [vault] });
+  const QUESTIONS = 'Open questions sit at the bottom until someone owns them. Typed while it ran.';
+  await commentOn('Open questions sit');
+  await page.keyboard.type('Capitalise the start');
+  await page.keyboard.press('Enter');
+  await box.waitFor({ state: 'detached', timeout: 5_000 });
+  await page.locator('.cm-line', { hasText: 'Open questions sit' }).first().click();
+  // End twice: the line wraps, and the first End stops at the end of the row.
+  await page.keyboard.press('End');
+  await page.keyboard.press('End');
+  await page.keyboard.type(' TYPED');
+  check('the typing is saved before the run writes', await waitFor(async () => (await diskText()).includes(`${QUESTIONS} TYPED`), 2_500));
+  check('the stale write takes the saved typing out of the page and the file', await waitFor(async () => (await pageText()).includes('OPEN QUESTIONS SIT'), 6_000)
+    && !(await pageText()).includes('TYPED') && !(await diskText()).includes('TYPED'));
+  await waitFor(async () => (await marks.first().getAttribute('data-status')) === 'done', 5_000);
+  await page.keyboard.press('Meta+Z');
+  check('one Cmd+Z brings the typed text back, undamaged', await waitFor(async () => (await pageText()).includes(`${QUESTIONS} TYPED`), 2_000), (await pageText()).split('Open').slice(1, 2).join(''));
+  check('and the file follows', await waitFor(async () => (await diskText()).includes(`${QUESTIONS} TYPED`), 4_000));
+  await page.keyboard.press('Meta+Z');
+  check('a second Cmd+Z undoes the typing cleanly', await waitFor(async () => (await pageText()).includes(QUESTIONS) && !(await pageText()).includes('TYPED') && !(await pageText()).includes('OPEN QUESTIONS'), 2_000));
+  await marks.first().click();
+  await popover.waitFor({ timeout: 5_000 });
+  await page.keyboard.press('Escape');
+  await waitFor(async () => (await marks.count()) === 0, 3_000);
+
+  // Comment again while the box is open keeps the box and what was typed in it.
+  await commentOn('Do we ship on Friday');
+  await page.keyboard.type('Half a thought');
+  const firstBox = await box.getAttribute('data-comment-box');
+  await page.keyboard.press('Meta+Shift+M');
+  await page.waitForTimeout(300);
+  check('Comment again keeps the open box, its text and its focus',
+    (await box.getAttribute('data-comment-box')) === firstBox
+      && (await box.locator('textarea').inputValue()) === 'Half a thought'
+      && await page.evaluate(() => document.activeElement?.closest('[data-testid="comment-box"]') !== null));
+  await closeBox();
 
   // A long wrapped paragraph: one comment on its first row, two on a later row that share a mark.
   await settings({ command: SIGNED_IN, folders: [vault] });

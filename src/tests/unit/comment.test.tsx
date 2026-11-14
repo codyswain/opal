@@ -2,10 +2,11 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
+import { redo, undo } from '@codemirror/commands';
 import { toast } from 'sonner';
 import { MarkdownEditor } from '@/renderer/features/disk-explorer/components/editor/MarkdownEditor';
 import { commentBox, commentMarks, groupStatus, markGroups, openCommentBox, openMark, selectedLines, setOpenMark } from '@/renderer/features/comment/commentEditor';
-import { listenToRuns, useCommentStore } from '@/renderer/features/comment/commentStore';
+import { listenToRuns, runTouches, RUN_TOUCH_MS, useCommentStore } from '@/renderer/features/comment/commentStore';
 import { SIGNED_OUT_MESSAGE } from '@/common/commentText';
 import { TooltipProvider } from '@/renderer/shared/ui';
 import type { AgentAPI, AgentReadiness, CommentRun } from '@/types/agent';
@@ -39,7 +40,7 @@ beforeEach(() => {
     }),
   });
   openTabs([NOTE]);
-  useCommentStore.setState({ marks: {} });
+  useCommentStore.setState({ marks: {}, ended: {} });
   vi.mocked(toast).mockClear();
   readiness = [];
   runChanged = null;
@@ -341,5 +342,128 @@ describe('Comment', () => {
     await waitFor(() => expect(marksIn(view)).toHaveLength(1));
     expect(markGroups(view)).toEqual([expect.objectContaining({ ids: ['run-1'] })]);
     expect(Number.isFinite(markGroups(view)[0].y)).toBe(true);
+  });
+
+  it('keeps an open box and its text when Comment is asked for again, and gives its field the focus', async () => {
+    const { view } = await openEditor(NOTE);
+    select(view, TEXT.indexOf('ship'), TEXT.indexOf('ship') + 4);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Half a thought');
+    const before = view.state.field(commentBox);
+    field().blur();
+    act(() => { openCommentBox(view); });
+    expect(view.state.field(commentBox)).toBe(before);
+    expect(field()).toHaveValue('Half a thought');
+    expect(field()).toHaveFocus();
+  });
+});
+
+describe('undo after a comment\'s run edits the page', () => {
+  /** Sends a comment on the line holding `text`, so a run is going on the page. */
+  async function commentOnLine(view: EditorView, text: string) {
+    const at = view.state.doc.toString().indexOf(text);
+    select(view, at, at + text.length);
+    act(() => { openCommentBox(view); });
+    await box();
+    typeComment('Rewrite this');
+    enter();
+    await waitFor(() => expect(marksIn(view)).toHaveLength(1));
+  }
+  const fromDisk = (api: ReturnType<typeof installMarkdownApi>, body: string) => {
+    api.externalEdit(NOTE, body);
+    act(() => { changed?.({ directories: ['/Vault/Projects'] }); });
+  };
+  const typeAt = (view: EditorView, at: number, insert: string) => act(() => {
+    view.dispatch({ changes: { from: at, insert }, userEvent: 'input.type' });
+  });
+  const press = (command: typeof undo, view: EditorView) => act(() => { command(view); });
+  const RUN = TEXT.replace('We ship on Friday.', 'Do we ship on Friday?');
+
+  it('counts a page as touched by a run while it runs and for a moment after it ends', async () => {
+    const { view } = await openEditor(NOTE);
+    expect(runTouches(NOTE)).toBe(false);
+    await commentOnLine(view, 'We ship on Friday.');
+    expect(runTouches(NOTE)).toBe(true);
+    expect(runTouches('/Vault/Projects/Other.md')).toBe(false);
+    act(() => { runChanged?.(run('run-1', 'done', 'Done.')); });
+    expect(runTouches(NOTE)).toBe(true);
+    expect(runTouches(NOTE, Date.now() + RUN_TOUCH_MS + 1)).toBe(false);
+  });
+
+  it('takes the run\'s edit back as one step, saves that, brings it back with redo, then undoes earlier typing cleanly', async () => {
+    const { api, view } = await openEditor(NOTE);
+    typeAt(view, TEXT.indexOf('Notes'), 'Mine. ');
+    const typed = TEXT.replace('Notes', 'Mine. Notes');
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe(typed));
+    await commentOnLine(view, 'We ship on Friday.');
+    const ran = typed.replace('We ship on Friday.', 'Do we ship on Friday?');
+    fromDisk(api, ran);
+    await waitFor(() => expect(view.state.doc.toString()).toBe(ran));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(typed);
+    // The page is dirty again, and the file follows.
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe(typed));
+    press(redo, view);
+    expect(view.state.doc.toString()).toBe(ran);
+    press(undo, view);
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(TEXT);
+  });
+
+  it('brings back what a stale write removed, undamaged, in one step', async () => {
+    const { api, view } = await openEditor(NOTE);
+    await commentOnLine(view, 'Then we rest.');
+    const at = TEXT.indexOf('Then we') + 'Then we'.length;
+    typeAt(view, at, ' TYPED');
+    const typed = `${TEXT.slice(0, at)} TYPED${TEXT.slice(at)}`;
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe(typed));
+    // The run writes from what it read before the typing was saved.
+    const stale = TEXT.replace('Then we rest.', 'THEN WE REST.');
+    fromDisk(api, stale);
+    await waitFor(() => expect(view.state.doc.toString()).toBe(stale));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(typed);
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe(typed));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(TEXT);
+  });
+
+  it('takes back only the run\'s part of a merge into a page with unsaved typing', async () => {
+    const { api, view } = await openEditor(NOTE);
+    await commentOnLine(view, 'We ship on Friday.');
+    typeAt(view, view.state.doc.length, 'Unsaved.');
+    fromDisk(api, RUN);
+    await waitFor(() => expect(view.state.doc.toString()).toBe(`${RUN}Unsaved.`));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(`${TEXT}Unsaved.`);
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(TEXT);
+  });
+
+  it('after a conflict settled with Keep disk version, undo gives the page\'s side back', async () => {
+    const { api, view } = await openEditor(NOTE);
+    await commentOnLine(view, 'We ship on Friday.');
+    const at = TEXT.indexOf('Friday');
+    typeAt(view, at, 'next ');
+    const mine = view.state.doc.toString();
+    fromDisk(api, RUN);
+    const bar = await screen.findByTestId('editor-conflict');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Keep disk version' }));
+    await waitFor(() => expect(view.state.doc.toString()).toBe(RUN));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(mine);
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(TEXT);
+  });
+
+  it('keeps every other disk edit out of undo, as before', async () => {
+    const { api, view } = await openEditor(NOTE);
+    typeAt(view, 0, 'X');
+    await waitFor(() => expect(api.documents.get(NOTE)?.body).toBe(`X${TEXT}`));
+    fromDisk(api, `X${RUN}`);
+    await waitFor(() => expect(view.state.doc.toString()).toBe(`X${RUN}`));
+    press(undo, view);
+    expect(view.state.doc.toString()).toBe(RUN);
   });
 });

@@ -9,6 +9,8 @@
 //   FAKE_AGENT_EDIT={"find":"a","replace":"b"}  the edit a success makes
 //   FAKE_AGENT_REPLY=text      the success result's text
 //   FAKE_AGENT_EDIT_DELAY_MS=n wait before making the edit
+//   FAKE_AGENT_STALE=1         make the edit on the file as it was when the run
+//                              began, overwriting whatever was saved since
 //   FAKE_AGENT_DELAY_MS=n      wait before the result line
 //   FAKE_AGENT_LINGER_MS=n     after the result, stay alive n ms, then print a
 //                              second result with other text, as when a
@@ -66,13 +68,12 @@ for (const line of lines) {
 }
 
 if (stream === 'success' && env.FAKE_AGENT_EDIT) {
-  if (Number(env.FAKE_AGENT_EDIT_DELAY_MS) > 0) await sleep(Number(env.FAKE_AGENT_EDIT_DELAY_MS));
   const file = /^File: (.+)$/m.exec(prompt)?.[1];
+  const target = file ? path.join(process.cwd(), file) : null;
+  const early = target && env.FAKE_AGENT_STALE === '1' ? readFileSync(target, 'utf8') : null;
+  if (Number(env.FAKE_AGENT_EDIT_DELAY_MS) > 0) await sleep(Number(env.FAKE_AGENT_EDIT_DELAY_MS));
   const { find, replace } = JSON.parse(env.FAKE_AGENT_EDIT);
-  if (file) {
-    const target = path.join(process.cwd(), file);
-    writeFileSync(target, readFileSync(target, 'utf8').replace(find, replace));
-  }
+  if (target) writeFileSync(target, (early ?? readFileSync(target, 'utf8')).replace(find, replace));
 }
 
 if (delay > 0) await sleep(delay);
