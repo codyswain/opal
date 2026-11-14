@@ -68,9 +68,13 @@ import { OpalLinks } from "@/main/protocol/OpalLinks";
 import { HiddenFiles } from "@/main/fs/HiddenFiles";
 import { HiddenHandlers } from "@/main/fs/HiddenHandlers";
 import { touchIdPrompt } from "@/main/fs/touchId";
-import { touchIdStub, updateBackupsDir, updateRelaunchEnv } from "@/main/testProfile";
+import { agentLookup, touchIdStub, updateBackupsDir, updateRelaunchEnv } from "@/main/testProfile";
 import { UpdateService } from "@/main/updates/UpdateService";
 import { UpdateHandlers } from "@/main/updates/UpdateHandlers";
+import { AgentService } from "@/main/agent/AgentService";
+import { AgentHandlers } from "@/main/agent/AgentHandlers";
+import { loginShellPath } from "@/main/agent/loginPath";
+import { runAgentFile, spawnAgent } from "@/main/agent/nodeProcesses";
 import { runningBuild } from "@/main/updates/buildIdentity";
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
@@ -608,6 +612,31 @@ const updateService = new UpdateService({
 });
 const updateHandlers = new UpdateHandlers({ ipc: ipcMain, service: updateService });
 
+// Comment: one run of the agent command per comment, in the page's opened folder.
+// A test run can point the lookup at a temp home and PATH, so it never finds a real command.
+const agentTest = agentLookup(process.env, app.isPackaged);
+const agentService = new AgentService({
+  registry: rootRegistry,
+  userData: userDataDir,
+  home: agentTest?.home ?? os.homedir(),
+  env: process.env,
+  fs: fsPromises,
+  spawn: spawnAgent,
+  runFile: runAgentFile,
+  searchPath: agentTest
+    ? async () => agentTest.path
+    : loginShellPath({
+      shell: process.env.SHELL,
+      fallback: process.env.PATH ?? "/usr/bin:/bin:/usr/sbin:/sbin",
+      run: async (file, args, timeoutMs) => (await runFile(file, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 })).stdout,
+    }),
+  onChanged: (run) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("agent:run-changed", run);
+  },
+});
+const agentHandlers = new AgentHandlers({ ipc: ipcMain, service: agentService });
+
 // --- Primary Initialization and Cleanup ---
 app.whenReady().then(async () => {
   try {
@@ -641,6 +670,7 @@ app.whenReady().then(async () => {
     pinsHandlers.registerAll();
     filesHandlers.registerAll();
     updateHandlers.registerAll();
+    agentHandlers.registerAll();
     void filesService.cleanup();
     log.info("Disk explorer IPC handlers and file protocols registered");
 
@@ -670,7 +700,11 @@ app.whenReady().then(async () => {
 });
 
 // Once quitting is certain: read-only copies of LFS files go with the app.
-app.on("will-quit", () => filesService.removeCopies());
+app.on("will-quit", () => {
+  filesService.removeCopies();
+  // Running comments end their turn rather than carry on after Opal.
+  agentService.stopAll();
+});
 
 app.on("before-quit", async () => {
   try {

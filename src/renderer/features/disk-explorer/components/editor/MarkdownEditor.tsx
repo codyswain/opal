@@ -8,7 +8,7 @@ import { recordOpened } from '../../activity/recordActivity';
 import { fileLocation } from '../../navigation/filesLocation';
 import { togglePageProperties, usePagePropertiesStore } from '../../store/pagePropertiesStore';
 import { useTabsStore } from '../../store/tabsStore';
-import { isLogPage } from './activityLog';
+import { isDailyLog, isLogPage } from './activityLog';
 import { linkEditor, type LinkEditor } from './docMode';
 import { CalloutTypeMenu } from './CalloutTypeMenu';
 import { DocToolbar } from './DocToolbar';
@@ -28,6 +28,8 @@ import { setPageProperties } from './pageProperties';
 import { useMarkdownDocument, type MarkdownDocumentActions, type MarkdownDocumentState } from './useMarkdownDocument';
 import { usePageProperties } from './usePageProperties';
 import type { OpenNote } from './wikiLinks';
+import { CommentBox, CommentMarkPopover, commentBox, commentExtensions, openMark, runTouches, type CommentBoxAt, type OpenMarks } from '@/renderer/features/comment';
+import '@/renderer/features/comment/comment.css';
 import './editor.css';
 
 export type EditorLayout = 'page' | 'section';
@@ -135,6 +137,9 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
   const [link, setLink] = useState<LinkEditor | null>(null);
   const [framed, setFramed] = useState<PageObject | null>(null);
   const [formula, setFormula] = useState<MathEditor | null>(null);
+  // Comment's box and mark popover, in notes and documents alike.
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
+  const [comment, setComment] = useState<{ box: CommentBoxAt | null; mark: OpenMarks | null }>({ box: null, mark: null });
   const conflict = useMemo(() => new Compartment(), []);
   const [words, setWords] = useState<{ words: number; selected: number | null }>({ words: 0, selected: null });
   const counting = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,7 +163,11 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
         extensions ?? [],
         keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void actions.current.flush(); return true; } }]),
         conflict.of([]),
+        commentExtensions({ path, flush: () => actions.current.flush() }),
         EditorView.updateListener.of((update) => {
+          const box = update.state.field(commentBox);
+          const mark = update.state.field(openMark);
+          setComment((shown) => (shown.box === box && shown.mark === mark ? shown : { box, mark }));
           if (update.docChanged || update.selectionSet) {
             if (update.docChanged) recount.current = true;
             if (counting.current) clearTimeout(counting.current);
@@ -202,6 +211,7 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
         : EditorState.create({ doc: initialBody, ...config }),
     });
     view.current = created;
+    setEditorView(created);
     setWords(pageWords(created.state));
     if (doc) {
       setDocView(created);
@@ -212,7 +222,10 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
     if (created.state.doc.length === 0 && (!section || autoFocusEmpty)) created.focus();
     const detach = actions.current.attach({
       getText: () => created.state.doc.toString(),
-      setText: (text) => replaceText(created, text),
+      // A comment's run edits the page from the disk; that edit is one undo
+      // step, so it can be taken back. Read-only log pages keep every disk
+      // edit out of undo, since their guard would drop an undo of one.
+      setText: (text) => replaceText(created, text, { undoable: runTouches(path) && !isLogPage(path) && !isDailyLog(path) }),
     });
     onViewRef.current?.(created);
     return () => {
@@ -281,6 +294,8 @@ const MarkdownEditorSurface: React.FC<MarkdownEditorSurfaceProps> = ({
       {docView && formula ? <MathPopover key={formula.id} view={docView} editor={formula} /> : null}
       {docView ? <ObjectMenu view={docView} /> : null}
       {docView ? <CalloutTypeMenu view={docView} /> : null}
+      {editorView && comment.box ? <CommentBox key={comment.box.id} view={editorView} box={comment.box} /> : null}
+      {editorView && comment.mark ? <CommentMarkPopover key={comment.mark.n} view={editorView} open={comment.mark} /> : null}
       <EditorStatus
         saveState={document.saveState}
         error={document.error}

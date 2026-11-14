@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyTestProfile } from '@/main/testProfile';
+import { agentLookup, applyTestProfile } from '@/main/testProfile';
 
 function fakeApp() {
   return { setPath: vi.fn<(name: string, value: string) => void>() };
@@ -19,5 +19,15 @@ describe('applyTestProfile', () => {
     expect(applyTestProfile({}, app)).toBeNull();
     expect(applyTestProfile({ OPAL_TEST_USER_DATA_DIR: '  ' }, app)).toBeNull();
     expect(app.setPath).not.toHaveBeenCalled();
+  });
+});
+
+describe('agentLookup', () => {
+  const env = { OPAL_TEST_USER_DATA_DIR: '/tmp/opal-test', OPAL_TEST_AGENT_HOME: '/tmp/home', OPAL_TEST_AGENT_PATH: '/tmp/bin' };
+  it('moves the command lookup to a temp home and PATH only for an unpackaged test run', () => {
+    expect(agentLookup(env, false)).toEqual({ home: '/tmp/home', path: '/tmp/bin' });
+    expect(agentLookup(env, true)).toBeNull();
+    expect(agentLookup({ ...env, OPAL_TEST_USER_DATA_DIR: '' }, false)).toBeNull();
+    expect(agentLookup({ ...env, OPAL_TEST_AGENT_PATH: undefined }, false)).toBeNull();
   });
 });

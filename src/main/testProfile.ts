@@ -54,6 +54,22 @@ export function updateBackupsDir(env: Record<string, string | undefined>, home: 
 }
 
 /**
+ * Where a test run looks for Comment's command. Under the test profile in an
+ * unpackaged run, OPAL_TEST_AGENT_HOME stands for the home folder and
+ * OPAL_TEST_AGENT_PATH for the login shell's PATH, so a test can never find
+ * or run a real command installed on the Mac. Otherwise null.
+ */
+export function agentLookup(
+  env: Record<string, string | undefined>,
+  isPackaged: boolean,
+): { home: string; path: string } | null {
+  if (isPackaged || !env.OPAL_TEST_USER_DATA_DIR?.trim()) return null;
+  const home = env.OPAL_TEST_AGENT_HOME?.trim();
+  const searchPath = env.OPAL_TEST_AGENT_PATH?.trim();
+  return home && searchPath ? { home, path: searchPath } : null;
+}
+
+/**
  * What a build relaunched after an update must start with. Under a test
  * profile the new build gets the same profile (and backups folder), so it
  * never opens the real one; otherwise nothing, and the bundle opens as from
