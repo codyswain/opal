@@ -55,15 +55,16 @@
   }
 }
 
+/* The popover is the box's frame, so the field draws none of its own. */
 .opal-comment-field {
   box-sizing: border-box;
   display: block;
   width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  border: 1px solid hsl(var(--border-strong));
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 0;
   border-radius: var(--radius-control);
-  background-color: hsl(var(--canvas));
+  background-color: transparent;
   color: hsl(var(--foreground));
   font-family: var(--font-sans);
   font-size: var(--text-ui-size);
@@ -72,17 +73,14 @@
   resize: none;
 }
 
-.opal-comment-field:focus-visible {
-  box-shadow: 0 0 0 2px hsl(var(--focus));
-}
-
 .opal-comment-field::placeholder {
   color: hsl(var(--text-tertiary));
 }
 
 /* Why the comment cannot go yet, or the first-use question. */
 .opal-comment-line {
-  margin-top: 8px;
+  margin-top: 4px;
+  padding: 0 6px 2px;
   color: hsl(var(--text-secondary));
   font-size: var(--text-label-size);
   line-height: 1.4;

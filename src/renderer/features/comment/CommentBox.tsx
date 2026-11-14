@@ -12,7 +12,9 @@ const MAX_ROWS = 6;
 function selectionRect(view: EditorView, box: CommentBoxAt): DOMRect {
   const start = view.coordsAtPos(box.from, 1);
   if (!start) return new DOMRect();
-  const end = box.to > box.from ? view.coordsAtPos(box.to, -1) : start;
+  // A selection that ends at the start of a line, as a triple-click's does, ends on the line before.
+  const to = box.to > box.from && view.state.doc.lineAt(box.to).from === box.to ? box.to - 1 : box.to;
+  const end = to > box.from ? view.coordsAtPos(to, -1) : start;
   const bottom = Math.max(start.bottom, end?.bottom ?? start.bottom);
   const right = end && end.top === start.top ? Math.max(end.right, start.left + 1) : start.left + 1;
   return new DOMRect(start.left, start.top, right - start.left, bottom - start.top);
